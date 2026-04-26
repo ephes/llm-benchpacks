@@ -2,22 +2,27 @@
 
 ## Phase 1: Minimal Runner
 
+**Status:** landed 2026-04-26. See `docs/spec-log.md` for the dated entries.
+
 Deliver a CLI that can run one benchmark case against one endpoint and write
 results.
 
 Scope:
 
 - Python package managed with `uv`.
-- `benchpack run <pack> --adapter <adapter> --model <model>`.
+- `benchpack run <pack> --adapter <adapter> --model <model>` (with
+  `--endpoint`, `--out`, `--host-label`, `--force`).
 - `openai-chat` adapter.
 - `ollama-generate` adapter.
 - `smoke-chat` benchmark pack.
-- JSONL run output plus Markdown summary.
+- JSONL run output plus Markdown summary, with `endpoint` recorded per run.
 - Best-effort hardware metadata on macOS and Linux.
+- Refuse-to-overwrite collision rule on the per-run output directory.
 
 Validation:
 
-- Unit tests for manifest loading and result normalization.
+- `uv run pytest` (manifest loading, result normalization, scoring,
+  re-run safety, adapter HTTP handling).
 - Smoke run against a locally reachable endpoint.
 
 ## Phase 2: Runtime Sweep

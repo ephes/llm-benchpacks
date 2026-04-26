@@ -16,6 +16,58 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-26 (post-review)
+
+### Changed
+
+- Promoted the `benchpack run ... [--force]` CLI shape and the output-directory
+  collision rule (refuse-by-default, `--force` replaces, `--out` writes
+  elsewhere) into `docs/specification.md`. The spec is the contract;
+  `spec-log.md` only records history.
+- Reporter now writes `endpoint` (the resolved URL the adapter actually called)
+  alongside `adapter`/`model` in every `run.jsonl` record. Adapter return
+  payload gained an `endpoint` field. Closes the gap between
+  `docs/specification.md` (which already required endpoint capture) and the
+  initial implementation. `docs/architecture.md` updated.
+- CLI refuses to overwrite an existing run directory that already contains a
+  `run.jsonl`; pass `--force` to replace it or `--out` to write elsewhere.
+  Prevents the "second run on the same date+host appends to old `run.jsonl`
+  while overwriting `raw/` and rewriting `summary.md` from only the current
+  records" failure mode flagged in review.
+- `benchpack.toml` pack and case ids must now match
+  `^[A-Za-z0-9][A-Za-z0-9_-]*$`. Manifests with unsafe ids (slashes, `..`,
+  empty) are rejected at load time so the reporter can use ids verbatim as
+  path components. `docs/benchpack-format.md` documents the grammar.
+
+## 2026-04-26 (afternoon)
+
+### Changed
+
+- Landed the Phase 1 minimal runner from `docs/implementation-plan.md`.
+  - Python package `benchpack` managed with `uv`; console script
+    `benchpack = "benchpack.cli:main"`.
+  - `benchpack run <pack> --adapter <adapter> --model <model> [--endpoint] [--out] [--host-label]`.
+  - Adapters: `openai-chat` (POST `/v1/chat/completions`, non-streaming) and
+    `ollama-generate` (POST `/api/generate`, derives `prefill_tps` /
+    `decode_tps` from native duration fields and preserves them under `backend`).
+  - Pack loader, scoring (`none` and `contains` only — other modes parse but
+    raise `NotImplementedError` per Phase 1 scope), best-effort
+    macOS/Linux hardware collector, and reporter that writes
+    `run.jsonl`, `summary.md`, `hardware.json`, plus `raw/`.
+  - Reporter assembles the three-contributor envelope from
+    `docs/architecture.md` and runs scoring before appending each `run.jsonl`
+    line. Adapters do not import the pack loader, the reporter, or the
+    collector.
+- Recorded `uv run pytest` as the repo-level validation command in `AGENTS.md`.
+- Added the `smoke-chat` benchpack at `benchpacks/smoke-chat/`.
+
+### Open Questions
+
+- Streaming TTFT measurement and the `runtime-sweep` pack remain Phase 2 work.
+- `mlx-lm` adapter shape (CLI vs server) is still open.
+- Remote Linux orchestration over SSH is still open.
+- Vendoring strategy for `desktop-django-starter` content is still open.
+
 ## 2026-04-26
 
 ### Changed

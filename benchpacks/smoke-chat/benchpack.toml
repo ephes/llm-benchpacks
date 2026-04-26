@@ -1,0 +1,19 @@
+[pack]
+id = "smoke-chat"
+version = "0.1.0"
+description = "Tiny endpoint smoke test"
+
+[defaults]
+temperature = 0
+max_tokens = 64
+stream = false
+repetitions = 1
+
+[[cases]]
+id = "capital"
+kind = "chat"
+prompt = "What is the capital of France? Answer in one sentence."
+
+[scoring]
+mode = "contains"
+expected = "Paris"

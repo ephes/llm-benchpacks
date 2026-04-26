@@ -83,9 +83,45 @@ Every run should record:
 - exit status and error payloads
 - scoring result for deterministic packs
 
+## CLI
+
+The runner exposes a single subcommand for executing a pack:
+
+```text
+benchpack run <pack> --adapter <adapter> --model <model>
+                     [--endpoint <url>]
+                     [--out <dir>]
+                     [--host-label <label>]
+                     [--force]
+```
+
+- `<pack>` is either a path to a pack directory containing `benchpack.toml`
+  or a pack name resolved under `benchpacks/<name>/`.
+- `--adapter` selects a registered adapter (`openai-chat`, `ollama-generate`).
+- `--model` is passed verbatim to the adapter.
+- `--endpoint` is the runtime URL. Adapters resolve a base URL against their
+  conventional path (e.g. `/v1/chat/completions`, `/api/generate`); the
+  resolved URL is recorded in each result record as `endpoint`.
+- `--out` overrides the output directory. The default is
+  `results/<YYYY-MM-DD>-<host-label>/`.
+- `--host-label` overrides the auto-derived host label used in the default
+  `--out` path.
+
+### Output directory collision
+
+The runner refuses to write into an output directory that already contains a
+`run.jsonl`. This prevents two runs sharing the same `<date>-<host-label>`
+from interleaving result rows or overwriting each other's `raw/` files.
+
+- Pass `--force` to delete the existing directory before the new run starts.
+- Or pass `--out <dir>` to write somewhere distinct.
+
+`run.jsonl` itself is append-only within a single run: the reporter appends
+one record per case as it executes.
+
 ## Result Artifacts
 
-Results should be append-only and easy to inspect:
+Results are easy to inspect and follow a fixed layout per run:
 
 ```text
 results/

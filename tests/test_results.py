@@ -1,0 +1,208 @@
+"""Tests for benchpack.results (the reporter)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
+from benchpack.packs import Case, Pack, Scoring
+from benchpack.results import RunReporter
+
+
+def make_pack(tmp_path: Path, scoring: Scoring | None = None) -> Pack:
+    return Pack(
+        id="smoke-chat",
+        version="0.1.0",
+        description="test",
+        defaults={},
+        cases=[
+            Case(
+                id="capital",
+                kind="chat",
+                prompt="What is the capital of France?",
+                scoring=None,
+                raw={},
+            )
+        ],
+        scoring=scoring,
+        path=tmp_path / "pack",
+    )
+
+
+def make_adapter_result(out_dir: Path, output_text: str = "Paris.") -> AdapterResult:
+    raw_dir = out_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    req = raw_dir / "capital.request.json"
+    resp = raw_dir / "capital.response.json"
+    req.write_text("{}")
+    resp.write_text("{}")
+    return AdapterResult(
+        adapter="ollama-generate",
+        endpoint="http://localhost:11434/api/generate",
+        model="qwen3-coder",
+        ok=True,
+        timing=Timing(wall_s=4.0, ttft_s=0.5, prefill_tps=950.0, decode_tps=42.0),
+        tokens=Tokens(prompt=32768, output=192),
+        raw=RawPaths(request_path=str(req), response_path=str(resp)),
+        output_text=output_text,
+        backend={"prompt_eval_count": 32768},
+    )
+
+
+def test_record_matches_documented_combined_shape(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    ar = make_adapter_result(out)
+
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": 6234, "gpu_memory_mb": 14820},
+    )
+
+    # All fields from docs/architecture.md "Combined record" must be present.
+    assert record["pack"] == {"id": "smoke-chat", "version": "0.1.0"}
+    assert record["case"] == "capital"
+    assert record["adapter"] == "ollama-generate"
+    assert record["endpoint"] == "http://localhost:11434/api/generate"
+    assert record["model"] == "qwen3-coder"
+    assert record["ok"] is True
+
+    timing = record["timing"]
+    assert timing["wall_s"] == 4.0
+    assert timing["ttft_s"] == 0.5
+    assert timing["prefill_tps"] == 950.0
+    assert timing["decode_tps"] == 42.0
+    assert timing["total_tps"] == 48.0  # 192 / 4.0
+
+    assert record["tokens"] == {"prompt": 32768, "output": 192}
+    assert record["resources"] == {"memory_mb": 6234, "gpu_memory_mb": 14820}
+    assert record["scoring"] == {"mode": "contains", "passed": True}
+
+    # raw paths are relative to the run dir per the spec example.
+    assert record["raw"]["request_path"] == "raw/capital.request.json"
+    assert record["raw"]["response_path"] == "raw/capital.response.json"
+
+    # backend table from the adapter is preserved verbatim.
+    assert record["backend"] == {"prompt_eval_count": 32768}
+
+
+def test_record_appends_to_run_jsonl(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+
+    lines = (out / "run.jsonl").read_text().strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["case"] == "capital"
+
+
+def test_record_uses_per_case_scoring_override(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = Pack(
+        id="mix",
+        version="0.1.0",
+        description="",
+        defaults={},
+        cases=[
+            Case(
+                id="capital",
+                kind="chat",
+                prompt="x",
+                scoring=Scoring(mode="contains", expected="London"),
+                raw={},
+            )
+        ],
+        scoring=Scoring(mode="contains", expected="Paris"),
+        path=tmp_path / "pack",
+    )
+    reporter = RunReporter(out, pack)
+    record = reporter.record(
+        pack.cases[0],
+        make_adapter_result(out, output_text="Paris."),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    # Per-case override wins; "London" not in "Paris." → passed False.
+    assert record["scoring"] == {"mode": "contains", "passed": False}
+
+
+def test_record_scoring_null_when_pack_has_none(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)  # no scoring at all
+    reporter = RunReporter(out, pack)
+    record = reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    assert record["scoring"] is None
+
+
+def test_total_tps_null_when_inputs_missing(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    raw_dir = out / "raw"  # already created by reporter
+    req = raw_dir / "capital.request.json"
+    resp = raw_dir / "capital.response.json"
+    req.write_text("{}")
+    resp.write_text("{}")
+    ar = AdapterResult(
+        adapter="openai-chat",
+        endpoint="http://example.test/v1/chat/completions",
+        model="m",
+        ok=True,
+        timing=Timing(wall_s=2.0),
+        tokens=Tokens(prompt=None, output=None),
+        raw=RawPaths(request_path=str(req), response_path=str(resp)),
+        output_text="",
+    )
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    assert record["timing"]["total_tps"] is None
+
+
+def test_case_paths_inside_raw_subdir(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    req, resp = reporter.case_paths(pack.cases[0])
+    assert req == out / "raw" / "capital.request.json"
+    assert resp == out / "raw" / "capital.response.json"
+    assert req.parent.exists()
+
+
+def test_write_hardware_writes_json(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    reporter.write_hardware({"hostname": "h", "platform": "darwin", "gpus": []})
+    data = json.loads((out / "hardware.json").read_text())
+    assert data["hostname"] == "h"
+
+
+def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+    assert "smoke-chat" in text
+    assert "capital" in text
+    assert "ollama-generate" in text

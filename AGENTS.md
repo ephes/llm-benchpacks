@@ -47,8 +47,8 @@ and OpenAI-compatible local servers.
 
 ## Validation
 
-Until the runner exists, validate documentation changes by reviewing links and
-checking `git status --short`.
-
-Once implementation starts, add a single repo-level validation command and record
-it here.
+- Repo-level validation command: `uv run pytest`.
+- For documentation-only changes, additionally review links and check
+  `git status --short`.
+- For end-to-end checks, run the smoke pack against a reachable endpoint, e.g.
+  `uv run benchpack run smoke-chat --adapter ollama-generate --model <model>`.

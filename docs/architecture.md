@@ -62,12 +62,17 @@ sample host resources, or compute derived metrics.
 
 The runtime adapter returns only fields the backend can supply directly:
 
-- `adapter`, `model`, `ok`
+- `adapter`, `endpoint`, `model`, `ok`
 - `timing.wall_s`, `timing.ttft_s`, `timing.prefill_tps`, `timing.decode_tps`
 - `tokens.prompt`, `tokens.output`
 - `raw.request_path`, `raw.response_path`
 - optional `backend` table for backend-specific fields the adapter wants to
   preserve verbatim
+
+`endpoint` is the resolved URL the adapter actually called (after appending
+`/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
+argument).  It is recorded so result records remain unambiguous when the same
+adapter/model points at different local servers.
 
 ### Collector sample
 
@@ -101,6 +106,7 @@ id/version get attached for cross-run comparison.
   "pack": { "id": "smoke-chat", "version": "0.1.0" },
   "case": "capital",
   "adapter": "ollama-generate",
+  "endpoint": "http://localhost:11434/api/generate",
   "model": "qwen3-coder",
   "ok": true,
   "timing": {

@@ -25,14 +25,29 @@ and whether the final repository changes pass verification.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
 
+## Usage
+
+The Phase 1 runner is in `src/benchpack/`, managed with [`uv`](https://docs.astral.sh/uv/):
+
+```sh
+uv sync
+uv run benchpack run smoke-chat --adapter ollama-generate --model qwen3-coder:latest
+uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1
+```
+
+Each invocation writes `results/<date>-<host-label>/` containing
+`run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
+[`docs/specification.md`](docs/specification.md) for the full CLI shape and
+collision rules, and `uv run pytest` for the test suite.
+
 ## Initial Shape
 
-The first implementation should stay small:
+The first implementation stays small:
 
 1. A CLI that can run one benchmark pack against one endpoint.
 2. An OpenAI-compatible adapter for `mlx_lm.server`, `llama-server`, vLLM, LM Studio, and similar servers.
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
-4. A smoke benchmark and one real workload pack from `desktop-django-starter`.
+4. A smoke benchmark and one real workload pack from `desktop-django-starter` (the workload pack is Phase 3 work).
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

@@ -30,7 +30,7 @@ expected = "Paris"
 ## Fields
 
 `pack.id`
-: Stable pack identifier used in result records.
+: Stable pack identifier used in result records. Must match the id grammar below.
 
 `pack.version`
 : Version of the workload. Change it when prompts, fixtures, or scoring change.
@@ -39,11 +39,20 @@ expected = "Paris"
 : Request defaults shared by cases.
 
 `cases`
-: Ordered benchmark cases.
+: Ordered benchmark cases. Each case `id` must match the id grammar below and
+  must be unique within the pack.
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
   inline on individual cases as an override. See **Scoring** below.
+
+## ID Grammar
+
+Pack and case ids are used both as stable record keys and as filesystem path
+components (e.g. `raw/<case-id>.request.json`). They must match
+`^[A-Za-z0-9][A-Za-z0-9_-]*$`: start with an alphanumeric, then any mix of
+alphanumerics, underscore, and hyphen. No dots, slashes, spaces, or empty
+strings. The runner rejects manifests that violate this at load time.
 
 ## Case Kinds
 
