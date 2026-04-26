@@ -68,10 +68,10 @@ class RunReporter:
             self.raw_dir / f"{prefix}.response.json",
         )
 
-    def warmup_paths(self, case: Case, warmup: int) -> tuple[Path, Path]:
-        if warmup < 1:
+    def warmup_paths(self, case: Case, warmup_index: int) -> tuple[Path, Path]:
+        if warmup_index < 1:
             raise ValueError("warmup must be >= 1")
-        prefix = f"{case.id}.warmup-{warmup:03d}"
+        prefix = f"{case.id}.warmup-{warmup_index:03d}"
         return (
             self.raw_dir / f"{prefix}.request.json",
             self.raw_dir / f"{prefix}.response.json",
@@ -116,6 +116,10 @@ class RunReporter:
             },
         }
         if repetition is not None:
+            if isinstance(repetition, bool) or not isinstance(repetition, int):
+                raise ValueError("repetition must be an integer >= 1")
+            if repetition < 1:
+                raise ValueError("repetition must be an integer >= 1")
             record["repetition"] = repetition
         if adapter_result.backend is not None:
             record["backend"] = adapter_result.backend

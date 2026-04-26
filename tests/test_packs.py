@@ -283,3 +283,27 @@ prompt = "x"
 
     assert warmup_from_defaults(pack.defaults) == 1
     assert repetitions_from_defaults(pack.defaults) == 2
+
+
+def test_load_pack_accepts_explicit_zero_warmup(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "p"
+version = "0.1.0"
+
+[defaults]
+warmup = 0
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    pack = load_pack(pack_dir)
+
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1

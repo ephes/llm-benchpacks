@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
 from benchpack.packs import Case, Pack, Scoring
 from benchpack.results import RunReporter
@@ -239,6 +241,24 @@ def test_record_can_include_reporter_owned_repetition(tmp_path: Path) -> None:
 
     assert record["repetition"] == 2
     assert record["raw"]["request_path"] == "raw/capital.rep-002.request.json"
+
+
+@pytest.mark.parametrize("repetition", [0, -1, True, "1"])
+def test_record_rejects_invalid_repetition(
+    tmp_path: Path,
+    repetition: object,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+
+    with pytest.raises(ValueError, match="repetition"):
+        reporter.record(
+            pack.cases[0],
+            make_adapter_result(out),
+            sample={"memory_mb": None, "gpu_memory_mb": None},
+            repetition=repetition,  # type: ignore[arg-type]
+        )
 
 
 def test_write_hardware_writes_json(tmp_path: Path) -> None:
