@@ -83,6 +83,22 @@ Every run should record:
 - exit status and error payloads
 - scoring result for deterministic packs
 
+For `openai-chat`, `timing.ttft_s`, `timing.prefill_tps`, and
+`timing.decode_tps` are populated when the pack sets `defaults.stream = true`
+and the endpoint returns streaming chunks. TTFT is measured from request send to
+the first non-empty `delta.content` chunk. `prefill_tps` is approximated as
+reported prompt tokens divided by TTFT; `decode_tps` is approximated as reported
+output tokens divided by post-TTFT wall time. These rates include transport and
+server scheduling overhead because OpenAI-compatible streaming APIs do not
+expose native prefill/decode durations.
+
+The `openai-chat` streaming path requests `stream_options.include_usage` so
+token counts can be captured when the server supports OpenAI's streaming usage
+chunk. Some OpenAI-compatible local servers may reject that option; those runs
+are recorded as adapter errors rather than silently retrying with different
+request semantics. Use non-streaming packs for those servers until their
+streaming usage support or an explicit compatibility mode exists.
+
 ## CLI
 
 The runner exposes a single subcommand for executing a pack:

@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-26 (Phase 2 streaming TTFT)
+
+### Changed
+
+- `openai-chat` now honors `defaults.stream = true` by using streamed chat
+  completions with `stream_options.include_usage`, measuring TTFT from request
+  send to the first non-empty `delta.content` chunk, and assembling raw streamed
+  output plus per-chunk wall offsets under `raw/<case>.response.json`.
+- When streaming usage is reported, `openai-chat` fills `tokens.prompt`,
+  `tokens.output`, `timing.prefill_tps`, and `timing.decode_tps`. The prefill
+  and decode rates are TTFT-based approximations because OpenAI-compatible
+  streaming APIs do not expose native runtime phase durations.
+- Non-streaming `openai-chat` requests remain the default when
+  `defaults.stream` is false or absent.
+- Stream parse failures keep any assembled partial content in the raw response
+  file for debugging, but return empty `output_text` to the reporter so failed
+  partial generations are not scored as successful output.
+
+### Open Questions
+
+- Warmup, repetitions, the `runtime-sweep` pack, and the compare command remain
+  later Phase 2 slices.
+- Some older OpenAI-compatible local servers reject
+  `stream_options.include_usage`; an explicit compatibility mode may be needed
+  when validating against those servers.
+
 ## 2026-04-26 (post-review)
 
 ### Changed

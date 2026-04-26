@@ -1,8 +1,4 @@
-"""OpenAI-compatible ``/v1/chat/completions`` adapter.
-
-Phase 1 is non-streaming.  ``ttft_s`` / ``prefill_tps`` / ``decode_tps`` are
-left as ``None`` until streaming support lands in Phase 2.
-"""
+"""OpenAI-compatible ``/v1/chat/completions`` adapter."""
 
 from __future__ import annotations
 
@@ -33,6 +29,19 @@ def _resolve_url(endpoint: str | None) -> str:
     return base + "/v1/chat/completions"
 
 
+def _tps(count: int | None, duration_s: float | None) -> float | None:
+    if not count or not duration_s or duration_s <= 0:
+        return None
+    return round(count / duration_s, 4)
+
+
+def _json_payload_from_response(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return {"text": response.text}
+
+
 @register
 class OpenAIChatAdapter:
     name = "openai-chat"
@@ -55,6 +64,11 @@ class OpenAIChatAdapter:
         for key in ("temperature", "max_tokens", "top_p"):
             if key in request.defaults:
                 body[key] = request.defaults[key]
+
+        if request.defaults.get("stream"):
+            body["stream"] = True
+            body["stream_options"] = {"include_usage": True}
+            return self._run_streaming(request, url, body)
 
         request.request_path.write_text(json.dumps(body, indent=2))
 
@@ -104,6 +118,112 @@ class OpenAIChatAdapter:
             model=request.model,
             ok=ok,
             timing=Timing(wall_s=wall_s),
+            tokens=Tokens(prompt=prompt_tokens, output=completion_tokens),
+            raw=RawPaths(
+                request_path=str(request.request_path),
+                response_path=str(request.response_path),
+            ),
+            output_text=output_text,
+            backend=None,
+            error=error,
+        )
+
+    def _run_streaming(
+        self,
+        request: AdapterRequest,
+        url: str,
+        body: dict[str, Any],
+    ) -> AdapterResult:
+        request.request_path.write_text(json.dumps(body, indent=2))
+
+        ok = True
+        error: str | None = None
+        usage: dict[str, Any] = {}
+        output_parts: list[str] = []
+        chunks: list[dict[str, Any]] = []
+        ttft_s: float | None = None
+        wall_s = 0.0
+        error_payload: Any = None
+
+        client = httpx.Client(transport=self._transport, timeout=self._timeout)
+        start = time.monotonic()
+        try:
+            with client.stream("POST", url, json=body) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    error_payload = _json_payload_from_response(response)
+                    ok = False
+                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                else:
+                    for line in response.iter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line.removeprefix("data:").strip()
+                        if data == "[DONE]":
+                            continue
+
+                        payload = json.loads(data)
+                        if payload.get("usage"):
+                            usage = payload["usage"]
+
+                        choices = payload.get("choices") or []
+                        delta = ""
+                        if choices:
+                            delta_payload = choices[0].get("delta") or {}
+                            delta = delta_payload.get("content") or ""
+                        offset_s = time.monotonic() - start
+                        chunks.append({"offset_s": offset_s, "delta": delta})
+                        if delta:
+                            if ttft_s is None:
+                                ttft_s = offset_s
+                            output_parts.append(delta)
+        except httpx.HTTPError as exc:
+            ok = False
+            error = f"transport error: {exc!r}"
+            error_payload = {"error": str(exc)}
+        except json.JSONDecodeError as exc:
+            ok = False
+            error = f"stream parse error: {exc}"
+        finally:
+            wall_s = time.monotonic() - start
+            client.close()
+
+        assembled_text = "".join(output_parts)
+        response_payload: dict[str, Any] = {
+            "model": request.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": assembled_text},
+                }
+            ],
+            "chunks": chunks,
+        }
+        if usage:
+            response_payload["usage"] = usage
+        if error is not None:
+            response_payload["error"] = error
+        if error_payload is not None:
+            response_payload["error_payload"] = error_payload
+        request.response_path.write_text(json.dumps(response_payload, indent=2))
+
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        prefill_tps = _tps(prompt_tokens, ttft_s)
+        decode_tps = _tps(completion_tokens, wall_s - ttft_s if ttft_s else None)
+        output_text = assembled_text if ok else ""
+
+        return AdapterResult(
+            adapter=self.name,
+            endpoint=url,
+            model=request.model,
+            ok=ok,
+            timing=Timing(
+                wall_s=wall_s,
+                ttft_s=ttft_s,
+                prefill_tps=prefill_tps,
+                decode_tps=decode_tps,
+            ),
             tokens=Tokens(prompt=prompt_tokens, output=completion_tokens),
             raw=RawPaths(
                 request_path=str(request.request_path),

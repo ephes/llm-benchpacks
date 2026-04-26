@@ -38,6 +38,14 @@ expected = "Paris"
 `defaults`
 : Request defaults shared by cases.
 
+`defaults.stream`
+: When true, adapters that support streaming may use a streaming request path.
+  `openai-chat` honors this flag by requesting streamed chat completions and
+  measuring TTFT from the first non-empty content delta. When false or absent,
+  `openai-chat` keeps the non-streaming request shape. The example above is a
+  schema example; individual packs such as `smoke-chat` may leave streaming off
+  to preserve non-streaming smoke coverage.
+
 `cases`
 : Ordered benchmark cases. Each case `id` must match the id grammar below and
   must be unique within the pack.
