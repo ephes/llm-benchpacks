@@ -225,6 +225,56 @@ def test_repetition_and_warmup_paths_use_stable_suffixes(tmp_path: Path) -> None
     assert resp == out / "raw" / "capital.warmup-001.response.json"
 
 
+@pytest.mark.parametrize("repetition", [0, -1, True, "1"])
+def test_measured_paths_rejects_invalid_repetition(
+    tmp_path: Path,
+    repetition: object,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+
+    with pytest.raises(ValueError, match="repetition"):
+        reporter.measured_paths(
+            pack.cases[0],
+            repetition,  # type: ignore[arg-type]
+            1,
+        )
+
+
+@pytest.mark.parametrize("total_repetitions", [0, -1, True, "1"])
+def test_measured_paths_rejects_invalid_total_repetitions(
+    tmp_path: Path,
+    total_repetitions: object,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+
+    with pytest.raises(ValueError, match="total_repetitions"):
+        reporter.measured_paths(
+            pack.cases[0],
+            1,
+            total_repetitions,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("warmup_index", [0, -1, True, "1"])
+def test_warmup_paths_rejects_invalid_warmup_index(
+    tmp_path: Path,
+    warmup_index: object,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+
+    with pytest.raises(ValueError, match="warmup_index"):
+        reporter.warmup_paths(
+            pack.cases[0],
+            warmup_index,  # type: ignore[arg-type]
+        )
+
+
 def test_record_can_include_reporter_owned_repetition(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path)

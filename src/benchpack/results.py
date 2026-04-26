@@ -54,10 +54,14 @@ class RunReporter:
         repetition: int,
         total_repetitions: int,
     ) -> tuple[Path, Path]:
+        if isinstance(repetition, bool) or not isinstance(repetition, int):
+            raise ValueError("repetition must be an integer >= 1")
         if repetition < 1:
-            raise ValueError("repetition must be >= 1")
+            raise ValueError("repetition must be an integer >= 1")
+        if isinstance(total_repetitions, bool) or not isinstance(total_repetitions, int):
+            raise ValueError("total_repetitions must be an integer >= 1")
         if total_repetitions < 1:
-            raise ValueError("total_repetitions must be >= 1")
+            raise ValueError("total_repetitions must be an integer >= 1")
         if repetition > total_repetitions:
             raise ValueError("repetition must be <= total_repetitions")
         if total_repetitions == 1:
@@ -69,8 +73,10 @@ class RunReporter:
         )
 
     def warmup_paths(self, case: Case, warmup_index: int) -> tuple[Path, Path]:
+        if isinstance(warmup_index, bool) or not isinstance(warmup_index, int):
+            raise ValueError("warmup_index must be an integer >= 1")
         if warmup_index < 1:
-            raise ValueError("warmup must be >= 1")
+            raise ValueError("warmup_index must be an integer >= 1")
         prefix = f"{case.id}.warmup-{warmup_index:03d}"
         return (
             self.raw_dir / f"{prefix}.request.json",
