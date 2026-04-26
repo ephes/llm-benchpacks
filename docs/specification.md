@@ -89,16 +89,21 @@ Results should be append-only and easy to inspect:
 
 ```text
 results/
-  2026-04-26-m5-mbp/
+  2026-04-26-m5-mbp-64gb/
     run.jsonl
     summary.md
+    hardware.json
     raw/
       case-001.request.json
       case-001.response.json
 ```
 
-Large generated artifacts should stay out of git by default. Small summary files
-and curated run logs may be committed.
+`hardware.json` is the per-run host metadata file described in
+`docs/hardware-targets.md`. `summary.md` and `hardware.json` are committable;
+`raw/` is generated and ignored by default.
+
+Large generated artifacts should stay out of git by default. Curated
+`summary.md`, `hardware.json`, and small `run.jsonl` files may be committed.
 
 ## MVP
 

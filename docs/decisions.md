@@ -44,3 +44,20 @@ large response file.
 
 Reason: benchmark runs can produce noisy or large artifacts. The repo should stay
 usable as source.
+
+## D-007: Python With uv
+
+The first implementation is a Python package managed with `uv`.
+
+Reason: most local LLM tooling (`mlx-lm`, llama.cpp Python bindings, Ollama
+clients, vLLM) has first-class Python support, and `uv` gives reproducible
+dependency resolution and fast environment setup without committing to a
+heavier packaging system this early.
+
+## D-008: TOML For Pack Manifests
+
+Benchpack manifests are TOML files (`benchpack.toml`).
+
+Reason: TOML is human-editable, supports the table and array-of-tables shape that
+packs need (cases, scoring), and matches the Python tooling already used by `uv`
+and `pyproject.toml`.

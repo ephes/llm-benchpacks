@@ -7,8 +7,8 @@ __pycache__/
 node_modules/
 
 # Generated benchmark output
-results/*
-!results/.gitkeep
+# Raw responses stay local; curated summaries under results/ may be committed.
+results/*/raw/
 
 # Local environment
 .env

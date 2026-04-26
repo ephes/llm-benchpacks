@@ -13,6 +13,7 @@ and OpenAI-compatible local servers.
 - `docs/architecture.md`
 - `docs/implementation-plan.md`
 - `docs/benchpack-format.md`
+- `docs/hardware-targets.md`
 - `docs/decisions.md`
 - `docs/spec-log.md`
 - `docs/run-log.md`
@@ -33,6 +34,12 @@ and OpenAI-compatible local servers.
 
 - Update `docs/specification.md` when behavior, result schema, CLI shape, or pack
   semantics change.
+- Update `docs/architecture.md` when component boundaries, adapter contracts, or
+  result envelopes change.
+- Update `docs/benchpack-format.md` when manifest fields, case kinds, or scoring
+  modes change.
+- Update `docs/hardware-targets.md` when supported targets or hardware metadata
+  fields change.
 - Add durable design choices to `docs/decisions.md`.
 - Add dated design movement and open questions to `docs/spec-log.md`.
 - Add curated benchmark outcomes to `docs/run-log.md`.
