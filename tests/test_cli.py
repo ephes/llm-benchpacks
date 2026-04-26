@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -13,8 +14,11 @@ from benchpack.adapters.openai_chat import OpenAIChatAdapter
 from benchpack.cli import main
 
 
-def _install_fake_adapter(monkeypatch) -> None:
+def _install_fake_adapter(monkeypatch) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(json.loads(request.content))
         return httpx.Response(
             200,
             json={
@@ -30,13 +34,14 @@ def _install_fake_adapter(monkeypatch) -> None:
             super().__init__(transport=transport)
 
     monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", FakeAdapter)
+    return calls
 
 
-def _write_smoke_pack(tmp_path: Path) -> None:
+def _write_smoke_pack(tmp_path: Path, defaults_extra: str = "") -> None:
     pack_dir = tmp_path / "benchpacks" / "smoke-chat"
     pack_dir.mkdir(parents=True)
     (pack_dir / "benchpack.toml").write_text(
-        """
+        f"""
 [pack]
 id = "smoke-chat"
 version = "0.1.0"
@@ -45,6 +50,7 @@ version = "0.1.0"
 temperature = 0
 max_tokens = 32
 stream = false
+{defaults_extra}
 
 [[cases]]
 id = "capital"
@@ -103,6 +109,84 @@ def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> Non
     assert record["scoring"] == {"mode": "contains", "passed": True}
     assert record["raw"]["request_path"] == "raw/capital.request.json"
     assert record["resources"].keys() == {"memory_mb", "gpu_memory_mb"}
+    assert "repetition" not in record
+
+
+def test_cli_repetitions_write_distinct_measured_records(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path, defaults_extra="repetitions = 2")
+
+    assert main(_argv()) == 0
+
+    out = next((tmp_path / "results").iterdir())
+    records = [
+        json.loads(line)
+        for line in (out / "run.jsonl").read_text().strip().splitlines()
+    ]
+    assert [record["repetition"] for record in records] == [1, 2]
+    assert [record["raw"]["request_path"] for record in records] == [
+        "raw/capital.rep-001.request.json",
+        "raw/capital.rep-002.request.json",
+    ]
+    assert (out / "raw" / "capital.rep-001.request.json").exists()
+    assert (out / "raw" / "capital.rep-001.response.json").exists()
+    assert (out / "raw" / "capital.rep-002.request.json").exists()
+    assert (out / "raw" / "capital.rep-002.response.json").exists()
+    assert not (out / "raw" / "capital.request.json").exists()
+
+    summary = (out / "summary.md").read_text()
+    assert "capital#1" in summary
+    assert "capital#2" in summary
+
+
+def test_cli_warmup_is_unrecorded_and_measured_repetitions_are_recorded(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path, defaults_extra="warmup = 1\nrepetitions = 2")
+
+    assert main(_argv()) == 0
+
+    out = next((tmp_path / "results").iterdir())
+    records = [
+        json.loads(line)
+        for line in (out / "run.jsonl").read_text().strip().splitlines()
+    ]
+    assert len(calls) == 3
+    assert len(records) == 2
+    assert [record["repetition"] for record in records] == [1, 2]
+    assert (out / "raw" / "capital.warmup-001.request.json").exists()
+    assert (out / "raw" / "capital.warmup-001.response.json").exists()
+    assert all("warmup" not in record["raw"]["request_path"] for record in records)
+    assert "warmup" not in (out / "summary.md").read_text()
+
+
+def test_cli_repetitions_one_keeps_legacy_raw_paths_and_record_shape(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path, defaults_extra="repetitions = 1")
+
+    assert main(_argv()) == 0
+
+    out = next((tmp_path / "results").iterdir())
+    assert (out / "raw" / "capital.request.json").exists()
+    assert (out / "raw" / "capital.response.json").exists()
+    assert not (out / "raw" / "capital.rep-001.request.json").exists()
+    record = json.loads((out / "run.jsonl").read_text().strip())
+    assert "repetition" not in record
+    assert record["raw"] == {
+        "request_path": "raw/capital.request.json",
+        "response_path": "raw/capital.response.json",
+    }
 
 
 def test_cli_refuses_to_overwrite_existing_run(tmp_path: Path, monkeypatch) -> None:

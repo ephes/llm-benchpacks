@@ -50,6 +50,28 @@ def make_adapter_result(out_dir: Path, output_text: str = "Paris.") -> AdapterRe
     )
 
 
+def make_adapter_result_for_paths(
+    request_path: Path,
+    response_path: Path,
+    output_text: str = "Paris.",
+) -> AdapterResult:
+    request_path.write_text("{}")
+    response_path.write_text("{}")
+    return AdapterResult(
+        adapter="ollama-generate",
+        endpoint="http://localhost:11434/api/generate",
+        model="qwen3-coder",
+        ok=True,
+        timing=Timing(wall_s=4.0),
+        tokens=Tokens(prompt=7, output=2),
+        raw=RawPaths(
+            request_path=str(request_path),
+            response_path=str(response_path),
+        ),
+        output_text=output_text,
+    )
+
+
 def test_record_matches_documented_combined_shape(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
@@ -183,6 +205,42 @@ def test_case_paths_inside_raw_subdir(tmp_path: Path) -> None:
     assert req.parent.exists()
 
 
+def test_repetition_and_warmup_paths_use_stable_suffixes(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+
+    req, resp = reporter.measured_paths(pack.cases[0], 1, 1)
+    assert req == out / "raw" / "capital.request.json"
+    assert resp == out / "raw" / "capital.response.json"
+
+    req, resp = reporter.measured_paths(pack.cases[0], 2, 3)
+    assert req == out / "raw" / "capital.rep-002.request.json"
+    assert resp == out / "raw" / "capital.rep-002.response.json"
+
+    req, resp = reporter.warmup_paths(pack.cases[0], 1)
+    assert req == out / "raw" / "capital.warmup-001.request.json"
+    assert resp == out / "raw" / "capital.warmup-001.response.json"
+
+
+def test_record_can_include_reporter_owned_repetition(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    req, resp = reporter.measured_paths(pack.cases[0], 2, 2)
+    ar = make_adapter_result_for_paths(req, resp)
+
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        repetition=2,
+    )
+
+    assert record["repetition"] == 2
+    assert record["raw"]["request_path"] == "raw/capital.rep-002.request.json"
+
+
 def test_write_hardware_writes_json(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path)
@@ -206,3 +264,23 @@ def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
     assert "smoke-chat" in text
     assert "capital" in text
     assert "ollama-generate" in text
+
+
+def test_write_summary_distinguishes_repetitions(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    for repetition in (1, 2):
+        req, resp = reporter.measured_paths(pack.cases[0], repetition, 2)
+        reporter.record(
+            pack.cases[0],
+            make_adapter_result_for_paths(req, resp),
+            sample={"memory_mb": None, "gpu_memory_mb": None},
+            repetition=repetition,
+        )
+
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+
+    assert "capital#1" in text
+    assert "capital#2" in text

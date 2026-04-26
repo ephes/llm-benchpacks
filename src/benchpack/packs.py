@@ -47,6 +47,10 @@ class UnknownScoringModeError(PackError):
     """Raised when a scoring mode is not in the documented set."""
 
 
+class InvalidDefaultError(PackError):
+    """Raised when a manifest default has the wrong type or range."""
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.match(value):
         raise InvalidIdError(
@@ -108,6 +112,51 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
     )
 
 
+def _validated_int_default(
+    defaults: dict[str, Any],
+    key: str,
+    fallback: int,
+    minimum: int,
+) -> int:
+    if key not in defaults:
+        return fallback
+    value = defaults[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise InvalidDefaultError(
+            f"defaults.{key} must be an integer >= {minimum}; got {value!r}"
+        )
+    if value < minimum:
+        raise InvalidDefaultError(
+            f"defaults.{key} must be an integer >= {minimum}; got {value!r}"
+        )
+    return value
+
+
+def repetitions_from_defaults(defaults: dict[str, Any]) -> int:
+    """Return the measured repetition count requested by pack defaults."""
+
+    return _validated_int_default(defaults, "repetitions", fallback=1, minimum=1)
+
+
+def warmup_from_defaults(defaults: dict[str, Any]) -> int:
+    """Return the warmup execution count requested by pack defaults."""
+
+    return _validated_int_default(defaults, "warmup", fallback=0, minimum=0)
+
+
+def _defaults_from_dict(data: Any) -> dict[str, Any]:
+    if data is None:
+        defaults: dict[str, Any] = {}
+    elif isinstance(data, dict):
+        defaults = dict(data)
+    else:
+        raise PackError("[defaults] must be a table")
+
+    repetitions_from_defaults(defaults)
+    warmup_from_defaults(defaults)
+    return defaults
+
+
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
@@ -141,11 +190,13 @@ def load_pack(path: Path | str) -> Pack:
             )
         )
 
+    defaults = _defaults_from_dict(data.get("defaults"))
+
     return Pack(
         id=pack_id,
         version=pack_version,
         description=pack_section.get("description", ""),
-        defaults=dict(data.get("defaults") or {}),
+        defaults=defaults,
         cases=cases,
         scoring=_scoring_from_dict(data.get("scoring")),
         path=pack_dir,

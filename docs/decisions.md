@@ -61,3 +61,13 @@ Benchpack manifests are TOML files (`benchpack.toml`).
 Reason: TOML is human-editable, supports the table and array-of-tables shape that
 packs need (cases, scoring), and matches the Python tooling already used by `uv`
 and `pyproject.toml`.
+
+## D-009: Pack-Owned Warmup And Repetition Counts
+
+Measured repetition count and warmup count live in pack manifest defaults as
+`defaults.repetitions` and `defaults.warmup`, not CLI flags.
+
+Reason: repeated runtime measurements are part of the benchmark workload
+contract. Keeping counts in the pack makes runs comparable across hosts and
+avoids ad hoc invocation differences. Warmups are excluded from `run.jsonl`,
+scoring, and summaries because they are preparation work, not benchmark samples.

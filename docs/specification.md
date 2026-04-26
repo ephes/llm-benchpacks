@@ -123,6 +123,27 @@ benchpack run <pack> --adapter <adapter> --model <model>
 - `--host-label` overrides the auto-derived host label used in the default
   `--out` path.
 
+### Pack-driven repetitions and warmup
+
+`benchpack run` executes the ordered cases from the pack manifest. Each case may
+run more than once based on `[defaults]` in `benchpack.toml`:
+
+- `defaults.warmup` is the number of unrecorded warmup executions per case.
+  It defaults to `0` and must be a non-negative integer.
+- `defaults.repetitions` is the number of measured executions per case. It
+  defaults to `1` and must be a positive integer.
+
+For each case, warmup executions run first with the same adapter, model,
+endpoint, prompt, and request defaults as measured executions. Warmups write raw
+request/response files for debugging, but they are not scored and do not appear
+in `run.jsonl` or `summary.md`.
+
+Measured repetitions run after warmup and each measured execution appends one
+record to `run.jsonl`. When `repetitions > 1`, each measured record includes a
+top-level reporter-owned `repetition` field with a 1-based integer. Single
+repetition packs keep the previous record shape and do not include
+`repetition`.
+
 ### Output directory collision
 
 The runner refuses to write into an output directory that already contains a
@@ -133,7 +154,7 @@ from interleaving result rows or overwriting each other's `raw/` files.
 - Or pass `--out <dir>` to write somewhere distinct.
 
 `run.jsonl` itself is append-only within a single run: the reporter appends
-one record per case as it executes.
+one record per measured execution as it executes.
 
 ## Result Artifacts
 
@@ -153,6 +174,36 @@ results/
 `hardware.json` is the per-run host metadata file described in
 `docs/hardware-targets.md`. `summary.md` and `hardware.json` are committable;
 `raw/` is generated and ignored by default.
+
+Raw request/response names preserve the legacy shape when a pack has exactly one
+measured repetition:
+
+```text
+raw/<case>.request.json
+raw/<case>.response.json
+```
+
+When `defaults.repetitions > 1`, measured executions use stable 1-based
+suffixes to avoid overwrites:
+
+```text
+raw/<case>.rep-001.request.json
+raw/<case>.rep-001.response.json
+raw/<case>.rep-002.request.json
+raw/<case>.rep-002.response.json
+```
+
+Warmup executions use separate names that cannot collide with measured runs:
+
+```text
+raw/<case>.warmup-001.request.json
+raw/<case>.warmup-001.response.json
+```
+
+`summary.md` contains one row per measured record. For repeated cases the case
+cell is displayed as `<case>#<repetition>` so rows remain distinguishable without
+changing the summary table columns. Single-repetition summaries keep the legacy
+case label.
 
 Large generated artifacts should stay out of git by default. Curated
 `summary.md`, `hardware.json`, and small `run.jsonl` files may be committed.

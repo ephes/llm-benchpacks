@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from benchpack.packs import DuplicateCaseIdError, InvalidIdError, load_pack
+from benchpack.packs import (
+    DuplicateCaseIdError,
+    InvalidDefaultError,
+    InvalidIdError,
+    load_pack,
+    repetitions_from_defaults,
+    warmup_from_defaults,
+)
 
 
 def write_manifest(tmp_path: Path, body: str) -> Path:
@@ -49,6 +56,8 @@ expected = "Paris"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 64
     assert pack.defaults["stream"] is False
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert warmup_from_defaults(pack.defaults) == 0
     assert len(pack.cases) == 1
     assert pack.cases[0].id == "capital"
     assert pack.cases[0].kind == "chat"
@@ -214,3 +223,63 @@ prompt = "x"
     pack = load_pack(str(pack_dir))
 
     assert pack.id == "p"
+
+
+@pytest.mark.parametrize(
+    "defaults_body",
+    [
+        "repetitions = 0",
+        "repetitions = -1",
+        'repetitions = "2"',
+        "warmup = -1",
+        'warmup = "1"',
+    ],
+)
+def test_load_pack_rejects_invalid_runtime_defaults(
+    tmp_path: Path,
+    defaults_body: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "p"
+version = "0.1.0"
+
+[defaults]
+{defaults_body}
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidDefaultError):
+        load_pack(pack_dir)
+
+
+def test_load_pack_reads_warmup_and_repetition_defaults(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "p"
+version = "0.1.0"
+
+[defaults]
+warmup = 1
+repetitions = 2
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    pack = load_pack(pack_dir)
+
+    assert warmup_from_defaults(pack.defaults) == 1
+    assert repetitions_from_defaults(pack.defaults) == 2

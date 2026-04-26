@@ -11,7 +11,13 @@ from pathlib import Path
 
 from .adapters import Adapter, AdapterRequest, get_adapter
 from .hardware import collect_hardware, sample_resources
-from .packs import Case, Pack, load_pack
+from .packs import (
+    Case,
+    Pack,
+    load_pack,
+    repetitions_from_defaults,
+    warmup_from_defaults,
+)
 from .results import RunReporter
 
 
@@ -39,6 +45,7 @@ def _run_case(
     endpoint: str | None,
     request_path: Path,
     response_path: Path,
+    collect_resources: bool = True,
 ) -> tuple[object, dict]:
     if case.prompt is None:
         raise SystemExit(f"case {case.id!r} has no 'prompt' field")
@@ -51,7 +58,7 @@ def _run_case(
         response_path=response_path,
     )
     result = adapter.run(request)
-    sample = sample_resources()
+    sample = sample_resources() if collect_resources else {}
     return result, sample
 
 
@@ -77,19 +84,44 @@ def _cmd_run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     reporter = RunReporter(out_dir, pack)
+    warmup = warmup_from_defaults(pack.defaults)
+    repetitions = repetitions_from_defaults(pack.defaults)
 
     for case in pack.cases:
-        request_path, response_path = reporter.case_paths(case)
-        result, sample = _run_case(
-            adapter,
-            pack,
-            case,
-            model=args.model,
-            endpoint=args.endpoint,
-            request_path=request_path,
-            response_path=response_path,
-        )
-        reporter.record(case, result, sample)
+        for warmup_index in range(1, warmup + 1):
+            request_path, response_path = reporter.warmup_paths(case, warmup_index)
+            _run_case(
+                adapter,
+                pack,
+                case,
+                model=args.model,
+                endpoint=args.endpoint,
+                request_path=request_path,
+                response_path=response_path,
+                collect_resources=False,
+            )
+
+        for repetition in range(1, repetitions + 1):
+            request_path, response_path = reporter.measured_paths(
+                case,
+                repetition,
+                repetitions,
+            )
+            result, sample = _run_case(
+                adapter,
+                pack,
+                case,
+                model=args.model,
+                endpoint=args.endpoint,
+                request_path=request_path,
+                response_path=response_path,
+            )
+            reporter.record(
+                case,
+                result,
+                sample,
+                repetition=repetition if repetitions > 1 else None,
+            )
 
     reporter.write_hardware(hardware)
     reporter.write_summary(hardware)

@@ -48,11 +48,41 @@ class RunReporter:
             self.raw_dir / f"{case.id}.response.json",
         )
 
+    def measured_paths(
+        self,
+        case: Case,
+        repetition: int,
+        total_repetitions: int,
+    ) -> tuple[Path, Path]:
+        if repetition < 1:
+            raise ValueError("repetition must be >= 1")
+        if total_repetitions < 1:
+            raise ValueError("total_repetitions must be >= 1")
+        if repetition > total_repetitions:
+            raise ValueError("repetition must be <= total_repetitions")
+        if total_repetitions == 1:
+            return self.case_paths(case)
+        prefix = f"{case.id}.rep-{repetition:03d}"
+        return (
+            self.raw_dir / f"{prefix}.request.json",
+            self.raw_dir / f"{prefix}.response.json",
+        )
+
+    def warmup_paths(self, case: Case, warmup: int) -> tuple[Path, Path]:
+        if warmup < 1:
+            raise ValueError("warmup must be >= 1")
+        prefix = f"{case.id}.warmup-{warmup:03d}"
+        return (
+            self.raw_dir / f"{prefix}.request.json",
+            self.raw_dir / f"{prefix}.response.json",
+        )
+
     def record(
         self,
         case: Case,
         adapter_result: AdapterResult,
         sample: dict[str, Any],
+        repetition: int | None = None,
     ) -> dict[str, Any]:
         scoring_cfg = case.scoring or self.pack.scoring
         scoring_result = evaluate(scoring_cfg, adapter_result.output_text)
@@ -85,6 +115,8 @@ class RunReporter:
                 ),
             },
         }
+        if repetition is not None:
+            record["repetition"] = repetition
         if adapter_result.backend is not None:
             record["backend"] = adapter_result.backend
         if adapter_result.error is not None:
@@ -127,6 +159,9 @@ class RunReporter:
         lines.append("| case | adapter | model | ok | wall_s | total_tps | scoring |")
         lines.append("|------|---------|-------|----|--------|-----------|---------|")
         for record in self.records:
+            case_label = record["case"]
+            if "repetition" in record:
+                case_label = f"{case_label}#{record['repetition']}"
             scoring = record.get("scoring")
             scoring_cell = (
                 "—"
@@ -135,7 +170,7 @@ class RunReporter:
             )
             lines.append(
                 "| {case} | {adapter} | {model} | {ok} | {wall:.3f} | {tps} | {sc} |".format(
-                    case=record["case"],
+                    case=case_label,
                     adapter=record["adapter"],
                     model=record["model"],
                     ok="yes" if record["ok"] else "no",

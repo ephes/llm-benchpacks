@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-26 (Phase 2 warmup and repetitions)
+
+### Changed
+
+- `benchpack run` now gives `defaults.repetitions` runner semantics: each case
+  records that many measured executions, with a top-level 1-based `repetition`
+  field only when the count is greater than one.
+- `defaults.warmup` now runs unrecorded warmup executions before measured
+  repetitions. Warmups call the same adapter and write raw artifacts, but do not
+  appear in `run.jsonl`, scoring, or `summary.md`.
+- Raw artifact names preserve `raw/<case>.request.json` and
+  `raw/<case>.response.json` for single-repetition packs. Multi-repetition runs
+  use `raw/<case>.rep-NNN.*.json`; warmups use
+  `raw/<case>.warmup-NNN.*.json`.
+- The summary table keeps its existing columns and displays repeated measured
+  rows as `<case>#<repetition>`.
+
+### Open Questions
+
+- The `runtime-sweep` pack and compare/aggregation command remain later Phase 2
+  slices.
+
 ## 2026-04-26 (Phase 2 streaming TTFT)
 
 ### Changed
@@ -36,8 +58,7 @@ working history and open questions.
 
 ### Open Questions
 
-- Warmup, repetitions, the `runtime-sweep` pack, and the compare command remain
-  later Phase 2 slices.
+- The `runtime-sweep` pack and compare command remain later Phase 2 slices.
 - Some older OpenAI-compatible local servers reject
   `stream_options.include_usage`; an explicit compatibility mode may be needed
   when validating against those servers.

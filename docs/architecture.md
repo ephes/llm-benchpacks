@@ -44,11 +44,12 @@ results/
 1. Load a benchmark pack and select cases.
 2. Load runtime adapter configuration.
 3. Capture host metadata.
-4. Warm up the endpoint if the pack requests it.
-5. Execute cases, streaming when supported.
-6. Persist raw requests and responses.
-7. Run deterministic verifiers if present.
-8. Normalize metrics, resources, and scoring into `run.jsonl`.
+4. For each case, run pack-requested warmup executions first.
+5. Execute the pack-requested measured repetitions, streaming when supported.
+6. Persist raw requests and responses for warmups and measured executions.
+7. Run deterministic verifiers for measured executions if present.
+8. Normalize metrics, resources, and scoring into `run.jsonl` for measured
+   executions.
 9. Write `summary.md`.
 
 ## Result Record Envelope
@@ -92,12 +93,18 @@ to `run.jsonl`:
 
 - `pack.id`, `pack.version` — copied from the loaded manifest
 - `case` — the case id from the manifest
+- `repetition` — a 1-based integer only when the pack requests more than one
+  measured repetition
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
   `docs/benchpack-format.md`); `null` when mode is `none` or absent
 
 Adapters do not produce or read these fields. The reporter is also where pack
 id/version get attached for cross-run comparison.
+
+Warmup executions are runner/reporter concerns. They call the same adapter and
+write raw artifacts under `raw/`, but they do not produce result records and are
+not scored.
 
 ### Combined record
 

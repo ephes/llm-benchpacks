@@ -30,7 +30,8 @@ Validation:
 Add fixed-context performance cases that make runtime comparisons meaningful.
 
 **Status:** in progress. Streaming TTFT measurement for OpenAI-compatible
-endpoints landed 2026-04-26; see `docs/spec-log.md`.
+endpoints landed 2026-04-26, and pack-driven warmup/repetitions landed
+2026-04-26; see `docs/spec-log.md`.
 
 Scope:
 
@@ -38,7 +39,7 @@ Scope:
 - Streaming TTFT measurement for OpenAI-compatible endpoints. **Landed
   2026-04-26.**
 - Ollama native timing extraction.
-- Warmup and repetitions.
+- Warmup and repetitions. **Landed 2026-04-26.**
 - Compare command that reads multiple result directories.
 
 Validation:

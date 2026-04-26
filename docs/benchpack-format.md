@@ -15,6 +15,7 @@ description = "Tiny endpoint smoke test"
 temperature = 0
 max_tokens = 64
 stream = true
+warmup = 0
 repetitions = 1
 
 [[cases]]
@@ -45,6 +46,22 @@ expected = "Paris"
   `openai-chat` keeps the non-streaming request shape. The example above is a
   schema example; individual packs such as `smoke-chat` may leave streaming off
   to preserve non-streaming smoke coverage.
+
+`defaults.warmup`
+: Number of unrecorded warmup executions per case. It defaults to `0` when
+  absent and must be a non-negative integer. Warmups use the same adapter,
+  endpoint, model, prompt, and defaults as measured executions, write raw
+  request/response files under `raw/<case>.warmup-NNN.*.json`, and are excluded
+  from `run.jsonl`, scoring, and `summary.md`.
+
+`defaults.repetitions`
+: Number of measured executions per case. It defaults to `1` when absent and
+  must be a positive integer. Each measured execution writes one `run.jsonl`
+  record. Packs with `repetitions = 1` use legacy raw file names
+  `raw/<case>.request.json` and `raw/<case>.response.json`. Packs with
+  `repetitions > 1` use `raw/<case>.rep-NNN.request.json` and
+  `raw/<case>.rep-NNN.response.json`, and each record includes a 1-based
+  top-level `repetition` field owned by the reporter.
 
 `cases`
 : Ordered benchmark cases. Each case `id` must match the id grammar below and
