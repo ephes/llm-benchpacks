@@ -1,0 +1,18 @@
+# llm-benchpacks
+
+Benchmark packs for comparing local LLM runtimes and coding-agent workloads.
+
+Important files:
+
+- [README.md](README.md): project overview.
+- [docs/specification.md](docs/specification.md): current product and behavior contract.
+- [docs/architecture.md](docs/architecture.md): runner, adapters, packs, and result schema.
+- [docs/implementation-plan.md](docs/implementation-plan.md): phased implementation plan.
+- [docs/benchpack-format.md](docs/benchpack-format.md): initial pack manifest format.
+- [docs/hardware-targets.md](docs/hardware-targets.md): Apple Silicon, Hetzner GEX44-class GPU, and generic CUDA targets.
+- [docs/decisions.md](docs/decisions.md): durable decisions.
+- [docs/spec-log.md](docs/spec-log.md): dated design changes and open questions.
+- [docs/run-log.md](docs/run-log.md): curated benchmark run history.
+- [AGENTS.md](AGENTS.md): contributor and agent instructions.
+
+Generated benchmark results are ignored by default under `results/`.

@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+
+# Generated benchmark output
+results/*
+!results/.gitkeep
+
+# Local environment
+.env
+.DS_Store
