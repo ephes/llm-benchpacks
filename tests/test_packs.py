@@ -307,3 +307,24 @@ prompt = "x"
 
     assert warmup_from_defaults(pack.defaults) == 0
     assert repetitions_from_defaults(pack.defaults) == 1
+
+
+def test_bundled_runtime_sweep_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "runtime-sweep")
+
+    assert pack.id == "runtime-sweep"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 128
+    assert pack.defaults["stream"] is True
+    assert warmup_from_defaults(pack.defaults) == 1
+    assert repetitions_from_defaults(pack.defaults) == 3
+    assert [case.id for case in pack.cases] == ["short", "medium", "long"]
+
+    prompt_sizes = [len(case.prompt or "") for case in pack.cases]
+    assert prompt_sizes == sorted(prompt_sizes)
+    assert len(set(prompt_sizes)) == 3
+
+    assert pack.scoring is not None
+    assert pack.scoring.mode == "none"

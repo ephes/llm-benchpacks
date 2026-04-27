@@ -1,0 +1,132 @@
+[pack]
+id = "runtime-sweep"
+version = "0.1.0"
+description = "Fixed-size prompt sweep for repeated local runtime measurements"
+
+[defaults]
+temperature = 0
+max_tokens = 128
+stream = true
+warmup = 1
+repetitions = 3
+
+[[cases]]
+id = "short"
+kind = "chat"
+prompt = """
+You are measuring a local language model runtime. Read this short synthetic note
+and answer with three bullet points: one sentence about the workload shape, one
+sentence about likely timing metrics, and one sentence about any caveat. The note
+is intentionally generic: a developer sends a compact request, the model has
+little context to prefill, and the response should stay brief.
+"""
+
+[[cases]]
+id = "medium"
+kind = "chat"
+prompt = """
+You are measuring a local language model runtime. Read the synthetic operations
+note below and answer with a concise summary in four bullet points. Keep the
+answer under 120 words.
+
+Runtime note:
+
+A small team is preparing repeatable local inference measurements. The same
+model will be tested through several runtime adapters on the same host. The
+operators want a prompt that is stable, portable, and unrelated to any private
+repository. They also want enough context to exercise prefill without turning
+the benchmark into a long-form reasoning task.
+
+The first run happens after the runtime service has started and loaded the
+model. The team expects that caches, memory allocation, and request routing may
+still be settling. They perform one warmup request before recording measured
+rows. The warmup uses the same prompt, model, endpoint, and request defaults as
+the measured repetitions, but its result is used only to prepare the runtime and
+to preserve raw request and response artifacts for debugging.
+
+Measured repetitions are intentionally simple. Each measured request should be
+recorded as its own row so later tooling can calculate statistics without the
+runner hiding individual samples. The benchmark should preserve native runtime
+timing when the adapter reports it, while also recording normalized fields such
+as wall time, token counts, and total tokens per second.
+
+For OpenAI-compatible streaming endpoints, the benchmark asks for streamed
+responses and records time to first token from the first non-empty content
+delta. For Ollama's native generate API, the benchmark records Ollama timing
+fields instead of pretending the response used the OpenAI streaming shape. The
+prompt is not meant to judge answer quality. Its job is to create a consistent
+runtime measurement surface.
+"""
+
+[[cases]]
+id = "long"
+kind = "chat"
+prompt = """
+You are measuring a local language model runtime. Read the synthetic benchmark
+brief below and answer with five compact bullets: purpose, request shape,
+warmup behavior, measured repetition behavior, and interpretation caveat. Keep
+the answer under 128 words.
+
+Benchmark brief:
+
+The benchmark runner is designed for local language model runtimes on several
+classes of hardware. A laptop with unified memory, a desktop workstation with a
+consumer GPU, and a rented Linux CUDA host should all be able to run the same
+pack without modifying prompts. The pack should avoid references to local paths,
+private repositories, external services, network lookups, or runtime-specific
+setup. Every case should be a plain chat prompt that can be sent through an
+OpenAI-compatible chat endpoint or through a native runtime adapter that accepts
+a single prompt string.
+
+The measurements are about runtime behavior, not model quality. The prompt asks
+for a short response so output length stays modest and the main difference
+between cases is the amount of input context. The result can be inspected for
+basic sanity, but no deterministic answer check is needed. A correct benchmark
+run records timing, token counts when available, adapter identity, resolved
+endpoint, model name, hardware metadata, and raw request and response files. It
+does not assign a pass or fail score for these cases.
+
+The short case represents a compact interactive request. It has little context
+to prefill and should make request overhead and first-token latency visible. The
+medium case represents a structured operational note with several paragraphs.
+It is large enough to exercise more prefill work while still being quick enough
+for repeated local runs. The long case represents a heavier but still portable
+context. It should remain small enough for ordinary local models while giving
+runtimes a materially larger input to process.
+
+Warmup exists because first requests can include work that does not represent a
+steady measured sample. A runtime may allocate buffers, initialize kernels,
+populate a prompt cache, or finish lazy service setup. The runner sends warmup
+requests before measured repetitions for each case. Warmup requests use the same
+adapter, model, endpoint, prompt, and defaults as measured requests. They write
+raw artifacts so failures can be debugged, but they are intentionally excluded
+from the measured result rows and from the human summary.
+
+Measured repetitions exist because single local inference measurements are
+noisy. Background processes, thermal behavior, runtime scheduling, server queue
+state, and cache behavior can all change one request at a time. The pack records
+three measured repetitions per case. Each measured repetition should appear as
+its own row rather than being aggregated inside the runner. Later comparison
+tooling can compute medians, percentiles, or confidence intervals, but this pack
+only provides the repeatable samples.
+
+Streaming behavior depends on the adapter. For OpenAI-compatible chat servers,
+the pack requests streaming so the adapter can measure time to first token. The
+adapter asks for streaming usage data so prompt and output token counts can be
+captured from endpoints that implement that part of the API. Some local servers
+do not accept that option; those incompatibilities should be visible as adapter
+errors instead of silently changing request semantics. For Ollama generate, the
+native response already includes timing fields, so the adapter preserves those
+backend-specific measurements.
+
+Interpreting results requires care. A faster row does not prove a model is
+better at coding, instruction following, or tool use. A slower row may reflect a
+larger prompt, different quantization, cold runtime state, or a server that
+reports usage in a different way. The useful comparison is within the same pack
+version, on clearly documented hardware, with the same model label and runtime
+configuration. This pack creates that fixed measurement surface while leaving
+aggregation, comparison, and quality-oriented workloads for later slices.
+"""
+
+[scoring]
+mode = "none"

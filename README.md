@@ -33,12 +33,19 @@ The Phase 1 runner is in `src/benchpack/`, managed with [`uv`](https://docs.astr
 uv sync
 uv run benchpack run smoke-chat --adapter ollama-generate --model qwen3-coder:latest
 uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1
+uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
 ```
 
 Each invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
 collision rules, and `uv run pytest` for the test suite.
+
+Bundled packs:
+
+- `smoke-chat`: non-streaming single-case endpoint smoke test.
+- `runtime-sweep`: streaming short/medium/long runtime measurement pack with one
+  warmup and three measured repetitions per case.
 
 ## Initial Shape
 
@@ -47,7 +54,8 @@ The first implementation stays small:
 1. A CLI that can run one benchmark pack against one endpoint.
 2. An OpenAI-compatible adapter for `mlx_lm.server`, `llama-server`, vLLM, LM Studio, and similar servers.
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
-4. A smoke benchmark and one real workload pack from `desktop-django-starter` (the workload pack is Phase 3 work).
+4. Smoke and runtime-sweep benchmarks, plus one real workload pack from
+   `desktop-django-starter` later in Phase 3.
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

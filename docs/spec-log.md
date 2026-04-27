@@ -16,6 +16,23 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-27 (Phase 2 runtime-sweep pack)
+
+### Changed
+
+- Added the bundled `runtime-sweep` pack with `short`, `medium`, and `long`
+  fixed inline chat prompts for repeated local runtime measurement.
+- The pack uses `defaults.stream = true`, `defaults.warmup = 1`,
+  `defaults.repetitions = 3`, `max_tokens = 128`, and `scoring.mode = "none"`.
+- Documented adapter interpretation for this pack: `openai-chat` exercises
+  streaming TTFT with `stream_options.include_usage`, while
+  `ollama-generate` preserves Ollama native timing fields.
+
+### Open Questions
+
+- Compare/aggregation remains the next Phase 2 slice now that repeated
+  runtime-oriented rows can be produced by a bundled pack.
+
 ## 2026-04-26 (Phase 2 warmup and repetitions)
 
 ### Changed

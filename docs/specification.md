@@ -50,6 +50,12 @@ Initial packs:
   diff size.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
+The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains
+`short`, `medium`, and `long` chat cases with fixed inline prompts. It sets
+`defaults.stream = true`, `defaults.warmup = 1`, `defaults.repetitions = 3`,
+and `scoring.mode = "none"`. The pack is intended for repeated local runtime
+measurement, not model-quality comparison.
+
 ## Runtime Adapters
 
 Adapters should hide request differences while preserving backend-specific metrics
