@@ -71,3 +71,15 @@ Reason: repeated runtime measurements are part of the benchmark workload
 contract. Keeping counts in the pack makes runs comparable across hosts and
 avoids ad hoc invocation differences. Warmups are excluded from `run.jsonl`,
 scoring, and summaries because they are preparation work, not benchmark samples.
+
+## D-010: Validate MLX Through Its OpenAI-Compatible Server First
+
+Use `mlx_lm.server` with the existing `openai-chat` adapter before adding a
+dedicated `mlx-lm` CLI or Python adapter.
+
+Reason: `mlx_lm.server` exposes an OpenAI-compatible chat surface, which is the
+same runtime boundary already used for `llama-server`, vLLM, LM Studio, and
+similar servers. Proving or disproving compatibility there keeps the adapter
+surface smaller. Add a dedicated MLX adapter only if server-path validation
+shows that the OpenAI-compatible path cannot provide the measurements the
+project needs.

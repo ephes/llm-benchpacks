@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-28 (Phase 2 MLX server-path planning)
+
+### Changed
+
+- Phase 2 now validates `mlx_lm.server` through the existing `openai-chat`
+  adapter before adding any dedicated MLX adapter.
+- The `mlx_lm.server` validation path is explicit: run `smoke-chat` first for
+  basic OpenAI-compatible chat behavior, then run `runtime-sweep` for streaming
+  TTFT, warmup, and measured repetitions.
+- Added D-010 to record the durable decision that the OpenAI-compatible server
+  path should be tried before a direct MLX adapter.
+- Supersedes the 2026-04-26 open question about whether direct `mlx-lm` should
+  start as a CLI adapter or through `mlx_lm.server`: try the server path first.
+- Refines the 2026-04-26 streaming TTFT compatibility question: validate
+  `stream_options.include_usage` against `mlx_lm.server` and `llama-server`,
+  then add a narrow `openai-chat` compatibility mode only if needed.
+
+### Open Questions
+
+- Whether `mlx_lm.server` and `llama-server` accept
+  `stream_options.include_usage` remains to be validated locally. If either
+  rejects it, the next slice should be a narrow `openai-chat` streaming
+  compatibility mode before `benchpack compare`.
+
 ## 2026-04-27 (Phase 2 runtime-sweep pack)
 
 ### Changed

@@ -42,11 +42,53 @@ Scope:
   2026-04-26.**
 - Ollama native timing extraction.
 - Warmup and repetitions. **Landed 2026-04-26.**
-- Compare command that reads multiple result directories. **Remaining.**
+- Validate the `mlx_lm.server` OpenAI-compatible path through the existing
+  `openai-chat` adapter. **Next.**
+  - Run `smoke-chat` first to prove basic chat behavior.
+  - Run `runtime-sweep` next to exercise streaming TTFT, warmup, and measured
+    repetitions.
+- Decide the next implementation slice from that validation:
+  - If `mlx_lm.server` accepts the current streaming request shape, continue to
+    the `llama-server` server-path check.
+  - If it rejects `stream_options.include_usage` or otherwise differs from the
+    OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
+    compatibility slice before compare. That slice should likely suppress
+    `stream_options.include_usage` for endpoints that reject it and record
+    TTFT/output text while leaving usage-derived token rates null unless the
+    endpoint reports token usage another way.
+- Validate `llama-server` after `mlx_lm.server`; any compatibility slice should
+  cover OpenAI-compatible servers broadly, not just MLX.
+- Implement `benchpack compare` after the `mlx_lm.server` and `llama-server`
+  server-path checks are understood, either because both accept the current
+  streaming request shape or because the compatibility slice is in place.
 
 Validation:
 
 - Same pack can run against `mlx_lm.server`, `llama-server`, and Ollama.
+- `smoke-chat` against `mlx_lm.server` is considered successful when it writes
+  one measured row with `ok = true` and `scoring.passed = true`.
+- `runtime-sweep` against `mlx_lm.server` is considered successful when it
+  writes nine measured rows, no warmup rows appear in `run.jsonl`, and each
+  measured row has `ok = true`, non-null `timing.ttft_s`,
+  `timing.prefill_tps`, `timing.decode_tps`, and `tokens.output`.
+- `runtime-sweep` against `llama-server` should use the same success criteria
+  as `runtime-sweep` against `mlx_lm.server`.
+- If `runtime-sweep` does not meet that bar, capture the adapter error or
+  missing fields in the run notes before choosing the compatibility slice.
+
+Suggested local `mlx_lm.server` check:
+
+```sh
+mlx_lm.server --model <mlx-model>
+uv run benchpack run smoke-chat --adapter openai-chat --model <mlx-model> --endpoint http://localhost:8080/v1 --host-label mlx-lm-smoke --force
+uv run benchpack run runtime-sweep --adapter openai-chat --model <mlx-model> --endpoint http://localhost:8080/v1 --host-label mlx-lm-runtime --force
+```
+
+Use the same invocation shape against the `llama-server` OpenAI-compatible
+endpoint when validating that path.
+
+Do not add a dedicated `mlx-lm` adapter until this server-path validation shows
+that the OpenAI-compatible adapter is insufficient for the measurements we need.
 
 ## Phase 3: Desktop Django Workload
 
