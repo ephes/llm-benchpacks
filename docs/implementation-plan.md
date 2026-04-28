@@ -31,8 +31,8 @@ Add fixed-context performance cases that make runtime comparisons meaningful.
 
 **Status:** in progress. Streaming TTFT measurement for OpenAI-compatible
 endpoints landed 2026-04-26, pack-driven warmup/repetitions landed 2026-04-26,
-and the bundled `runtime-sweep` pack landed 2026-04-27; see
-`docs/spec-log.md`.
+the bundled `runtime-sweep` pack landed 2026-04-27, and `mlx_lm.server`
+validation through `openai-chat` passed 2026-04-28; see `docs/spec-log.md`.
 
 Scope:
 
@@ -43,21 +43,18 @@ Scope:
 - Ollama native timing extraction.
 - Warmup and repetitions. **Landed 2026-04-26.**
 - Validate the `mlx_lm.server` OpenAI-compatible path through the existing
-  `openai-chat` adapter. **Next.**
+  `openai-chat` adapter. **Validated 2026-04-28.**
   - Run `smoke-chat` first to prove basic chat behavior.
   - Run `runtime-sweep` next to exercise streaming TTFT, warmup, and measured
     repetitions.
-- Decide the next implementation slice from that validation:
-  - If `mlx_lm.server` accepts the current streaming request shape, continue to
-    the `llama-server` server-path check.
-  - If it rejects `stream_options.include_usage` or otherwise differs from the
-    OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
-    compatibility slice before compare. That slice should likely suppress
-    `stream_options.include_usage` for endpoints that reject it and record
-    TTFT/output text while leaving usage-derived token rates null unless the
-    endpoint reports token usage another way.
-- Validate `llama-server` after `mlx_lm.server`; any compatibility slice should
-  cover OpenAI-compatible servers broadly, not just MLX.
+- Validate `llama-server` next; any compatibility slice should cover
+  OpenAI-compatible servers broadly, not just MLX.
+- If `llama-server` rejects `stream_options.include_usage` or otherwise differs
+  from the OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
+  compatibility slice before compare. That slice should likely suppress
+  `stream_options.include_usage` for endpoints that reject it and record
+  TTFT/output text while leaving usage-derived token rates null unless the
+  endpoint reports token usage another way.
 - Implement `benchpack compare` after the `mlx_lm.server` and `llama-server`
   server-path checks are understood, either because both accept the current
   streaming request shape or because the compatibility slice is in place.

@@ -20,6 +20,18 @@ working history and open questions.
 
 ### Changed
 
+- Validated `mlx_lm.server` through the existing `openai-chat` adapter on
+  `atlas.local` using `mlx-community/Qwen2.5-0.5B-Instruct-4bit` at
+  `http://localhost:8080/v1`.
+- `smoke-chat` passed with exactly one measured row, `ok = true`,
+  `scoring.passed = true`, and the resolved endpoint
+  `http://localhost:8080/v1/chat/completions`.
+- `runtime-sweep` passed with exactly nine measured rows, no warmup rows in
+  `run.jsonl`, and non-null `timing.ttft_s`, `timing.prefill_tps`,
+  `timing.decode_tps`, and `tokens.output` for every measured row.
+- `mlx_lm.server` accepted the current streaming request shape, including
+  `stream_options.include_usage`; no `openai-chat` compatibility slice is
+  needed before validating `llama-server`.
 - Phase 2 now validates `mlx_lm.server` through the existing `openai-chat`
   adapter before adding any dedicated MLX adapter.
 - The `mlx_lm.server` validation path is explicit: run `smoke-chat` first for
@@ -35,10 +47,9 @@ working history and open questions.
 
 ### Open Questions
 
-- Whether `mlx_lm.server` and `llama-server` accept
-  `stream_options.include_usage` remains to be validated locally. If either
-  rejects it, the next slice should be a narrow `openai-chat` streaming
-  compatibility mode before `benchpack compare`.
+- Whether `llama-server` accepts `stream_options.include_usage` remains to be
+  validated locally. If it rejects the option, the next slice should be a
+  narrow `openai-chat` streaming compatibility mode before `benchpack compare`.
 
 ## 2026-04-27 (Phase 2 runtime-sweep pack)
 
