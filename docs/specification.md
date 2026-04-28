@@ -68,7 +68,9 @@ Required first:
 
 Likely next:
 
-- `mlx-lm-cli`: direct `mlx_lm.generate` or a small Python wrapper.
+- `mlx-lm-cli`: direct `mlx_lm.generate` or a small Python wrapper, only if
+  `mlx_lm.server` validation shows the OpenAI-compatible adapter is
+  insufficient; see D-010 in `docs/decisions.md`.
 - `llama-completion`: llama.cpp `/completion` for prompt-completion metrics.
 - `agent-proxy`: record/replay for real coding-agent sessions.
 
