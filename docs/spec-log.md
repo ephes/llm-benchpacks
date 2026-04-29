@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 gated compare prefill TPS)
+
+### Changed
+
+- Added a `prefill_tps med` column to `benchpack compare`.
+- The column is a median of normalized `run.jsonl` `timing.prefill_tps` values
+  using the same numeric filter as the other compare metrics.
+- Numeric prefill TPS is rendered only when the case-level `prefill parity`
+  status is `comparable`; `missing-case`, `prompt-missing`, `prompt-diff`,
+  `cache-missing`, and `cache-diff` render `—` even if timing values exist.
+- Existing prompt/cache warnings, cache coverage, and parity status priority
+  remain unchanged.
+- Compare still reads only normalized `run.jsonl` records and does not inspect
+  ignored `raw/` artifacts or infer prompt/cache state from timing fields.
+
+### Open Questions
+
+- Future compare slices may add stronger summaries for comparable prefill cases,
+  but they should preserve the parity gate unless a better deterministic parity
+  contract replaces it.
+- Historical artifacts without normalized cache fields will continue to suppress
+  prefill speed display until rerun or otherwise supported by explicit
+  normalized metadata.
+
 ## 2026-04-29 (Phase 2 compare prefill parity status)
 
 ### Changed

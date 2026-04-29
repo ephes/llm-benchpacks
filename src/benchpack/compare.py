@@ -37,6 +37,7 @@ class CaseSummary:
     ok: int
     wall_s: float | None
     ttft_s: float | None
+    prefill_tps: float | None
     decode_tps: float | None
     total_tps: float | None
     output_tokens: float | None
@@ -106,6 +107,7 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                         ok=0,
                         wall_s=None,
                         ttft_s=None,
+                        prefill_tps=None,
                         decode_tps=None,
                         total_tps=None,
                         output_tokens=None,
@@ -129,6 +131,7 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     ok=sum(1 for row in rows if row.get("ok") is True),
                     wall_s=_median_metric(rows, ("timing", "wall_s")),
                     ttft_s=_median_metric(rows, ("timing", "ttft_s")),
+                    prefill_tps=_median_metric(rows, ("timing", "prefill_tps")),
                     decode_tps=_median_metric(rows, ("timing", "decode_tps")),
                     total_tps=_median_metric(rows, ("timing", "total_tps")),
                     output_tokens=_median_metric(rows, ("tokens", "output")),
@@ -165,12 +168,17 @@ def render_comparison(runs: list[ResultRun]) -> str:
         )
     lines.append("")
     lines.append(
-        "Note: medians ignore null metric values. `prefill_tps` is intentionally "
-        "omitted because prefill comparisons require prompt-cache parity. New "
-        "rows may include `tokens.prompt` and `tokens.cached_prompt`, but old "
-        "rows may lack one or both fields; do not draw prefill-speed "
-        "conclusions without prompt/cache parity evidence. The `prefill parity` "
-        "column reports deterministic prompt/cache status for each case."
+        "Note: medians ignore null metric values."
+    )
+    lines.append("")
+    lines.append(
+        "`prefill_tps med` is shown "
+        "only when the case-level `prefill parity` status is `comparable`; "
+        "otherwise it renders as `—`. New rows may include `tokens.prompt` and "
+        "`tokens.cached_prompt`, but old rows may lack one or both fields; do "
+        "not draw prefill-speed conclusions without prompt/cache parity "
+        "evidence. The `prefill parity` column reports deterministic "
+        "prompt/cache status for each case."
     )
     lines.append("")
 
@@ -184,18 +192,26 @@ def render_comparison(runs: list[ResultRun]) -> str:
 
     lines.append(
         "| run | case | rows | ok | wall_s med | ttft_s med | "
-        "decode_tps med | total_tps med | output_tokens med | "
-        "prompt_tokens med | cached_prompt med | cache rows | prefill parity |"
+        "prefill_tps med | decode_tps med | total_tps med | "
+        "output_tokens med | prompt_tokens med | cached_prompt med | "
+        "cache rows | prefill parity |"
     )
     lines.append(
-        "|-----|------|------|----|------------|------------|----------------|"
-        "---------------|-------------------|-------------------|-------------------|"
-        "------------|----------------|"
+        "|-----|------|------|----|------------|------------|-----------------|"
+        "----------------|---------------|-------------------|-------------------|"
+        "-------------------|------------|----------------|"
     )
     for summary in summaries:
+        prefill_parity = prefill_parity_statuses[summary.case]
+        # Summary keeps the median; display is gated by case-level parity.
+        prefill_tps = (
+            _format_float(summary.prefill_tps, digits=2)
+            if prefill_parity == "comparable"
+            else MISSING
+        )
         lines.append(
-            "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {decode} | "
-            "{total} | {output} | {prompt} | {cached} | {cache_rows} | "
+            "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {prefill} | "
+            "{decode} | {total} | {output} | {prompt} | {cached} | {cache_rows} | "
             "{prefill_parity} |".format(
                 run=summary.run_label,
                 case=summary.case,
@@ -203,13 +219,14 @@ def render_comparison(runs: list[ResultRun]) -> str:
                 ok=summary.ok,
                 wall=_format_float(summary.wall_s, digits=3),
                 ttft=_format_float(summary.ttft_s, digits=3),
+                prefill=prefill_tps,
                 decode=_format_float(summary.decode_tps, digits=2),
                 total=_format_float(summary.total_tps, digits=2),
                 output=_format_tokens(summary.output_tokens),
                 prompt=_format_tokens(summary.prompt_tokens),
                 cached=_format_tokens(summary.cached_prompt_tokens),
                 cache_rows=f"{summary.cache_rows}/{summary.rows}",
-                prefill_parity=prefill_parity_statuses[summary.case],
+                prefill_parity=prefill_parity,
             )
         )
     lines.append("")

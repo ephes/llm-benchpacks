@@ -93,8 +93,8 @@ artifacts.
 Reason: `run.jsonl` is the stable result contract from prior slices. A
 read-only compare command gives useful Phase 2 summaries without expanding the
 adapter surface, mutating result directories, or depending on ignored raw
-payloads. `prefill_tps` stays out of the primary comparison table until
-normalized results carry enough prompt-cache metadata to establish cache parity.
+payloads. `prefill_tps` must stay hidden or gated until normalized results carry
+enough prompt-cache metadata to establish cache parity.
 
 ## D-012: Cached Prompt Tokens Live Under `tokens.cached_prompt`
 
@@ -114,12 +114,15 @@ only when every compared row in that case has a numeric `tokens.prompt` value.
 It also reports a deterministic case-level `prefill parity` status with the
 priority `missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
 `cache-diff`, then `comparable`. Cached-token parity is interpreted only
-relative to comparable prompt token counts, and `prefill_tps` remains omitted
-from the primary table until prompt/cache parity is explicit enough for speed
-comparison.
+relative to comparable prompt token counts. The compare table may display
+`prefill_tps med`, but only for cases whose `prefill parity` status is
+`comparable`; every non-comparable status renders `—` even when timing values
+exist in `run.jsonl`.
 
 Reason: cached prompt-token counts are not meaningful in isolation when compared
 runs used different prompt token counts. Keeping the rule in compare, based only
 on normalized `run.jsonl` token fields, preserves old artifact compatibility
 while avoiding prompt/cache inference from ignored raw payloads or timing
-fields.
+fields. Gating prefill speed on the explicit parity status prevents warm-cache,
+cold-prefill, and different-prompt timings from being presented as comparable
+speed evidence.

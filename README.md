@@ -44,19 +44,20 @@ collision rules, and `uv run pytest` for the test suite.
 
 `benchpack compare` is read-only and compares existing result directories that
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,
-total TPS, output tokens, prompt tokens, and backend-reported cached prompt
-tokens when available. It also prints cache metadata coverage as numeric
-cached-token rows over total rows for each case/run group and a case-level
-`prefill parity` status repeated on each run row. The status is one of
-`missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
+total TPS, output tokens, prompt tokens, backend-reported cached prompt tokens,
+and prefill TPS gated on prefill parity. The `prefill_tps med` column renders a
+numeric median only when that case's `prefill parity` status is `comparable`;
+otherwise it renders `—`. Compare also prints cache metadata coverage as
+numeric cached-token rows over total rows for each case/run group and a
+case-level `prefill parity` status repeated on each run row. The status is one
+of `missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
 `cache-diff`, or `comparable`, in that priority order. Compare warns when
 metadata is incomplete, complete prompt-token medians differ, or complete
 cached-token medians differ. Prompt-token coverage is used to decide whether a
 prompt mismatch warning is meaningful, but the table does not add a second
-coverage column. It intentionally omits `prefill_tps` from the primary table
-because cross-server prefill speed requires prompt/cache parity. Old rows may
-lack `tokens.prompt` or `tokens.cached_prompt`, and missing values do not
-establish parity.
+coverage column. Old rows may lack `tokens.prompt`, `tokens.cached_prompt`, or
+`timing.prefill_tps`, and missing values do not establish parity or prefill
+speed.
 
 Bundled packs:
 

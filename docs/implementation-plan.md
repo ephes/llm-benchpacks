@@ -41,6 +41,7 @@ installed locally; the first read-only `benchpack compare` command landed
 cache-aware compare reporting landed 2026-04-29;
 prompt/cache parity context for compare landed 2026-04-29;
 explicit prefill parity status for compare landed 2026-04-29;
+gated prefill TPS display for comparable cases landed 2026-04-29;
 see `docs/spec-log.md`.
 
 Scope:
@@ -91,6 +92,10 @@ Scope:
   without adding `prefill_tps`. **Landed 2026-04-29** with case-level statuses
   repeated on each run row: `missing-case`, `prompt-missing`, `prompt-diff`,
   `cache-missing`, `cache-diff`, or `comparable`.
+- Add a gated `prefill_tps med` compare column. **Landed 2026-04-29** as a
+  median of normalized `timing.prefill_tps` values that renders numerically only
+  when the case-level `prefill parity` status is `comparable`; every
+  non-comparable status renders `—`.
 
 Validation:
 

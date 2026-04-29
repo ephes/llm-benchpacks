@@ -50,6 +50,7 @@ def _record(
     ok: bool = True,
     wall_s: float | None = 1.0,
     ttft_s: float | None = 0.2,
+    prefill_tps: object = 100.0,
     decode_tps: float | None = 40.0,
     total_tps: float | None = 30.0,
     prompt_tokens: object = 10,
@@ -71,7 +72,7 @@ def _record(
         "timing": {
             "wall_s": wall_s,
             "ttft_s": ttft_s,
-            "prefill_tps": 100.0,
+            "prefill_tps": prefill_tps,
             "decode_tps": decode_tps,
             "total_tps": total_tps,
         },
@@ -148,10 +149,12 @@ def test_summarize_runs_groups_by_case_and_ignores_null_metrics(
     ]
     assert summaries[0].wall_s == 2.0
     assert summaries[0].ttft_s == 0.4
+    assert summaries[0].prefill_tps == 100.0
     assert summaries[0].output_tokens == 80.0
     assert summaries[0].prompt_tokens == 10.0
     assert summaries[0].prompt_rows == 2
     assert summaries[3].wall_s is None
+    assert summaries[3].prefill_tps is None
     assert summaries[3].prompt_tokens is None
     assert summaries[3].prompt_rows == 0
     assert summaries[0].cached_prompt_tokens is None
@@ -259,6 +262,31 @@ def test_summarize_runs_ignores_invalid_cached_prompt_values(
     assert summaries[0].cache_rows == 2
 
 
+def test_summarize_runs_ignores_invalid_prefill_tps_values(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    rows = [
+        _record("short", prefill_tps=float("nan")),
+        _record("short", prefill_tps=float("inf")),
+        _record("short", prefill_tps=float("-inf")),
+        _record("short", prefill_tps=None),
+        _record("short", prefill_tps=True),
+        _record("short", prefill_tps="100"),
+        _record("short", prefill_tps=80),
+        _record("short", prefill_tps=120.0),
+        _record("short"),
+        _record("short"),
+    ]
+    rows[-2]["timing"] = None
+    rows[-1].pop("timing")
+    _write_run(run_a, rows=rows)
+
+    summaries = summarize_runs([load_result_run(run_a)])
+
+    assert summaries[0].prefill_tps == 100.0
+
+
 def test_compare_handles_old_rows_without_cached_prompt_field(
     tmp_path: Path,
 ) -> None:
@@ -270,16 +298,72 @@ def test_compare_handles_old_rows_without_cached_prompt_field(
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | — | 40.00 | 30.00 | "
         "60 | 10 | — | 0/1 | cache-missing |"
         in output
     )
     assert (
-        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | "
+        "| run-b | short | 1 | 1 | 2.000 | 0.200 | — | 40.00 | 30.00 | "
         "60 | 10 | — | 0/1 | cache-missing |"
         in output
     )
     assert "WARNING: cache metadata incomplete for case `short`" in output
+
+
+@pytest.mark.parametrize(
+    ("status", "run_a_rows", "run_b_rows"),
+    [
+        (
+            "missing-case",
+            [_record("short", prompt_tokens=10, cached_prompt=8)],
+            [_record("long", prompt_tokens=10, cached_prompt=8)],
+        ),
+        (
+            "prompt-missing",
+            [_record("short", prompt_tokens=_UNSET, cached_prompt=8)],
+            [_record("short", prompt_tokens=10, cached_prompt=8)],
+        ),
+        (
+            "prompt-diff",
+            [_record("short", prompt_tokens=10, cached_prompt=8)],
+            [_record("short", prompt_tokens=12, cached_prompt=8)],
+        ),
+        (
+            "cache-missing",
+            [_record("short", prompt_tokens=10)],
+            [_record("short", prompt_tokens=10, cached_prompt=8)],
+        ),
+        (
+            "cache-diff",
+            [_record("short", prompt_tokens=10, cached_prompt=8)],
+            [_record("short", prompt_tokens=10, cached_prompt=10)],
+        ),
+    ],
+)
+def test_render_comparison_gates_prefill_tps_for_non_comparable_statuses(
+    tmp_path: Path,
+    status: str,
+    run_a_rows: list[dict],
+    run_b_rows: list[dict],
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=run_a_rows)
+    _write_run(run_b, rows=run_b_rows)
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert _prefill_statuses(run_a, run_b)["short"] == status
+    short_rows = [
+        line
+        for line in output.splitlines()
+        if line.startswith("| run-") and "| short |" in line
+    ]
+    assert len(short_rows) == 2
+    for row in short_rows:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        assert cells[6] == "—"
+    assert "100.00" not in output
 
 
 def test_prefill_parity_status_comparable_when_prompt_and_cache_match(
@@ -301,12 +385,40 @@ def test_prefill_parity_status_comparable_when_prompt_and_cache_match(
     assert _prefill_statuses(run_a, run_b) == {"short": "comparable"}
     assert "prefill parity" in output
     assert (
-        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 100.00 | 40.00 | 30.00 | "
         "60 | 10 | 8 | 2/2 | comparable |"
     ) in output
     assert (
-        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 100.00 | 40.00 | 30.00 | "
         "60 | 10 | 8 | 1/1 | comparable |"
+    ) in output
+
+
+def test_render_comparison_hides_prefill_tps_for_comparable_case_without_metric(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    run_a_rows = [
+        _record("short", prompt_tokens=10, cached_prompt=8, prefill_tps=None),
+        _record("short", prompt_tokens=10, cached_prompt=8, prefill_tps=True),
+        _record("short", prompt_tokens=10, cached_prompt=8, prefill_tps="100"),
+    ]
+    run_b_rows = [_record("short", prompt_tokens=10, cached_prompt=8)]
+    run_b_rows[0].pop("timing")
+    _write_run(run_a, rows=run_a_rows)
+    _write_run(run_b, rows=run_b_rows)
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "comparable"}
+    assert (
+        "| run-a | short | 3 | 3 | 1.000 | 0.200 | — | 40.00 | 30.00 | "
+        "60 | 10 | 8 | 3/3 | comparable |"
+    ) in output
+    assert (
+        "| run-b | short | 1 | 1 | — | — | — | — | — | 60 | 10 | 8 | "
+        "1/1 | comparable |"
     ) in output
 
 
@@ -423,11 +535,11 @@ def test_render_comparison_shows_partial_cache_coverage(tmp_path: Path) -> None:
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 3 | 3 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-a | short | 3 | 3 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "10 | 9 | 2/3 | cache-missing |"
     ) in output
     assert (
-        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-b | short | 1 | 1 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "10 | 9 | 1/1 | cache-missing |"
     ) in output
     assert "WARNING: cache metadata incomplete for case `short`" in output
@@ -443,11 +555,11 @@ def test_render_comparison_shows_prompt_token_median(tmp_path: Path) -> None:
 
     assert "prompt_tokens med" in output
     assert (
-        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "10 | — | 0/1 | prompt-diff |"
     ) in output
     assert (
-        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-b | short | 1 | 1 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "12 | — | 0/1 | prompt-diff |"
     ) in output
 
@@ -497,7 +609,7 @@ def test_render_comparison_suppresses_prompt_mismatch_with_partial_prompt_covera
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "10 | 8 | 2/2 | prompt-missing |"
     ) in output
     assert "prompt-token medians differ" not in output
@@ -527,7 +639,7 @@ def test_render_comparison_suppresses_prompt_mismatch_with_missing_prompt_median
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | — | 40.00 | 30.00 | 60 | "
         "— | 8 | 2/2 | prompt-missing |"
     ) in output
     assert "prompt-token medians differ" not in output
@@ -577,11 +689,11 @@ def test_render_comparison_suppresses_prompt_and_cache_mismatch_for_missing_case
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-b | short | 0 | 0 | — | — | — | — | — | — | — | 0/0 | "
+        "| run-b | short | 0 | 0 | — | — | — | — | — | — | — | — | 0/0 | "
         "missing-case |"
     ) in output
     assert (
-        "| run-a | long | 0 | 0 | — | — | — | — | — | — | — | 0/0 | "
+        "| run-a | long | 0 | 0 | — | — | — | — | — | — | — | — | 0/0 | "
         "missing-case |"
     ) in output
     assert "prompt-token medians differ" not in output
@@ -597,12 +709,13 @@ def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> Non
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert "WARNING: compared records use different pack ids or versions" in output
-    assert "prefill_tps` is intentionally omitted" in output
+    assert "`prefill_tps med` is shown only when" in output
     assert "tokens.cached_prompt" in output
     assert (
-        "| run | case | rows | ok | wall_s med | ttft_s med | decode_tps med | "
-        "total_tps med | output_tokens med | prompt_tokens med | "
-        "cached_prompt med | cache rows | prefill parity |"
+        "| run | case | rows | ok | wall_s med | ttft_s med | "
+        "prefill_tps med | decode_tps med | total_tps med | "
+        "output_tokens med | prompt_tokens med | cached_prompt med | "
+        "cache rows | prefill parity |"
     ) in output
 
 

@@ -175,11 +175,14 @@ record dictionaries as loaded, groups by case and input run, and renders a
 stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
 tokens. It also reports median numeric `tokens.prompt`, median numeric
 `tokens.cached_prompt`, and cache metadata coverage, expressed as numeric
-cached-token rows over total rows, for each case/run group.
+cached-token rows over total rows, for each case/run group. It computes median
+numeric `timing.prefill_tps` but renders that median only when the case-level
+`prefill parity` status is `comparable`.
 
-The compare utility warns when pack ids or versions differ. It omits
-`prefill_tps` from the primary table because prefill comparisons still require
-explicit prompt-cache parity. New rows may carry `tokens.prompt` and
+The compare utility warns when pack ids or versions differ. The `prefill_tps
+med` column is gated because prefill comparisons require explicit prompt-cache
+parity: non-comparable cases render `—` even when `timing.prefill_tps` values
+exist in `run.jsonl`. New rows may carry `tokens.prompt` and
 `tokens.cached_prompt`, but old rows may lack one or both fields and missing
 values do not prove parity. Cache warnings are derived only from normalized
 `run.jsonl` rows: compare warns when cache metadata is incomplete for a case,
