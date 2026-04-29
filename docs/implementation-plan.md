@@ -33,9 +33,9 @@ Add fixed-context performance cases that make runtime comparisons meaningful.
 endpoints landed 2026-04-26, pack-driven warmup/repetitions landed 2026-04-26,
 the bundled `runtime-sweep` pack landed 2026-04-27, `mlx_lm.server`
 validation through `openai-chat` passed 2026-04-28, and local
-`llama-server` validation was attempted 2026-04-29 but blocked because no
-`llama-server` binary or GGUF model file was available on the validation host;
-see `docs/spec-log.md`.
+`llama-server` validation attempts on 2026-04-29 were blocked because no
+compatible server binary or GGUF model file was available on the validation
+host; see `docs/spec-log.md`.
 
 Scope:
 
@@ -54,6 +54,8 @@ Scope:
   `llama-server` binary and a suitable local GGUF instruct model; any
   compatibility slice should cover OpenAI-compatible servers broadly, not just
   MLX.
+  - Do not run benchmark commands until both prerequisites and the server help
+    output have been verified locally.
 - If `llama-server` rejects `stream_options.include_usage` or otherwise differs
   from the OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
   compatibility slice before compare. That slice should likely suppress

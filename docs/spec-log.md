@@ -16,13 +16,16 @@ working history and open questions.
 - ...
 ```
 
-## 2026-04-29 (Phase 2 llama-server validation blocker)
+## 2026-04-29 (Phase 2 llama-server validation blocker, rechecked)
 
 ### Changed
 
-- Attempted the next Phase 2 `llama-server` validation slice on `atlas.local`,
-  but live benchmark execution was blocked by missing local server/model
-  prerequisites rather than by an adapter compatibility result.
+- Attempted the next Phase 2 `llama-server` validation slice on `atlas.local`;
+  a second 2026-04-29 implementation pass on branch
+  `phase2-llama-server-live-validation` rechecked the prerequisites before any
+  benchmark command was run. Live benchmark execution remained blocked by
+  missing local server/model prerequisites rather than by an adapter
+  compatibility result.
 - No `llama-server`, `llama.cpp-server`, `llama-cpp-server`, or `llama-cli`
   executable was available on `PATH`; `llama-server --help` and
   `llama-server --version` therefore failed with `command not found`.
@@ -31,14 +34,17 @@ working history and open questions.
   `*llama*server*`, and `server`-named files. Local GGUF searches checked
   `~/.cache`, `~/models`, `~/.local/share`, `~/Library/Caches`,
   `/opt/homebrew`, `~/Projects`, and `~/projects` with `*.gguf` file globs,
-  plus Spotlight `mdfind 'kMDItemFSName == "*.gguf"c'`. Those searches found
-  no usable `llama-server` executable and no `.gguf` model file.
+  plus Spotlight `mdfind 'kMDItemFSName == "*.gguf"c'`. The second pass also
+  checked Homebrew package metadata for `llama.cpp` and scanned
+  `/opt/homebrew`, `/usr/local`, `~/projects`, `~/Projects`, and `$HOME` for
+  executable `llama-server`-compatible binaries. Those searches found no usable
+  `llama-server` executable and no `.gguf` model file.
 - `ollama list` showed local Ollama tags, but those are not directly usable as
   the GGUF model file required to start `llama-server` for this validation
   slice.
 - No `smoke-chat` or `runtime-sweep` `llama-server` benchmark command was run,
-  because the server command, endpoint, and model file could not be verified
-  locally.
+  because the server command, endpoint, model file, model label, and
+  quantization could not be verified locally.
 - The blocked run means the `llama-server` success criteria in the Validation
   section of `docs/implementation-plan.md` remain untested: `smoke-chat` still
   needs exactly one measured row with `ok = true`, `scoring.passed = true`, and
