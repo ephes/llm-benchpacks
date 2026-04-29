@@ -16,23 +16,36 @@ working history and open questions.
 - ...
 ```
 
-## 2026-04-29 (Phase 2 llama-server validation attempt)
+## 2026-04-29 (Phase 2 llama-server validation blocker)
 
 ### Changed
 
 - Attempted the next Phase 2 `llama-server` validation slice on `atlas.local`,
-  but live benchmark execution was blocked by local artifacts rather than by an
-  adapter compatibility result.
+  but live benchmark execution was blocked by missing local server/model
+  prerequisites rather than by an adapter compatibility result.
 - No `llama-server`, `llama.cpp-server`, `llama-cpp-server`, or `llama-cli`
   executable was available on `PATH`; `llama-server --help` and
   `llama-server --version` therefore failed with `command not found`.
-- Broader local searches under common bin/project/cache/model locations found
-  no usable `llama-server` executable and no `.gguf` model file. `ollama list`
-  showed local Ollama tags, but those are not directly usable as the GGUF model
-  file required to start `llama-server` for this validation slice.
+- Local executable searches checked `/opt/homebrew/bin`, `/usr/local/bin`,
+  `~/.local/bin`, `~/bin`, and `~/projects` for `llama-server`,
+  `*llama*server*`, and `server`-named files. Local GGUF searches checked
+  `~/.cache`, `~/models`, `~/.local/share`, `~/Library/Caches`,
+  `/opt/homebrew`, `~/Projects`, and `~/projects` with `*.gguf` file globs,
+  plus Spotlight `mdfind 'kMDItemFSName == "*.gguf"c'`. Those searches found
+  no usable `llama-server` executable and no `.gguf` model file.
+- `ollama list` showed local Ollama tags, but those are not directly usable as
+  the GGUF model file required to start `llama-server` for this validation
+  slice.
 - No `smoke-chat` or `runtime-sweep` `llama-server` benchmark command was run,
   because the server command, endpoint, and model file could not be verified
   locally.
+- The blocked run means the `llama-server` success criteria in the Validation
+  section of `docs/implementation-plan.md` remain untested: `smoke-chat` still
+  needs exactly one measured row with `ok = true`, `scoring.passed = true`, and
+  a resolved `/v1/chat/completions` endpoint, while `runtime-sweep` still needs
+  exactly nine measured rows, no warmup rows in `run.jsonl`, and non-null
+  `timing.ttft_s`, `timing.prefill_tps`, `timing.decode_tps`, and
+  `tokens.output` for every measured row.
 - No adapter behavior, request shape, result schema, CLI flags, benchmark pack
   semantics, or compatibility fallback changed in this slice.
 
@@ -77,13 +90,9 @@ working history and open questions.
 
 ### Open Questions
 
-- Whether `llama-server` accepts the current `openai-chat` streaming request
-  shape, including `stream_options.include_usage`, remains unresolved. The next
-  Phase 2 step is still to complete `llama-server` validation on a host with a
-  verified server binary and a suitable local GGUF instruct model.
-- If that future run rejects `stream_options.include_usage` or omits streaming
-  usage fields, add a narrow `openai-chat` compatibility mode before
-  `benchpack compare`; otherwise proceed to `benchpack compare`.
+- Whether `llama-server` accepts `stream_options.include_usage` remains to be
+  validated locally. If it rejects the option, the next slice should be a
+  narrow `openai-chat` streaming compatibility mode before `benchpack compare`.
 
 ## 2026-04-27 (Phase 2 runtime-sweep pack)
 
