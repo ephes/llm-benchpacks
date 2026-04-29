@@ -34,12 +34,20 @@ uv sync
 uv run benchpack run smoke-chat --adapter ollama-generate --model qwen3-coder:latest
 uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
+uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
 Each invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
 collision rules, and `uv run pytest` for the test suite.
+
+`benchpack compare` is read-only and compares existing result directories that
+contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,
+total TPS, and output tokens. It intentionally omits `prefill_tps` from the
+primary table because normalized results do not yet record prompt-cache parity;
+do not use current compare output for cross-server prefill-speed conclusions
+without separate cache evidence.
 
 Bundled packs:
 

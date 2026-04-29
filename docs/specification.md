@@ -109,7 +109,10 @@ streaming usage support or an explicit compatibility mode exists.
 
 ## CLI
 
-The runner exposes a single subcommand for executing a pack:
+The runner exposes subcommands for executing packs and comparing existing result
+directories.
+
+### `benchpack run`
 
 ```text
 benchpack run <pack> --adapter <adapter> --model <model>
@@ -163,6 +166,40 @@ from interleaving result rows or overwriting each other's `raw/` files.
 
 `run.jsonl` itself is append-only within a single run: the reporter appends
 one record per measured execution as it executes.
+
+### `benchpack compare`
+
+```text
+benchpack compare <result-dir> <result-dir> [<result-dir> ...]
+```
+
+`benchpack compare` reads existing result directories and writes only a textual
+comparison to stdout. Each argument must be a directory containing `run.jsonl`;
+passing a `run.jsonl` file directly is not supported in the first compare
+slice.
+
+The command exits nonzero with a clear message when fewer than two inputs are
+provided, an input is not a result directory, `run.jsonl` is missing or empty,
+or a JSONL row cannot be parsed as a JSON object.
+
+The initial summary is intentionally small and deterministic:
+
+- Inputs are identified by directory basename and path.
+- Records are grouped by case and input run.
+- Case order follows first appearance across the compared rows.
+- `rows` counts measured records and `ok` counts rows with `ok = true`.
+- `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
+  summarized with `statistics.median`.
+- Null or non-numeric metric values are ignored; a metric with no numeric
+  samples is displayed as `—`.
+- Differing `pack.id` or `pack.version` values produce a warning because
+  cross-pack comparisons are not reliable.
+
+`prefill_tps` is intentionally omitted from the primary compare table for now.
+The normalized `run.jsonl` schema does not record prompt-cache parity or cached
+prompt-token counts, and the 2026-04-29 `llama-server` runtime-sweep rows were
+warm-cache rows. Compare output must not be interpreted as cross-server cold
+prefill speed unless cache parity is established separately.
 
 ## Result Artifacts
 

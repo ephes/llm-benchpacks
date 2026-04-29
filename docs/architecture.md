@@ -2,13 +2,15 @@
 
 ## Components
 
-`benchpack` should be a small CLI with five internal concepts:
+`benchpack` should be a small CLI with six internal concepts:
 
 - **Pack**: versioned workload definition.
 - **Case**: one request or task inside a pack.
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
 - **Reporter**: JSONL artifacts plus human-readable summaries.
+- **Compare utility**: read-only reporting over existing `run.jsonl` result
+  directories.
 
 ## Proposed Layout
 
@@ -25,6 +27,7 @@ src/
       openai_chat.py
     packs.py
     results.py
+    compare.py
     hardware.py
 docs/
   specification.md
@@ -156,6 +159,19 @@ On Linux:
 - `free`
 - `nvidia-smi` when available
 - `/etc/os-release`
+
+## Compare Flow
+
+`benchpack compare` is intentionally outside the execution flow. It does not
+load adapters, collect hardware, execute packs, write result artifacts, or read
+ignored `raw/` files. It reads each input directory's `run.jsonl`, preserves the
+record dictionaries as loaded, groups by case and input run, and renders a
+stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
+tokens.
+
+The compare utility warns when pack ids or versions differ. It omits
+`prefill_tps` from the primary table because normalized result records do not
+carry prompt-cache parity metadata.
 
 ## Spec And Log Management
 

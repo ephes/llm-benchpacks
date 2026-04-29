@@ -362,3 +362,117 @@ def test_cli_force_replaces_existing_run(tmp_path: Path, monkeypatch) -> None:
     # New run.jsonl has exactly one record.
     lines = (out / "run.jsonl").read_text().strip().splitlines()
     assert len(lines) == 1
+
+
+def _write_compare_run(
+    path: Path,
+    *,
+    version: str = "0.1.0",
+    wall_s: float | None = 1.0,
+    ttft_s: float | None = 0.1,
+) -> None:
+    path.mkdir(parents=True)
+    record = {
+        "pack": {"id": "runtime-sweep", "version": version},
+        "case": "short",
+        "adapter": "openai-chat",
+        "endpoint": "http://example.test/v1/chat/completions",
+        "model": "model",
+        "ok": True,
+        "timing": {
+            "wall_s": wall_s,
+            "ttft_s": ttft_s,
+            "prefill_tps": 100.0,
+            "decode_tps": 40.0,
+            "total_tps": 30.0,
+        },
+        "tokens": {"prompt": 10, "output": 60},
+        "resources": {"memory_mb": None, "gpu_memory_mb": None},
+        "scoring": None,
+        "raw": {
+            "request_path": "raw/short.request.json",
+            "response_path": "raw/short.response.json",
+        },
+    }
+    (path / "run.jsonl").write_text(json.dumps(record) + "\n")
+
+
+def test_cli_compare_prints_table_for_two_result_dirs(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a, wall_s=1.0)
+    _write_compare_run(run_b, wall_s=2.0)
+
+    assert main(["compare", str(run_a), str(run_b)]) == 0
+
+    output = capsys.readouterr().out
+    assert "# benchpack compare" in output
+    assert "| run | case | rows | ok | wall_s med |" in output
+    assert "| run-a | short | 1 | 1 | 1.000 | 0.100 | 40.00 | 30.00 | 60 |" in output
+    assert "`prefill_tps` is intentionally omitted" in output
+
+
+def test_cli_compare_warns_on_pack_version_mismatch(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a, version="0.1.0")
+    _write_compare_run(run_b, version="0.2.0")
+
+    assert main(["compare", str(run_a), str(run_b)]) == 0
+
+    assert "WARNING: compared records use different pack ids or versions" in (
+        capsys.readouterr().out
+    )
+
+
+def test_cli_compare_rejects_missing_run_jsonl(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a)
+    run_b.mkdir()
+
+    with pytest.raises(SystemExit, match="missing run.jsonl"):
+        main(["compare", str(run_a), str(run_b)])
+
+
+def test_cli_compare_rejects_empty_run_jsonl(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a)
+    run_b.mkdir()
+    (run_b / "run.jsonl").write_text("")
+
+    with pytest.raises(SystemExit, match="empty"):
+        main(["compare", str(run_a), str(run_b)])
+
+
+def test_cli_compare_rejects_malformed_jsonl(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a)
+    run_b.mkdir()
+    (run_b / "run.jsonl").write_text("{bad json}\n")
+
+    with pytest.raises(SystemExit, match="could not parse"):
+        main(["compare", str(run_a), str(run_b)])
+
+
+def test_cli_compare_displays_placeholder_for_null_metrics(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a, wall_s=None, ttft_s=None)
+    _write_compare_run(run_b)
+
+    assert main(["compare", str(run_a), str(run_b)]) == 0
+
+    output = capsys.readouterr().out
+    assert "| run-a | short | 1 | 1 | — | — | 40.00 | 30.00 | 60 |" in output

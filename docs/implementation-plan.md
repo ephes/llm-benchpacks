@@ -36,7 +36,8 @@ validation through `openai-chat` passed 2026-04-28, earlier local
 `llama-server` validation attempts on 2026-04-29 were blocked by missing local
 server/model prerequisites, and `llama-server` validation through
 `openai-chat` passed later on 2026-04-29 after those prerequisites were
-installed locally; see `docs/spec-log.md`.
+installed locally; the first read-only `benchpack compare` command landed
+2026-04-29; see `docs/spec-log.md`.
 
 Scope:
 
@@ -64,12 +65,12 @@ Scope:
   slice should likely suppress `stream_options.include_usage` for endpoints
   that reject it and record TTFT/output text while leaving usage-derived token
   rates null unless the endpoint reports token usage another way.
-- Implement `benchpack compare` next now that the `mlx_lm.server` and
-  `llama-server` server-path checks are understood and both accepted the current
-  streaming request shape. Before using it for prefill-speed conclusions,
-  establish prompt-cache parity between compared servers, for example by
-  disabling llama.cpp prompt cache or recording cached-token counts on both
-  sides.
+- Implement `benchpack compare` over existing `run.jsonl` result directories.
+  **Landed 2026-04-29** as a compact read-only median table for wall time,
+  TTFT, decode TPS, total TPS, and output tokens. Before using compare output
+  for prefill-speed conclusions, establish prompt-cache parity between compared
+  servers, for example by disabling llama.cpp prompt cache or recording
+  cached-token counts on both sides.
 
 Validation:
 

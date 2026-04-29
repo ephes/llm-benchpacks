@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 compare command)
+
+### Changed
+
+- Added `benchpack compare <result-dir> <result-dir> [...]` as the first
+  read-only comparison slice over existing result directories that contain
+  `run.jsonl`.
+- The compare command loads normalized result rows only, groups by case and
+  input run, and prints a deterministic Markdown table with row count, `ok`
+  count, and median `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and
+  `tokens.output`.
+- Compare warns when pack ids or versions differ and handles missing, empty, or
+  malformed `run.jsonl` inputs with clear nonzero CLI errors.
+- `prefill_tps` is intentionally omitted from the primary table because
+  normalized result rows do not include prompt-cache parity metadata. The
+  2026-04-29 `llama-server` runtime rows remain warm-cache rows, so compare
+  output must not be read as cross-server cold-prefill evidence.
+- No adapter behavior, adapter return payload shape, benchmark pack semantics,
+  result record schema, compatibility fallback, live server orchestration, or
+  generated result artifacts changed in this slice.
+
+### Open Questions
+
+- A future result schema may need normalized cached-token fields before
+  `prefill_tps` can be compared across servers with cache parity.
+- Future compare slices may add richer aggregation or output formats, but this
+  slice deliberately stays at per-case medians over measured rows.
+
 ## 2026-04-29 (Phase 2 llama-server validation passed)
 
 ### Changed

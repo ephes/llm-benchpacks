@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .adapters import Adapter, AdapterRequest, get_adapter
+from .compare import CompareError, load_result_run, render_comparison
 from .hardware import collect_hardware, sample_resources
 from .packs import (
     Case,
@@ -130,6 +131,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compare(args: argparse.Namespace) -> int:
+    if len(args.result_dirs) < 2:
+        raise SystemExit("benchpack compare requires at least two result directories")
+    try:
+        runs = [load_result_run(path) for path in args.result_dirs]
+    except CompareError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(render_comparison(runs))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchpack")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -146,6 +158,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Delete the output directory if a previous run.jsonl exists",
     )
+
+    compare = sub.add_parser("compare", help="Compare existing result directories")
+    compare.add_argument(
+        "result_dirs",
+        nargs="+",
+        help="Result directories containing run.jsonl",
+    )
     return parser
 
 
@@ -154,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "run":
         return _cmd_run(args)
+    if args.command == "compare":
+        return _cmd_compare(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

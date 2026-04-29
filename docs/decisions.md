@@ -83,3 +83,15 @@ similar servers. Proving or disproving compatibility there keeps the adapter
 surface smaller. Add a dedicated MLX adapter only if server-path validation
 shows that the OpenAI-compatible path cannot provide the measurements the
 project needs.
+
+## D-011: Compare Existing Result Artifacts First
+
+Make the first comparison command read existing result directories containing
+`run.jsonl` instead of executing benchmarks or reading generated `raw/`
+artifacts.
+
+Reason: `run.jsonl` is the stable result contract from prior slices. A
+read-only compare command gives useful Phase 2 summaries without expanding the
+adapter surface, mutating result directories, or depending on ignored raw
+payloads. `prefill_tps` stays out of the primary comparison table until
+normalized results carry enough prompt-cache metadata to establish cache parity.
