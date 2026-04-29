@@ -16,6 +16,33 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 3 prompt-file support)
+
+### Changed
+
+- Added case-level `prompt_file` support to the benchpack manifest loader.
+- `prompt_file` paths are resolved relative to the pack directory, must be
+  relative paths, and must resolve inside the pack after following symlinks.
+- Cases now fail at load time when they define both `prompt` and `prompt_file`,
+  or neither prompt source.
+- The loader reads prompt files as UTF-8 text and stores the contents in
+  `Case.prompt`, so existing CLI, adapter, scoring, reporter, and result record
+  behavior remains unchanged.
+- Moved the bundled `desktop-django-wrap` prompts from inline TOML strings to
+  pack-local files under `benchpacks/desktop-django-wrap/prompts/`, while
+  keeping pack id, version, defaults, case ids, scoring mode, and marker check
+  unchanged.
+- No live benchmark run, new adapter, new scoring engine, compare change,
+  fixture support, disposable worktree handling, verifier script, repo mutation,
+  or agent execution harness was added.
+
+### Open Questions
+
+- Future Phase 3 slices still need fixture loading, disposable target repos,
+  repo-task semantics, patch extraction or agent-harness integration, and
+  verify-script scoring contracts before this becomes a repo-mutating wrapping
+  benchmark.
+
 ## 2026-04-29 (Phase 3 desktop-django-wrap starter pack)
 
 ### Changed

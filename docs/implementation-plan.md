@@ -131,17 +131,21 @@ that the OpenAI-compatible adapter is insufficient for the measurements we need.
 Add the first real coding-agent-shaped workload.
 
 **Status:** started 2026-04-29 with the bundled `desktop-django-wrap` pack.
-The first slice is prompt-only: two inline chat cases ask for concise wrapping
-plans and use deterministic `contains` scoring against `DDS_WRAP_PLAN`. It does
-not yet include fixtures, disposable target repos, repo mutation, patch
-extraction, agent-session replay, or verification scripts.
+The first slice is prompt-only: two prompt-file-backed static chat cases ask for
+concise wrapping plans and use deterministic `contains` scoring against
+`DDS_WRAP_PLAN`. Prompt-file loading landed 2026-04-29 so longer static prompts
+can live under pack-local `prompts/` directories. Phase 3 does not yet include
+fixtures, disposable target repos, repo mutation, patch extraction,
+agent-session replay, or verification scripts.
 
 Scope:
 
 - Add a prompt-only `desktop-django-wrap` starter pack derived from the
   `desktop-django-starter` wrapping workflow. **Landed 2026-04-29.**
+- Add static prompt-file support and move `desktop-django-wrap` prompts under
+  `benchpacks/desktop-django-wrap/prompts/`. **Landed 2026-04-29.**
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
-  later slice when prompt-file or fixture support is ready.
+  later slice when fixture support and repo-task contracts are ready.
 - Include a compact target-repo snapshot fixture.
 - Add deterministic constraints for short output comparison.
 - Add optional full agent-session replay later.

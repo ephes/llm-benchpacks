@@ -51,6 +51,10 @@ class InvalidDefaultError(PackError):
     """Raised when a manifest default has the wrong type or range."""
 
 
+class InvalidPromptSourceError(PackError):
+    """Raised when a case prompt or prompt_file entry is invalid."""
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.match(value):
         raise InvalidIdError(
@@ -157,6 +161,59 @@ def _defaults_from_dict(data: Any) -> dict[str, Any]:
     return defaults
 
 
+def _prompt_from_case_entry(
+    entry: dict[str, Any],
+    *,
+    case_id: str,
+    pack_dir: Path,
+) -> str | None:
+    has_prompt = "prompt" in entry
+    has_prompt_file = "prompt_file" in entry
+
+    if has_prompt and has_prompt_file:
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} cannot define both 'prompt' and 'prompt_file'"
+        )
+    if not has_prompt and not has_prompt_file:
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} must define either 'prompt' or 'prompt_file'"
+        )
+    if has_prompt:
+        return entry["prompt"]
+
+    prompt_file = entry["prompt_file"]
+    if not isinstance(prompt_file, str):
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} prompt_file must be a string"
+        )
+
+    prompt_path = Path(prompt_file)
+    if prompt_path.is_absolute():
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} prompt_file must be relative to the pack directory"
+        )
+
+    try:
+        resolved_pack_dir = pack_dir.resolve(strict=True)
+        resolved_prompt_path = (pack_dir / prompt_path).resolve(strict=True)
+    except OSError as exc:
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} prompt_file {prompt_file!r} could not be resolved"
+        ) from exc
+
+    if not resolved_prompt_path.is_relative_to(resolved_pack_dir):
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} prompt_file {prompt_file!r} escapes the pack directory"
+        )
+
+    try:
+        return resolved_prompt_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise InvalidPromptSourceError(
+            f"case {case_id!r} prompt_file {prompt_file!r} could not be read"
+        ) from exc
+
+
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
@@ -180,11 +237,16 @@ def load_pack(path: Path | str) -> Pack:
                 f"duplicate case id {case_id!r} in pack {pack_id!r}"
             )
         seen.add(case_id)
+        prompt = _prompt_from_case_entry(
+            entry,
+            case_id=case_id,
+            pack_dir=pack_dir,
+        )
         cases.append(
             Case(
                 id=case_id,
                 kind=entry.get("kind", "chat"),
-                prompt=entry.get("prompt"),
+                prompt=prompt,
                 scoring=_scoring_from_dict(entry.get("scoring")),
                 raw=dict(entry),
             )

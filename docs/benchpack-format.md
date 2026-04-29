@@ -67,9 +67,40 @@ expected = "Paris"
 : Ordered benchmark cases. Each case `id` must match the id grammar below and
   must be unique within the pack.
 
+`cases[].prompt`
+: Inline prompt text for a case. Inline prompts remain supported for compact
+  smoke and runtime-measurement cases.
+
+`cases[].prompt_file`
+: Pack-relative path to a UTF-8 prompt file, for example
+  `prompt_file = "prompts/wrap-plan-small.md"`. A case must define exactly one
+  prompt source: either `prompt` or `prompt_file`, never both and never neither.
+  Prompt files are resolved relative to the pack directory, must not be absolute
+  paths, and must resolve inside the pack directory after following symlinks.
+  The runner rejects paths that escape the pack directory through `..` traversal
+  or symlinks. Loaded file contents become the case prompt at manifest-load time,
+  so adapters and result records do not distinguish inline prompts from prompt
+  files.
+
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
   inline on individual cases as an override. See **Scoring** below.
+
+### Prompt Files
+
+Use `prompt_file` when a prompt is long enough that keeping it in TOML would make
+the manifest hard to scan:
+
+```toml
+[[cases]]
+id = "wrap-plan-small"
+kind = "chat"
+prompt_file = "prompts/wrap-plan-small.md"
+```
+
+Prompt files are static text in the current format. There is no templating,
+variable substitution, globbing, include support, fixture loading, or
+multi-message loader in this slice.
 
 ## ID Grammar
 

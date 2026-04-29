@@ -11,8 +11,8 @@ verification scripts.
 - `wrap-plan-small`: compact task brief for a short wrapping outline.
 - `wrap-plan-context`: slightly richer synthetic project context.
 
-Both prompts are inline in `benchpack.toml` so the current runner can load the
-pack without prompt-file support. They are synthetic and portable: no local
+Both prompts live in pack-local files under `prompts/`, referenced from
+`benchpack.toml` with `prompt_file`. They are synthetic and portable: no local
 paths, private repository checkout, network access, Apple Silicon assumptions,
 CUDA assumptions, or endpoint-specific behavior.
 

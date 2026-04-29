@@ -13,37 +13,12 @@ repetitions = 1
 [[cases]]
 id = "wrap-plan-small"
 kind = "chat"
-prompt = """
-You are planning a coding-agent task for an existing server-rendered Django app
-that should run inside an Electron desktop shell.
-
-Return a concise implementation outline. The output must start with the exact
-marker DDS_WRAP_PLAN, then use at most six bullets. Cover: Electron starting
-Django on 127.0.0.1 with a health check, dev mode versus packaged mode,
-SQLite or media files moving to a writable app-data path, keeping CSRF and a
-narrow shell-to-Django token boundary, a smoke command, and verification steps.
-Do not run commands, assume local files, or include absolute paths.
-"""
+prompt_file = "prompts/wrap-plan-small.md"
 
 [[cases]]
 id = "wrap-plan-context"
 kind = "chat"
-prompt = """
-You are given a portable benchmark prompt that approximates wrapping an
-existing Django project in Electron. The target is synthetic: it has a
-manage.py entrypoint, server-rendered templates, SQLite for local data, static
-assets, and a few authenticated views. The desired desktop app should keep the
-Django UI, add a thin Electron shell, work in local development and packaged
-mode, and avoid network dependencies.
-
-Write a short implementation plan for a coding agent. Include the exact marker
-DDS_WRAP_PLAN somewhere in the first line. Keep the answer under 180 words and
-structure it as sections for inspect, Electron shell, Django runtime,
-packaging, and verification. Mention a health endpoint or smoke command,
-writable app-data paths for packaged SQLite/media, static files with
-DEBUG=false, and bounded tests. Do not reference private repos, local absolute
-paths, or command execution you performed.
-"""
+prompt_file = "prompts/wrap-plan-context.md"
 
 [scoring]
 mode = "contains"

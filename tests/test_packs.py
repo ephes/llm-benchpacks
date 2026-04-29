@@ -10,6 +10,7 @@ from benchpack.packs import (
     DuplicateCaseIdError,
     InvalidDefaultError,
     InvalidIdError,
+    InvalidPromptSourceError,
     load_pack,
     repetitions_from_defaults,
     warmup_from_defaults,
@@ -66,6 +67,178 @@ expected = "Paris"
     assert pack.scoring.mode == "contains"
     assert pack.scoring.expected == "Paris"
     assert pack.path == pack_dir
+
+
+def test_load_pack_loads_prompt_file(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fileprompt"
+version = "0.1.0"
+
+[[cases]]
+id = "from-file"
+kind = "chat"
+prompt_file = "prompts/example.md"
+""",
+    )
+    prompt = "Line one.\nLine two.\n"
+    prompt_dir = pack_dir / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "example.md").write_text(prompt, encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == prompt
+    assert pack.cases[0].raw["prompt_file"] == "prompts/example.md"
+
+
+def test_load_pack_keeps_inline_prompt_support(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "inline"
+version = "0.1.0"
+
+[[cases]]
+id = "inline-case"
+kind = "chat"
+prompt = "Inline prompt stays supported."
+""",
+    )
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == "Inline prompt stays supported."
+    assert pack.cases[0].raw["prompt"] == "Inline prompt stays supported."
+
+
+def test_load_pack_rejects_absolute_prompt_file(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "absfile"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = {str(outside)!r}
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="relative"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_prompt_file_traversal(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "traversal"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = "../outside.md"
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="escapes"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_prompt_file_symlink_escape(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "symlinkescape"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = "prompts/escape.md"
+""",
+    )
+    prompts_dir = pack_dir / "prompts"
+    prompts_dir.mkdir()
+    try:
+        (prompts_dir / "escape.md").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
+
+    with pytest.raises(InvalidPromptSourceError, match="escapes"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_string_prompt_file(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badpromptfile"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = 123
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="must be a string"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_prompt_and_prompt_file_together(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "both"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt = "inline"
+prompt_file = "prompts/example.md"
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="both"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_missing_prompt_source(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "noprompt"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="either"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_rejects_duplicate_case_ids(tmp_path: Path) -> None:
@@ -355,5 +528,11 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
         assert case.kind == "chat"
         assert case.prompt
         assert "DDS_WRAP_PLAN" in case.prompt
+        assert "prompt" not in case.raw
+        assert "prompt_file" in case.raw
+        prompt_file = case.raw["prompt_file"]
+        assert isinstance(prompt_file, str)
+        assert prompt_file.startswith("prompts/")
+        assert not Path(prompt_file).is_absolute()
         for fragment in forbidden_path_fragments:
             assert fragment not in case.prompt

@@ -46,8 +46,8 @@ Initial packs:
 - `runtime-sweep`: fixed prompts at several context sizes for TTFT and throughput.
 - `desktop-django-wrap`: first Phase 3 prompt-only coding-agent-shaped pack
   derived from the `desktop-django-starter` wrapping workflow. Version `0.1.0`
-  asks for concise Django-in-Electron wrapping plans with inline chat prompts,
-  uses `defaults.stream = true`, `defaults.warmup = 0`,
+  asks for concise Django-in-Electron wrapping plans with prompt-file-backed
+  static chat prompts, uses `defaults.stream = true`, `defaults.warmup = 0`,
   `defaults.repetitions = 1`, and `scoring.mode = "contains"` against
   `DDS_WRAP_PLAN`. It is not yet a repo-mutating wrapping task and has no
   fixtures, patch extraction, disposable worktree, or verifier script.

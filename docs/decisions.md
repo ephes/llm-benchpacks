@@ -144,11 +144,23 @@ usage-derived metrics when the endpoint does not report usage.
 ## D-015: Start Phase 3 With A Prompt-Only Wrap Pack
 
 The first Phase 3 coding-agent-shaped workload is the bundled
-`desktop-django-wrap` pack: inline chat prompts ask for concise plans to adapt a
-server-rendered Django app to run inside Electron, and deterministic scoring is
-limited to a `contains` check for `DDS_WRAP_PLAN`.
+`desktop-django-wrap` pack: static chat prompts ask for concise plans to adapt
+a server-rendered Django app to run inside Electron, and deterministic scoring
+is limited to a `contains` check for `DDS_WRAP_PLAN`.
 
 Reason: this gives the runner a portable workload surface shaped like the real
 `desktop-django-starter` wrap task without adding repo mutation, fixtures,
 agent-session orchestration, patch extraction, verifier scripts, or new scoring
 engines before those contracts are ready.
+
+## D-016: Prompt Files Resolve Inside The Pack
+
+Case-level `prompt_file` entries are pack-relative static text files whose
+contents are loaded into `Case.prompt` during manifest loading. The loader
+rejects absolute paths and any resolved path, including a symlink target, that
+escapes the pack directory.
+
+Reason: prompt files are source artifacts that must remain portable across
+local laptops, Linux CUDA hosts, and OpenAI-compatible local servers. Loading
+file contents into `Case.prompt` keeps adapter request shapes and result records
+unchanged while preventing manifests from depending on private local paths.

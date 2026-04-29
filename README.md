@@ -74,8 +74,9 @@ Bundled packs:
 - `runtime-sweep`: streaming short/medium/long runtime measurement pack with one
   warmup and three measured repetitions per case.
 - `desktop-django-wrap`: streaming prompt-only first Phase 3 coding-agent-shaped
-  workload that asks for Django-in-Electron wrapping plans and uses a
-  `DDS_WRAP_PLAN` contains check. It is not yet a repo-mutating wrap benchmark.
+  workload with pack-local prompt files that asks for Django-in-Electron
+  wrapping plans and uses a `DDS_WRAP_PLAN` contains check. It is not yet a
+  repo-mutating wrap benchmark.
 
 ## Initial Shape
 
