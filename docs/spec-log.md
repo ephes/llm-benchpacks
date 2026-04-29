@@ -44,6 +44,35 @@ working history and open questions.
 - Future compare slices may add richer aggregation or output formats, but this
   slice deliberately stays at per-case medians over measured rows.
 
+## 2026-04-29 (Phase 2 prompt-cache metadata)
+
+### Changed
+
+- Added normalized `tokens.cached_prompt` to new `run.jsonl` records. The field
+  is the backend-reported count of prompt tokens served from cache, or `null`
+  when unavailable.
+- `openai-chat` now extracts
+  `usage.prompt_tokens_details.cached_tokens` from both non-streaming responses
+  and final streaming usage chunks while preserving existing prompt/output token
+  behavior.
+- `ollama-generate` leaves `tokens.cached_prompt` as `null`; its native
+  `prompt_eval_*` fields are timing/count fields, not equivalent cache-hit
+  counts.
+- Existing committed result artifacts were not rewritten. Historical rows may
+  lack `tokens.cached_prompt`; compare continues to read those rows.
+- `benchpack compare` keeps the same table columns and still omits
+  `prefill_tps`; its caveat now names `tokens.cached_prompt`. The new field
+  makes future cache-parity checks possible, but missing or unequal cached-token
+  counts do not support cross-server prefill-speed conclusions.
+
+### Open Questions
+
+- A future compare slice can summarize `tokens.cached_prompt` or warn on cache
+  mismatch before exposing any prefill-speed comparison.
+- Old curated artifacts without `tokens.cached_prompt` remain useful for
+  wall/TTFT/decode/total/output comparisons, but not for cache-aware prefill
+  analysis without separate evidence.
+
 ## 2026-04-29 (Phase 2 llama-server validation passed)
 
 ### Changed

@@ -95,3 +95,13 @@ read-only compare command gives useful Phase 2 summaries without expanding the
 adapter surface, mutating result directories, or depending on ignored raw
 payloads. `prefill_tps` stays out of the primary comparison table until
 normalized results carry enough prompt-cache metadata to establish cache parity.
+
+## D-012: Cached Prompt Tokens Live Under `tokens.cached_prompt`
+
+Normalize backend-reported cached prompt-token counts as
+`tokens.cached_prompt` in new `run.jsonl` records.
+
+Reason: cached prompt tokens are a token-count property directly tied to
+`tokens.prompt` and prefill interpretation. Keeping a single nullable field
+under `tokens` makes missing backend support explicit without introducing a
+larger cache object before there are multiple normalized cache fields.

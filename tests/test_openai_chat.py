@@ -82,6 +82,7 @@ def test_openai_chat_happy_path(tmp_path: Path) -> None:
     assert result.timing.decode_tps is None
     assert result.tokens.prompt == 7
     assert result.tokens.output == 2
+    assert result.tokens.cached_prompt is None
     assert result.raw.request_path == str(req.request_path)
     assert result.raw.response_path == str(req.response_path)
 
@@ -98,6 +99,32 @@ def test_openai_chat_happy_path(tmp_path: Path) -> None:
     assert json.loads(req.response_path.read_text())["choices"][0]["message"][
         "content"
     ] == "Paris."
+
+
+def test_openai_chat_captures_cached_prompt_tokens_non_streaming(
+    tmp_path: Path,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": "ok"}}
+                ],
+                "usage": {
+                    "prompt_tokens": 104,
+                    "completion_tokens": 2,
+                    "prompt_tokens_details": {"cached_tokens": 103},
+                },
+            },
+        )
+
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(handler))
+    result = adapter.run(make_request(tmp_path))
+
+    assert result.tokens.prompt == 104
+    assert result.tokens.output == 2
+    assert result.tokens.cached_prompt == 103
 
 
 def test_openai_chat_endpoint_already_full(tmp_path: Path) -> None:
@@ -150,6 +177,7 @@ def test_openai_chat_streaming_happy_path(tmp_path: Path) -> None:
                             "prompt_tokens": 7,
                             "completion_tokens": 2,
                             "total_tokens": 9,
+                            "prompt_tokens_details": {"cached_tokens": 6},
                         },
                     },
                     "[DONE]",
@@ -171,6 +199,7 @@ def test_openai_chat_streaming_happy_path(tmp_path: Path) -> None:
     assert result.output_text == "Paris."
     assert result.tokens.prompt == 7
     assert result.tokens.output == 2
+    assert result.tokens.cached_prompt == 6
     assert result.timing.wall_s > 0
     assert result.timing.ttft_s is not None
     assert 0 < result.timing.ttft_s < result.timing.wall_s
@@ -213,6 +242,7 @@ def test_openai_chat_streaming_without_usage_keeps_token_metrics_empty(
     assert result.output_text == "hello"
     assert result.tokens.prompt is None
     assert result.tokens.output is None
+    assert result.tokens.cached_prompt is None
     assert result.timing.wall_s > 0
     assert result.timing.ttft_s is not None
     assert result.timing.prefill_tps is None

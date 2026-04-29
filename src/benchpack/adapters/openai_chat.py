@@ -42,6 +42,16 @@ def _json_payload_from_response(response: httpx.Response) -> Any:
         return {"text": response.text}
 
 
+def _cached_prompt_tokens(usage: dict[str, Any]) -> int | None:
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        return None
+    value = details.get("cached_tokens")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 @register
 class OpenAIChatAdapter:
     name = "openai-chat"
@@ -104,6 +114,7 @@ class OpenAIChatAdapter:
 
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
+        cached_prompt_tokens = _cached_prompt_tokens(usage)
 
         output_text = ""
         if isinstance(response_payload, dict):
@@ -118,7 +129,11 @@ class OpenAIChatAdapter:
             model=request.model,
             ok=ok,
             timing=Timing(wall_s=wall_s),
-            tokens=Tokens(prompt=prompt_tokens, output=completion_tokens),
+            tokens=Tokens(
+                prompt=prompt_tokens,
+                output=completion_tokens,
+                cached_prompt=cached_prompt_tokens,
+            ),
             raw=RawPaths(
                 request_path=str(request.request_path),
                 response_path=str(request.response_path),
@@ -209,6 +224,7 @@ class OpenAIChatAdapter:
 
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
+        cached_prompt_tokens = _cached_prompt_tokens(usage)
         prefill_tps = _tps(prompt_tokens, ttft_s)
         decode_tps = _tps(completion_tokens, wall_s - ttft_s if ttft_s else None)
         output_text = assembled_text if ok else ""
@@ -224,7 +240,11 @@ class OpenAIChatAdapter:
                 prefill_tps=prefill_tps,
                 decode_tps=decode_tps,
             ),
-            tokens=Tokens(prompt=prompt_tokens, output=completion_tokens),
+            tokens=Tokens(
+                prompt=prompt_tokens,
+                output=completion_tokens,
+                cached_prompt=cached_prompt_tokens,
+            ),
             raw=RawPaths(
                 request_path=str(request.request_path),
                 response_path=str(request.response_path),

@@ -58,6 +58,12 @@ def test_ollama_generate_derives_tps_from_native_durations(tmp_path: Path) -> No
     assert result.endpoint == "http://example.test/api/generate"
     assert result.tokens.prompt == 8
     assert result.tokens.output == 50
+    assert result.tokens.cached_prompt is None
+    assert result.tokens.to_dict() == {
+        "prompt": 8,
+        "output": 50,
+        "cached_prompt": None,
+    }
     assert result.timing.prefill_tps == 40.0
     assert result.timing.decode_tps == 50.0
     assert result.timing.ttft_s is None

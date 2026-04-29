@@ -149,8 +149,9 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines.append("")
     lines.append(
         "Note: medians ignore null metric values. `prefill_tps` is intentionally "
-        "omitted because normalized results do not record prompt-cache parity; "
-        "do not draw prefill-speed conclusions without separate cache evidence."
+        "omitted because prefill comparisons require prompt-cache parity. New "
+        "rows may include `tokens.cached_prompt`, but old rows may lack it; do "
+        "not draw prefill-speed conclusions without cache evidence."
     )
     lines.append("")
 

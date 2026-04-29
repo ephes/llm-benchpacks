@@ -414,6 +414,7 @@ def test_cli_compare_prints_table_for_two_result_dirs(
     assert "| run | case | rows | ok | wall_s med |" in output
     assert "| run-a | short | 1 | 1 | 1.000 | 0.100 | 40.00 | 30.00 | 60 |" in output
     assert "`prefill_tps` is intentionally omitted" in output
+    assert "`tokens.cached_prompt`" in output
 
 
 def test_cli_compare_warns_on_pack_version_mismatch(

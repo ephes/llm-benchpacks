@@ -46,9 +46,14 @@ class Timing:
 class Tokens:
     prompt: int | None = None
     output: int | None = None
+    cached_prompt: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"prompt": self.prompt, "output": self.output}
+        return {
+            "prompt": self.prompt,
+            "output": self.output,
+            "cached_prompt": self.cached_prompt,
+        }
 
 
 @dataclass

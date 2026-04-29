@@ -135,6 +135,26 @@ def test_summarize_runs_groups_by_case_and_ignores_null_metrics(
     assert summaries[3].wall_s is None
 
 
+def test_compare_handles_old_rows_without_cached_prompt_field(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short")])
+    _write_run(run_b, rows=[_record("short", wall_s=2.0)])
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert (
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 |"
+        in output
+    )
+    assert (
+        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | 60 |"
+        in output
+    )
+
+
 def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
@@ -145,6 +165,7 @@ def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> Non
 
     assert "WARNING: compared records use different pack ids or versions" in output
     assert "prefill_tps` is intentionally omitted" in output
+    assert "tokens.cached_prompt" in output
     assert "| run | case | rows | ok |" in output
 
 

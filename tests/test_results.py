@@ -101,7 +101,11 @@ def test_record_matches_documented_combined_shape(tmp_path: Path) -> None:
     assert timing["decode_tps"] == 42.0
     assert timing["total_tps"] == 48.0  # 192 / 4.0
 
-    assert record["tokens"] == {"prompt": 32768, "output": 192}
+    assert record["tokens"] == {
+        "prompt": 32768,
+        "output": 192,
+        "cached_prompt": None,
+    }
     assert record["resources"] == {"memory_mb": 6234, "gpu_memory_mb": 14820}
     assert record["scoring"] == {"mode": "contains", "passed": True}
 
@@ -127,6 +131,28 @@ def test_record_appends_to_run_jsonl(tmp_path: Path) -> None:
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["case"] == "capital"
+    assert record["tokens"]["cached_prompt"] is None
+
+
+def test_record_writes_cached_prompt_tokens_to_run_jsonl(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    adapter_result = make_adapter_result(out)
+    adapter_result.tokens = Tokens(prompt=104, output=32, cached_prompt=103)
+
+    reporter.record(
+        pack.cases[0],
+        adapter_result,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["tokens"] == {
+        "prompt": 104,
+        "output": 32,
+        "cached_prompt": 103,
+    }
 
 
 def test_record_uses_per_case_scoring_override(tmp_path: Path) -> None:

@@ -68,10 +68,16 @@ The runtime adapter returns only fields the backend can supply directly:
 
 - `adapter`, `endpoint`, `model`, `ok`
 - `timing.wall_s`, `timing.ttft_s`, `timing.prefill_tps`, `timing.decode_tps`
-- `tokens.prompt`, `tokens.output`
+- `tokens.prompt`, `tokens.output`, `tokens.cached_prompt`
 - `raw.request_path`, `raw.response_path`
 - optional `backend` table for backend-specific fields the adapter wants to
   preserve verbatim
+
+`tokens.cached_prompt` is the backend-reported count of prompt tokens served
+from prompt cache when the adapter can identify an equivalent field. It is
+`null` when unavailable. The initial source is OpenAI-compatible
+`usage.prompt_tokens_details.cached_tokens`; Ollama native timing fields are not
+treated as cache counts.
 
 `endpoint` is the resolved URL the adapter actually called (after appending
 `/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
@@ -126,7 +132,7 @@ not scored.
     "decode_tps": 42.0,
     "total_tps": 45.6
   },
-  "tokens": { "prompt": 32768, "output": 192 },
+  "tokens": { "prompt": 32768, "output": 192, "cached_prompt": null },
   "resources": {
     "memory_mb": 6234,
     "gpu_memory_mb": 14820
@@ -170,8 +176,9 @@ stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
 tokens.
 
 The compare utility warns when pack ids or versions differ. It omits
-`prefill_tps` from the primary table because normalized result records do not
-carry prompt-cache parity metadata.
+`prefill_tps` from the primary table because prefill comparisons still require
+explicit prompt-cache parity. New rows may carry `tokens.cached_prompt`, but
+old rows may lack the field and missing values do not prove parity.
 
 ## Spec And Log Management
 

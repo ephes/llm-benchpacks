@@ -37,7 +37,8 @@ validation through `openai-chat` passed 2026-04-28, earlier local
 server/model prerequisites, and `llama-server` validation through
 `openai-chat` passed later on 2026-04-29 after those prerequisites were
 installed locally; the first read-only `benchpack compare` command landed
-2026-04-29; see `docs/spec-log.md`.
+2026-04-29; normalized prompt-cache metadata for new rows landed 2026-04-29;
+see `docs/spec-log.md`.
 
 Scope:
 
@@ -71,6 +72,10 @@ Scope:
   for prefill-speed conclusions, establish prompt-cache parity between compared
   servers, for example by disabling llama.cpp prompt cache or recording
   cached-token counts on both sides.
+- Normalize backend-reported cached prompt-token counts into
+  `tokens.cached_prompt` for new rows. **Landed 2026-04-29** for
+  OpenAI-compatible `usage.prompt_tokens_details.cached_tokens`; missing support
+  is recorded as `null`, and existing result artifacts remain historical.
 
 Validation:
 
