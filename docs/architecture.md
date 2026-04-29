@@ -186,9 +186,14 @@ values do not prove parity. Cache warnings are derived only from normalized
 when prompt-token medians differ across compared runs for a case with complete
 numeric `tokens.prompt` coverage, and when complete cached prompt-token medians
 differ. Prompt-token coverage is used as a warning gate but is not rendered as a
-separate coverage column. Missing case/run groups suppress prompt-token and
-cached-token median mismatch warnings for that case. Compare does not read
-`raw/` files or infer prompt/cache state from timing or prompt shape.
+separate coverage column. It also computes one case-level `prefill parity`
+status from the same summaries and repeats it on every run row for that case.
+The status priority is `missing-case`, `prompt-missing`, `prompt-diff`,
+`cache-missing`, `cache-diff`, then `comparable`, so cache parity is considered
+only after case and prompt parity hold. Missing case/run groups suppress
+prompt-token and cached-token median mismatch warnings for that case. Compare
+does not read `raw/` files or infer prompt/cache state from timing or prompt
+shape.
 
 ## Spec And Log Management
 

@@ -46,7 +46,10 @@ collision rules, and `uv run pytest` for the test suite.
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,
 total TPS, output tokens, prompt tokens, and backend-reported cached prompt
 tokens when available. It also prints cache metadata coverage as numeric
-cached-token rows over total rows for each case/run group and warns when
+cached-token rows over total rows for each case/run group and a case-level
+`prefill parity` status repeated on each run row. The status is one of
+`missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
+`cache-diff`, or `comparable`, in that priority order. Compare warns when
 metadata is incomplete, complete prompt-token medians differ, or complete
 cached-token medians differ. Prompt-token coverage is used to decide whether a
 prompt mismatch warning is meaningful, but the table does not add a second

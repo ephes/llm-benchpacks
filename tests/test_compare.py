@@ -9,6 +9,7 @@ import pytest
 
 from benchpack.compare import (
     CompareError,
+    _prefill_parity_statuses,
     load_result_run,
     render_comparison,
     summarize_runs,
@@ -32,6 +33,12 @@ def _write_run(
     ]
     (path / "run.jsonl").write_text(
         "".join(json.dumps(record) + "\n" for record in records)
+    )
+
+
+def _prefill_statuses(*run_dirs: Path) -> dict[str, str]:
+    return _prefill_parity_statuses(
+        summarize_runs([load_result_run(run_dir) for run_dir in run_dirs])
     )
 
 
@@ -263,14 +270,141 @@ def test_compare_handles_old_rows_without_cached_prompt_field(
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | 10 | — | 0/1 |"
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "60 | 10 | — | 0/1 | cache-missing |"
         in output
     )
     assert (
-        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | 60 | 10 | — | 0/1 |"
+        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | "
+        "60 | 10 | — | 0/1 | cache-missing |"
         in output
     )
     assert "WARNING: cache metadata incomplete for case `short`" in output
+
+
+def test_prefill_parity_status_comparable_when_prompt_and_cache_match(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(
+        run_a,
+        rows=[
+            _record("short", prompt_tokens=10, cached_prompt=8),
+            _record("short", prompt_tokens=10, cached_prompt=8),
+        ],
+    )
+    _write_run(run_b, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "comparable"}
+    assert "prefill parity" in output
+    assert (
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "60 | 10 | 8 | 2/2 | comparable |"
+    ) in output
+    assert (
+        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | "
+        "60 | 10 | 8 | 1/1 | comparable |"
+    ) in output
+
+
+def test_prefill_parity_status_missing_case_when_run_lacks_case(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", cached_prompt=8)])
+    _write_run(run_b, rows=[_record("long", cached_prompt=8)])
+
+    assert _prefill_statuses(run_a, run_b) == {
+        "short": "missing-case",
+        "long": "missing-case",
+    }
+
+
+def test_prefill_parity_status_prompt_missing_when_prompt_coverage_incomplete(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=_UNSET, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "prompt-missing"}
+
+
+def test_prefill_parity_status_prompt_diff_when_complete_prompt_medians_differ(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=12, cached_prompt=8)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "prompt-diff"}
+
+
+def test_prefill_parity_status_cache_missing_when_prompt_parity_holds(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "cache-missing"}
+
+
+def test_prefill_parity_status_cache_diff_when_complete_cached_medians_differ(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=10, cached_prompt=10)])
+
+    assert _prefill_statuses(run_a, run_b) == {"short": "cache-diff"}
+
+
+def test_prefill_parity_status_priority_keeps_prompt_issues_before_cache(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    run_c = tmp_path / "run-c"
+    _write_run(
+        run_a,
+        rows=[
+            _record("short", prompt_tokens=_UNSET),
+            _record("medium", prompt_tokens=10),
+            _record("long", prompt_tokens=10),
+        ],
+    )
+    _write_run(
+        run_b,
+        rows=[
+            _record("short", prompt_tokens=12, cached_prompt=10),
+            _record("medium", prompt_tokens=12),
+            _record("missing", prompt_tokens=_UNSET),
+        ],
+    )
+    _write_run(
+        run_c,
+        rows=[
+            _record("short", prompt_tokens=12, cached_prompt=12),
+            _record("medium", prompt_tokens=12, cached_prompt=12),
+            _record("long", prompt_tokens=_UNSET),
+        ],
+    )
+
+    assert _prefill_statuses(run_a, run_b, run_c) == {
+        "short": "prompt-missing",
+        "medium": "prompt-diff",
+        "long": "missing-case",
+        "missing": "missing-case",
+    }
 
 
 def test_render_comparison_shows_partial_cache_coverage(tmp_path: Path) -> None:
@@ -290,11 +424,11 @@ def test_render_comparison_shows_partial_cache_coverage(tmp_path: Path) -> None:
 
     assert (
         "| run-a | short | 3 | 3 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "10 | 9 | 2/3 |"
+        "10 | 9 | 2/3 | cache-missing |"
     ) in output
     assert (
         "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "10 | 9 | 1/1 |"
+        "10 | 9 | 1/1 | cache-missing |"
     ) in output
     assert "WARNING: cache metadata incomplete for case `short`" in output
 
@@ -310,11 +444,11 @@ def test_render_comparison_shows_prompt_token_median(tmp_path: Path) -> None:
     assert "prompt_tokens med" in output
     assert (
         "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "10 | — | 0/1 |"
+        "10 | — | 0/1 | prompt-diff |"
     ) in output
     assert (
         "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "12 | — | 0/1 |"
+        "12 | — | 0/1 | prompt-diff |"
     ) in output
 
 
@@ -364,7 +498,7 @@ def test_render_comparison_suppresses_prompt_mismatch_with_partial_prompt_covera
 
     assert (
         "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "10 | 8 | 2/2 |"
+        "10 | 8 | 2/2 | prompt-missing |"
     ) in output
     assert "prompt-token medians differ" not in output
     assert "cache metadata incomplete" not in output
@@ -394,7 +528,7 @@ def test_render_comparison_suppresses_prompt_mismatch_with_missing_prompt_median
 
     assert (
         "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "— | 8 | 2/2 |"
+        "— | 8 | 2/2 | prompt-missing |"
     ) in output
     assert "prompt-token medians differ" not in output
     assert "cache metadata incomplete" not in output
@@ -442,8 +576,14 @@ def test_render_comparison_suppresses_prompt_and_cache_mismatch_for_missing_case
 
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
-    assert "| run-b | short | 0 | 0 | — | — | — | — | — | — | — | 0/0 |" in output
-    assert "| run-a | long | 0 | 0 | — | — | — | — | — | — | — | 0/0 |" in output
+    assert (
+        "| run-b | short | 0 | 0 | — | — | — | — | — | — | — | 0/0 | "
+        "missing-case |"
+    ) in output
+    assert (
+        "| run-a | long | 0 | 0 | — | — | — | — | — | — | — | 0/0 | "
+        "missing-case |"
+    ) in output
     assert "prompt-token medians differ" not in output
     assert "cached prompt-token medians differ" not in output
 
@@ -462,7 +602,7 @@ def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> Non
     assert (
         "| run | case | rows | ok | wall_s med | ttft_s med | decode_tps med | "
         "total_tps med | output_tokens med | prompt_tokens med | "
-        "cached_prompt med | cache rows |"
+        "cached_prompt med | cache rows | prefill parity |"
     ) in output
 
 

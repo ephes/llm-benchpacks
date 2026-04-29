@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 compare prefill parity status)
+
+### Changed
+
+- Added a compact `prefill parity` column to `benchpack compare`, repeated on
+  each run row with a case-level status.
+- Status values use deterministic priority order: `missing-case`,
+  `prompt-missing`, `prompt-diff`, `cache-missing`, `cache-diff`, then
+  `comparable`.
+- The status is derived only from normalized `run.jsonl` summaries: case row
+  presence, complete numeric `tokens.prompt` coverage, prompt-token medians,
+  complete numeric `tokens.cached_prompt` coverage, and cached prompt-token
+  medians.
+- Existing prompt/cache warnings remain, cache metadata coverage remains, and
+  `timing.prefill_tps` remains omitted from the primary compare table.
+
+### Open Questions
+
+- A future compare slice can expose `prefill_tps` only after deciding how to
+  gate the numeric speed column on the explicit parity status.
+- Historical artifacts without `tokens.cached_prompt` will continue to show
+  non-comparable status for prefill interpretation until rerun or otherwise
+  supported by explicit normalized cache metadata.
+
 ## 2026-04-29 (Phase 2 compare prompt/cache parity)
 
 ### Changed

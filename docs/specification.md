@@ -203,6 +203,8 @@ The initial summary is intentionally small and deterministic:
 - `tokens.cached_prompt` is summarized with `statistics.median` when numeric
   samples are present, and `cache rows` displays numeric cached-token rows over
   total rows for the case/run group.
+- `prefill parity` displays a deterministic case-level prompt/cache
+  comparability status repeated on each run row for that case.
 - Null, non-numeric, and non-finite metric values are ignored; a metric with no
   numeric samples is displayed as `—`.
 - Differing `pack.id` or `pack.version` values produce a warning because
@@ -220,6 +222,19 @@ The initial summary is intentionally small and deterministic:
   compare displays `0/0` cache coverage for that missing case/run group and
   suppresses prompt-token and cached-token median mismatch warnings for that
   case.
+
+The `prefill parity` status uses the following priority order:
+
+1. `missing-case`: at least one compared run has zero rows for the case.
+2. `prompt-missing`: a non-empty case/run group has rows without numeric
+   `tokens.prompt`.
+3. `prompt-diff`: prompt metadata is complete, but prompt-token medians differ.
+4. `cache-missing`: prompt parity holds, but a non-empty case/run group lacks
+   complete numeric `tokens.cached_prompt`.
+5. `cache-diff`: prompt and cache metadata are complete, but cached
+   prompt-token medians differ.
+6. `comparable`: every compared run has rows, complete numeric prompt/cache
+   token metadata, matching prompt medians, and matching cached prompt medians.
 
 `prefill_tps` is intentionally omitted from the primary compare table for now.
 New normalized rows can include `tokens.prompt` and `tokens.cached_prompt`, but

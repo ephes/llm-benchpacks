@@ -169,11 +169,13 @@ def render_comparison(runs: list[ResultRun]) -> str:
         "omitted because prefill comparisons require prompt-cache parity. New "
         "rows may include `tokens.prompt` and `tokens.cached_prompt`, but old "
         "rows may lack one or both fields; do not draw prefill-speed "
-        "conclusions without prompt/cache parity evidence."
+        "conclusions without prompt/cache parity evidence. The `prefill parity` "
+        "column reports deterministic prompt/cache status for each case."
     )
     lines.append("")
 
     summaries = summarize_runs(runs)
+    prefill_parity_statuses = _prefill_parity_statuses(summaries)
     cache_warnings = _cache_warnings(summaries)
     for warning in cache_warnings:
         lines.append(warning)
@@ -183,17 +185,18 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines.append(
         "| run | case | rows | ok | wall_s med | ttft_s med | "
         "decode_tps med | total_tps med | output_tokens med | "
-        "prompt_tokens med | cached_prompt med | cache rows |"
+        "prompt_tokens med | cached_prompt med | cache rows | prefill parity |"
     )
     lines.append(
         "|-----|------|------|----|------------|------------|----------------|"
         "---------------|-------------------|-------------------|-------------------|"
-        "------------|"
+        "------------|----------------|"
     )
     for summary in summaries:
         lines.append(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {decode} | "
-            "{total} | {output} | {prompt} | {cached} | {cache_rows} |".format(
+            "{total} | {output} | {prompt} | {cached} | {cache_rows} | "
+            "{prefill_parity} |".format(
                 run=summary.run_label,
                 case=summary.case,
                 rows=summary.rows,
@@ -206,6 +209,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
                 prompt=_format_tokens(summary.prompt_tokens),
                 cached=_format_tokens(summary.cached_prompt_tokens),
                 cache_rows=f"{summary.cache_rows}/{summary.rows}",
+                prefill_parity=prefill_parity_statuses[summary.case],
             )
         )
     lines.append("")
@@ -298,6 +302,40 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
                 f"`{case}`; do not compare prefill speed."
             )
     return warnings
+
+
+def _prefill_parity_statuses(summaries: list[CaseSummary]) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    by_case: dict[str, list[CaseSummary]] = {}
+    for summary in summaries:
+        by_case.setdefault(summary.case, []).append(summary)
+
+    for case, case_summaries in by_case.items():
+        if any(summary.rows == 0 for summary in case_summaries):
+            statuses[case] = "missing-case"
+            continue
+
+        if any(summary.prompt_rows < summary.rows for summary in case_summaries):
+            statuses[case] = "prompt-missing"
+            continue
+
+        prompt_medians = {summary.prompt_tokens for summary in case_summaries}
+        if len(prompt_medians) > 1:
+            statuses[case] = "prompt-diff"
+            continue
+
+        if any(summary.cache_rows < summary.rows for summary in case_summaries):
+            statuses[case] = "cache-missing"
+            continue
+
+        cached_medians = {summary.cached_prompt_tokens for summary in case_summaries}
+        if len(cached_medians) > 1:
+            statuses[case] = "cache-diff"
+            continue
+
+        statuses[case] = "comparable"
+
+    return statuses
 
 
 def _median_metric(rows: list[dict[str, Any]], path: tuple[str, str]) -> float | None:

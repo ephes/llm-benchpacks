@@ -40,6 +40,7 @@ installed locally; the first read-only `benchpack compare` command landed
 2026-04-29; normalized prompt-cache metadata for new rows landed 2026-04-29;
 cache-aware compare reporting landed 2026-04-29;
 prompt/cache parity context for compare landed 2026-04-29;
+explicit prefill parity status for compare landed 2026-04-29;
 see `docs/spec-log.md`.
 
 Scope:
@@ -86,6 +87,10 @@ Scope:
   `prefill_tps`. **Landed 2026-04-29** as prompt-token medians beside cached
   prompt-token medians, plus deterministic warnings when prompt-token medians
   differ and cache parity is therefore not comparable across different prompts.
+- Add a compact deterministic `prefill parity` status to `benchpack compare`
+  without adding `prefill_tps`. **Landed 2026-04-29** with case-level statuses
+  repeated on each run row: `missing-case`, `prompt-missing`, `prompt-diff`,
+  `cache-missing`, `cache-diff`, or `comparable`.
 
 Validation:
 
