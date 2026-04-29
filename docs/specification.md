@@ -201,8 +201,8 @@ The initial summary is intentionally small and deterministic:
 - `tokens.cached_prompt` is summarized with `statistics.median` when numeric
   samples are present, and `cache rows` displays numeric cached-token rows over
   total rows for the case/run group.
-- Null or non-numeric metric values are ignored; a metric with no numeric
-  samples is displayed as `—`.
+- Null, non-numeric, and non-finite metric values are ignored; a metric with no
+  numeric samples is displayed as `—`.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
@@ -210,6 +210,9 @@ The initial summary is intentionally small and deterministic:
 - When all compared runs for a case have complete cache metadata but cached
   prompt-token medians differ, compare warns that prefill speed should not be
   compared.
+- When a compared input has no rows for a case that appears in another input,
+  compare displays `0/0` cache coverage for that missing case/run group and
+  suppresses cached-token median mismatch warnings for that case.
 
 `prefill_tps` is intentionally omitted from the primary compare table for now.
 New normalized rows can include `tokens.cached_prompt`, but older rows may lack

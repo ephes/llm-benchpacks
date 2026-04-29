@@ -168,6 +168,9 @@ def test_summarize_runs_ignores_invalid_cached_prompt_values(
 ) -> None:
     run_a = tmp_path / "run-a"
     rows = [
+        _record("short", cached_prompt=float("nan")),
+        _record("short", cached_prompt=float("inf")),
+        _record("short", cached_prompt=float("-inf")),
         _record("short", cached_prompt=None),
         _record("short", cached_prompt=True),
         _record("short", cached_prompt="10"),

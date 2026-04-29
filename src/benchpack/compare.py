@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -287,7 +288,11 @@ def _numeric_metric_values(
         if not isinstance(section, dict):
             continue
         value = section.get(field_name)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             continue
         values.append(float(value))
     return values
