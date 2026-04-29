@@ -140,3 +140,15 @@ Reason: silently retrying without `stream_options.include_usage` can execute a
 benchmark prompt twice and change timing or cache semantics. Making the
 request-shape change explicit keeps compatibility visible while preserving null
 usage-derived metrics when the endpoint does not report usage.
+
+## D-015: Start Phase 3 With A Prompt-Only Wrap Pack
+
+The first Phase 3 coding-agent-shaped workload is the bundled
+`desktop-django-wrap` pack: inline chat prompts ask for concise plans to adapt a
+server-rendered Django app to run inside Electron, and deterministic scoring is
+limited to a `contains` check for `DDS_WRAP_PLAN`.
+
+Reason: this gives the runner a portable workload surface shaped like the real
+`desktop-django-starter` wrap task without adding repo mutation, fixtures,
+agent-session orchestration, patch extraction, verifier scripts, or new scoring
+engines before those contracts are ready.

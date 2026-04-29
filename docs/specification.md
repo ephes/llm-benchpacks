@@ -44,8 +44,13 @@ Initial packs:
 
 - `smoke-chat`: tiny single-turn endpoint check.
 - `runtime-sweep`: fixed prompts at several context sizes for TTFT and throughput.
-- `desktop-django-wrap`: resolved wrapping prompt and staged wrapping scenarios from
-  `desktop-django-starter`.
+- `desktop-django-wrap`: first Phase 3 prompt-only coding-agent-shaped pack
+  derived from the `desktop-django-starter` wrapping workflow. Version `0.1.0`
+  asks for concise Django-in-Electron wrapping plans with inline chat prompts,
+  uses `defaults.stream = true`, `defaults.warmup = 0`,
+  `defaults.repetitions = 1`, and `scoring.mode = "contains"` against
+  `DDS_WRAP_PLAN`. It is not yet a repo-mutating wrapping task and has no
+  fixtures, patch extraction, disposable worktree, or verifier script.
 - `patch-from-failure`: small repo plus failing test output; score by test pass and
   diff size.
 - `tool-json`: strict JSON and tool-call formatting checks.
@@ -323,7 +328,8 @@ The first useful version is complete when it can:
 
 1. Run `smoke-chat` against an OpenAI-compatible endpoint.
 2. Run `smoke-chat` against Ollama via `/api/generate`.
-3. Run a fixed long-prompt case from `desktop-django-starter`.
+3. Run a prompt-only coding-agent-shaped case derived from
+   `desktop-django-starter`.
 4. Write raw request/response artifacts and a summary table.
 5. Record hardware and runtime metadata.
 6. Run on macOS and a Linux CUDA host without changing benchmark pack contents.

@@ -16,6 +16,31 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 3 desktop-django-wrap starter pack)
+
+### Changed
+
+- Added the bundled `desktop-django-wrap` pack as the first Phase 3
+  coding-agent-shaped workload surface.
+- The pack is prompt-only and portable: two inline chat cases ask for concise
+  Django-in-Electron wrapping plans derived from the
+  `desktop-django-starter` workflow, without local paths, target repo
+  checkouts, network dependencies, fixtures, repo mutation, patch extraction,
+  or verifier scripts.
+- The pack sets `defaults.stream = true`, `defaults.warmup = 0`,
+  `defaults.repetitions = 1`, and `defaults.max_tokens = 384`.
+- Scoring uses the existing executable `contains` mode against the explicit
+  marker `DDS_WRAP_PLAN` as a minimal deterministic sanity check.
+- No live benchmark run, new adapter, new scoring engine, compare change,
+  fixture support, disposable worktree handling, or agent execution harness was
+  added.
+
+### Open Questions
+
+- Future Phase 3 slices still need compact target fixtures, disposable target
+  repos, deterministic verify scripts, patch extraction or agent-harness
+  integration, and eventual replay of fuller wrapping sessions.
+
 ## 2026-04-29 (Phase 2 OpenAI stream usage compatibility)
 
 ### Changed

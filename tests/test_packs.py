@@ -328,3 +328,32 @@ def test_bundled_runtime_sweep_pack_contract() -> None:
 
     assert pack.scoring is not None
     assert pack.scoring.mode == "none"
+
+
+def test_bundled_desktop_django_wrap_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "desktop-django-wrap")
+
+    assert pack.id == "desktop-django-wrap"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 384
+    assert pack.defaults["stream"] is True
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert [case.id for case in pack.cases] == [
+        "wrap-plan-small",
+        "wrap-plan-context",
+    ]
+
+    assert pack.scoring is not None
+    assert pack.scoring.mode == "contains"
+    assert pack.scoring.expected == "DDS_WRAP_PLAN"
+
+    forbidden_path_fragments = ("/Users/", "~/", "C:\\")
+    for case in pack.cases:
+        assert case.kind == "chat"
+        assert case.prompt
+        assert "DDS_WRAP_PLAN" in case.prompt
+        for fragment in forbidden_path_fragments:
+            assert fragment not in case.prompt
