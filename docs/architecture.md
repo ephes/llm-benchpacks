@@ -4,7 +4,8 @@
 
 `benchpack` should be a small CLI with six internal concepts:
 
-- **Pack**: versioned workload definition.
+- **Pack**: versioned workload definition, including static fixture metadata
+  when a pack declares pack-local fixture files or directories.
 - **Case**: one request or task inside a pack.
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
@@ -45,18 +46,21 @@ results/
 ## Execution Flow
 
 1. Load a benchmark pack and select cases.
-2. Load runtime adapter configuration.
-3. Capture host metadata.
-4. For each case, run pack-requested warmup executions first.
-5. Execute the pack-requested measured repetitions, streaming when supported.
+2. Validate declared fixture metadata and pack-relative fixture paths. Fixtures
+   are not executed, copied, injected into prompts, or attached to adapter
+   requests in the current slice.
+3. Load runtime adapter configuration.
+4. Capture host metadata.
+5. For each case, run pack-requested warmup executions first.
+6. Execute the pack-requested measured repetitions, streaming when supported.
    Runner-level adapter compatibility options, such as the `openai-chat`
    streaming usage mode, are merged into a per-request defaults copy so the
    loaded pack defaults are not mutated.
-6. Persist raw requests and responses for warmups and measured executions.
-7. Run deterministic verifiers for measured executions if present.
-8. Normalize metrics, resources, and scoring into `run.jsonl` for measured
+7. Persist raw requests and responses for warmups and measured executions.
+8. Run deterministic verifiers for measured executions if present.
+9. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions.
-9. Write `summary.md`.
+10. Write `summary.md`.
 
 ## Result Record Envelope
 

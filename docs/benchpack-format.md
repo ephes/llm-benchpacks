@@ -23,6 +23,12 @@ id = "capital"
 kind = "chat"
 prompt = "What is the capital of France? Answer in one sentence."
 
+[[fixtures]]
+id = "synthetic-context"
+kind = "context"
+path = "fixtures/context.md"
+description = "Portable synthetic context for future tasks"
+
 [scoring]
 mode = "contains"
 expected = "Paris"
@@ -82,6 +88,18 @@ expected = "Paris"
   so adapters and result records do not distinguish inline prompts from prompt
   files.
 
+`fixtures`
+: Optional top-level fixture inventory. Each `[[fixtures]]` entry declares a
+  static pack-owned file or directory by `id`, `kind`, `path`, and optional
+  `description`. Fixture ids use the same id grammar as packs and cases and
+  must be unique within the pack. Fixture paths are source contracts: they must
+  be strings, relative to the pack directory, resolve inside the pack after
+  following symlinks, exist at manifest-load time, and point to either a file or
+  a directory. The current runner only validates and exposes fixture metadata
+  on loaded packs. It does not read fixture contents into prompts, copy
+  repositories, create disposable worktrees, mutate repositories, extract
+  patches, execute verifiers, or score from fixtures.
+
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
   inline on individual cases as an override. See **Scoring** below.
@@ -102,10 +120,47 @@ Prompt files are static text in the current format. There is no templating,
 variable substitution, globbing, include support, fixture loading, or
 multi-message loader in this slice.
 
+### Fixtures
+
+Use top-level `[[fixtures]]` entries to declare pack-local static inputs that
+future workload slices can consume:
+
+```toml
+[[fixtures]]
+id = "synthetic-django-app"
+kind = "context"
+path = "fixtures/synthetic-django-app.md"
+description = "Portable synthetic target app description"
+```
+
+Required fields:
+
+- `id`: stable fixture identifier. It must match the id grammar below and be
+  unique within the pack.
+- `kind`: explicit non-empty fixture type string, such as `context` or `repo`.
+- `path`: pack-relative file or directory path.
+
+Optional fields:
+
+- `description`: human-readable description. It defaults to an empty string
+  when absent.
+
+The loader resolves `path` relative to the pack directory and rejects absolute
+paths, `..` traversal outside the pack, symlink targets outside the pack,
+paths that resolve to the pack directory itself, missing paths, and existing
+paths that are neither files nor directories. File and directory fixtures are
+both allowed so later repo-task work can introduce directory snapshots without
+changing this source contract.
+
+Fixture declarations are metadata only in this slice. Cases do not reference
+fixtures yet, fixture contents are not loaded into prompts, and adapter request
+shapes and result records are unchanged.
+
 ## ID Grammar
 
-Pack and case ids are used both as stable record keys and as filesystem path
-components (e.g. `raw/<case-id>.request.json`). They must match
+Pack, case, and fixture ids are used as stable record keys or source
+identifiers, and case ids are also used as filesystem path components (e.g.
+`raw/<case-id>.request.json`). They must match
 `^[A-Za-z0-9][A-Za-z0-9_-]*$`: start with an alphanumeric, then any mix of
 alphanumerics, underscore, and hyphen. No dots, slashes, spaces, or empty
 strings. The runner rejects manifests that violate this at load time.

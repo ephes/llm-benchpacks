@@ -164,3 +164,19 @@ Reason: prompt files are source artifacts that must remain portable across
 local laptops, Linux CUDA hosts, and OpenAI-compatible local servers. Loading
 file contents into `Case.prompt` keeps adapter request shapes and result records
 unchanged while preventing manifests from depending on private local paths.
+
+## D-017: Fixtures Start As Top-Level Pack Metadata
+
+Fixture declarations live as top-level `[[fixtures]]` entries with an id, kind,
+pack-relative path, and optional description. The loader validates that fixture
+kind values are non-empty strings and fixture paths are relative, exist, point
+to a file or directory, do not resolve to the pack directory itself, and remain
+inside the pack directory after resolving traversal and symlinks. Loaded `Pack`
+objects expose fixture metadata, but fixtures are not attached to cases or
+consumed by prompts, adapters, scoring, or result records yet.
+
+Reason: Phase 3 needs a portable source contract for future repo-shaped
+workloads before repo-task execution exists. Keeping fixtures as pack-owned
+metadata establishes path safety and avoids coupling the format to disposable
+worktrees, prompt assembly, patch extraction, verifier scripts, or repo
+mutation before those contracts are ready.

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from benchpack.packs import (
     DuplicateCaseIdError,
+    DuplicateFixtureIdError,
     InvalidDefaultError,
+    InvalidFixtureError,
     InvalidIdError,
     InvalidPromptSourceError,
     load_pack,
@@ -67,6 +70,429 @@ expected = "Paris"
     assert pack.scoring.mode == "contains"
     assert pack.scoring.expected == "Paris"
     assert pack.path == pack_dir
+    assert pack.fixtures == []
+
+
+def test_load_pack_loads_fixture_file_metadata(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturepack"
+version = "0.1.0"
+
+[[fixtures]]
+id = "synthetic-fixture"
+kind = "context"
+path = "fixtures/context.md"
+description = "Synthetic context"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    fixture_file = fixture_dir / "context.md"
+    fixture_file.write_text("portable context\n", encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert len(pack.fixtures) == 1
+    fixture = pack.fixtures[0]
+    assert fixture.id == "synthetic-fixture"
+    assert fixture.kind == "context"
+    assert fixture.path == fixture_file.resolve()
+    assert fixture.description == "Synthetic context"
+    assert fixture.raw == {
+        "id": "synthetic-fixture",
+        "kind": "context",
+        "path": "fixtures/context.md",
+        "description": "Synthetic context",
+    }
+
+
+def test_load_pack_accepts_fixture_directory(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturedir"
+version = "0.1.0"
+
+[[fixtures]]
+id = "repo-snapshot"
+kind = "repo"
+path = "fixtures/repo"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    fixture_dir = pack_dir / "fixtures" / "repo"
+    fixture_dir.mkdir(parents=True)
+
+    pack = load_pack(pack_dir)
+
+    assert pack.fixtures[0].path == fixture_dir.resolve()
+    assert pack.fixtures[0].path.is_dir()
+
+
+def test_load_pack_rejects_invalid_fixture_id(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badfixtureid"
+version = "0.1.0"
+
+[[fixtures]]
+id = "../escape"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidIdError):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_duplicate_fixture_ids(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "dupfixtures"
+version = "0.1.0"
+
+[[fixtures]]
+id = "same"
+kind = "context"
+path = "fixtures/a.md"
+
+[[fixtures]]
+id = "same"
+kind = "context"
+path = "fixtures/b.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    fixtures_dir = pack_dir / "fixtures"
+    fixtures_dir.mkdir()
+    (fixtures_dir / "a.md").write_text("a", encoding="utf-8")
+    (fixtures_dir / "b.md").write_text("b", encoding="utf-8")
+
+    with pytest.raises(DuplicateFixtureIdError):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_table_fixture_entries(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+fixtures = ["not-a-table"]
+
+[pack]
+id = "badfixtureshape"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="tables"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_string_fixture_path(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badfixturepath"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = 123
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="path must be a string"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_string_fixture_kind(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badfixturekind"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = 123
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureError, match="kind must be a non-empty string"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("kind", ['""', '"   "'])
+def test_load_pack_rejects_empty_fixture_kind(tmp_path: Path, kind: str) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "emptyfixturekind"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = {kind}
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureError, match="kind must be a non-empty string"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_absolute_fixture_path(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "absfixture"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = {str(outside)!r}
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="relative"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_fixture_path_traversal(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturetraversal"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = "../outside.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="escapes"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_missing_fixture_traversal_as_escape(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingfixturetraversal"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = "../missing.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="escapes"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("fixture_path", ['""', '"."'])
+def test_load_pack_rejects_fixture_path_resolving_to_pack_root(
+    tmp_path: Path,
+    fixture_path: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "fixturepackroot"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = {fixture_path}
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="pack directory"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_fixture_symlink_escape(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturesymlinkescape"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = "fixtures/escape.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    fixtures_dir = pack_dir / "fixtures"
+    fixtures_dir.mkdir()
+    try:
+        (fixtures_dir / "escape.md").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
+
+    with pytest.raises(InvalidFixtureError, match="escapes"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_missing_fixture_path(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingfixture"
+version = "0.1.0"
+
+[[fixtures]]
+id = "bad"
+kind = "context"
+path = "fixtures/missing.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    with pytest.raises(InvalidFixtureError, match="does not exist"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_fixture_path_that_is_not_file_or_directory(
+    tmp_path: Path,
+) -> None:
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("mkfifo is not available on this platform")
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "specialfixture"
+version = "0.1.0"
+
+[[fixtures]]
+id = "special"
+kind = "context"
+path = "fixtures/special"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+    fixtures_dir = pack_dir / "fixtures"
+    fixtures_dir.mkdir()
+    try:
+        os.mkfifo(fixtures_dir / "special")
+    except OSError as exc:
+        pytest.skip(f"fifo cannot be created on this filesystem: {exc}")
+
+    with pytest.raises(InvalidFixtureError, match="file or directory"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_loads_prompt_file(tmp_path: Path) -> None:
@@ -561,14 +987,24 @@ def test_bundled_runtime_sweep_pack_contract() -> None:
 
     assert pack.scoring is not None
     assert pack.scoring.mode == "none"
+    assert pack.fixtures == []
+
+
+def test_bundled_smoke_chat_pack_has_no_fixtures() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "smoke-chat")
+
+    assert pack.id == "smoke-chat"
+    assert pack.fixtures == []
 
 
 def test_bundled_desktop_django_wrap_pack_contract() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     pack = load_pack(repo_root / "benchpacks" / "desktop-django-wrap")
+    pack_dir = repo_root / "benchpacks" / "desktop-django-wrap"
 
     assert pack.id == "desktop-django-wrap"
-    assert pack.version == "0.1.0"
+    assert pack.version == "0.1.1"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 384
     assert pack.defaults["stream"] is True
@@ -596,3 +1032,15 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
         assert not Path(prompt_file).is_absolute()
         for fragment in forbidden_path_fragments:
             assert fragment not in case.prompt
+
+    assert len(pack.fixtures) == 1
+    fixture = pack.fixtures[0]
+    assert fixture.id == "synthetic-django-app"
+    assert fixture.kind == "context"
+    assert fixture.raw["path"] == "fixtures/synthetic-django-app.md"
+    assert fixture.raw["path"].startswith("fixtures/")
+    assert fixture.path.is_relative_to(pack_dir.resolve())
+    assert fixture.path.is_file()
+    fixture_contents = fixture.path.read_text(encoding="utf-8")
+    for fragment in forbidden_path_fragments:
+        assert fragment not in fixture_contents

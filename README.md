@@ -75,8 +75,9 @@ Bundled packs:
   warmup and three measured repetitions per case.
 - `desktop-django-wrap`: streaming prompt-only first Phase 3 coding-agent-shaped
   workload with pack-local prompt files that asks for Django-in-Electron
-  wrapping plans and uses a `DDS_WRAP_PLAN` contains check. It is not yet a
-  repo-mutating wrap benchmark.
+  wrapping plans, uses a `DDS_WRAP_PLAN` contains check, and declares one
+  pack-local synthetic fixture for future wrap work. The fixture is metadata
+  only; this is not yet a repo-mutating wrap benchmark.
 
 ## Initial Shape
 
@@ -87,7 +88,8 @@ The first implementation stays small:
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
 4. Smoke and runtime-sweep benchmarks, plus the prompt-only
    `desktop-django-wrap` Phase 3 starter pack derived from the
-   `desktop-django-starter` wrapping workflow.
+   `desktop-django-starter` wrapping workflow, with static fixture metadata
+   declared but not executed.
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

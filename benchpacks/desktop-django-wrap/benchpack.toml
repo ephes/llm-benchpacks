@@ -1,6 +1,6 @@
 [pack]
 id = "desktop-django-wrap"
-version = "0.1.0"
+version = "0.1.1"
 description = "Prompt-only first Phase 3 workload for Django-in-Electron wrapping plans; not a repo-mutating wrap run"
 
 [defaults]
@@ -9,6 +9,12 @@ max_tokens = 384
 stream = true
 warmup = 0
 repetitions = 1
+
+[[fixtures]]
+id = "synthetic-django-app"
+kind = "context"
+path = "fixtures/synthetic-django-app.md"
+description = "Portable synthetic target app description for future wrap work"
 
 [[cases]]
 id = "wrap-plan-small"

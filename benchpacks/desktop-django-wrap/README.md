@@ -3,8 +3,10 @@
 Prompt-only first Phase 3 workload for coding-agent-shaped Django/Electron
 wrapping behavior. It approximates the planning surface of wrapping an existing
 server-rendered Django app in an Electron desktop shell, but it does not execute
-an agent, mutate a target repository, prepare fixtures, extract patches, or run
+an agent, mutate a target repository, execute fixtures, extract patches, or run
 verification scripts.
+
+Pack version: `0.1.1`.
 
 ## Cases
 
@@ -15,6 +17,19 @@ Both prompts live in pack-local files under `prompts/`, referenced from
 `benchpack.toml` with `prompt_file`. They are synthetic and portable: no local
 paths, private repository checkout, network access, Apple Silicon assumptions,
 CUDA assumptions, or endpoint-specific behavior.
+
+## Fixtures
+
+The pack declares one static fixture:
+
+- `synthetic-django-app`: a portable context file at
+  `fixtures/synthetic-django-app.md` describing a compact synthetic Django app
+  shape for future wrap work.
+
+The current prompts do not consume this fixture yet. It is loaded only as
+manifest metadata and validated as a pack-local path; the runner does not copy
+it, execute it, create a disposable repository from it, or inject its contents
+into adapter requests.
 
 ## Runtime Defaults
 

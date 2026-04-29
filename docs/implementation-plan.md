@@ -134,8 +134,10 @@ Add the first real coding-agent-shaped workload.
 The first slice is prompt-only: two prompt-file-backed static chat cases ask for
 concise wrapping plans and use deterministic `contains` scoring against
 `DDS_WRAP_PLAN`. Prompt-file loading landed 2026-04-29 so longer static prompts
-can live under pack-local `prompts/` directories. Phase 3 does not yet include
-fixtures, disposable target repos, repo mutation, patch extraction,
+can live under pack-local `prompts/` directories. Static fixture metadata
+loading and one portable synthetic `desktop-django-wrap` fixture landed
+2026-04-29, but Phase 3 does not yet include fixture execution, prompt assembly
+from fixtures, disposable target repos, repo mutation, patch extraction,
 agent-session replay, or verification scripts.
 
 Scope:
@@ -144,9 +146,13 @@ Scope:
   `desktop-django-starter` wrapping workflow. **Landed 2026-04-29.**
 - Add static prompt-file support and move `desktop-django-wrap` prompts under
   `benchpacks/desktop-django-wrap/prompts/`. **Landed 2026-04-29.**
+- Add top-level static `[[fixtures]]` manifest metadata with pack-relative file
+  and directory path validation. **Landed 2026-04-29.**
+- Add one synthetic portable `desktop-django-wrap` fixture under
+  `benchpacks/desktop-django-wrap/fixtures/`. **Landed 2026-04-29.**
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
-  later slice when fixture support and repo-task contracts are ready.
-- Include a compact target-repo snapshot fixture.
+  later slice when prompt assembly and repo-task contracts are ready.
+- Include a compact target-repo snapshot directory fixture in a later slice.
 - Add deterministic constraints for short output comparison.
 - Add optional full agent-session replay later.
 

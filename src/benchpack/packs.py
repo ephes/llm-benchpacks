@@ -39,6 +39,10 @@ class DuplicateCaseIdError(PackError):
     """Raised when two cases share an id."""
 
 
+class DuplicateFixtureIdError(PackError):
+    """Raised when two fixtures share an id."""
+
+
 class InvalidIdError(PackError):
     """Raised when a pack or case id violates :data:`ID_PATTERN`."""
 
@@ -53,6 +57,10 @@ class InvalidDefaultError(PackError):
 
 class InvalidPromptSourceError(PackError):
     """Raised when a case prompt or prompt_file entry is invalid."""
+
+
+class InvalidFixtureError(PackError):
+    """Raised when a fixture declaration is invalid."""
 
 
 def _validate_id(value: object, role: str) -> str:
@@ -83,6 +91,15 @@ class Case:
 
 
 @dataclass(frozen=True)
+class Fixture:
+    id: str
+    kind: str
+    path: Path
+    description: str
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class Pack:
     id: str
     version: str
@@ -91,6 +108,7 @@ class Pack:
     cases: list[Case]
     scoring: Scoring | None
     path: Path
+    fixtures: list[Fixture] = field(default_factory=list)
 
 
 def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
@@ -161,11 +179,33 @@ def _defaults_from_dict(data: Any) -> dict[str, Any]:
     return defaults
 
 
+def _resolve_pack_relative_path(
+    raw_path: str,
+    *,
+    resolved_pack_dir: Path,
+    subject: str,
+    error_type: type[PackError],
+) -> Path:
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        raise error_type(f"{subject} must be relative to the pack directory")
+
+    try:
+        resolved_path = (resolved_pack_dir / candidate).resolve(strict=False)
+    except OSError as exc:
+        raise error_type(f"{subject} {raw_path!r} could not be resolved") from exc
+
+    if not resolved_path.is_relative_to(resolved_pack_dir):
+        raise error_type(f"{subject} {raw_path!r} escapes the pack directory")
+
+    return resolved_path
+
+
 def _prompt_from_case_entry(
     entry: dict[str, Any],
     *,
     case_id: str,
-    pack_dir: Path,
+    resolved_pack_dir: Path,
 ) -> str | None:
     has_prompt = "prompt" in entry
     has_prompt_file = "prompt_file" in entry
@@ -187,24 +227,12 @@ def _prompt_from_case_entry(
             f"case {case_id!r} prompt_file must be a string"
         )
 
-    prompt_path = Path(prompt_file)
-    if prompt_path.is_absolute():
-        raise InvalidPromptSourceError(
-            f"case {case_id!r} prompt_file must be relative to the pack directory"
-        )
-
-    try:
-        resolved_pack_dir = pack_dir.resolve(strict=True)
-        resolved_prompt_path = (pack_dir / prompt_path).resolve(strict=False)
-    except OSError as exc:
-        raise InvalidPromptSourceError(
-            f"case {case_id!r} prompt_file {prompt_file!r} could not be resolved"
-        ) from exc
-
-    if not resolved_prompt_path.is_relative_to(resolved_pack_dir):
-        raise InvalidPromptSourceError(
-            f"case {case_id!r} prompt_file {prompt_file!r} escapes the pack directory"
-        )
+    resolved_prompt_path = _resolve_pack_relative_path(
+        prompt_file,
+        resolved_pack_dir=resolved_pack_dir,
+        subject=f"case {case_id!r} prompt_file",
+        error_type=InvalidPromptSourceError,
+    )
 
     try:
         return resolved_prompt_path.read_text(encoding="utf-8")
@@ -214,11 +242,87 @@ def _prompt_from_case_entry(
         ) from exc
 
 
+def _fixtures_from_entries(
+    raw_fixtures: Any,
+    *,
+    resolved_pack_dir: Path,
+    pack_id: str,
+) -> list[Fixture]:
+    if raw_fixtures is None:
+        return []
+    if not isinstance(raw_fixtures, list):
+        raise InvalidFixtureError("[[fixtures]] must be an array of tables")
+
+    fixtures: list[Fixture] = []
+    seen: set[str] = set()
+    for entry in raw_fixtures:
+        if not isinstance(entry, dict):
+            raise InvalidFixtureError("fixture entries must be tables")
+
+        fixture_id = _validate_id(entry.get("id"), "fixture")
+        if fixture_id in seen:
+            raise DuplicateFixtureIdError(
+                f"duplicate fixture id {fixture_id!r} in pack {pack_id!r}"
+            )
+        seen.add(fixture_id)
+
+        kind = entry.get("kind")
+        if not isinstance(kind, str) or not kind.strip():
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} kind must be a non-empty string"
+            )
+
+        fixture_path = entry.get("path")
+        if not isinstance(fixture_path, str):
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} path must be a string"
+            )
+        resolved_fixture_path = _resolve_pack_relative_path(
+            fixture_path,
+            resolved_pack_dir=resolved_pack_dir,
+            subject=f"fixture {fixture_id!r} path",
+            error_type=InvalidFixtureError,
+        )
+        if resolved_fixture_path == resolved_pack_dir:
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} path {fixture_path!r} must not resolve "
+                "to the pack directory"
+            )
+        if not resolved_fixture_path.exists():
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} path {fixture_path!r} does not exist"
+            )
+        if not (resolved_fixture_path.is_file() or resolved_fixture_path.is_dir()):
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} path {fixture_path!r} must be a file "
+                "or directory"
+            )
+
+        description = entry.get("description", "")
+        if not isinstance(description, str):
+            raise InvalidFixtureError(
+                f"fixture {fixture_id!r} description must be a string"
+            )
+
+        fixtures.append(
+            Fixture(
+                id=fixture_id,
+                kind=kind,
+                path=resolved_fixture_path,
+                description=description,
+                raw=dict(entry),
+            )
+        )
+
+    return fixtures
+
+
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
     with manifest_path.open("rb") as fh:
         data = tomllib.load(fh)
+    resolved_pack_dir = pack_dir.resolve(strict=True)
 
     pack_section = data.get("pack") or {}
     pack_id_raw = pack_section.get("id")
@@ -240,7 +344,7 @@ def load_pack(path: Path | str) -> Pack:
         prompt = _prompt_from_case_entry(
             entry,
             case_id=case_id,
-            pack_dir=pack_dir,
+            resolved_pack_dir=resolved_pack_dir,
         )
         cases.append(
             Case(
@@ -253,6 +357,11 @@ def load_pack(path: Path | str) -> Pack:
         )
 
     defaults = _defaults_from_dict(data.get("defaults"))
+    fixtures = _fixtures_from_entries(
+        data.get("fixtures"),
+        resolved_pack_dir=resolved_pack_dir,
+        pack_id=pack_id,
+    )
 
     return Pack(
         id=pack_id,
@@ -262,4 +371,5 @@ def load_pack(path: Path | str) -> Pack:
         cases=cases,
         scoring=_scoring_from_dict(data.get("scoring")),
         path=pack_dir,
+        fixtures=fixtures,
     )

@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 3 fixture metadata support)
+
+### Changed
+
+- Added top-level `[[fixtures]]` support to the benchpack manifest loader.
+- Fixture ids use the existing id grammar and duplicate fixture ids fail at
+  load time.
+- Fixture kind values must be non-empty strings. Fixture paths must be strings,
+  relative to the pack directory, exist, point to a file or directory, and not
+  resolve to the pack directory itself.
+- Fixture path resolution rejects absolute paths, `..` traversal outside the
+  pack, and symlink targets outside the pack directory.
+- Loaded `Pack` objects now expose `fixtures` metadata while packs without
+  fixtures continue to load with an empty fixture list.
+- Added one portable synthetic `desktop-django-wrap` fixture file under
+  `benchpacks/desktop-django-wrap/fixtures/` and bumped that pack to version
+  `0.1.1`.
+- Existing `desktop-django-wrap` case ids, defaults, prompt-file entries,
+  scoring mode, and `DDS_WRAP_PLAN` marker behavior remain unchanged.
+- No live benchmark run, new adapter, new scoring engine, compare change,
+  prompt templating, fixture execution, disposable worktree handling, verifier
+  script, patch extraction, repo mutation, or agent execution harness was
+  added.
+
+### Open Questions
+
+- Future Phase 3 slices still need to define prompt assembly from fixtures,
+  directory fixture loading semantics, disposable target repos, `repo-task`
+  execution, patch extraction, and verify-script scoring.
+
 ## 2026-04-29 (Phase 3 prompt-file support)
 
 ### Changed
