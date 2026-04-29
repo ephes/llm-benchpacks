@@ -39,6 +39,7 @@ server/model prerequisites, and `llama-server` validation through
 installed locally; the first read-only `benchpack compare` command landed
 2026-04-29; normalized prompt-cache metadata for new rows landed 2026-04-29;
 cache-aware compare reporting landed 2026-04-29;
+prompt/cache parity context for compare landed 2026-04-29;
 see `docs/spec-log.md`.
 
 Scope:
@@ -81,6 +82,10 @@ Scope:
   **Landed 2026-04-29** as cached-prompt medians, cache metadata coverage, and
   deterministic warnings for incomplete metadata or differing complete cached
   prompt-token medians.
+- Make `benchpack compare` prompt/cache-parity-aware without adding
+  `prefill_tps`. **Landed 2026-04-29** as prompt-token medians beside cached
+  prompt-token medians, plus deterministic warnings when prompt-token medians
+  differ and cache parity is therefore not comparable across different prompts.
 
 Validation:
 

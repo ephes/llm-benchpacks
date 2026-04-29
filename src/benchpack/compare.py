@@ -40,6 +40,8 @@ class CaseSummary:
     decode_tps: float | None
     total_tps: float | None
     output_tokens: float | None
+    prompt_tokens: float | None
+    prompt_rows: int
     cached_prompt_tokens: float | None
     cache_rows: int
 
@@ -107,12 +109,15 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                         decode_tps=None,
                         total_tps=None,
                         output_tokens=None,
+                        prompt_tokens=None,
+                        prompt_rows=0,
                         cached_prompt_tokens=None,
                         cache_rows=0,
                     )
                 )
                 continue
 
+            prompt_values = _numeric_metric_values(rows, ("tokens", "prompt"))
             cached_prompt_values = _numeric_metric_values(
                 rows, ("tokens", "cached_prompt")
             )
@@ -127,6 +132,8 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     decode_tps=_median_metric(rows, ("timing", "decode_tps")),
                     total_tps=_median_metric(rows, ("timing", "total_tps")),
                     output_tokens=_median_metric(rows, ("tokens", "output")),
+                    prompt_tokens=_median_values(prompt_values),
+                    prompt_rows=len(prompt_values),
                     cached_prompt_tokens=_median_values(cached_prompt_values),
                     cache_rows=len(cached_prompt_values),
                 )
@@ -160,8 +167,9 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines.append(
         "Note: medians ignore null metric values. `prefill_tps` is intentionally "
         "omitted because prefill comparisons require prompt-cache parity. New "
-        "rows may include `tokens.cached_prompt`, but old rows may lack it; do "
-        "not draw prefill-speed conclusions without cache evidence."
+        "rows may include `tokens.prompt` and `tokens.cached_prompt`, but old "
+        "rows may lack one or both fields; do not draw prefill-speed "
+        "conclusions without prompt/cache parity evidence."
     )
     lines.append("")
 
@@ -175,16 +183,17 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines.append(
         "| run | case | rows | ok | wall_s med | ttft_s med | "
         "decode_tps med | total_tps med | output_tokens med | "
-        "cached_prompt med | cache rows |"
+        "prompt_tokens med | cached_prompt med | cache rows |"
     )
     lines.append(
         "|-----|------|------|----|------------|------------|----------------|"
-        "---------------|-------------------|-------------------|------------|"
+        "---------------|-------------------|-------------------|-------------------|"
+        "------------|"
     )
     for summary in summaries:
         lines.append(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {decode} | "
-            "{total} | {output} | {cached} | {cache_rows} |".format(
+            "{total} | {output} | {prompt} | {cached} | {cache_rows} |".format(
                 run=summary.run_label,
                 case=summary.case,
                 rows=summary.rows,
@@ -194,6 +203,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
                 decode=_format_float(summary.decode_tps, digits=2),
                 total=_format_float(summary.total_tps, digits=2),
                 output=_format_tokens(summary.output_tokens),
+                prompt=_format_tokens(summary.prompt_tokens),
                 cached=_format_tokens(summary.cached_prompt_tokens),
                 cache_rows=f"{summary.cache_rows}/{summary.rows}",
             )
@@ -248,6 +258,22 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         by_case.setdefault(summary.case, []).append(summary)
 
     for case, case_summaries in by_case.items():
+        has_all_case_rows = all(summary.rows > 0 for summary in case_summaries)
+        prompt_medians = {
+            summary.prompt_tokens
+            for summary in case_summaries
+            if summary.prompt_tokens is not None
+        }
+        has_complete_prompt_medians = (
+            has_all_case_rows
+            and all(summary.prompt_rows == summary.rows for summary in case_summaries)
+        )
+        if has_complete_prompt_medians and len(prompt_medians) > 1:
+            warnings.append(
+                "WARNING: prompt-token medians differ for case "
+                f"`{case}`; cache parity is not comparable across different prompts."
+            )
+
         if any(
             summary.rows > 0 and summary.cache_rows < summary.rows
             for summary in case_summaries
@@ -258,7 +284,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
             )
             continue
 
-        if not all(summary.rows > 0 for summary in case_summaries):
+        if not has_all_case_rows:
             continue
 
         medians = {

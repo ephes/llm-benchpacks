@@ -44,13 +44,16 @@ collision rules, and `uv run pytest` for the test suite.
 
 `benchpack compare` is read-only and compares existing result directories that
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,
-total TPS, output tokens, and backend-reported cached prompt tokens when
-available. It also prints cache metadata coverage as numeric cached-token rows
-over total rows for each case/run group and warns when metadata is incomplete or
-complete cached-token medians differ. It intentionally omits `prefill_tps` from
-the primary table because cross-server prefill speed requires prompt-cache
-parity. Old rows may lack `tokens.cached_prompt`, and missing values do not
-establish cache parity.
+total TPS, output tokens, prompt tokens, and backend-reported cached prompt
+tokens when available. It also prints cache metadata coverage as numeric
+cached-token rows over total rows for each case/run group and warns when
+metadata is incomplete, complete prompt-token medians differ, or complete
+cached-token medians differ. Prompt-token coverage is used to decide whether a
+prompt mismatch warning is meaningful, but the table does not add a second
+coverage column. It intentionally omits `prefill_tps` from the primary table
+because cross-server prefill speed requires prompt/cache parity. Old rows may
+lack `tokens.prompt` or `tokens.cached_prompt`, and missing values do not
+establish parity.
 
 Bundled packs:
 

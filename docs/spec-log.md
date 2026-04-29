@@ -16,6 +16,29 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 compare prompt/cache parity)
+
+### Changed
+
+- Added prompt/cache parity context to `benchpack compare`: the table now shows
+  median numeric `tokens.prompt` beside median `tokens.cached_prompt`.
+- Compare warns when all compared runs for a case have measured rows and every
+  row has numeric prompt-token metadata but the prompt-token medians differ,
+  because cache parity is not comparable across different prompt token counts.
+- Existing cache metadata warnings remain: compare still warns for incomplete
+  `tokens.cached_prompt` metadata and for differing complete cached prompt-token
+  medians, while suppressing prompt/cache median mismatch warnings when a case
+  is absent from one compared run.
+- `timing.prefill_tps` remains omitted. This slice adds prompt/cache parity
+  visibility only; it does not make prefill-speed claims and does not read raw
+  artifacts or infer token/cache state.
+
+### Open Questions
+
+- Future compare work can add `prefill_tps` only after the output makes
+  prompt/cache parity explicit enough to avoid mixing different prompts or
+  warm-cache and cold-prefill behavior.
+
 ## 2026-04-29 (Phase 2 compare cache awareness)
 
 ### Changed

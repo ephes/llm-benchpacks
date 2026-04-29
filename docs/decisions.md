@@ -105,3 +105,18 @@ Reason: cached prompt tokens are a token-count property directly tied to
 `tokens.prompt` and prefill interpretation. Keeping a single nullable field
 under `tokens` makes missing backend support explicit without introducing a
 larger cache object before there are multiple normalized cache fields.
+
+## D-013: Compare Prompt/Cache Parity From Normalized Token Medians
+
+`benchpack compare` reports median `tokens.prompt` beside median
+`tokens.cached_prompt` and warns when prompt-token medians differ for a case
+only when every compared row in that case has a numeric `tokens.prompt` value.
+Cached-token parity is interpreted only relative to comparable prompt token
+counts, and `prefill_tps` remains omitted from the primary table until
+prompt/cache parity is explicit enough for speed comparison.
+
+Reason: cached prompt-token counts are not meaningful in isolation when compared
+runs used different prompt token counts. Keeping the rule in compare, based only
+on normalized `run.jsonl` token fields, preserves old artifact compatibility
+while avoiding prompt/cache inference from ignored raw payloads or timing
+fields.

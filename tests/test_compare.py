@@ -45,10 +45,13 @@ def _record(
     ttft_s: float | None = 0.2,
     decode_tps: float | None = 40.0,
     total_tps: float | None = 30.0,
+    prompt_tokens: object = 10,
     output_tokens: int | None = 60,
     cached_prompt: object = _UNSET,
 ) -> dict:
-    tokens = {"prompt": 10, "output": output_tokens}
+    tokens = {"output": output_tokens}
+    if prompt_tokens is not _UNSET:
+        tokens["prompt"] = prompt_tokens
     if cached_prompt is not _UNSET:
         tokens["cached_prompt"] = cached_prompt
     return {
@@ -139,9 +142,69 @@ def test_summarize_runs_groups_by_case_and_ignores_null_metrics(
     assert summaries[0].wall_s == 2.0
     assert summaries[0].ttft_s == 0.4
     assert summaries[0].output_tokens == 80.0
+    assert summaries[0].prompt_tokens == 10.0
+    assert summaries[0].prompt_rows == 2
     assert summaries[3].wall_s is None
+    assert summaries[3].prompt_tokens is None
+    assert summaries[3].prompt_rows == 0
     assert summaries[0].cached_prompt_tokens is None
     assert summaries[0].cache_rows == 0
+
+
+def test_summarize_runs_reports_prompt_token_median(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(
+        run_a,
+        rows=[
+            _record("short", prompt_tokens=8),
+            _record("short", prompt_tokens=10),
+            _record("short", prompt_tokens=12),
+        ],
+    )
+
+    summaries = summarize_runs([load_result_run(run_a)])
+
+    assert summaries[0].prompt_tokens == 10.0
+    assert summaries[0].prompt_rows == 3
+
+
+def test_summarize_runs_handles_old_rows_without_prompt_token_field(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    rows = [_record("short", prompt_tokens=_UNSET), _record("short")]
+    _write_run(run_a, rows=rows)
+
+    summaries = summarize_runs([load_result_run(run_a)])
+
+    assert summaries[0].prompt_tokens == 10.0
+    assert summaries[0].prompt_rows == 1
+
+
+def test_summarize_runs_ignores_invalid_prompt_token_values(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    rows = [
+        _record("short", prompt_tokens=float("nan")),
+        _record("short", prompt_tokens=float("inf")),
+        _record("short", prompt_tokens=float("-inf")),
+        _record("short", prompt_tokens=None),
+        _record("short", prompt_tokens=True),
+        _record("short", prompt_tokens="10"),
+        _record("short", prompt_tokens=6),
+        _record("short", prompt_tokens=8.0),
+        _record("short"),
+        _record("short"),
+    ]
+    rows[-2]["tokens"] = None
+    rows[-1].pop("tokens")
+    _write_run(run_a, rows=rows)
+
+    summaries = summarize_runs([load_result_run(run_a)])
+
+    assert summaries[0].prompt_tokens == 7.0
+    assert summaries[0].prompt_rows == 2
 
 
 def test_summarize_runs_reports_cached_prompt_median_and_coverage(
@@ -200,11 +263,11 @@ def test_compare_handles_old_rows_without_cached_prompt_field(
     output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
 
     assert (
-        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | — | 0/1 |"
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | 10 | — | 0/1 |"
         in output
     )
     assert (
-        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | 60 | — | 0/1 |"
+        "| run-b | short | 1 | 1 | 2.000 | 0.200 | 40.00 | 30.00 | 60 | 10 | — | 0/1 |"
         in output
     )
     assert "WARNING: cache metadata incomplete for case `short`" in output
@@ -227,13 +290,129 @@ def test_render_comparison_shows_partial_cache_coverage(tmp_path: Path) -> None:
 
     assert (
         "| run-a | short | 3 | 3 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "9 | 2/3 |"
+        "10 | 9 | 2/3 |"
     ) in output
     assert (
         "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
-        "9 | 1/1 |"
+        "10 | 9 | 1/1 |"
     ) in output
     assert "WARNING: cache metadata incomplete for case `short`" in output
+
+
+def test_render_comparison_shows_prompt_token_median(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=12)])
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert "prompt_tokens med" in output
+    assert (
+        "| run-a | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "10 | — | 0/1 |"
+    ) in output
+    assert (
+        "| run-b | short | 1 | 1 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "12 | — | 0/1 |"
+    ) in output
+
+
+def test_render_comparison_warns_on_differing_prompt_token_medians(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    run_c = tmp_path / "run-c"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_c, rows=[_record("short", prompt_tokens=12, cached_prompt=8)])
+
+    output = render_comparison(
+        [load_result_run(run_a), load_result_run(run_b), load_result_run(run_c)]
+    )
+
+    assert (
+        "WARNING: prompt-token medians differ for case `short`; cache parity is "
+        "not comparable across different prompts."
+    ) in output
+    assert "cached prompt-token medians differ" not in output
+    assert "cache metadata incomplete" not in output
+
+
+def test_render_comparison_suppresses_prompt_mismatch_with_partial_prompt_coverage(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(
+        run_a,
+        rows=[
+            _record("short", prompt_tokens=10, cached_prompt=8),
+            _record("short", prompt_tokens=_UNSET, cached_prompt=8),
+        ],
+    )
+    _write_run(
+        run_b,
+        rows=[
+            _record("short", prompt_tokens=12, cached_prompt=8),
+            _record("short", prompt_tokens=12, cached_prompt=8),
+        ],
+    )
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert (
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "10 | 8 | 2/2 |"
+    ) in output
+    assert "prompt-token medians differ" not in output
+    assert "cache metadata incomplete" not in output
+
+
+def test_render_comparison_suppresses_prompt_mismatch_with_missing_prompt_median(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(
+        run_a,
+        rows=[
+            _record("short", prompt_tokens=None, cached_prompt=8),
+            _record("short", prompt_tokens=True, cached_prompt=8),
+        ],
+    )
+    _write_run(
+        run_b,
+        rows=[
+            _record("short", prompt_tokens=12, cached_prompt=8),
+            _record("short", prompt_tokens=12, cached_prompt=8),
+        ],
+    )
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert (
+        "| run-a | short | 2 | 2 | 1.000 | 0.200 | 40.00 | 30.00 | 60 | "
+        "— | 8 | 2/2 |"
+    ) in output
+    assert "prompt-token medians differ" not in output
+    assert "cache metadata incomplete" not in output
+
+
+def test_render_comparison_keeps_prompt_then_cached_warning_order(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("short", prompt_tokens=12, cached_prompt=10)])
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert output.index("prompt-token medians differ") < output.index(
+        "cached prompt-token medians differ"
+    )
 
 
 def test_render_comparison_warns_on_differing_complete_cached_prompt_medians(
@@ -253,6 +432,22 @@ def test_render_comparison_warns_on_differing_complete_cached_prompt_medians(
     assert "cache metadata incomplete" not in output
 
 
+def test_render_comparison_suppresses_prompt_and_cache_mismatch_for_missing_case(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", prompt_tokens=10, cached_prompt=8)])
+    _write_run(run_b, rows=[_record("long", prompt_tokens=12, cached_prompt=10)])
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert "| run-b | short | 0 | 0 | — | — | — | — | — | — | — | 0/0 |" in output
+    assert "| run-a | long | 0 | 0 | — | — | — | — | — | — | — | 0/0 |" in output
+    assert "prompt-token medians differ" not in output
+    assert "cached prompt-token medians differ" not in output
+
+
 def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
@@ -266,7 +461,8 @@ def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> Non
     assert "tokens.cached_prompt" in output
     assert (
         "| run | case | rows | ok | wall_s med | ttft_s med | decode_tps med | "
-        "total_tps med | output_tokens med | cached_prompt med | cache rows |"
+        "total_tps med | output_tokens med | prompt_tokens med | "
+        "cached_prompt med | cache rows |"
     ) in output
 
 

@@ -198,6 +198,8 @@ The initial summary is intentionally small and deterministic:
 - `rows` counts measured records and `ok` counts rows with `ok = true`.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
   summarized with `statistics.median`.
+- `tokens.prompt` is summarized with `statistics.median` when numeric samples
+  are present so cache interpretation is visible beside generated-token counts.
 - `tokens.cached_prompt` is summarized with `statistics.median` when numeric
   samples are present, and `cache rows` displays numeric cached-token rows over
   total rows for the case/run group.
@@ -207,18 +209,27 @@ The initial summary is intentionally small and deterministic:
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
   case/run group has measured rows without numeric `tokens.cached_prompt`.
+- When all compared runs for a case have measured rows and every row in those
+  case/run groups has a numeric `tokens.prompt` value, but the resulting
+  `tokens.prompt` medians differ, compare warns that cache parity is not
+  comparable across different prompts.
 - When all compared runs for a case have complete cache metadata but cached
   prompt-token medians differ, compare warns that prefill speed should not be
   compared.
 - When a compared input has no rows for a case that appears in another input,
   compare displays `0/0` cache coverage for that missing case/run group and
-  suppresses cached-token median mismatch warnings for that case.
+  suppresses prompt-token and cached-token median mismatch warnings for that
+  case.
 
 `prefill_tps` is intentionally omitted from the primary compare table for now.
-New normalized rows can include `tokens.cached_prompt`, but older rows may lack
-that field and missing values are not cache-parity evidence. Compare uses only
-normalized `run.jsonl` fields for cache reporting and does not infer cache state
-from prompt length, raw artifacts, timing fields, or backend-specific durations.
+New normalized rows can include `tokens.prompt` and `tokens.cached_prompt`, but
+older rows may lack one or both fields and missing values are not parity
+evidence. The table shows cache metadata coverage because missing cached-token
+metadata is a common parity blocker; prompt-token coverage is used internally
+for prompt mismatch warnings but is not rendered as a separate column. Compare
+uses only normalized `run.jsonl` fields for prompt/cache reporting and does not
+infer prompt or cache state from prompt length, raw artifacts, timing fields, or
+backend-specific durations.
 The 2026-04-29 `llama-server` runtime-sweep rows were warm-cache rows. Compare
 output must not be interpreted as cross-server cold prefill speed unless cache
 parity is established separately.

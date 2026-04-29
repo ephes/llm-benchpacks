@@ -414,7 +414,7 @@ def test_cli_compare_prints_table_for_two_result_dirs(
     assert "| run | case | rows | ok | wall_s med |" in output
     assert (
         "| run-a | short | 1 | 1 | 1.000 | 0.100 | 40.00 | 30.00 | 60 | "
-        "— | 0/1 |"
+        "10 | — | 0/1 |"
     ) in output
     assert "WARNING: cache metadata incomplete for case `short`" in output
     assert "`prefill_tps` is intentionally omitted" in output
@@ -482,7 +482,7 @@ def test_cli_compare_displays_placeholder_for_null_metrics(
 
     output = capsys.readouterr().out
     assert (
-        "| run-a | short | 1 | 1 | — | — | 40.00 | 30.00 | 60 | — | 0/1 |"
+        "| run-a | short | 1 | 1 | — | — | 40.00 | 30.00 | 60 | 10 | — | 0/1 |"
         in output
     )
 
