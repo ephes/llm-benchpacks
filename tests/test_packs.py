@@ -157,6 +157,27 @@ prompt_file = "../outside.md"
         load_pack(pack_dir)
 
 
+def test_load_pack_rejects_missing_prompt_file_traversal_as_escape(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingtraversal"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = "../missing.md"
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="escapes"):
+        load_pack(pack_dir)
+
+
 def test_load_pack_rejects_prompt_file_symlink_escape(tmp_path: Path) -> None:
     outside = tmp_path / "outside.md"
     outside.write_text("outside\n", encoding="utf-8")
@@ -181,6 +202,45 @@ prompt_file = "prompts/escape.md"
         pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
 
     with pytest.raises(InvalidPromptSourceError, match="escapes"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_missing_prompt_file(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingpromptfile"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = "prompts/missing.md"
+""",
+    )
+
+    with pytest.raises(InvalidPromptSourceError, match="could not be read"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_directory_prompt_file(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "directorypromptfile"
+version = "0.1.0"
+
+[[cases]]
+id = "bad"
+kind = "chat"
+prompt_file = "prompts"
+""",
+    )
+    (pack_dir / "prompts").mkdir()
+
+    with pytest.raises(InvalidPromptSourceError, match="could not be read"):
         load_pack(pack_dir)
 
 

@@ -195,7 +195,7 @@ def _prompt_from_case_entry(
 
     try:
         resolved_pack_dir = pack_dir.resolve(strict=True)
-        resolved_prompt_path = (pack_dir / prompt_path).resolve(strict=True)
+        resolved_prompt_path = (pack_dir / prompt_path).resolve(strict=False)
     except OSError as exc:
         raise InvalidPromptSourceError(
             f"case {case_id!r} prompt_file {prompt_file!r} could not be resolved"
