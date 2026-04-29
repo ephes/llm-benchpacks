@@ -39,6 +39,8 @@ class CaseSummary:
     decode_tps: float | None
     total_tps: float | None
     output_tokens: float | None
+    cached_prompt_tokens: float | None
+    cache_rows: int
 
 
 def load_result_run(result_dir: Path | str) -> ResultRun:
@@ -104,10 +106,15 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                         decode_tps=None,
                         total_tps=None,
                         output_tokens=None,
+                        cached_prompt_tokens=None,
+                        cache_rows=0,
                     )
                 )
                 continue
 
+            cached_prompt_values = _numeric_metric_values(
+                rows, ("tokens", "cached_prompt")
+            )
             summaries.append(
                 CaseSummary(
                     run_label=run.label,
@@ -119,6 +126,8 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     decode_tps=_median_metric(rows, ("timing", "decode_tps")),
                     total_tps=_median_metric(rows, ("timing", "total_tps")),
                     output_tokens=_median_metric(rows, ("tokens", "output")),
+                    cached_prompt_tokens=_median_values(cached_prompt_values),
+                    cache_rows=len(cached_prompt_values),
                 )
             )
     return summaries
@@ -155,18 +164,26 @@ def render_comparison(runs: list[ResultRun]) -> str:
     )
     lines.append("")
 
+    summaries = summarize_runs(runs)
+    cache_warnings = _cache_warnings(summaries)
+    for warning in cache_warnings:
+        lines.append(warning)
+    if cache_warnings:
+        lines.append("")
+
     lines.append(
         "| run | case | rows | ok | wall_s med | ttft_s med | "
-        "decode_tps med | total_tps med | output_tokens med |"
+        "decode_tps med | total_tps med | output_tokens med | "
+        "cached_prompt med | cache rows |"
     )
     lines.append(
         "|-----|------|------|----|------------|------------|----------------|"
-        "---------------|-------------------|"
+        "---------------|-------------------|-------------------|------------|"
     )
-    for summary in summarize_runs(runs):
+    for summary in summaries:
         lines.append(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {decode} | "
-            "{total} | {output} |".format(
+            "{total} | {output} | {cached} | {cache_rows} |".format(
                 run=summary.run_label,
                 case=summary.case,
                 rows=summary.rows,
@@ -176,6 +193,8 @@ def render_comparison(runs: list[ResultRun]) -> str:
                 decode=_format_float(summary.decode_tps, digits=2),
                 total=_format_float(summary.total_tps, digits=2),
                 output=_format_tokens(summary.output_tokens),
+                cached=_format_tokens(summary.cached_prompt_tokens),
+                cache_rows=f"{summary.cache_rows}/{summary.rows}",
             )
         )
     lines.append("")
@@ -221,7 +240,46 @@ def _pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
     return versions
 
 
+def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
+    warnings: list[str] = []
+    by_case: dict[str, list[CaseSummary]] = {}
+    for summary in summaries:
+        by_case.setdefault(summary.case, []).append(summary)
+
+    for case, case_summaries in by_case.items():
+        if any(
+            summary.rows > 0 and summary.cache_rows < summary.rows
+            for summary in case_summaries
+        ):
+            warnings.append(
+                "WARNING: cache metadata incomplete for case "
+                f"`{case}`; some rows lack numeric `tokens.cached_prompt`."
+            )
+            continue
+
+        if not all(summary.rows > 0 for summary in case_summaries):
+            continue
+
+        medians = {
+            summary.cached_prompt_tokens
+            for summary in case_summaries
+            if summary.cached_prompt_tokens is not None
+        }
+        if len(medians) > 1:
+            warnings.append(
+                "WARNING: cached prompt-token medians differ for case "
+                f"`{case}`; do not compare prefill speed."
+            )
+    return warnings
+
+
 def _median_metric(rows: list[dict[str, Any]], path: tuple[str, str]) -> float | None:
+    return _median_values(_numeric_metric_values(rows, path))
+
+
+def _numeric_metric_values(
+    rows: list[dict[str, Any]], path: tuple[str, str]
+) -> list[float]:
     values: list[float] = []
     section_name, field_name = path
     for row in rows:
@@ -232,6 +290,10 @@ def _median_metric(rows: list[dict[str, Any]], path: tuple[str, str]) -> float |
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             continue
         values.append(float(value))
+    return values
+
+
+def _median_values(values: list[float]) -> float | None:
     if not values:
         return None
     return float(median(values))

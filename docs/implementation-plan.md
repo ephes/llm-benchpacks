@@ -38,6 +38,7 @@ server/model prerequisites, and `llama-server` validation through
 `openai-chat` passed later on 2026-04-29 after those prerequisites were
 installed locally; the first read-only `benchpack compare` command landed
 2026-04-29; normalized prompt-cache metadata for new rows landed 2026-04-29;
+cache-aware compare reporting landed 2026-04-29;
 see `docs/spec-log.md`.
 
 Scope:
@@ -76,6 +77,10 @@ Scope:
   `tokens.cached_prompt` for new rows. **Landed 2026-04-29** for
   OpenAI-compatible `usage.prompt_tokens_details.cached_tokens`; missing support
   is recorded as `null`, and existing result artifacts remain historical.
+- Make `benchpack compare` cache-aware without adding `prefill_tps`.
+  **Landed 2026-04-29** as cached-prompt medians, cache metadata coverage, and
+  deterministic warnings for incomplete metadata or differing complete cached
+  prompt-token medians.
 
 Validation:
 

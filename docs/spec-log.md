@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 compare cache awareness)
+
+### Changed
+
+- Extended `benchpack compare` to report median numeric `tokens.cached_prompt`
+  and cache metadata coverage for each case/run row while keeping
+  `timing.prefill_tps` out of the primary table.
+- Added deterministic per-case warnings when cache metadata is incomplete for
+  compared measured rows or when all compared runs for a case have complete
+  cache metadata but cached prompt-token medians differ.
+- Compare still reads only normalized `run.jsonl` records. It does not inspect
+  ignored `raw/` artifacts and does not infer cache counts from prompt length,
+  timing, or backend-specific duration fields.
+- Existing historical rows that lack `tokens.cached_prompt`, or carry null or
+  non-numeric values, remain readable and are displayed as missing cache
+  metadata.
+
+### Open Questions
+
+- Future compare work may reintroduce `prefill_tps` only after cache parity is
+  explicit enough to avoid warm-cache and cold-prefill comparisons being mixed.
+
 ## 2026-04-29 (Phase 2 compare command)
 
 ### Changed

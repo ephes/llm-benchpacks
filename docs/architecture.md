@@ -173,12 +173,18 @@ load adapters, collect hardware, execute packs, write result artifacts, or read
 ignored `raw/` files. It reads each input directory's `run.jsonl`, preserves the
 record dictionaries as loaded, groups by case and input run, and renders a
 stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
-tokens.
+tokens. It also reports the median numeric `tokens.cached_prompt` value and
+cache metadata coverage, expressed as numeric cached-token rows over total rows,
+for each case/run group.
 
 The compare utility warns when pack ids or versions differ. It omits
 `prefill_tps` from the primary table because prefill comparisons still require
 explicit prompt-cache parity. New rows may carry `tokens.cached_prompt`, but
-old rows may lack the field and missing values do not prove parity.
+old rows may lack the field and missing values do not prove parity. Cache
+warnings are derived only from normalized `run.jsonl` rows: compare warns when
+cache metadata is incomplete for a case and when complete cached prompt-token
+medians differ across compared runs for a case. It does not read `raw/` files or
+infer cache state from timing or prompt shape.
 
 ## Spec And Log Management
 

@@ -198,17 +198,27 @@ The initial summary is intentionally small and deterministic:
 - `rows` counts measured records and `ok` counts rows with `ok = true`.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
   summarized with `statistics.median`.
+- `tokens.cached_prompt` is summarized with `statistics.median` when numeric
+  samples are present, and `cache rows` displays numeric cached-token rows over
+  total rows for the case/run group.
 - Null or non-numeric metric values are ignored; a metric with no numeric
   samples is displayed as `—`.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
+- Incomplete cache metadata produces a per-case warning when any compared
+  case/run group has measured rows without numeric `tokens.cached_prompt`.
+- When all compared runs for a case have complete cache metadata but cached
+  prompt-token medians differ, compare warns that prefill speed should not be
+  compared.
 
 `prefill_tps` is intentionally omitted from the primary compare table for now.
 New normalized rows can include `tokens.cached_prompt`, but older rows may lack
-that field and missing values are not cache-parity evidence. The 2026-04-29
-`llama-server` runtime-sweep rows were warm-cache rows. Compare output must not
-be interpreted as cross-server cold prefill speed unless cache parity is
-established separately.
+that field and missing values are not cache-parity evidence. Compare uses only
+normalized `run.jsonl` fields for cache reporting and does not infer cache state
+from prompt length, raw artifacts, timing fields, or backend-specific durations.
+The 2026-04-29 `llama-server` runtime-sweep rows were warm-cache rows. Compare
+output must not be interpreted as cross-server cold prefill speed unless cache
+parity is established separately.
 
 ## Result Artifacts
 
