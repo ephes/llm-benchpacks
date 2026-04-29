@@ -410,6 +410,7 @@ def test_cli_compare_prints_table_for_two_result_dirs(
 
     output = capsys.readouterr().out
     assert "# benchpack compare" in output
+    assert "Pack: `runtime-sweep` version `0.1.0`" in output
     assert "| run | case | rows | ok | wall_s med |" in output
     assert "| run-a | short | 1 | 1 | 1.000 | 0.100 | 40.00 | 30.00 | 60 |" in output
     assert "`prefill_tps` is intentionally omitted" in output
@@ -441,14 +442,14 @@ def test_cli_compare_rejects_missing_run_jsonl(tmp_path: Path) -> None:
         main(["compare", str(run_a), str(run_b)])
 
 
-def test_cli_compare_rejects_empty_run_jsonl(tmp_path: Path) -> None:
+def test_cli_compare_rejects_run_jsonl_with_no_records(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
     _write_compare_run(run_a)
     run_b.mkdir()
-    (run_b / "run.jsonl").write_text("")
+    (run_b / "run.jsonl").write_text("\n  \n")
 
-    with pytest.raises(SystemExit, match="empty"):
+    with pytest.raises(SystemExit, match="has no records"):
         main(["compare", str(run_a), str(run_b)])
 
 
@@ -476,3 +477,11 @@ def test_cli_compare_displays_placeholder_for_null_metrics(
 
     output = capsys.readouterr().out
     assert "| run-a | short | 1 | 1 | — | — | 40.00 | 30.00 | 60 |" in output
+
+
+def test_cli_compare_rejects_single_result_dir(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+
+    with pytest.raises(SystemExit, match="at least two result directories"):
+        main(["compare", str(run_a)])

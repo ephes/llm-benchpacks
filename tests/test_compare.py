@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from benchpack.compare import CompareError, load_result_run, render_comparison, summarize_runs
+from benchpack.compare import (
+    CompareError,
+    load_result_run,
+    render_comparison,
+    summarize_runs,
+)
 
 
 def _write_run(
@@ -85,8 +90,14 @@ def test_load_result_run_rejects_missing_empty_and_malformed_inputs(
     empty = tmp_path / "empty"
     empty.mkdir()
     (empty / "run.jsonl").write_text("")
-    with pytest.raises(CompareError, match="empty"):
+    with pytest.raises(CompareError, match="has no records"):
         load_result_run(empty)
+
+    whitespace = tmp_path / "whitespace"
+    whitespace.mkdir()
+    (whitespace / "run.jsonl").write_text("\n  \n")
+    with pytest.raises(CompareError, match="has no records"):
+        load_result_run(whitespace)
 
     malformed = tmp_path / "malformed"
     malformed.mkdir()
@@ -135,3 +146,42 @@ def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> Non
     assert "WARNING: compared records use different pack ids or versions" in output
     assert "prefill_tps` is intentionally omitted" in output
     assert "| run | case | rows | ok |" in output
+
+
+def test_render_comparison_shows_single_pack_line_and_separate_note(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a)
+    _write_run(run_b)
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert "Pack: `runtime-sweep` version `0.1.0`\n\nNote:" in output
+
+
+def test_render_comparison_disambiguates_duplicate_basenames(tmp_path: Path) -> None:
+    first = tmp_path / "first" / "run-x"
+    second = tmp_path / "second" / "run-x"
+    _write_run(first)
+    _write_run(second)
+
+    output = render_comparison([load_result_run(first), load_result_run(second)])
+
+    assert "`first/run-x`:" in output
+    assert "`second/run-x`:" in output
+    assert "| first/run-x | short |" in output
+    assert "| second/run-x | short |" in output
+
+
+def test_render_comparison_pluralizes_single_input_row(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short")])
+    _write_run(run_b)
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert "`run-a`: `" in output
+    assert "(1 row)" in output

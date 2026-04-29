@@ -179,8 +179,8 @@ passing a `run.jsonl` file directly is not supported in the first compare
 slice.
 
 The command exits nonzero with a clear message when fewer than two inputs are
-provided, an input is not a result directory, `run.jsonl` is missing or empty,
-or a JSONL row cannot be parsed as a JSON object.
+provided, an input is not a result directory, `run.jsonl` is missing, the file
+contains no JSON records, or a JSONL row cannot be parsed as a JSON object.
 
 The initial summary is intentionally small and deterministic:
 

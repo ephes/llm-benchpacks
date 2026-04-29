@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
@@ -70,7 +71,7 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
             records.append(record)
 
     if not records:
-        raise CompareError(f"run.jsonl is empty: {jsonl_path}")
+        raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
     return ResultRun(path=path, label=path.name, records=records)
 
@@ -126,10 +127,12 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
 def render_comparison(runs: list[ResultRun]) -> str:
     """Render a compact Markdown table comparing loaded result runs."""
 
+    runs = _disambiguate_labels(runs)
     pack_versions = _pack_versions(runs)
     lines: list[str] = ["# benchpack compare", "", "Inputs:"]
     for run in runs:
-        lines.append(f"- `{run.label}`: `{run.path}` ({len(run.records)} rows)")
+        row_word = "row" if len(run.records) == 1 else "rows"
+        lines.append(f"- `{run.label}`: `{run.path}` ({len(run.records)} {row_word})")
     lines.append("")
 
     if len(pack_versions) == 1:
@@ -143,6 +146,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
             "WARNING: compared records use different pack ids or versions: "
             f"{rendered}"
         )
+    lines.append("")
     lines.append(
         "Note: medians ignore null metric values. `prefill_tps` is intentionally "
         "omitted because normalized results do not record prompt-cache parity; "
@@ -175,6 +179,30 @@ def render_comparison(runs: list[ResultRun]) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
+    basename_counts = Counter(run.path.name for run in runs)
+    candidates: list[str] = []
+    for run in runs:
+        if basename_counts[run.path.name] == 1:
+            candidates.append(run.path.name)
+            continue
+        parent = run.path.parent.name
+        candidates.append(f"{parent}/{run.path.name}" if parent else run.path.name)
+
+    candidate_counts = Counter(candidates)
+    seen: Counter[str] = Counter()
+    labeled: list[ResultRun] = []
+    for run, candidate in zip(runs, candidates, strict=True):
+        seen[candidate] += 1
+        label = (
+            f"{candidate}#{seen[candidate]}"
+            if candidate_counts[candidate] > 1
+            else candidate
+        )
+        labeled.append(ResultRun(path=run.path, label=label, records=run.records))
+    return labeled
 
 
 def _pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
