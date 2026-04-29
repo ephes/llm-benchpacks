@@ -17,7 +17,12 @@ from benchpack.adapters import (
     Timing,
     Tokens,
 )
-from benchpack.adapters.openai_chat import OpenAIChatAdapter
+from benchpack.adapters.openai_chat import (
+    OpenAIChatAdapter,
+    OPENAI_STREAM_USAGE_INCLUDE,
+    OPENAI_STREAM_USAGE_KEY,
+    OPENAI_STREAM_USAGE_OMIT,
+)
 from benchpack.cli import main
 
 
@@ -87,6 +92,38 @@ def _install_recording_adapter(monkeypatch) -> list[dict[str, str]]:
     return calls
 
 
+def _install_defaults_recording_adapter(monkeypatch) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
+    class RecordingAdapter:
+        name = "openai-chat"
+
+        def run(self, request: AdapterRequest) -> AdapterResult:
+            calls.append(
+                {
+                    "request_path": request.request_path.name,
+                    "defaults": dict(request.defaults),
+                }
+            )
+            request.request_path.write_text(json.dumps({"prompt": request.prompt}))
+            request.response_path.write_text(json.dumps({"choices": []}))
+            return AdapterResult(
+                adapter=self.name,
+                endpoint="http://example.test/v1/chat/completions",
+                model=request.model,
+                ok=True,
+                timing=Timing(wall_s=1.0),
+                tokens=Tokens(),
+                raw=RawPaths(
+                    request_path=str(request.request_path),
+                    response_path=str(request.response_path),
+                ),
+            )
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", RecordingAdapter)
+    return calls
+
+
 def _write_smoke_pack(tmp_path: Path, defaults_extra: str = "") -> None:
     pack_dir = tmp_path / "benchpacks" / "smoke-chat"
     pack_dir.mkdir(parents=True)
@@ -110,6 +147,32 @@ prompt = "What is the capital of France?"
 [scoring]
 mode = "contains"
 expected = "Paris"
+"""
+    )
+
+
+def _write_streaming_pack(tmp_path: Path, defaults_extra: str = "") -> None:
+    pack_dir = tmp_path / "benchpacks" / "smoke-chat"
+    pack_dir.mkdir(parents=True)
+    (pack_dir / "benchpack.toml").write_text(
+        f"""
+[pack]
+id = "smoke-chat"
+version = "0.1.0"
+
+[defaults]
+temperature = 0
+max_tokens = 32
+stream = true
+{defaults_extra}
+
+[[cases]]
+id = "capital"
+kind = "chat"
+prompt = "What is the capital of France?"
+
+[scoring]
+mode = "none"
 """
     )
 
@@ -329,6 +392,54 @@ def test_cli_runs_warmup_then_measured_per_case(
             "response_path": "beta.response.json",
         },
     ]
+
+
+def test_cli_default_openai_stream_usage_is_include(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_defaults_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_streaming_pack(tmp_path)
+
+    assert main(_argv()) == 0
+
+    assert len(calls) == 1
+    defaults = calls[0]["defaults"]
+    assert defaults["stream"] is True
+    assert defaults["temperature"] == 0
+    assert defaults["max_tokens"] == 32
+    assert defaults[OPENAI_STREAM_USAGE_KEY] == OPENAI_STREAM_USAGE_INCLUDE
+
+
+def test_cli_openai_stream_usage_flag_reaches_measured_requests(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_defaults_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_streaming_pack(tmp_path, defaults_extra="warmup = 1\nrepetitions = 2")
+
+    assert main(_argv(["--openai-stream-usage", "omit"])) == 0
+
+    measured = [
+        call for call in calls if ".rep-" in call["request_path"]
+    ]
+    assert [call["request_path"] for call in measured] == [
+        "capital.rep-001.request.json",
+        "capital.rep-002.request.json",
+    ]
+    assert all(
+        call["defaults"][OPENAI_STREAM_USAGE_KEY] == OPENAI_STREAM_USAGE_OMIT
+        for call in measured
+    )
+    warmup = [
+        call for call in calls if ".warmup-" in call["request_path"]
+    ]
+    assert [call["request_path"] for call in warmup] == [
+        "capital.warmup-001.request.json"
+    ]
+    assert warmup[0]["defaults"][OPENAI_STREAM_USAGE_KEY] == OPENAI_STREAM_USAGE_OMIT
 
 
 def test_cli_refuses_to_overwrite_existing_run(tmp_path: Path, monkeypatch) -> None:

@@ -105,8 +105,11 @@ The `openai-chat` streaming path requests `stream_options.include_usage` so
 token counts can be captured when the server supports OpenAI's streaming usage
 chunk. Some OpenAI-compatible local servers may reject that option; those runs
 are recorded as adapter errors rather than silently retrying with different
-request semantics. Use non-streaming packs for those servers until their
-streaming usage support or an explicit compatibility mode exists.
+request semantics unless the user explicitly selects the compatibility mode
+described below. With `--openai-stream-usage omit`, streamed output and
+`timing.ttft_s` are still measured from content chunks, but `tokens.prompt`,
+`tokens.output`, `tokens.cached_prompt`, `timing.prefill_tps`, and
+`timing.decode_tps` remain null when the endpoint does not report usage.
 
 When OpenAI-compatible usage includes
 `usage.prompt_tokens_details.cached_tokens`, `openai-chat` normalizes that count
@@ -127,6 +130,7 @@ benchpack run <pack> --adapter <adapter> --model <model>
                      [--endpoint <url>]
                      [--out <dir>]
                      [--host-label <label>]
+                     [--openai-stream-usage {include,omit}]
                      [--force]
 ```
 
@@ -137,6 +141,11 @@ benchpack run <pack> --adapter <adapter> --model <model>
 - `--endpoint` is the runtime URL. Adapters resolve a base URL against their
   conventional path (e.g. `/v1/chat/completions`, `/api/generate`); the
   resolved URL is recorded in each result record as `endpoint`.
+- `--openai-stream-usage` controls only `openai-chat` streaming request bodies.
+  The default `include` sends `stream_options: {"include_usage": true}` when
+  the pack requests streaming. `omit` still sends `"stream": true` but leaves
+  out the `stream_options` key for endpoints that reject OpenAI streaming usage
+  options. The option does not change non-streaming `openai-chat` requests.
 - `--out` overrides the output directory. The default is
   `results/<YYYY-MM-DD>-<host-label>/`.
 - `--host-label` overrides the auto-derived host label used in the default

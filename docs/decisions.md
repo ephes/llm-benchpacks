@@ -126,3 +126,17 @@ while avoiding prompt/cache inference from ignored raw payloads or timing
 fields. Gating prefill speed on the explicit parity status prevents warm-cache,
 cold-prefill, and different-prompt timings from being presented as comparable
 speed evidence.
+
+## D-014: OpenAI Streaming Usage Compatibility Is Explicit
+
+`benchpack run` exposes `--openai-stream-usage {include,omit}` for
+`openai-chat` streaming requests. The default `include` keeps sending
+`stream_options.include_usage` so endpoints that support OpenAI streaming usage
+chunks can populate token counts and token-rate fields. The `omit` mode still
+sends streamed chat completions but leaves out `stream_options`, preserving
+streamed output and TTFT for local servers that reject the usage option.
+
+Reason: silently retrying without `stream_options.include_usage` can execute a
+benchmark prompt twice and change timing or cache semantics. Making the
+request-shape change explicit keeps compatibility visible while preserving null
+usage-derived metrics when the endpoint does not report usage.

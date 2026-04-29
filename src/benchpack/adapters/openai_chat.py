@@ -18,6 +18,11 @@ from . import (
 )
 
 
+OPENAI_STREAM_USAGE_KEY = "_openai_stream_usage"
+OPENAI_STREAM_USAGE_INCLUDE = "include"
+OPENAI_STREAM_USAGE_OMIT = "omit"
+
+
 def _resolve_url(endpoint: str | None) -> str:
     if not endpoint:
         raise ValueError("openai-chat adapter requires --endpoint")
@@ -77,7 +82,17 @@ class OpenAIChatAdapter:
 
         if request.defaults.get("stream"):
             body["stream"] = True
-            body["stream_options"] = {"include_usage": True}
+            stream_usage = request.defaults.get(
+                OPENAI_STREAM_USAGE_KEY,
+                OPENAI_STREAM_USAGE_INCLUDE,
+            )
+            if stream_usage == OPENAI_STREAM_USAGE_INCLUDE:
+                body["stream_options"] = {"include_usage": True}
+            elif stream_usage != OPENAI_STREAM_USAGE_OMIT:
+                raise ValueError(
+                    "openai-chat stream usage mode must be "
+                    f"{OPENAI_STREAM_USAGE_INCLUDE!r} or {OPENAI_STREAM_USAGE_OMIT!r}"
+                )
             return self._run_streaming(request, url, body)
 
         request.request_path.write_text(json.dumps(body, indent=2))

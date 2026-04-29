@@ -11,7 +11,11 @@ from pathlib import Path
 import httpx
 
 from benchpack.adapters import AdapterRequest
-from benchpack.adapters.openai_chat import OpenAIChatAdapter
+from benchpack.adapters.openai_chat import (
+    OPENAI_STREAM_USAGE_KEY,
+    OPENAI_STREAM_USAGE_OMIT,
+    OpenAIChatAdapter,
+)
 
 
 class DelayedSSEStream(httpx.SyncByteStream):
@@ -215,6 +219,8 @@ def test_openai_chat_streaming_happy_path(tmp_path: Path) -> None:
     assert response_payload["chunks"][1]["delta"] == "Par"
     assert response_payload["chunks"][2]["delta"] == "is."
     assert response_payload["chunks"][1]["offset_s"] >= result.timing.ttft_s
+    request_payload = json.loads(req.request_path.read_text())
+    assert request_payload["stream_options"] == {"include_usage": True}
 
 
 def test_openai_chat_streaming_without_usage_keeps_token_metrics_empty(
@@ -247,6 +253,99 @@ def test_openai_chat_streaming_without_usage_keeps_token_metrics_empty(
     assert result.timing.ttft_s is not None
     assert result.timing.prefill_tps is None
     assert result.timing.decode_tps is None
+
+
+def test_openai_chat_streaming_omit_usage_sends_no_stream_options(
+    tmp_path: Path,
+) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=DelayedSSEStream(
+                [
+                    {"choices": [{"delta": {"role": "assistant"}}]},
+                    {"choices": [{"delta": {"content": "hello"}}]},
+                    "[DONE]",
+                ]
+            ),
+        )
+
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(handler))
+    req = make_request(
+        tmp_path,
+        defaults={
+            "stream": True,
+            OPENAI_STREAM_USAGE_KEY: OPENAI_STREAM_USAGE_OMIT,
+        },
+    )
+
+    result = adapter.run(req)
+
+    assert result.ok is True
+    assert captured["body"]["stream"] is True
+    assert "stream_options" not in captured["body"]
+    assert result.output_text == "hello"
+    assert result.tokens.prompt is None
+    assert result.tokens.output is None
+    assert result.tokens.cached_prompt is None
+    assert result.timing.wall_s > 0
+    assert result.timing.ttft_s is not None
+    assert result.timing.prefill_tps is None
+    assert result.timing.decode_tps is None
+    request_payload = json.loads(req.request_path.read_text())
+    assert request_payload["stream"] is True
+    assert "stream_options" not in request_payload
+
+
+def test_openai_chat_streaming_omit_usage_still_consumes_usage_chunk(
+    tmp_path: Path,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        assert "stream_options" not in body
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=DelayedSSEStream(
+                [
+                    {"choices": [{"delta": {"content": "ok"}}]},
+                    {
+                        "choices": [],
+                        "usage": {
+                            "prompt_tokens": 5,
+                            "completion_tokens": 1,
+                            "prompt_tokens_details": {"cached_tokens": 4},
+                        },
+                    },
+                    "[DONE]",
+                ]
+            ),
+        )
+
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(handler))
+    req = make_request(
+        tmp_path,
+        defaults={
+            "stream": True,
+            OPENAI_STREAM_USAGE_KEY: OPENAI_STREAM_USAGE_OMIT,
+        },
+    )
+
+    result = adapter.run(req)
+
+    assert result.ok is True
+    assert result.output_text == "ok"
+    assert result.tokens.prompt == 5
+    assert result.tokens.output == 1
+    assert result.tokens.cached_prompt == 4
+    assert result.timing.prefill_tps is not None
+    assert math.isfinite(result.timing.prefill_tps)
+    assert result.timing.decode_tps is not None
+    assert math.isfinite(result.timing.decode_tps)
 
 
 def test_openai_chat_streaming_marks_failure_on_http_error(tmp_path: Path) -> None:

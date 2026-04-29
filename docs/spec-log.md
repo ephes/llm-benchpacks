@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 OpenAI stream usage compatibility)
+
+### Changed
+
+- Added `benchpack run --openai-stream-usage {include,omit}` as an explicit
+  `openai-chat` streaming compatibility switch.
+- The default `include` mode preserves the existing request shape by sending
+  `stream_options.include_usage` whenever the pack requests streaming.
+- The `omit` mode still sends `"stream": true` but omits the `stream_options`
+  key entirely for endpoints that reject OpenAI streaming usage options.
+- In omit mode, streamed output text, raw chunks, `timing.wall_s`, and
+  `timing.ttft_s` remain available when content chunks arrive. If no usage chunk
+  is reported, `tokens.prompt`, `tokens.output`, `tokens.cached_prompt`,
+  `timing.prefill_tps`, and `timing.decode_tps` remain null.
+- The CLI passes the option through a private per-request defaults key for
+  `openai-chat` only, without changing benchpack manifest semantics or mutating
+  the loaded pack defaults.
+- No automatic retry, endpoint detection, new adapter, compare behavior change,
+  live benchmark run, or generated result artifact update was added.
+
+### Open Questions
+
+- Future work may add endpoint presets or manifest-level adapter options if
+  several compatibility switches accumulate, but this slice intentionally keeps
+  the usage mode as an explicit run-time option.
+- Live validation against a server that rejects `stream_options.include_usage`
+  remains useful when such a target is available.
+
 ## 2026-04-29 (Phase 2 gated compare prefill TPS)
 
 ### Changed

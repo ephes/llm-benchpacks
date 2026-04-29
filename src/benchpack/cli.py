@@ -10,6 +10,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .adapters import Adapter, AdapterRequest, get_adapter
+from .adapters.openai_chat import (
+    OPENAI_STREAM_USAGE_INCLUDE,
+    OPENAI_STREAM_USAGE_KEY,
+    OPENAI_STREAM_USAGE_OMIT,
+)
 from .compare import CompareError, load_result_run, render_comparison
 from .hardware import collect_hardware, sample_resources
 from .packs import (
@@ -46,15 +51,19 @@ def _run_case(
     endpoint: str | None,
     request_path: Path,
     response_path: Path,
+    openai_stream_usage: str = OPENAI_STREAM_USAGE_INCLUDE,
     collect_resources: bool = True,
 ) -> tuple[object, dict]:
     if case.prompt is None:
         raise SystemExit(f"case {case.id!r} has no 'prompt' field")
+    defaults = dict(pack.defaults)
+    if adapter.name == "openai-chat":
+        defaults[OPENAI_STREAM_USAGE_KEY] = openai_stream_usage
     request = AdapterRequest(
         prompt=case.prompt,
         model=model,
         endpoint=endpoint,
-        defaults=pack.defaults,
+        defaults=defaults,
         request_path=request_path,
         response_path=response_path,
     )
@@ -99,6 +108,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 endpoint=args.endpoint,
                 request_path=request_path,
                 response_path=response_path,
+                openai_stream_usage=args.openai_stream_usage,
                 collect_resources=False,
             )
 
@@ -116,6 +126,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 endpoint=args.endpoint,
                 request_path=request_path,
                 response_path=response_path,
+                openai_stream_usage=args.openai_stream_usage,
             )
             reporter.record(
                 case,
@@ -153,6 +164,16 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--endpoint", default=None, help="Endpoint URL (adapter-specific default if omitted)")
     run.add_argument("--out", default=None, help="Output directory (default: results/<date>-<host-label>/)")
     run.add_argument("--host-label", default=None, help="Host label override for the default --out path")
+    run.add_argument(
+        "--openai-stream-usage",
+        choices=(OPENAI_STREAM_USAGE_INCLUDE, OPENAI_STREAM_USAGE_OMIT),
+        default=OPENAI_STREAM_USAGE_INCLUDE,
+        help=(
+            "For openai-chat streaming requests, include "
+            "stream_options.include_usage or omit stream_options entirely "
+            "(default: include)"
+        ),
+    )
     run.add_argument(
         "--force",
         action="store_true",

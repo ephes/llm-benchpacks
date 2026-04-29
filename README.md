@@ -34,6 +34,7 @@ uv sync
 uv run benchpack run smoke-chat --adapter ollama-generate --model qwen3-coder:latest
 uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
+uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
@@ -41,6 +42,13 @@ Each invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
 collision rules, and `uv run pytest` for the test suite.
+
+For `openai-chat` streaming runs, `--openai-stream-usage include` is the
+default and sends `stream_options.include_usage` so supporting endpoints can
+return token usage chunks. Use `--openai-stream-usage omit` for
+OpenAI-compatible local servers that reject that option; streamed output and
+TTFT remain available, while usage-derived token counts and token-rate fields
+stay null unless the server still reports usage.
 
 `benchpack compare` is read-only and compares existing result directories that
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,

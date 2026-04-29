@@ -49,6 +49,9 @@ results/
 3. Capture host metadata.
 4. For each case, run pack-requested warmup executions first.
 5. Execute the pack-requested measured repetitions, streaming when supported.
+   Runner-level adapter compatibility options, such as the `openai-chat`
+   streaming usage mode, are merged into a per-request defaults copy so the
+   loaded pack defaults are not mutated.
 6. Persist raw requests and responses for warmups and measured executions.
 7. Run deterministic verifiers for measured executions if present.
 8. Normalize metrics, resources, and scoring into `run.jsonl` for measured

@@ -36,10 +36,12 @@ them without the runner hiding individual samples.
 ## Adapter Notes
 
 `openai-chat` uses streaming TTFT for this pack. It sends
-`stream_options.include_usage`, so the endpoint must accept that option if token
-counts are expected from streaming responses. Endpoints that reject the option
-are recorded as adapter errors rather than silently retried with different
-request semantics.
+`stream_options.include_usage` by default, so supporting endpoints can return
+token counts from streaming responses. Endpoints that reject the option are
+recorded as adapter errors rather than silently retried with different request
+semantics. For those endpoints, run with `--openai-stream-usage omit`; the
+adapter still records streamed output and TTFT, but prompt/output/cache token
+counts plus prefill/decode TPS stay null unless the server reports usage anyway.
 
 `ollama-generate` uses Ollama native timing fields and ignores the OpenAI
 streaming response shape.
@@ -48,5 +50,6 @@ Example commands:
 
 ```sh
 uv run benchpack run runtime-sweep --adapter openai-chat --model <model> --endpoint http://localhost:11434/v1 --host-label local-runtime --force
+uv run benchpack run runtime-sweep --adapter openai-chat --model <model> --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
 uv run benchpack run runtime-sweep --adapter ollama-generate --model <model> --host-label local-runtime --force
 ```

@@ -42,6 +42,7 @@ cache-aware compare reporting landed 2026-04-29;
 prompt/cache parity context for compare landed 2026-04-29;
 explicit prefill parity status for compare landed 2026-04-29;
 gated prefill TPS display for comparable cases landed 2026-04-29;
+explicit `openai-chat` streaming usage omit mode landed 2026-04-29;
 see `docs/spec-log.md`.
 
 Scope:
@@ -64,12 +65,12 @@ Scope:
 - For future OpenAI-compatible server validation, do not run benchmark commands
   until local server/model prerequisites and server help output have been
   verified.
-- If another OpenAI-compatible server rejects `stream_options.include_usage` or
-  otherwise differs from the OpenAI-compatible streaming assumptions, add a
-  narrow `openai-chat` compatibility slice before comparing that endpoint. That
-  slice should likely suppress `stream_options.include_usage` for endpoints
-  that reject it and record TTFT/output text while leaving usage-derived token
-  rates null unless the endpoint reports token usage another way.
+- If another OpenAI-compatible server rejects `stream_options.include_usage`,
+  run `openai-chat` streaming packs with `--openai-stream-usage omit`.
+  **Landed 2026-04-29.** This explicit compatibility mode suppresses the
+  `stream_options` key while preserving streamed output and TTFT; usage-derived
+  token counts and token-rate fields remain null unless the endpoint reports
+  token usage another way.
 - Implement `benchpack compare` over existing `run.jsonl` result directories.
   **Landed 2026-04-29** as a compact read-only median table for wall time,
   TTFT, decode TPS, total TPS, and output tokens. Before using compare output
