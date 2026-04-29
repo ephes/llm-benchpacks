@@ -32,10 +32,11 @@ Add fixed-context performance cases that make runtime comparisons meaningful.
 **Status:** in progress. Streaming TTFT measurement for OpenAI-compatible
 endpoints landed 2026-04-26, pack-driven warmup/repetitions landed 2026-04-26,
 the bundled `runtime-sweep` pack landed 2026-04-27, `mlx_lm.server`
-validation through `openai-chat` passed 2026-04-28, and local
-`llama-server` validation attempts on 2026-04-29 were blocked because no
-compatible server binary or GGUF model file was available on the validation
-host; see `docs/spec-log.md`.
+validation through `openai-chat` passed 2026-04-28, earlier local
+`llama-server` validation attempts on 2026-04-29 were blocked by missing local
+server/model prerequisites, and `llama-server` validation through
+`openai-chat` passed later on 2026-04-29 after those prerequisites were
+installed locally; see `docs/spec-log.md`.
 
 Scope:
 
@@ -50,23 +51,25 @@ Scope:
   - Run `smoke-chat` first to prove basic chat behavior.
   - Run `runtime-sweep` next to exercise streaming TTFT, warmup, and measured
     repetitions.
-- Complete `llama-server` validation next on a host with a verified
-  `llama-server` binary and a suitable local GGUF instruct model; any
-  compatibility slice should cover OpenAI-compatible servers broadly, not just
-  MLX.
-  - Do not run benchmark commands until both prerequisites and the server help
-    output have been verified locally.
-- If `llama-server` rejects `stream_options.include_usage` or otherwise differs
-  from the OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
-  compatibility slice before compare. That slice should likely suppress
-  `stream_options.include_usage` for endpoints that reject it and record
-  TTFT/output text while leaving usage-derived token rates null unless the
-  endpoint reports token usage another way.
-- Implement `benchpack compare` after the `mlx_lm.server` and `llama-server`
-  server-path checks are understood, either because both accept the current
-  streaming request shape or because the compatibility slice is in place.
-  The 2026-04-29 local blocker means compare should still wait for a completed
-  `llama-server` check.
+- Complete `llama-server` validation on a host with a verified
+  `llama-server` binary and a suitable local GGUF instruct model. **Validated
+  2026-04-29** with Homebrew `llama.cpp` 8960 and
+  `Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`.
+- For future OpenAI-compatible server validation, do not run benchmark commands
+  until local server/model prerequisites and server help output have been
+  verified.
+- If another OpenAI-compatible server rejects `stream_options.include_usage` or
+  otherwise differs from the OpenAI-compatible streaming assumptions, add a
+  narrow `openai-chat` compatibility slice before comparing that endpoint. That
+  slice should likely suppress `stream_options.include_usage` for endpoints
+  that reject it and record TTFT/output text while leaving usage-derived token
+  rates null unless the endpoint reports token usage another way.
+- Implement `benchpack compare` next now that the `mlx_lm.server` and
+  `llama-server` server-path checks are understood and both accepted the current
+  streaming request shape. Before using it for prefill-speed conclusions,
+  establish prompt-cache parity between compared servers, for example by
+  disabling llama.cpp prompt cache or recording cached-token counts on both
+  sides.
 
 Validation:
 
@@ -78,7 +81,7 @@ Validation:
   measured row has `ok = true`, non-null `timing.ttft_s`,
   `timing.prefill_tps`, `timing.decode_tps`, and `tokens.output`.
 - `runtime-sweep` against `llama-server` should use the same success criteria
-  as `runtime-sweep` against `mlx_lm.server`.
+  as `runtime-sweep` against `mlx_lm.server`. **Validated 2026-04-29.**
 - If `runtime-sweep` does not meet that bar, capture the adapter error or
   missing fields in the run notes before choosing the compatibility slice.
 

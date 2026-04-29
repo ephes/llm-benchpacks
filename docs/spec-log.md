@@ -16,7 +16,59 @@ working history and open questions.
 - ...
 ```
 
-## 2026-04-29 (Phase 2 llama-server validation blocker, rechecked)
+## 2026-04-29 (Phase 2 llama-server validation passed)
+
+### Changed
+
+- Completed the Phase 2 `llama-server` validation slice on `atlas.local` after
+  preparing the host with Homebrew `llama.cpp` 8960
+  (`version: 8960 (19821178b)`) and a local GGUF instruct model.
+- Used model repository `bartowski/Qwen2.5-0.5B-Instruct-GGUF` at repository
+  SHA `41ba88dbac95fed2528c92514c131d73eb5a174b` and model file
+  `/Users/jochen/models/gguf/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`
+  (`sha256: 6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653`).
+  `llama-server` reported GGUF V3, file type `Q4_K - Medium`, 494.03M
+  parameters, and Qwen2.5 0.5B Instruct metadata.
+- Verified local server usage before benchmark execution. Relevant help output
+  confirmed `--model`, `--host`, `--port`, `--alias`, `--ctx-size`,
+  `--gpu-layers`, and OpenAI-compatible server flags. The live server command
+  was:
+  `llama-server --model /Users/jochen/models/gguf/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf --alias qwen2.5-0.5b-instruct-q4_k_m --host 127.0.0.1 --port 8081 --ctx-size 4096 --gpu-layers auto`.
+- The server listened at `http://127.0.0.1:8081`; the runner endpoint was
+  `http://127.0.0.1:8081/v1`, which resolved to
+  `http://127.0.0.1:8081/v1/chat/completions` in result rows.
+- `smoke-chat` passed through the existing `openai-chat` adapter with exactly
+  one measured row, `ok = true`, `scoring.passed = true`, output containing
+  `Paris`, and non-streaming usage fields populated.
+- `runtime-sweep` passed through the existing `openai-chat` adapter with
+  exactly nine measured rows, no warmup rows in `run.jsonl`, and non-null
+  `timing.ttft_s`, `timing.prefill_tps`, `timing.decode_tps`, and
+  `tokens.output` for every measured row. Warmup raw files were generated
+  locally under `raw/` and are not committed.
+- `llama-server` accepted the current streaming request shape, including
+  `stream_options.include_usage`, and returned streaming usage chunks with
+  prompt and completion token counts. Because each case's warmup primed the
+  llama.cpp prompt cache, all nine measured `runtime-sweep` rows were warm-cache
+  rows: `short` reported 103 cached / 104 prompt tokens, `medium` reported
+  375 / 376, and `long` reported 810 / 811. TTFT-derived `prefill_tps` in this
+  run is therefore a prompt-cache fast-path artifact, not cold prefill speed.
+- No adapter behavior, request shape, result schema, CLI flags, benchmark pack
+  semantics, compatibility fallback, compare command, or aggregation changed in
+  this slice.
+
+### Open Questions
+
+- The Phase 2 OpenAI-compatible server-path question is resolved for
+  `mlx_lm.server` and this Homebrew `llama-server` build: both accept
+  `stream_options.include_usage`. The next useful Phase 2 slice is
+  `benchpack compare`, with prompt-cache parity handled before drawing numeric
+  prefill-speed conclusions across servers.
+- A future compatibility slice may still be useful for older or different
+  OpenAI-compatible local servers that reject `stream_options.include_usage`,
+  but it is no longer blocking compare for the validated MLX and llama.cpp
+  server paths.
+
+## 2026-04-29 (Phase 2 llama-server validation blocker, rechecked; superseded)
 
 ### Changed
 
@@ -57,13 +109,8 @@ working history and open questions.
 
 ### Open Questions
 
-- Whether `llama-server` accepts the current `openai-chat` streaming request
-  shape, including `stream_options.include_usage`, remains unresolved. The next
-  Phase 2 step is still to complete `llama-server` validation on a host with a
-  verified server binary and a suitable local GGUF instruct model.
-- If that future run rejects `stream_options.include_usage` or omits streaming
-  usage fields, add a narrow `openai-chat` compatibility mode before
-  `benchpack compare`; otherwise proceed to `benchpack compare`.
+- Superseded by the later 2026-04-29 `llama-server` validation pass above:
+  this blocker no longer represents the current Phase 2 state.
 
 ## 2026-04-28 (Phase 2 MLX server-path planning)
 

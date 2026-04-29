@@ -1,0 +1,16 @@
+{
+  "hostname": "atlas.local",
+  "platform": "darwin",
+  "os": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "kernel": "25.4.0",
+  "cpu_model": "Apple M5 Max",
+  "cpu_count": 18,
+  "ram_mb": 65536,
+  "gpus": [
+    {
+      "model": "Apple M5 Max",
+      "vram_mb": null
+    }
+  ],
+  "chip": "Apple M5 Max"
+}
