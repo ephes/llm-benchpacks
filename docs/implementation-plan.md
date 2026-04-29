@@ -31,8 +31,11 @@ Add fixed-context performance cases that make runtime comparisons meaningful.
 
 **Status:** in progress. Streaming TTFT measurement for OpenAI-compatible
 endpoints landed 2026-04-26, pack-driven warmup/repetitions landed 2026-04-26,
-the bundled `runtime-sweep` pack landed 2026-04-27, and `mlx_lm.server`
-validation through `openai-chat` passed 2026-04-28; see `docs/spec-log.md`.
+the bundled `runtime-sweep` pack landed 2026-04-27, `mlx_lm.server`
+validation through `openai-chat` passed 2026-04-28, and local
+`llama-server` validation was attempted 2026-04-29 but blocked because no
+`llama-server` binary or GGUF model file was available on the validation host;
+see `docs/spec-log.md`.
 
 Scope:
 
@@ -47,8 +50,10 @@ Scope:
   - Run `smoke-chat` first to prove basic chat behavior.
   - Run `runtime-sweep` next to exercise streaming TTFT, warmup, and measured
     repetitions.
-- Validate `llama-server` next; any compatibility slice should cover
-  OpenAI-compatible servers broadly, not just MLX.
+- Complete `llama-server` validation next on a host with a verified
+  `llama-server` binary and a suitable local GGUF instruct model; any
+  compatibility slice should cover OpenAI-compatible servers broadly, not just
+  MLX.
 - If `llama-server` rejects `stream_options.include_usage` or otherwise differs
   from the OpenAI-compatible streaming assumptions, add a narrow `openai-chat`
   compatibility slice before compare. That slice should likely suppress
@@ -58,6 +63,8 @@ Scope:
 - Implement `benchpack compare` after the `mlx_lm.server` and `llama-server`
   server-path checks are understood, either because both accept the current
   streaming request shape or because the compatibility slice is in place.
+  The 2026-04-29 local blocker means compare should still wait for a completed
+  `llama-server` check.
 
 Validation:
 

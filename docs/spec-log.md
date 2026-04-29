@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-29 (Phase 2 llama-server validation attempt)
+
+### Changed
+
+- Attempted the next Phase 2 `llama-server` validation slice on `atlas.local`,
+  but live benchmark execution was blocked by local artifacts rather than by an
+  adapter compatibility result.
+- No `llama-server`, `llama.cpp-server`, `llama-cpp-server`, or `llama-cli`
+  executable was available on `PATH`; `llama-server --help` and
+  `llama-server --version` therefore failed with `command not found`.
+- Broader local searches under common bin/project/cache/model locations found
+  no usable `llama-server` executable and no `.gguf` model file. `ollama list`
+  showed local Ollama tags, but those are not directly usable as the GGUF model
+  file required to start `llama-server` for this validation slice.
+- No `smoke-chat` or `runtime-sweep` `llama-server` benchmark command was run,
+  because the server command, endpoint, and model file could not be verified
+  locally.
+- No adapter behavior, request shape, result schema, CLI flags, benchmark pack
+  semantics, or compatibility fallback changed in this slice.
+
+### Open Questions
+
+- Whether `llama-server` accepts the current `openai-chat` streaming request
+  shape, including `stream_options.include_usage`, remains unresolved. The next
+  Phase 2 step is still to complete `llama-server` validation on a host with a
+  verified server binary and a suitable local GGUF instruct model.
+- If that future run rejects `stream_options.include_usage` or omits streaming
+  usage fields, add a narrow `openai-chat` compatibility mode before
+  `benchpack compare`; otherwise proceed to `benchpack compare`.
+
 ## 2026-04-28 (Phase 2 MLX server-path planning)
 
 ### Changed
@@ -47,9 +77,13 @@ working history and open questions.
 
 ### Open Questions
 
-- Whether `llama-server` accepts `stream_options.include_usage` remains to be
-  validated locally. If it rejects the option, the next slice should be a
-  narrow `openai-chat` streaming compatibility mode before `benchpack compare`.
+- Whether `llama-server` accepts the current `openai-chat` streaming request
+  shape, including `stream_options.include_usage`, remains unresolved. The next
+  Phase 2 step is still to complete `llama-server` validation on a host with a
+  verified server binary and a suitable local GGUF instruct model.
+- If that future run rejects `stream_options.include_usage` or omits streaming
+  usage fields, add a narrow `openai-chat` compatibility mode before
+  `benchpack compare`; otherwise proceed to `benchpack compare`.
 
 ## 2026-04-27 (Phase 2 runtime-sweep pack)
 
