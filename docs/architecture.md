@@ -7,7 +7,8 @@
 - **Pack**: versioned workload definition, including static fixture metadata
   when a pack declares pack-local fixture files or directories.
 - **Case**: one request or task inside a pack, optionally linked to top-level
-  fixture metadata by fixture id.
+  fixtures by id. For chat cases, `Case.prompt` is the final prompt after any
+  referenced file fixtures have been appended.
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
 - **Reporter**: JSONL artifacts plus human-readable summaries.
@@ -48,9 +49,11 @@ results/
 
 1. Load a benchmark pack and select cases.
 2. Validate declared fixture metadata, pack-relative fixture paths, and any
-   case-level fixture refs against the pack's top-level fixture ids. Fixtures
-   are not executed, copied, injected into prompts, or attached to adapter
-   requests in the current slice.
+   case-level fixture refs against the pack's top-level fixture ids. Referenced
+   file fixtures are read as UTF-8 and appended to the loaded case prompt in
+   `fixture_refs` order with stable delimiters. Referenced directory fixtures
+   remain metadata-only and are not copied, executed, injected, or attached to
+   adapter requests.
 3. Load runtime adapter configuration.
 4. Capture host metadata.
 5. For each case, run pack-requested warmup executions first.

@@ -148,10 +148,10 @@ The first Phase 3 coding-agent-shaped workload is the bundled
 a server-rendered Django app to run inside Electron, and deterministic scoring
 is limited to a `contains` check for `DDS_WRAP_PLAN`.
 
-Reason: this gives the runner a portable workload surface shaped like the real
-`desktop-django-starter` wrap task without adding repo mutation, fixtures,
+Reason: this gave the runner a portable initial workload surface shaped like
+the real `desktop-django-starter` wrap task without adding repo mutation,
 agent-session orchestration, patch extraction, verifier scripts, or new scoring
-engines before those contracts are ready.
+engines before those contracts were ready.
 
 ## D-016: Prompt Files Resolve Inside The Pack
 
@@ -172,25 +172,40 @@ pack-relative path, and optional description. The loader validates that fixture
 kind values are non-empty strings and fixture paths are relative, exist, point
 to a file or directory, do not resolve to the pack directory itself, and remain
 inside the pack directory after resolving traversal and symlinks. Loaded `Pack`
-objects expose fixture metadata, but fixtures are not attached to cases or
-consumed by prompts, adapters, scoring, or result records yet.
+objects expose fixture metadata. Later file-fixture prompt assembly is covered
+by D-019; fixture declarations themselves still do not imply adapter, scoring,
+result record, or repository execution behavior.
 
 Reason: Phase 3 needs a portable source contract for future repo-shaped
 workloads before repo-task execution exists. Keeping fixtures as pack-owned
-metadata establishes path safety and avoids coupling the format to disposable
-worktrees, prompt assembly, patch extraction, verifier scripts, or repo
-mutation before those contracts are ready.
+source artifacts establishes path safety without coupling the format to
+disposable worktrees, patch extraction, verifier scripts, or repo mutation
+before those contracts are ready.
 
 ## D-018: Cases Reference Fixtures By Id Only
 
 Case-level `fixture_refs` entries are optional lists of fixture ids declared in
 the same pack's top-level `[[fixtures]]` inventory. The loader validates that
 refs are strings, match the existing id grammar, are unique within a case, and
-point to existing fixture ids. Loaded `Case` objects expose only the fixture id
-strings, not `Fixture` objects or fixture contents.
+point to existing fixture ids. Loaded `Case` objects expose fixture id strings
+rather than `Fixture` objects.
 
 Reason: Phase 3 needs to express which static inputs belong to which cases
-before execution semantics exist. Id-only metadata keeps the source contract
-explicit without adding prompt assembly, fixture loading, repo copying,
-disposable worktrees, adapter request changes, result schema changes, verifier
-scripts, patch extraction, or repository mutation.
+before execution semantics exist. Id-only refs keep the source contract explicit
+without adding repo copying, disposable worktrees, adapter request changes,
+result schema changes, verifier scripts, patch extraction, or repository
+mutation.
+
+## D-019: Referenced File Fixtures Assemble Into Prompts
+
+When a chat case references a file fixture with `fixture_refs`, the loader reads
+that fixture as UTF-8 and appends it to the loaded base prompt in the exact
+`fixture_refs` order. The appended text is wrapped in stable plain-text
+delimiters that name the fixture id, kind, and pack-relative path. Directory
+fixture refs remain valid metadata-only refs and are not read, copied,
+executed, or injected into prompts.
+
+Reason: Phase 3 needs deterministic file context in model inputs before
+repo-task execution exists. Appending file fixtures keeps the adapter API and
+result schema unchanged because adapters still receive a single `Case.prompt`,
+while leaving directory snapshots for a future disposable-worktree contract.

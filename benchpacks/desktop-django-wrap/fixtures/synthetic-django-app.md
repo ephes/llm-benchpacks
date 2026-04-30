@@ -1,8 +1,9 @@
 # Synthetic Django App Fixture
 
 This fixture describes a portable target application for future
-Django-in-Electron wrapping work. It is static metadata for the benchmark pack;
-the current runner does not copy it, execute it, or merge it into prompts.
+Django-in-Electron wrapping work. Referenced chat cases append this file to
+their loaded prompt as deterministic context. The runner does not copy it,
+execute it, or turn it into a mutable repository.
 
 ## Application Shape
 

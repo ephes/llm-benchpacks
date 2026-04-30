@@ -1,6 +1,6 @@
 [pack]
 id = "desktop-django-wrap"
-version = "0.1.2"
+version = "0.1.3"
 description = "Prompt-only first Phase 3 workload for Django-in-Electron wrapping plans; not a repo-mutating wrap run"
 
 [defaults]

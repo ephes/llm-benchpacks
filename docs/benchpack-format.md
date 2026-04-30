@@ -95,11 +95,12 @@ expected = "Paris"
   `[[fixtures]]` inventory. It defaults to an empty list when absent. When
   present, it must be a TOML array of strings; every ref must match the id
   grammar, must point to an existing top-level fixture id in the same pack, and
-  must not appear more than once in the same case. Fixture refs only link a
-  case to fixture metadata. They do not load fixture contents into prompts,
-  execute fixtures, copy repositories, create disposable worktrees, mutate
-  repositories, template prompts, change adapter requests, change result
-  records, extract patches, or run verifiers.
+  must not appear more than once in the same case. Referenced file fixtures are
+  appended to the loaded case prompt in `fixture_refs` order with stable
+  delimiters. Referenced directory fixtures remain metadata-only. Fixture refs
+  do not execute fixtures, copy repositories, create disposable worktrees,
+  mutate repositories, template prompts, change adapter request or result
+  schemas, extract patches, or run verifiers.
 
 `fixtures`
 : Optional top-level fixture inventory. Each `[[fixtures]]` entry declares a
@@ -108,10 +109,11 @@ expected = "Paris"
   must be unique within the pack. Fixture paths are source contracts: they must
   be strings, relative to the pack directory, resolve inside the pack after
   following symlinks, exist at manifest-load time, and point to either a file or
-  a directory. The current runner only validates and exposes fixture metadata
-  on loaded packs. It does not read fixture contents into prompts, copy
-  repositories, create disposable worktrees, mutate repositories, extract
-  patches, execute verifiers, or score from fixtures.
+  a directory. The runner validates and exposes fixture metadata on loaded
+  packs. Referenced file fixtures are read as UTF-8 and appended to
+  `Case.prompt`; directory fixtures are not read into prompts. The runner does
+  not copy repositories, create disposable worktrees, mutate repositories,
+  extract patches, execute verifiers, or score from fixtures.
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
@@ -129,9 +131,10 @@ kind = "chat"
 prompt_file = "prompts/wrap-plan-small.md"
 ```
 
-Prompt files are static text in the current format. There is no templating,
-variable substitution, globbing, include support, fixture loading, or
-multi-message loader in this slice.
+Prompt files are static text in the current format. After the base prompt is
+loaded from `prompt` or `prompt_file`, referenced file fixtures may be appended
+as described below. There is no templating, variable substitution, globbing,
+include support, or multi-message loader in this slice.
 
 ### Fixtures
 
@@ -165,10 +168,31 @@ paths that are neither files nor directories. File and directory fixtures are
 both allowed so later repo-task work can introduce directory snapshots without
 changing this source contract.
 
-Fixture declarations are metadata only in this slice. Cases may reference
-fixtures by id with `fixture_refs`, but fixture contents are not loaded into
-prompts, fixtures are not executed, and adapter request shapes and result
-records are unchanged.
+Fixture declarations remain available as metadata on loaded packs. Cases may
+reference fixtures by id with `fixture_refs`. When a referenced fixture path is
+a file, the loader reads it as UTF-8 and appends it to the loaded case prompt.
+When a referenced fixture path is a directory, the loader validates the ref but
+does not read, copy, execute, or inject the directory contents.
+
+File fixture prompt assembly uses this stable plain-text shape:
+
+```text
+<base prompt>
+
+--- BEGIN FIXTURE <fixture-id> (<fixture-kind>, <pack-relative-path>) ---
+<fixture file contents>
+--- END FIXTURE <fixture-id> ---
+```
+
+Multiple referenced file fixtures are appended in the exact `fixture_refs`
+order chosen by the case author. `Case.prompt` is the final assembled prompt
+that adapters receive. `Case.raw` preserves the original manifest fields, and
+`Case.fixture_refs` preserves the fixture id list.
+
+Fixture assembly does not add prompt templating, variable substitution,
+globbing, include support, fixture execution, repository copying, disposable
+worktrees, repository mutation, patch extraction, verifier execution, adapter
+schema changes, or result schema changes.
 
 ### Case Fixture References
 
@@ -189,9 +213,8 @@ duplicate refs within one case, and refs that do not exist in the same pack's
 top-level fixture inventory. Top-level `[[fixtures]]` entries may appear before
 or after `[[cases]]` in TOML; refs are validated against the loaded inventory.
 
-Changing fixture refs alters pack source semantics, so pack authors should bump
-`pack.version` even though current runtime behavior and result records remain
-unchanged.
+Changing fixture refs alters the effective prompt for referenced file fixtures,
+so pack authors should bump `pack.version`.
 
 ## ID Grammar
 

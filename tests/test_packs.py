@@ -105,6 +105,117 @@ fixture_refs = ["synthetic-fixture"]
     assert pack.cases[0].raw["fixture_refs"] == ["synthetic-fixture"]
 
 
+def test_load_pack_appends_referenced_file_fixture_to_prompt(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixtureprompt"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "Base prompt."
+fixture_refs = ["context"]
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "context.md").write_text("fixture context\n", encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == (
+        "Base prompt.\n\n"
+        "--- BEGIN FIXTURE context (context, fixtures/context.md) ---\n"
+        "fixture context\n"
+        "--- END FIXTURE context ---"
+    )
+    assert pack.cases[0].fixture_refs == ["context"]
+    assert pack.cases[0].raw["prompt"] == "Base prompt."
+
+
+def test_load_pack_appends_multiple_file_fixtures_in_ref_order(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixtureorder"
+version = "0.1.0"
+
+[[fixtures]]
+id = "first"
+kind = "context"
+path = "fixtures/first.md"
+
+[[fixtures]]
+id = "second"
+kind = "context"
+path = "fixtures/second.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "Base"
+fixture_refs = ["second", "first"]
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "first.md").write_text("first contents\n", encoding="utf-8")
+    (fixture_dir / "second.md").write_text("second contents\n", encoding="utf-8")
+
+    prompt = load_pack(pack_dir).cases[0].prompt
+
+    assert prompt is not None
+    assert prompt.index("--- BEGIN FIXTURE second") < prompt.index(
+        "--- BEGIN FIXTURE first"
+    )
+    assert "second contents\n--- END FIXTURE second ---" in prompt
+    assert "first contents\n--- END FIXTURE first ---" in prompt
+
+
+def test_load_pack_keeps_directory_fixture_refs_metadata_only(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturedirref"
+version = "0.1.0"
+
+[[fixtures]]
+id = "repo-snapshot"
+kind = "repo"
+path = "fixtures/repo"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "Base prompt."
+fixture_refs = ["repo-snapshot"]
+""",
+    )
+    fixture_dir = pack_dir / "fixtures" / "repo"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "README.md").write_text("directory fixture text\n", encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == "Base prompt."
+    assert pack.cases[0].fixture_refs == ["repo-snapshot"]
+    assert pack.fixtures[0].path.is_dir()
+
+
 def test_load_pack_loads_case_fixture_refs_when_fixtures_appear_after_cases(
     tmp_path: Path,
 ) -> None:
@@ -1226,7 +1337,7 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     pack_dir = repo_root / "benchpacks" / "desktop-django-wrap"
 
     assert pack.id == "desktop-django-wrap"
-    assert pack.version == "0.1.2"
+    assert pack.version == "0.1.3"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 384
     assert pack.defaults["stream"] is True
@@ -1250,6 +1361,13 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
         assert "prompt" not in case.raw
         assert "prompt_file" in case.raw
         assert case.raw["fixture_refs"] == ["synthetic-django-app"]
+        assert (
+            "--- BEGIN FIXTURE synthetic-django-app "
+            "(context, fixtures/synthetic-django-app.md) ---"
+        ) in case.prompt
+        assert "--- END FIXTURE synthetic-django-app ---" in case.prompt
+        assert "## Application Shape" in case.prompt
+        assert "Django project with a `manage.py` entrypoint" in case.prompt
         prompt_file = case.raw["prompt_file"]
         assert isinstance(prompt_file, str)
         assert prompt_file.startswith("prompts/")

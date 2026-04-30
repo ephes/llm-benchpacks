@@ -43,6 +43,34 @@ working history and open questions.
   Phase 2 validation evidence remains optional and should be recorded in
   `docs/run-log.md` only if an actual run is performed and curated.
 
+## 2026-04-30 (Phase 3 file fixture prompt assembly)
+
+### Changed
+
+- Added fixture-backed prompt assembly for referenced file fixtures.
+- Loaded `Case.prompt` remains the final adapter prompt. The base prompt still
+  comes from exactly one `prompt` or `prompt_file` source, then referenced file
+  fixture contents are appended in `fixture_refs` order.
+- Appended file fixtures use stable plain-text delimiters that include the
+  fixture id, kind, and pack-relative path.
+- Directory fixture refs remain valid metadata-only refs and are not copied,
+  executed, read into prompts, or turned into disposable repositories.
+- `Case.raw` still preserves the manifest fields, `Case.fixture_refs` still
+  exposes fixture id strings, and `Pack.fixtures` still exposes fixture
+  metadata.
+- Bumped `desktop-django-wrap` to version `0.1.3` because both effective
+  prompts now include the referenced `synthetic-django-app` file fixture.
+- No live benchmark run, adapter change, compare change, result schema change,
+  scoring change, repo mutation, verifier execution, patch extraction,
+  agent-session replay, or generated result artifact was added.
+
+### Open Questions
+
+- Future Phase 3 slices still need to define directory fixture semantics,
+  disposable repo-task execution, prompt templating or multi-message support if
+  needed, verifier scripts, patch extraction, and eventual real agent-session
+  replay.
+
 ## 2026-04-30 (Phase 3 case fixture refs)
 
 ### Changed

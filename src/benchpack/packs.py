@@ -364,6 +364,42 @@ def _fixture_refs_from_case_entry(
     return fixture_refs
 
 
+def _append_referenced_file_fixtures(
+    prompt: str,
+    *,
+    fixture_refs: list[str],
+    fixtures_by_id: dict[str, Fixture],
+    case_id: str,
+) -> str:
+    assembled = prompt
+    for fixture_id in fixture_refs:
+        fixture = fixtures_by_id[fixture_id]
+        if fixture.path.is_dir():
+            continue
+
+        fixture_path = fixture.raw["path"]
+        try:
+            fixture_contents = fixture.path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise InvalidFixtureError(
+                f"case {case_id!r} fixture {fixture_id!r} file "
+                f"{fixture_path!r} could not be read"
+            ) from exc
+
+        header = (
+            f"--- BEGIN FIXTURE {fixture.id} "
+            f"({fixture.kind}, {fixture_path}) ---"
+        )
+        footer = f"--- END FIXTURE {fixture.id} ---"
+        fixture_block = f"{header}\n{fixture_contents}"
+        if not fixture_block.endswith("\n"):
+            fixture_block += "\n"
+        fixture_block += footer
+        assembled = f"{assembled}\n\n{fixture_block}"
+
+    return assembled
+
+
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
@@ -384,6 +420,7 @@ def load_pack(path: Path | str) -> Pack:
         pack_id=pack_id,
     )
     fixture_ids = {fixture.id for fixture in fixtures}
+    fixtures_by_id = {fixture.id: fixture for fixture in fixtures}
 
     raw_cases = data.get("cases") or []
     cases: list[Case] = []
@@ -400,6 +437,18 @@ def load_pack(path: Path | str) -> Pack:
             case_id=case_id,
             resolved_pack_dir=resolved_pack_dir,
         )
+        fixture_refs = _fixture_refs_from_case_entry(
+            entry,
+            case_id=case_id,
+            fixture_ids=fixture_ids,
+        )
+        if fixture_refs:
+            prompt = _append_referenced_file_fixtures(
+                prompt,
+                fixture_refs=fixture_refs,
+                fixtures_by_id=fixtures_by_id,
+                case_id=case_id,
+            )
         cases.append(
             Case(
                 id=case_id,
@@ -407,11 +456,7 @@ def load_pack(path: Path | str) -> Pack:
                 prompt=prompt,
                 scoring=_scoring_from_dict(entry.get("scoring")),
                 raw=dict(entry),
-                fixture_refs=_fixture_refs_from_case_entry(
-                    entry,
-                    case_id=case_id,
-                    fixture_ids=fixture_ids,
-                ),
+                fixture_refs=fixture_refs,
             )
         )
 
