@@ -141,6 +141,48 @@ fixture_refs = ["context"]
     assert pack.cases[0].raw["prompt"] == "Base prompt."
 
 
+def test_load_pack_keeps_fixture_footer_on_own_line_without_trailing_newline(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturepromptfile"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt_file = "prompts/base.md"
+fixture_refs = ["context"]
+""",
+    )
+    prompt_dir = pack_dir / "prompts"
+    prompt_dir.mkdir()
+    prompt_dir.joinpath("base.md").write_text("Base prompt.\n", encoding="utf-8")
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    fixture_dir.joinpath("context.md").write_text(
+        "fixture without trailing newline",
+        encoding="utf-8",
+    )
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == (
+        "Base prompt.\n\n"
+        "--- BEGIN FIXTURE context (context, fixtures/context.md) ---\n"
+        "fixture without trailing newline\n"
+        "--- END FIXTURE context ---"
+    )
+
+
 def test_load_pack_appends_multiple_file_fixtures_in_ref_order(
     tmp_path: Path,
 ) -> None:

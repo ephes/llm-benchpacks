@@ -395,7 +395,8 @@ def _append_referenced_file_fixtures(
         if not fixture_block.endswith("\n"):
             fixture_block += "\n"
         fixture_block += footer
-        assembled = f"{assembled}\n\n{fixture_block}"
+        separator = "\n" if assembled.endswith("\n") else "\n\n"
+        assembled = f"{assembled}{separator}{fixture_block}"
 
     return assembled
 
