@@ -6,7 +6,8 @@
 
 - **Pack**: versioned workload definition, including static fixture metadata
   when a pack declares pack-local fixture files or directories.
-- **Case**: one request or task inside a pack.
+- **Case**: one request or task inside a pack, optionally linked to top-level
+  fixture metadata by fixture id.
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
 - **Reporter**: JSONL artifacts plus human-readable summaries.
@@ -46,7 +47,8 @@ results/
 ## Execution Flow
 
 1. Load a benchmark pack and select cases.
-2. Validate declared fixture metadata and pack-relative fixture paths. Fixtures
+2. Validate declared fixture metadata, pack-relative fixture paths, and any
+   case-level fixture refs against the pack's top-level fixture ids. Fixtures
    are not executed, copied, injected into prompts, or attached to adapter
    requests in the current slice.
 3. Load runtime adapter configuration.

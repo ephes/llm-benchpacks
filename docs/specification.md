@@ -45,14 +45,15 @@ Initial packs:
 - `smoke-chat`: tiny single-turn endpoint check.
 - `runtime-sweep`: fixed prompts at several context sizes for TTFT and throughput.
 - `desktop-django-wrap`: first Phase 3 prompt-only coding-agent-shaped pack
-  derived from the `desktop-django-starter` wrapping workflow. Version `0.1.1`
+  derived from the `desktop-django-starter` wrapping workflow. Version `0.1.2`
   asks for concise Django-in-Electron wrapping plans with prompt-file-backed
   static chat prompts, uses `defaults.stream = true`, `defaults.warmup = 0`,
   `defaults.repetitions = 1`, and `scoring.mode = "contains"` against
   `DDS_WRAP_PLAN`. It includes one static synthetic fixture declaration/file for
-  future wrap work, but the runner does not consume that fixture yet. It is not
-  a repo-mutating wrapping task and has no patch extraction, disposable
-  worktree, or verifier script.
+  future wrap work, and both cases reference that fixture by id. Fixture refs are
+  metadata only: the runner does not execute fixtures, assemble prompts from
+  fixtures, mutate repositories, extract patches, create disposable worktrees,
+  or run verifier scripts. It is not a repo-mutating wrapping task.
 - `patch-from-failure`: small repo plus failing test output; score by test pass and
   diff size.
 - `tool-json`: strict JSON and tool-call formatting checks.

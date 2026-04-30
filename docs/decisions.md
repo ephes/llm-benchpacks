@@ -180,3 +180,17 @@ workloads before repo-task execution exists. Keeping fixtures as pack-owned
 metadata establishes path safety and avoids coupling the format to disposable
 worktrees, prompt assembly, patch extraction, verifier scripts, or repo
 mutation before those contracts are ready.
+
+## D-018: Cases Reference Fixtures By Id Only
+
+Case-level `fixture_refs` entries are optional lists of fixture ids declared in
+the same pack's top-level `[[fixtures]]` inventory. The loader validates that
+refs are strings, match the existing id grammar, are unique within a case, and
+point to existing fixture ids. Loaded `Case` objects expose only the fixture id
+strings, not `Fixture` objects or fixture contents.
+
+Reason: Phase 3 needs to express which static inputs belong to which cases
+before execution semantics exist. Id-only metadata keeps the source contract
+explicit without adding prompt assembly, fixture loading, repo copying,
+disposable worktrees, adapter request changes, result schema changes, verifier
+scripts, patch extraction, or repository mutation.

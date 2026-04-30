@@ -63,6 +63,10 @@ class InvalidFixtureError(PackError):
     """Raised when a fixture declaration is invalid."""
 
 
+class InvalidFixtureRefError(PackError):
+    """Raised when a case fixture reference is invalid."""
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.match(value):
         raise InvalidIdError(
@@ -88,6 +92,7 @@ class Case:
     prompt: str | None
     scoring: Scoring | None
     raw: dict[str, Any]
+    fixture_refs: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -317,6 +322,48 @@ def _fixtures_from_entries(
     return fixtures
 
 
+def _fixture_refs_from_case_entry(
+    entry: dict[str, Any],
+    *,
+    case_id: str,
+    fixture_ids: set[str],
+) -> list[str]:
+    if "fixture_refs" not in entry:
+        return []
+
+    raw_refs = entry["fixture_refs"]
+    if not isinstance(raw_refs, list):
+        raise InvalidFixtureRefError(
+            f"case {case_id!r} fixture_refs must be a list of fixture ids"
+        )
+
+    fixture_refs: list[str] = []
+    seen: set[str] = set()
+    for raw_ref in raw_refs:
+        if not isinstance(raw_ref, str):
+            raise InvalidFixtureRefError(
+                f"case {case_id!r} fixture_refs entries must be strings"
+            )
+        if not ID_PATTERN.match(raw_ref):
+            raise InvalidIdError(
+                f"case {case_id!r} fixture_refs entry {raw_ref!r} must match "
+                f"{ID_PATTERN.pattern}"
+            )
+        ref = raw_ref
+        if ref in seen:
+            raise InvalidFixtureRefError(
+                f"case {case_id!r} references fixture {ref!r} more than once"
+            )
+        if ref not in fixture_ids:
+            raise InvalidFixtureRefError(
+                f"case {case_id!r} references unknown fixture {ref!r}"
+            )
+        seen.add(ref)
+        fixture_refs.append(ref)
+
+    return fixture_refs
+
+
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
@@ -330,6 +377,13 @@ def load_pack(path: Path | str) -> Pack:
     if not pack_id_raw or not pack_version:
         raise PackError("[pack] section must define 'id' and 'version'")
     pack_id = _validate_id(pack_id_raw, "pack")
+
+    fixtures = _fixtures_from_entries(
+        data.get("fixtures"),
+        resolved_pack_dir=resolved_pack_dir,
+        pack_id=pack_id,
+    )
+    fixture_ids = {fixture.id for fixture in fixtures}
 
     raw_cases = data.get("cases") or []
     cases: list[Case] = []
@@ -353,15 +407,15 @@ def load_pack(path: Path | str) -> Pack:
                 prompt=prompt,
                 scoring=_scoring_from_dict(entry.get("scoring")),
                 raw=dict(entry),
+                fixture_refs=_fixture_refs_from_case_entry(
+                    entry,
+                    case_id=case_id,
+                    fixture_ids=fixture_ids,
+                ),
             )
         )
 
     defaults = _defaults_from_dict(data.get("defaults"))
-    fixtures = _fixtures_from_entries(
-        data.get("fixtures"),
-        resolved_pack_dir=resolved_pack_dir,
-        pack_id=pack_id,
-    )
 
     return Pack(
         id=pack_id,

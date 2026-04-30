@@ -6,7 +6,7 @@ server-rendered Django app in an Electron desktop shell, but it does not execute
 an agent, mutate a target repository, execute fixtures, extract patches, or run
 verification scripts.
 
-Pack version: `0.1.1`.
+Pack version: `0.1.2`.
 
 ## Cases
 
@@ -18,6 +18,10 @@ Both prompts live in pack-local files under `prompts/`, referenced from
 paths, private repository checkout, network access, Apple Silicon assumptions,
 CUDA assumptions, or endpoint-specific behavior.
 
+Both cases reference the pack's `synthetic-django-app` fixture by id through
+`fixture_refs`. The current prompts remain static files and do not consume the
+fixture contents.
+
 ## Fixtures
 
 The pack declares one static fixture:
@@ -27,9 +31,9 @@ The pack declares one static fixture:
   shape for future wrap work.
 
 The current prompts do not consume this fixture yet. It is loaded only as
-manifest metadata and validated as a pack-local path; the runner does not copy
-it, execute it, create a disposable repository from it, or inject its contents
-into adapter requests.
+manifest metadata, validated as a pack-local path, and linked from cases by id;
+the runner does not copy it, execute it, create a disposable repository from it,
+or inject its contents into adapter requests.
 
 ## Runtime Defaults
 

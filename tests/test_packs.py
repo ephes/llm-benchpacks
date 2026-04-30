@@ -12,6 +12,7 @@ from benchpack.packs import (
     DuplicateFixtureIdError,
     InvalidDefaultError,
     InvalidFixtureError,
+    InvalidFixtureRefError,
     InvalidIdError,
     InvalidPromptSourceError,
     load_pack,
@@ -66,11 +67,229 @@ expected = "Paris"
     assert pack.cases[0].id == "capital"
     assert pack.cases[0].kind == "chat"
     assert pack.cases[0].prompt == "What is the capital of France?"
+    assert pack.cases[0].fixture_refs == []
     assert pack.scoring is not None
     assert pack.scoring.mode == "contains"
     assert pack.scoring.expected == "Paris"
     assert pack.path == pack_dir
     assert pack.fixtures == []
+
+
+def test_load_pack_loads_case_fixture_refs(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixturepack"
+version = "0.1.0"
+
+[[fixtures]]
+id = "synthetic-fixture"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = ["synthetic-fixture"]
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "context.md").write_text("portable context\n", encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].fixture_refs == ["synthetic-fixture"]
+    assert pack.cases[0].raw["fixture_refs"] == ["synthetic-fixture"]
+
+
+def test_load_pack_loads_case_fixture_refs_when_fixtures_appear_after_cases(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "fixtureorder"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = ["late-fixture"]
+
+[[fixtures]]
+id = "late-fixture"
+kind = "context"
+path = "fixtures/context.md"
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "context.md").write_text("portable context\n", encoding="utf-8")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].fixture_refs == ["late-fixture"]
+
+
+def test_load_pack_without_fixtures_or_refs_still_loads(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "plainpack"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+""",
+    )
+
+    pack = load_pack(pack_dir)
+
+    assert pack.fixtures == []
+    assert pack.cases[0].fixture_refs == []
+
+
+def test_load_pack_rejects_non_list_fixture_refs(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badrefs"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = "context"
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureRefError, match="must be a list"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_string_fixture_refs(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badrefentries"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = [123]
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureRefError, match="entries must be strings"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_invalid_fixture_ref_id(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "badrefid"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = ["../context"]
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidIdError):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_duplicate_fixture_refs(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "duprefs"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = ["context", "context"]
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureRefError, match="more than once"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_missing_fixture_refs(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingrefs"
+version = "0.1.0"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+fixture_refs = ["missing"]
+""",
+    )
+    (pack_dir / "fixtures").mkdir()
+    (pack_dir / "fixtures" / "context.md").write_text("x", encoding="utf-8")
+
+    with pytest.raises(InvalidFixtureRefError, match="unknown fixture"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_loads_fixture_file_metadata(tmp_path: Path) -> None:
@@ -112,6 +331,7 @@ prompt = "x"
         "path": "fixtures/context.md",
         "description": "Synthetic context",
     }
+    assert pack.cases[0].fixture_refs == []
 
 
 def test_load_pack_accepts_fixture_directory(tmp_path: Path) -> None:
@@ -980,6 +1200,7 @@ def test_bundled_runtime_sweep_pack_contract() -> None:
     assert warmup_from_defaults(pack.defaults) == 1
     assert repetitions_from_defaults(pack.defaults) == 3
     assert [case.id for case in pack.cases] == ["short", "medium", "long"]
+    assert [case.fixture_refs for case in pack.cases] == [[], [], []]
 
     prompt_sizes = [len(case.prompt or "") for case in pack.cases]
     assert prompt_sizes == sorted(prompt_sizes)
@@ -996,6 +1217,7 @@ def test_bundled_smoke_chat_pack_has_no_fixtures() -> None:
 
     assert pack.id == "smoke-chat"
     assert pack.fixtures == []
+    assert [case.fixture_refs for case in pack.cases] == [[]]
 
 
 def test_bundled_desktop_django_wrap_pack_contract() -> None:
@@ -1004,7 +1226,7 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     pack_dir = repo_root / "benchpacks" / "desktop-django-wrap"
 
     assert pack.id == "desktop-django-wrap"
-    assert pack.version == "0.1.1"
+    assert pack.version == "0.1.2"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 384
     assert pack.defaults["stream"] is True
@@ -1022,10 +1244,12 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     forbidden_path_fragments = ("/Users/", "~/", "C:\\")
     for case in pack.cases:
         assert case.kind == "chat"
+        assert case.fixture_refs == ["synthetic-django-app"]
         assert case.prompt
         assert "DDS_WRAP_PLAN" in case.prompt
         assert "prompt" not in case.raw
         assert "prompt_file" in case.raw
+        assert case.raw["fixture_refs"] == ["synthetic-django-app"]
         prompt_file = case.raw["prompt_file"]
         assert isinstance(prompt_file, str)
         assert prompt_file.startswith("prompts/")

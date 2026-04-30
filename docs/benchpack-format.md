@@ -22,6 +22,7 @@ repetitions = 1
 id = "capital"
 kind = "chat"
 prompt = "What is the capital of France? Answer in one sentence."
+fixture_refs = ["synthetic-context"]
 
 [[fixtures]]
 id = "synthetic-context"
@@ -40,7 +41,8 @@ expected = "Paris"
 : Stable pack identifier used in result records. Must match the id grammar below.
 
 `pack.version`
-: Version of the workload. Change it when prompts, fixtures, or scoring change.
+: Version of the workload. Change it when prompts, fixtures, fixture
+  references, or scoring change.
 
 `defaults`
 : Request defaults shared by cases.
@@ -87,6 +89,17 @@ expected = "Paris"
   or symlinks. Loaded file contents become the case prompt at manifest-load time,
   so adapters and result records do not distinguish inline prompts from prompt
   files.
+
+`cases[].fixture_refs`
+: Optional list of fixture ids declared in the same pack's top-level
+  `[[fixtures]]` inventory. It defaults to an empty list when absent. When
+  present, it must be a TOML array of strings; every ref must match the id
+  grammar, must point to an existing top-level fixture id in the same pack, and
+  must not appear more than once in the same case. Fixture refs only link a
+  case to fixture metadata. They do not load fixture contents into prompts,
+  execute fixtures, copy repositories, create disposable worktrees, mutate
+  repositories, template prompts, change adapter requests, change result
+  records, extract patches, or run verifiers.
 
 `fixtures`
 : Optional top-level fixture inventory. Each `[[fixtures]]` entry declares a
@@ -152,9 +165,33 @@ paths that are neither files nor directories. File and directory fixtures are
 both allowed so later repo-task work can introduce directory snapshots without
 changing this source contract.
 
-Fixture declarations are metadata only in this slice. Cases do not reference
-fixtures yet, fixture contents are not loaded into prompts, and adapter request
-shapes and result records are unchanged.
+Fixture declarations are metadata only in this slice. Cases may reference
+fixtures by id with `fixture_refs`, but fixture contents are not loaded into
+prompts, fixtures are not executed, and adapter request shapes and result
+records are unchanged.
+
+### Case Fixture References
+
+Use `fixture_refs` on a case to declare which top-level fixture ids are relevant
+to that case:
+
+```toml
+[[cases]]
+id = "wrap-plan-context"
+kind = "chat"
+prompt_file = "prompts/wrap-plan-context.md"
+fixture_refs = ["synthetic-django-app"]
+```
+
+`fixture_refs` defaults to `[]` when omitted. The loader rejects non-array
+values, non-string entries, ids that do not match the documented grammar,
+duplicate refs within one case, and refs that do not exist in the same pack's
+top-level fixture inventory. Top-level `[[fixtures]]` entries may appear before
+or after `[[cases]]` in TOML; refs are validated against the loaded inventory.
+
+Changing fixture refs alters pack source semantics, so pack authors should bump
+`pack.version` even though current runtime behavior and result records remain
+unchanged.
 
 ## ID Grammar
 

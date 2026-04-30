@@ -136,9 +136,10 @@ concise wrapping plans and use deterministic `contains` scoring against
 `DDS_WRAP_PLAN`. Prompt-file loading landed 2026-04-29 so longer static prompts
 can live under pack-local `prompts/` directories. Static fixture metadata
 loading and one portable synthetic `desktop-django-wrap` fixture landed
-2026-04-29, but Phase 3 does not yet include fixture execution, prompt assembly
-from fixtures, disposable target repos, repo mutation, patch extraction,
-agent-session replay, or verification scripts.
+2026-04-29. Case-level fixture refs landed 2026-04-30 as metadata-only links
+from cases to top-level fixture ids, but Phase 3 does not yet include fixture
+execution, prompt assembly from fixtures, disposable target repos, repo
+mutation, patch extraction, agent-session replay, or verification scripts.
 
 Scope:
 
@@ -150,6 +151,8 @@ Scope:
   and directory path validation. **Landed 2026-04-29.**
 - Add one synthetic portable `desktop-django-wrap` fixture under
   `benchpacks/desktop-django-wrap/fixtures/`. **Landed 2026-04-29.**
+- Add case-level `fixture_refs` metadata that validates refs against top-level
+  fixture ids in the same pack. **Landed 2026-04-30.**
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
   later slice when prompt assembly and repo-task contracts are ready.
 - Include a compact target-repo snapshot directory fixture in a later slice.

@@ -16,6 +16,35 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-30 (Phase 3 case fixture refs)
+
+### Changed
+
+- Added optional case-level `fixture_refs` support to benchpack manifests.
+- Loaded `Case` objects now expose `fixture_refs` as fixture id strings, with
+  cases that omit the field loading as `[]`.
+- `fixture_refs` must be a TOML array of strings. Each ref must match the
+  existing id grammar, be unique within the case, and point to an existing
+  top-level fixture id in the same pack.
+- Fixture refs are validated against the loaded top-level fixture inventory, so
+  `[[fixtures]]` may appear before or after `[[cases]]` in TOML.
+- Bumped `desktop-django-wrap` to version `0.1.2` and linked both existing
+  cases to the existing portable `synthetic-django-app` fixture by id.
+- Existing `desktop-django-wrap` case ids, defaults, prompt-file entries,
+  scoring mode, prompt marker behavior, and fixture declaration/path remain
+  unchanged.
+- No live benchmark run, new adapter, new scoring engine, compare change,
+  prompt templating, fixture content loading, fixture execution, disposable
+  worktree handling, verifier script, patch extraction, repo mutation, or agent
+  execution harness was added.
+
+### Open Questions
+
+- Future Phase 3 slices still need to define prompt assembly from fixtures,
+  fixture loading semantics beyond metadata refs, directory fixture use,
+  disposable target repos, `repo-task` execution, patch extraction, and
+  verify-script scoring.
+
 ## 2026-04-29 (Phase 3 fixture metadata support)
 
 ### Changed

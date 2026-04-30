@@ -1,6 +1,6 @@
 [pack]
 id = "desktop-django-wrap"
-version = "0.1.1"
+version = "0.1.2"
 description = "Prompt-only first Phase 3 workload for Django-in-Electron wrapping plans; not a repo-mutating wrap run"
 
 [defaults]
@@ -20,11 +20,13 @@ description = "Portable synthetic target app description for future wrap work"
 id = "wrap-plan-small"
 kind = "chat"
 prompt_file = "prompts/wrap-plan-small.md"
+fixture_refs = ["synthetic-django-app"]
 
 [[cases]]
 id = "wrap-plan-context"
 kind = "chat"
 prompt_file = "prompts/wrap-plan-context.md"
+fixture_refs = ["synthetic-django-app"]
 
 [scoring]
 mode = "contains"
