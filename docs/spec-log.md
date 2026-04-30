@@ -16,6 +16,33 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-30 (Phase 2 closure docs)
+
+### Changed
+
+- Closed Phase 2 administratively in `docs/implementation-plan.md` after
+  reviewing the landed runtime-sweep, streaming TTFT, warmup/repetition,
+  Ollama native timing, MLX validation, llama-server validation, compare,
+  cache metadata, cache-aware compare, prompt/cache parity, prefill parity,
+  gated prefill TPS, and OpenAI streaming usage compatibility slices.
+- Marked Phase 2 as implemented/closed while preserving validation caveats:
+  the curated run log has MLX and llama-server evidence, the 2026-04-29
+  llama-server runtime rows are warm-cache rows, prompt-cache parity remains
+  required for prefill-speed interpretation, and a curated Ollama
+  `runtime-sweep` live run remains optional future validation.
+- Kept Phase 3 as the active current workstream; `desktop-django-wrap`,
+  prompt-file support, static fixture metadata, and case-level fixture refs
+  remain the started Phase 3 surface.
+- No live benchmark run, adapter change, compare change, result schema change,
+  scoring change, pack format change, pack manifest change, or generated result
+  artifact was added.
+
+### Open Questions
+
+- Whether to add a curated Ollama `runtime-sweep` live run later for additional
+  Phase 2 validation evidence remains optional and should be recorded in
+  `docs/run-log.md` only if an actual run is performed and curated.
+
 ## 2026-04-30 (Phase 3 case fixture refs)
 
 ### Changed

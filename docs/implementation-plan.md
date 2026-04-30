@@ -29,21 +29,15 @@ Validation:
 
 Add fixed-context performance cases that make runtime comparisons meaningful.
 
-**Status:** in progress. Streaming TTFT measurement for OpenAI-compatible
-endpoints landed 2026-04-26, pack-driven warmup/repetitions landed 2026-04-26,
-the bundled `runtime-sweep` pack landed 2026-04-27, `mlx_lm.server`
-validation through `openai-chat` passed 2026-04-28, earlier local
-`llama-server` validation attempts on 2026-04-29 were blocked by missing local
-server/model prerequisites, and `llama-server` validation through
-`openai-chat` passed later on 2026-04-29 after those prerequisites were
-installed locally; the first read-only `benchpack compare` command landed
-2026-04-29; normalized prompt-cache metadata for new rows landed 2026-04-29;
-cache-aware compare reporting landed 2026-04-29;
-prompt/cache parity context for compare landed 2026-04-29;
-explicit prefill parity status for compare landed 2026-04-29;
-gated prefill TPS display for comparable cases landed 2026-04-29;
-explicit `openai-chat` streaming usage omit mode landed 2026-04-29;
-see `docs/spec-log.md`.
+**Status:** closed 2026-04-30. The planned Phase 2 implementation slices have
+landed: streaming TTFT, pack-driven warmup/repetitions, the bundled
+`runtime-sweep` pack, Ollama native timing extraction, MLX and llama-server
+OpenAI-compatible validation, read-only compare, normalized cache metadata,
+cache-aware compare reporting, prompt/cache parity context, explicit prefill
+parity status, gated comparable-only prefill TPS display, and explicit
+`openai-chat` streaming usage omit mode. See `docs/spec-log.md` for the dated
+history. Remaining items below are preserved as validation caveats or optional
+future follow-up, not blockers for Phase 2 closure.
 
 Scope:
 
@@ -51,7 +45,9 @@ Scope:
   2026-04-27.**
 - Streaming TTFT measurement for OpenAI-compatible endpoints. **Landed
   2026-04-26.**
-- Ollama native timing extraction.
+- Ollama native timing extraction. **Implemented and tested 2026-04-26** via
+  the native `/api/generate` adapter's `prompt_eval_*` and `eval_*` duration
+  fields, with those backend fields preserved in result metadata.
 - Warmup and repetitions. **Landed 2026-04-26.**
 - Validate the `mlx_lm.server` OpenAI-compatible path through the existing
   `openai-chat` adapter. **Validated 2026-04-28.**
@@ -62,9 +58,9 @@ Scope:
   `llama-server` binary and a suitable local GGUF instruct model. **Validated
   2026-04-29** with Homebrew `llama.cpp` 8960 and
   `Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`.
-- For future OpenAI-compatible server validation, do not run benchmark commands
-  until local server/model prerequisites and server help output have been
-  verified.
+- For future optional OpenAI-compatible server validation, do not run benchmark
+  commands until local server/model prerequisites and server help output have
+  been verified.
 - If another OpenAI-compatible server rejects `stream_options.include_usage`,
   run `openai-chat` streaming packs with `--openai-stream-usage omit`.
   **Landed 2026-04-29.** This explicit compatibility mode suppresses the
@@ -100,7 +96,10 @@ Scope:
 
 Validation:
 
-- Same pack can run against `mlx_lm.server`, `llama-server`, and Ollama.
+- The same pack is intended to run against `mlx_lm.server`, `llama-server`, and
+  Ollama. Curated Phase 2 run-log evidence currently covers `mlx_lm.server` and
+  `llama-server`; a curated Ollama `runtime-sweep` live run remains useful
+  optional validation if needed later.
 - `smoke-chat` against `mlx_lm.server` is considered successful when it writes
   one measured row with `ok = true` and `scoring.passed = true`.
 - `runtime-sweep` against `mlx_lm.server` is considered successful when it
