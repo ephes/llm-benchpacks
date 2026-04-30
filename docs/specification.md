@@ -69,6 +69,69 @@ The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains
 and `scoring.mode = "none"`. The pack is intended for repeated local runtime
 measurement, not model-quality comparison.
 
+## Planned Repo-Task Contract
+
+`repo-task` is the planned case kind for coding-agent-shaped workloads that must
+change a repository and prove correctness with deterministic verification. This
+contract is defined before implementation so future runner code has explicit
+source, workspace, artifact, and cleanup rules.
+
+Current runner behavior is unchanged: `desktop-django-wrap` remains a
+prompt-only `chat` pack. Its `kind = "repo"` directory fixture is validated as
+metadata but is not copied, executed, injected into prompts, mutated, turned
+into a worktree, used for patch extraction, or passed to a verifier.
+
+Future repo-task cases use `kind = "repo"` directory fixtures as immutable
+source repository snapshots:
+
+- Files and directories under `benchpacks/<pack>/fixtures/` are pack-owned
+  source artifacts. The runner must never mutate source fixture paths.
+- Existing path safety still applies: fixture paths are pack-relative, must
+  resolve inside the pack after following symlinks, and must not depend on
+  private local paths.
+- A repo-task case should reference exactly one primary `kind = "repo"`
+  directory fixture. That directory is the source for the disposable workspace.
+- Referenced non-repo file fixtures remain prompt/context inputs unless a later
+  explicit manifest field defines another role. Directory fixtures outside
+  repo-task execution remain metadata-only.
+
+Future repo-task execution prepares a run-owned disposable copy under the output
+directory before any mutation occurs. The workspace must live under the run
+result directory, not under the pack directory. Each measured execution gets a
+fresh workspace. If repo-task warmups are later allowed, each warmup must also
+get its own disposable workspace and must not share mutation state with measured
+executions. Cleanup must be deterministic; keeping workspaces for debugging
+should be an explicit runner option, not an accidental side effect.
+
+Mutation and verification are isolated to the run-owned workspace and output
+directory. Pack contracts must not require implicit network access or private
+host paths. Repo-task execution must not write outside the run output directory
+and prepared workspace.
+
+Expected repo-task artifacts include:
+
+- prepared workspace metadata, such as the source fixture id and workspace path
+- the disposable `workspace/` contents while retained locally
+- `patch.diff` or an equivalent diff artifact captured from workspace changes
+- task stdout/stderr or execution logs, such as `task.stdout.log` and
+  `task.stderr.log`
+- verifier output, such as `verify.json` and verifier stdout/stderr logs
+- a final repo-task status suitable for deterministic scoring
+
+Raw model request/response artifacts under `raw/` stay conceptually separate
+from repo-task workspace and verifier artifacts. Curated result commits may
+include small summaries, `hardware.json`, and compact `run.jsonl` rows, plus
+small intentional artifacts such as `patch.diff` or `verify.json` when they are
+needed to explain a result. Full disposable workspaces and large execution logs
+should normally stay local or ignored.
+
+Existing `contains` and `regex` scoring modes score prompt output. Once
+implemented, `verify-script` should be the deterministic repo-task correctness
+mode: exit code `0` means pass, nonzero means fail, and the verifier should
+receive the prepared workspace plus declared case/run metadata as inputs. Result
+schema additions may be needed later for repo-task status and artifact paths,
+but current `run.jsonl` rows do not contain repo-task fields.
+
 ## Runtime Adapters
 
 Adapters should hide request differences while preserving backend-specific metrics

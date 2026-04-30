@@ -247,10 +247,93 @@ strings. The runner rejects manifests that violate this at load time.
 : A raw prompt-completion case.
 
 `repo-task`
-: A task that prepares a disposable repository and verifies changes.
+: Reserved/planned case kind for a task that prepares a disposable repository
+  workspace, applies model or agent changes there, captures a patch, and
+  verifies the result deterministically. There is no current runner support for
+  executing `repo-task` cases.
 
 `replay`
 : A recorded request sequence.
+
+### Planned `repo-task` Contract
+
+`repo-task` is specified here as a future manifest contract only. The current
+loader and runner still implement prompt-output cases: referenced file fixtures
+append to `Case.prompt`, referenced directory fixtures remain metadata-only, and
+no directory is copied, executed, mutated, or verified.
+
+Planned repo-task cases should use this conservative shape:
+
+```toml
+[[cases]]
+id = "wrap-repo"
+kind = "repo-task"
+prompt_file = "prompts/wrap-repo.md"
+fixture_refs = ["synthetic-django-repo", "synthetic-django-app"]
+scoring = { mode = "verify-script", script = "verify/wrap-repo.py" }
+```
+
+Fields:
+
+- `id`: case id using the normal id grammar.
+- `kind`: must be `repo-task`.
+- `prompt` or `prompt_file`: task instructions sent to the model or future
+  agent harness. The one-prompt-source rule remains the starting point unless a
+  later multi-message contract replaces it.
+- `fixture_refs`: must identify exactly one primary fixture with
+  `kind = "repo"` whose path is a directory. That fixture is the source
+  repository snapshot for the disposable workspace. Additional refs, if any,
+  must be non-directory file fixtures and remain prompt/context inputs.
+- `scoring`: should use `mode = "verify-script"` for deterministic repo-task
+  correctness once that scorer is implemented. `contains` and `regex` remain
+  prompt-output scoring modes and are not sufficient for repository correctness.
+
+The contract intentionally does not define broad generic blobs such as
+`workspace`, `commands`, or `environment` yet. Add explicit fields only when a
+future implementation needs them and the semantics are narrow enough to test.
+
+Directory fixture semantics for repo-task cases:
+
+- The referenced `kind = "repo"` fixture is immutable source. The runner must
+  never mutate files under `benchpacks/<pack>/fixtures/`.
+- The runner prepares a fresh copy under the run output directory for every
+  measured execution. If repo-task warmups are later supported, each warmup also
+  gets a fresh copy and does not share mutations with measured repetitions.
+- Mutation is allowed only inside the disposable workspace. Pack fixtures,
+  prompts, verify scripts, and other source artifacts remain read-only by
+  contract.
+- Repo-task execution must not write outside the run output directory and the
+  prepared workspace, and pack contracts must not depend on implicit network
+  access or private local host paths.
+- Multiple repo fixtures are not allowed until merge/copy rules are explicitly
+  documented. Non-repo directory fixtures in repo-task `fixture_refs` are
+  reserved and should be rejected by the future repo-task runner.
+- Referenced file fixtures keep the existing prompt-assembly behavior. They are
+  not copied into the workspace or exposed to verifiers unless a later explicit
+  field says so.
+- Directory fixtures outside repo-task execution remain metadata-only.
+
+Planned workspace and artifact layout:
+
+- Workspaces live under the run output directory, for example
+  `workspace/<case-id>/rep-NNN/` or an equivalent reporter-owned path.
+- The runner records prepared workspace metadata such as source fixture id,
+  source fixture pack-relative path, workspace path, and cleanup policy.
+- Patch capture should write a deterministic diff artifact such as
+  `patch.diff`, derived from changes inside the disposable workspace.
+- Task execution logs should be explicit artifacts, for example
+  `task.stdout.log` and `task.stderr.log`.
+- Verifier output should be explicit, for example `verify.json` plus verifier
+  stdout/stderr logs when useful.
+- Model request/response payloads remain under `raw/`; repo-task workspace,
+  patch, task logs, and verifier artifacts are conceptually separate.
+
+Cleanup should be deterministic. Keeping a workspace after a run should be an
+explicit runner option or future manifest-independent debug setting, not
+implicit behavior. Curated commits should normally include small summaries,
+`hardware.json`, compact `run.jsonl`, and small explanatory artifacts such as
+`patch.diff` or `verify.json` when useful; full workspaces and large logs should
+usually remain local or ignored.
 
 ## Scoring
 
@@ -301,8 +384,12 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 `verify-script`
 : Reserved; not implemented by the scorer yet. Intended behavior is to run the
   script at `script` (a path relative to the pack root, normally under
-  `verify/`) with the case output and fixtures available. Exit code 0 means
-  pass.
+  `verify/`) with deterministic inputs. For future repo-task cases those inputs
+  should include the prepared disposable workspace, case id, pack id/version,
+  source repo fixture id, patch artifact path when available, and task execution
+  logs. Exit code `0` means pass; any nonzero exit code means fail. Verifier
+  stdout/stderr and structured output such as `verify.json` should be recorded
+  as artifacts. The verifier must not mutate pack-owned source fixtures.
 
 `llm-judge`
 : Reserved; not implemented by the scorer yet. Intended behavior is to send the
@@ -314,7 +401,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 Scripts under `verify/` are reserved for scoring entries that reference them via
 `mode = "verify-script"` and a `script = "verify/..."` path once that mode is
 implemented. Implemented inline declarative modes (`contains` and `regex`) do
-not need `verify/` and should be preferred for fast deterministic checks.
+not need `verify/` and should be preferred for fast deterministic prompt-output
+checks. `verify-script` is the intended deterministic scoring mode for
+repo-task correctness, but it remains reserved and unimplemented today.
 
 ## Requires (TBD)
 

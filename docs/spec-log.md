@@ -16,6 +16,45 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-30 (Phase 3 repo-task contract design)
+
+### Changed
+
+- Defined the docs-first repo-task contract for future disposable repository
+  execution before adding runner support.
+- Specified that pack-owned `kind = "repo"` directory fixtures are immutable
+  source artifacts and that future repo-task mutation must happen only in a
+  run-owned disposable workspace under the result directory.
+- Documented the planned repo-task fixture rule: one primary repo directory
+  fixture per repo-task case, with additional referenced file fixtures remaining
+  prompt/context inputs unless a later explicit field gives them another role.
+- Documented planned repo-task artifacts: prepared workspace metadata,
+  retained `workspace/` contents when explicitly kept, `patch.diff`, task
+  stdout/stderr logs, verifier output such as `verify.json`, and final status.
+- Clarified that `verify-script` is the intended deterministic repo-task
+  scoring mode once implemented, while `contains` and `regex` remain
+  prompt-output scoring modes.
+- Added durable decision D-021 for run-owned disposable workspaces and explicit
+  repo-task artifacts.
+- Preserved the current `desktop-django-wrap` behavior: it remains prompt-only,
+  file fixture contents assemble into prompts, and the directory-shaped
+  `synthetic-django-repo` fixture remains metadata-only.
+- No runner implementation, adapter change, result schema writer change,
+  fixture copying code, verifier execution, patch extraction, prompt change,
+  pack manifest change, scoring change, live benchmark run, or generated result
+  artifact was added.
+
+### Open Questions
+
+- Exact result schema keys for repo-task status and artifact paths still need to
+  be designed with the implementation slice.
+- The first coding slice should choose the concrete workspace path convention
+  under each result directory and implement disposable directory copy for one
+  repo fixture per measured execution.
+- Later slices still need verifier invocation details, patch capture rules,
+  timeout/environment handling, workspace retention options, and agent-session
+  integration.
+
 ## 2026-04-30 (Phase 3 directory fixture snapshot)
 
 ### Changed

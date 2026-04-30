@@ -223,3 +223,22 @@ repository, but a single marker check is too weak for short output comparison.
 Regex scoring is already part of the manifest vocabulary, so implementing it is
 the narrowest deterministic improvement without adding repo-task semantics,
 verifier scripts, adapter changes, or result schema changes.
+
+## D-021: Repo-Task Mutation Uses Run-Owned Disposable Workspaces
+
+Future `repo-task` cases will treat pack-owned `kind = "repo"` directory
+fixtures as immutable source snapshots. The runner will copy exactly one
+primary repo fixture into a fresh workspace under the run output directory
+before any mutation. Repository writes, task execution, patch capture, and
+verification happen only inside that disposable workspace and the run output
+directory. Source fixtures under `benchpacks/<pack>/fixtures/` are never
+mutated. Repo-task artifacts such as workspace metadata, `patch.diff`, task
+stdout/stderr logs, verifier output, and final status are explicit result
+artifacts separate from raw model request/response payloads.
+
+Reason: repo mutation needs a stronger safety boundary than prompt-only chat
+cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark
+source portable and reviewable, prevents accidental fixture corruption, makes
+cleanup behavior testable, and gives later verifier, patch, and agent-session
+slices a clear artifact contract before implementation hard-codes execution
+semantics.

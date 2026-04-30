@@ -140,10 +140,12 @@ referenced file fixtures landed 2026-04-30, appending file fixture contents to
 loaded case prompts with stable delimiters while leaving directory fixtures
 metadata-only. A compact pack-local synthetic Django repo snapshot directory
 fixture landed 2026-04-30 as metadata only. Deterministic `regex` scoring and a
-short fixed output skeleton for `desktop-django-wrap` landed 2026-04-30. Phase
-3 does not yet include fixture execution, directory copying, disposable target
-repos, repo mutation, patch extraction, agent-session replay, prompt templating,
-or verification scripts.
+short fixed output skeleton for `desktop-django-wrap` landed 2026-04-30. A
+docs-first repo-task contract design landed 2026-04-30, defining disposable
+workspace, directory fixture, artifact, verifier, and mutation-isolation
+semantics before implementation. Phase 3 does not yet include fixture
+execution, directory copying, disposable target repos, repo mutation, patch
+extraction, agent-session replay, prompt templating, or verification scripts.
 
 Scope:
 
@@ -163,11 +165,29 @@ Scope:
   2026-04-30** as a pack-local static `repo` fixture referenced by existing
   cases but not copied, executed, injected into prompts, or used to mutate a
   repository.
+- Define the repo-task disposable workspace contract before implementation.
+  **Landed 2026-04-30** as documentation only: source repo fixtures are
+  immutable; future repo-task cases copy exactly one primary `kind = "repo"`
+  directory fixture into a run-owned disposable workspace; mutation is isolated
+  to that workspace; expected artifacts include workspace metadata, patch diff,
+  task logs, verifier output, and final status; current directory fixtures
+  remain metadata-only outside repo-task execution.
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
-  later slice when repo-task contracts are ready.
+  later slice after repo-task execution support starts.
 - Add deterministic constraints for short output comparison. **Landed
   2026-04-30** with executable `regex` scoring and the
   `desktop-django-wrap` `DDS_WRAP_PLAN`/fixed-label output skeleton.
+- Implement disposable directory copy for one pack-owned repo fixture per
+  measured repo-task execution. **Planned next coding slice.**
+- Add a repo-task runner skeleton that prepares workspaces and records planned
+  artifact paths without changing existing chat adapter behavior. **Planned.**
+- Implement `verify-script` execution against the disposable workspace and
+  record verifier artifacts. **Planned.**
+- Capture deterministic patch/diff artifacts from workspace changes. **Planned.**
+- Extend result records conservatively for repo-task artifact paths and final
+  status once the runner/verifier contract is implemented. **Planned.**
+- Integrate an agent-session harness after disposable workspace, verifier, and
+  patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.
 
 Validation:

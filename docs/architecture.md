@@ -15,6 +15,19 @@
 - **Compare utility**: read-only reporting over existing `run.jsonl` result
   directories.
 
+Planned repo-task execution adds responsibilities around the existing concepts
+rather than changing the adapter boundary:
+
+- **Workspace preparer**: runner-owned responsibility that copies one declared
+  `kind = "repo"` directory fixture into a run-owned disposable workspace.
+- **Task executor or agent harness**: future runner-side component that applies
+  model or agent actions inside the prepared workspace.
+- **Verifier**: deterministic checker for repo-task outcomes, expected to start
+  with `verify-script` once implemented.
+- **Artifact recorder**: reporter-side responsibility for explicit repo-task
+  artifacts such as workspace metadata, patch diffs, execution logs, verifier
+  output, and final status.
+
 ## Proposed Layout
 
 ```text
@@ -62,10 +75,51 @@ results/
    streaming usage mode, are merged into a per-request defaults copy so the
    loaded pack defaults are not mutated.
 7. Persist raw requests and responses for warmups and measured executions.
-8. Run deterministic verifiers for measured executions if present.
+8. Apply implemented deterministic scoring for measured executions when the
+   pack declares it.
 9. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions.
 10. Write `summary.md`.
+
+This is the implemented chat flow today. Adapters still receive a loaded prompt
+and return the existing result envelope. Referenced directory fixtures,
+including `kind = "repo"` fixtures, remain metadata-only in the current runner.
+
+## Planned Repo-Task Flow
+
+Future `repo-task` execution should insert workspace preparation after pack
+loading and before task execution for each warmup or measured execution:
+
+1. The pack loader validates fixture declarations and refs only. It does not
+   copy directories, choose workspace paths, run verifiers, or mutate source
+   fixtures.
+2. The runner identifies the case's single primary `kind = "repo"` directory
+   fixture and creates a fresh run-owned workspace under the output directory.
+3. The workspace preparer copies the source fixture into that workspace with
+   symlink escape protections preserved from fixture validation. The pack-owned
+   fixture remains read-only by contract and must not be mutated.
+4. The adapter continues to handle model/runtime calls. A future agent harness
+   may sit above adapters, but adapters should not learn pack fixture semantics
+   or write repository files directly.
+5. The task executor applies any generated changes only inside the disposable
+   workspace and records stdout/stderr or execution logs as explicit artifacts.
+6. The verifier consumes the prepared workspace, case metadata, and execution
+   outputs. It returns deterministic status and structured output; it does not
+   alter adapter result payloads.
+7. The reporter records normalized repo-task artifact paths and status alongside
+   the existing adapter, collector, and scoring fields once the result schema is
+   extended.
+8. Cleanup is deterministic. Retaining `workspace/` for debugging should be an
+   explicit option; otherwise large workspaces and logs should stay out of
+   curated commits.
+
+Planned repo-task artifacts should live beside, not inside, `raw/`. The `raw/`
+directory remains for model request/response payloads. Repo-task artifacts are
+expected to include categories such as `workspace/`, `patch.diff`,
+`task.stdout.log`, `task.stderr.log`, `verify.json`, and verifier logs.
+
+No current result rows contain repo-task status or artifact fields, and current
+chat cases do not use this flow.
 
 ## Result Record Envelope
 
