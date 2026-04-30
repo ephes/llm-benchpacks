@@ -1,0 +1,12 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f6f7f9;
+  color: #1f2933;
+}
+
+.shell {
+  max-width: 48rem;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+}

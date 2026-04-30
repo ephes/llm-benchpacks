@@ -51,9 +51,9 @@ results/
 2. Validate declared fixture metadata, pack-relative fixture paths, and any
    case-level fixture refs against the pack's top-level fixture ids. Referenced
    file fixtures are read as UTF-8 and appended to the loaded case prompt in
-   `fixture_refs` order with stable delimiters. Referenced directory fixtures
-   remain metadata-only and are not copied, executed, injected, or attached to
-   adapter requests.
+   `fixture_refs` order with stable delimiters. Referenced directory fixtures,
+   including static repo snapshots, remain metadata-only and are not copied,
+   executed, injected, mutated, or attached to adapter requests.
 3. Load runtime adapter configuration.
 4. Capture host metadata.
 5. For each case, run pack-requested warmup executions first.

@@ -149,6 +149,16 @@ path = "fixtures/synthetic-django-app.md"
 description = "Portable synthetic target app description"
 ```
 
+Directory snapshots use the same manifest shape and can declare `kind = "repo"`:
+
+```toml
+[[fixtures]]
+id = "synthetic-django-repo"
+kind = "repo"
+path = "fixtures/synthetic-django-repo"
+description = "Compact static synthetic Django source snapshot"
+```
+
 Required fields:
 
 - `id`: stable fixture identifier. It must match the id grammar below and be
@@ -171,8 +181,9 @@ changing this source contract.
 Fixture declarations remain available as metadata on loaded packs. Cases may
 reference fixtures by id with `fixture_refs`. When a referenced fixture path is
 a file, the loader reads it as UTF-8 and appends it to the loaded case prompt.
-When a referenced fixture path is a directory, the loader validates the ref but
-does not read, copy, execute, or inject the directory contents.
+When a referenced fixture path is a directory, including a repo snapshot, the
+loader validates the ref but does not read, copy, execute, or inject the
+directory contents.
 
 File fixture prompt assembly uses this stable plain-text shape:
 

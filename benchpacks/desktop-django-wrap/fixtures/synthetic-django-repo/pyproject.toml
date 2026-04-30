@@ -1,0 +1,8 @@
+[project]
+name = "synthetic-django-repo"
+version = "0.1.0"
+description = "Static fixture snapshot for desktop Django wrapping benchmarks"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.0,<6.0",
+]

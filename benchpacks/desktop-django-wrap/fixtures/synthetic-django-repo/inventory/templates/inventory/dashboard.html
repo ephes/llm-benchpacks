@@ -1,0 +1,22 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Inventory Dashboard</title>
+    <link rel="stylesheet" href="{% static 'inventory/app.css' %}">
+  </head>
+  <body>
+    <main class="shell">
+      <h1>Inventory Dashboard</h1>
+      <p>Recent stock items for the local desktop workflow.</p>
+      <ul>
+        {% for item in items %}
+          <li>{{ item.name }} - {{ item.quantity }} on hand</li>
+        {% empty %}
+          <li>No stock items yet.</li>
+        {% endfor %}
+      </ul>
+    </main>
+  </body>
+</html>

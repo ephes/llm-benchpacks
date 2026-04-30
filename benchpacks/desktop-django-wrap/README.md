@@ -6,7 +6,7 @@ server-rendered Django app in an Electron desktop shell, but it does not execute
 an agent, mutate a target repository, execute fixtures, extract patches, or run
 verification scripts.
 
-Pack version: `0.1.3`.
+Pack version: `0.1.4`.
 
 ## Cases
 
@@ -18,23 +18,30 @@ Both prompts live in pack-local files under `prompts/`, referenced from
 paths, private repository checkout, network access, Apple Silicon assumptions,
 CUDA assumptions, or endpoint-specific behavior.
 
-Both cases reference the pack's `synthetic-django-app` fixture by id through
-`fixture_refs`. The loader appends that file fixture to each loaded prompt with
-stable `BEGIN FIXTURE` / `END FIXTURE` delimiters before adapter requests are
-created.
+Both cases reference the pack's fixtures by id through `fixture_refs`, in this
+order: `synthetic-django-app`, then `synthetic-django-repo`. The loader appends
+the file fixture to each loaded prompt with stable `BEGIN FIXTURE` /
+`END FIXTURE` delimiters before adapter requests are created. The directory
+fixture ref validates as metadata only; its contents are not injected into
+`Case.prompt`.
 
 ## Fixtures
 
-The pack declares one static fixture:
+The pack declares two static fixtures:
 
 - `synthetic-django-app`: a portable context file at
   `fixtures/synthetic-django-app.md` describing a compact synthetic Django app
   shape for wrap planning.
+- `synthetic-django-repo`: a compact static source snapshot at
+  `fixtures/synthetic-django-repo/` with a tiny Django project, one inventory
+  app, a template, static CSS, and a health endpoint.
 
-The fixture is validated as a pack-local path, linked from cases by id, and
-assembled into the final case prompt. The runner does not copy it, execute it,
-create a disposable repository from it, extract patches, run verifier scripts,
-or mutate a target repository.
+Both fixtures are validated as pack-local paths and linked from cases by id.
+Only the file fixture is assembled into the final case prompt. The directory
+snapshot remains metadata-only: the runner does not read it into prompts, copy
+it, execute it, install dependencies, create a disposable repository from it,
+extract patches, run verifier scripts, replay an agent session, or mutate a
+target repository.
 
 ## Runtime Defaults
 

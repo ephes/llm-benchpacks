@@ -1379,7 +1379,7 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     pack_dir = repo_root / "benchpacks" / "desktop-django-wrap"
 
     assert pack.id == "desktop-django-wrap"
-    assert pack.version == "0.1.3"
+    assert pack.version == "0.1.4"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 384
     assert pack.defaults["stream"] is True
@@ -1397,17 +1397,25 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     forbidden_path_fragments = ("/Users/", "~/", "C:\\")
     for case in pack.cases:
         assert case.kind == "chat"
-        assert case.fixture_refs == ["synthetic-django-app"]
+        assert case.fixture_refs == ["synthetic-django-app", "synthetic-django-repo"]
         assert case.prompt
         assert "DDS_WRAP_PLAN" in case.prompt
         assert "prompt" not in case.raw
         assert "prompt_file" in case.raw
-        assert case.raw["fixture_refs"] == ["synthetic-django-app"]
+        assert case.raw["fixture_refs"] == [
+            "synthetic-django-app",
+            "synthetic-django-repo",
+        ]
         assert (
             "--- BEGIN FIXTURE synthetic-django-app "
             "(context, fixtures/synthetic-django-app.md) ---"
         ) in case.prompt
         assert "--- END FIXTURE synthetic-django-app ---" in case.prompt
+        assert "fixtures/synthetic-django-repo" not in case.prompt
+        assert "--- BEGIN FIXTURE synthetic-django-repo" not in case.prompt
+        assert "Synthetic Django Repo Snapshot" not in case.prompt
+        assert "class StockItem" not in case.prompt
+        assert "Inventory Dashboard" not in case.prompt
         assert "## Application Shape" in case.prompt
         assert "Django project with a `manage.py` entrypoint" in case.prompt
         prompt_file = case.raw["prompt_file"]
@@ -1417,14 +1425,57 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
         for fragment in forbidden_path_fragments:
             assert fragment not in case.prompt
 
-    assert len(pack.fixtures) == 1
-    fixture = pack.fixtures[0]
-    assert fixture.id == "synthetic-django-app"
-    assert fixture.kind == "context"
-    assert fixture.raw["path"] == "fixtures/synthetic-django-app.md"
-    assert fixture.raw["path"].startswith("fixtures/")
-    assert fixture.path.is_relative_to(pack_dir.resolve())
-    assert fixture.path.is_file()
-    fixture_contents = fixture.path.read_text(encoding="utf-8")
+    assert [fixture.id for fixture in pack.fixtures] == [
+        "synthetic-django-app",
+        "synthetic-django-repo",
+    ]
+    fixtures_by_id = {fixture.id: fixture for fixture in pack.fixtures}
+
+    app_fixture = fixtures_by_id["synthetic-django-app"]
+    assert app_fixture.kind == "context"
+    assert app_fixture.raw["path"] == "fixtures/synthetic-django-app.md"
+    assert app_fixture.raw["path"].startswith("fixtures/")
+    assert app_fixture.path.is_relative_to(pack_dir.resolve())
+    assert app_fixture.path.is_file()
+    app_fixture_contents = app_fixture.path.read_text(encoding="utf-8")
     for fragment in forbidden_path_fragments:
-        assert fragment not in fixture_contents
+        assert fragment not in app_fixture_contents
+
+    repo_fixture = fixtures_by_id["synthetic-django-repo"]
+    assert repo_fixture.kind == "repo"
+    assert repo_fixture.raw["path"] == "fixtures/synthetic-django-repo"
+    assert repo_fixture.raw["path"].startswith("fixtures/")
+    assert repo_fixture.path.is_relative_to(pack_dir.resolve())
+    assert repo_fixture.path.is_dir()
+    expected_repo_files = {
+        "README.md",
+        "manage.py",
+        "pyproject.toml",
+        "config/__init__.py",
+        "config/settings.py",
+        "config/urls.py",
+        "config/wsgi.py",
+        "inventory/__init__.py",
+        "inventory/models.py",
+        "inventory/views.py",
+        "inventory/urls.py",
+        "inventory/templates/inventory/dashboard.html",
+        "inventory/static/inventory/app.css",
+    }
+    actual_repo_files = {
+        path.relative_to(repo_fixture.path).as_posix()
+        for path in repo_fixture.path.rglob("*")
+        if path.is_file()
+    }
+    assert actual_repo_files == expected_repo_files
+    actual_repo_parts = {
+        part for path in actual_repo_files for part in path.split("/")
+    }
+    assert "__pycache__" not in actual_repo_parts
+    for fixture_file in repo_fixture.path.rglob("*"):
+        resolved_fixture_file = fixture_file.resolve()
+        assert resolved_fixture_file.is_relative_to(pack_dir.resolve())
+        if fixture_file.is_file():
+            fixture_contents = fixture_file.read_text(encoding="utf-8")
+            for fragment in forbidden_path_fragments:
+                assert fragment not in fixture_contents

@@ -139,8 +139,10 @@ loading and one portable synthetic `desktop-django-wrap` fixture landed
 from cases to top-level fixture ids. Fixture-backed prompt assembly for
 referenced file fixtures landed 2026-04-30, appending file fixture contents to
 loaded case prompts with stable delimiters while leaving directory fixtures
-metadata-only. Phase 3 does not yet include fixture execution, disposable target
-repos, repo mutation, patch extraction, agent-session replay, or verification
+metadata-only. A compact pack-local synthetic Django repo snapshot directory
+fixture landed 2026-04-30 as metadata only. Phase 3 does not yet include
+fixture execution, directory copying, disposable target repos, repo mutation,
+patch extraction, agent-session replay, prompt templating, or verification
 scripts.
 
 Scope:
@@ -157,9 +159,12 @@ Scope:
   fixture ids in the same pack. **Landed 2026-04-30.**
 - Add fixture-backed prompt assembly for referenced file fixtures, preserving
   directory fixtures as metadata-only refs. **Landed 2026-04-30.**
+- Include a compact target-repo snapshot directory fixture. **Landed
+  2026-04-30** as a pack-local static `repo` fixture referenced by existing
+  cases but not copied, executed, injected into prompts, or used to mutate a
+  repository.
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
   later slice when repo-task contracts are ready.
-- Include a compact target-repo snapshot directory fixture in a later slice.
 - Add deterministic constraints for short output comparison.
 - Add optional full agent-session replay later.
 

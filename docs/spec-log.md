@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-04-30 (Phase 3 directory fixture snapshot)
+
+### Changed
+
+- Added a compact pack-local `desktop-django-wrap` directory fixture at
+  `fixtures/synthetic-django-repo/` with a tiny synthetic Django source
+  snapshot.
+- Declared the snapshot as top-level fixture `synthetic-django-repo` with
+  `kind = "repo"` and a pack-relative directory path.
+- Bumped `desktop-django-wrap` to version `0.1.4` and linked both existing
+  cases to `synthetic-django-app` and `synthetic-django-repo` in that order.
+- The existing referenced file fixture still assembles into `Case.prompt`; the
+  directory fixture remains metadata-only and is not read, copied, executed, or
+  injected into prompts.
+- No live benchmark run, adapter change, compare change, result schema change,
+  scoring change, repo mutation, disposable worktree, directory copying,
+  fixture execution, verifier execution, patch extraction, prompt templating,
+  agent-session replay, or generated result artifact was added.
+
+### Open Questions
+
+- Future Phase 3 slices still need to define disposable repo-task execution,
+  directory fixture execution or copying semantics, prompt import from
+  `desktop-django-starter`, verifier scripts, patch extraction, and eventual
+  real agent-session replay.
+
 ## 2026-04-30 (Phase 2 closure docs)
 
 ### Changed
