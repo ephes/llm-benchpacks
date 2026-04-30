@@ -25,6 +25,11 @@ from .packs import (
     warmup_from_defaults,
 )
 from .results import RunReporter
+from .workspaces import (
+    WorkspaceError,
+    prepare_repo_task_workspace,
+    validate_repo_task_cases,
+)
 
 
 def _derive_host_label(hardware: dict) -> str:
@@ -75,6 +80,17 @@ def _run_case(
 def _cmd_run(args: argparse.Namespace) -> int:
     pack_dir = _resolve_pack_dir(args.pack)
     pack = load_pack(pack_dir)
+    warmup = warmup_from_defaults(pack.defaults)
+    repetitions = repetitions_from_defaults(pack.defaults)
+    try:
+        validate_repo_task_cases(pack)
+    except WorkspaceError as exc:
+        raise SystemExit(str(exc)) from exc
+    if warmup > 0 and any(case.kind == "repo-task" for case in pack.cases):
+        raise SystemExit(
+            "repo-task warmups are not supported yet; set defaults.warmup = 0"
+        )
+
     adapter = get_adapter(args.adapter)
 
     hardware = collect_hardware()
@@ -94,8 +110,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     reporter = RunReporter(out_dir, pack)
-    warmup = warmup_from_defaults(pack.defaults)
-    repetitions = repetitions_from_defaults(pack.defaults)
 
     for case in pack.cases:
         for warmup_index in range(1, warmup + 1):
@@ -113,6 +127,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
 
         for repetition in range(1, repetitions + 1):
+            if case.kind == "repo-task":
+                try:
+                    prepare_repo_task_workspace(pack, case, out_dir, repetition)
+                except WorkspaceError as exc:
+                    raise SystemExit(str(exc)) from exc
             request_path, response_path = reporter.measured_paths(
                 case,
                 repetition,

@@ -226,15 +226,17 @@ verifier scripts, adapter changes, or result schema changes.
 
 ## D-021: Repo-Task Mutation Uses Run-Owned Disposable Workspaces
 
-Future `repo-task` cases will treat pack-owned `kind = "repo"` directory
-fixtures as immutable source snapshots. The runner will copy exactly one
-primary repo fixture into a fresh workspace under the run output directory
-before any mutation. Repository writes, task execution, patch capture, and
-verification happen only inside that disposable workspace and the run output
-directory. Source fixtures under `benchpacks/<pack>/fixtures/` are never
-mutated. Repo-task artifacts such as workspace metadata, `patch.diff`, task
-stdout/stderr logs, verifier output, and final status are explicit result
-artifacts separate from raw model request/response payloads.
+`repo-task` cases treat pack-owned `kind = "repo"` directory fixtures as
+immutable source snapshots. The runner copies exactly one primary repo fixture
+into a fresh workspace under the run output directory for each measured
+execution before any mutation, rejecting absolute symlinks and symlinks that
+resolve outside the source repo fixture before copying. Repository writes, task
+execution, patch capture, and verification happen only inside that disposable
+workspace and the run output directory. Source fixtures under
+`benchpacks/<pack>/fixtures/` are never mutated. Repo-task artifacts such as
+workspace metadata, `patch.diff`, task stdout/stderr logs, verifier output, and
+final status are explicit result artifacts separate from raw model
+request/response payloads.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

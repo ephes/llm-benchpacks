@@ -15,11 +15,12 @@
 - **Compare utility**: read-only reporting over existing `run.jsonl` result
   directories.
 
-Planned repo-task execution adds responsibilities around the existing concepts
-rather than changing the adapter boundary:
+Repo-task execution adds responsibilities around the existing concepts rather
+than changing the adapter boundary:
 
-- **Workspace preparer**: runner-owned responsibility that copies one declared
-  `kind = "repo"` directory fixture into a run-owned disposable workspace.
+- **Workspace preparer**: implemented runner-owned responsibility that copies
+  one declared `kind = "repo"` directory fixture into a run-owned disposable
+  workspace for each measured repo-task execution.
 - **Task executor or agent harness**: future runner-side component that applies
   model or agent actions inside the prepared workspace.
 - **Verifier**: deterministic checker for repo-task outcomes, expected to start
@@ -65,51 +66,57 @@ results/
    case-level fixture refs against the pack's top-level fixture ids. Referenced
    file fixtures are read as UTF-8 and appended to the loaded case prompt in
    `fixture_refs` order with stable delimiters. Referenced directory fixtures,
-   including static repo snapshots, remain metadata-only and are not copied,
-   executed, injected, mutated, or attached to adapter requests.
+   including static repo snapshots used by chat cases, remain metadata-only and
+   are not copied, executed, injected, mutated, or attached to adapter requests.
 3. Load runtime adapter configuration.
 4. Capture host metadata.
-5. For each case, run pack-requested warmup executions first.
-6. Execute the pack-requested measured repetitions, streaming when supported.
+5. For each non-repo-task case, run pack-requested warmup executions first.
+   Packs with `repo-task` cases and `defaults.warmup > 0` are rejected before
+   execution in this slice.
+6. For `repo-task` measured executions only, validate that the case references
+   exactly one `kind = "repo"` directory fixture and copy it to
+   `workspace/<case-id>/rep-NNN/` under the run output directory. Repo-task
+   warmups are rejected for now.
+7. Execute the pack-requested measured repetitions, streaming when supported.
    Runner-level adapter compatibility options, such as the `openai-chat`
    streaming usage mode, are merged into a per-request defaults copy so the
    loaded pack defaults are not mutated.
-7. Persist raw requests and responses for warmups and measured executions.
-8. Apply implemented deterministic scoring for measured executions when the
+8. Persist raw requests and responses for warmups and measured executions.
+9. Apply implemented deterministic scoring for measured executions when the
    pack declares it.
-9. Normalize metrics, resources, and scoring into `run.jsonl` for measured
+10. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions.
-10. Write `summary.md`.
+11. Write `summary.md`.
 
-This is the implemented chat flow today. Adapters still receive a loaded prompt
-and return the existing result envelope. Referenced directory fixtures,
-including `kind = "repo"` fixtures, remain metadata-only in the current runner.
+Adapters still receive a loaded prompt and return the existing result envelope.
+Workspace paths are not passed to adapters and are not written to `run.jsonl` in
+this slice.
 
-## Planned Repo-Task Flow
+## Repo-Task Flow
 
-Future `repo-task` execution should insert workspace preparation after pack
-loading and before task execution for each warmup or measured execution:
+Current `repo-task` execution inserts workspace preparation after pack loading
+and before each measured adapter execution:
 
 1. The pack loader validates fixture declarations and refs only. It does not
    copy directories, choose workspace paths, run verifiers, or mutate source
    fixtures.
 2. The runner identifies the case's single primary `kind = "repo"` directory
    fixture and creates a fresh run-owned workspace under the output directory.
-3. The workspace preparer copies the source fixture into that workspace with
-   symlink escape protections preserved from fixture validation. The pack-owned
-   fixture remains read-only by contract and must not be mutated.
+3. The workspace preparer rejects absolute symlinks and symlinks escaping the
+   source repo fixture, then copies the source fixture into that workspace. The
+   pack-owned fixture remains read-only by contract and must not be mutated.
 4. The adapter continues to handle model/runtime calls. A future agent harness
    may sit above adapters, but adapters should not learn pack fixture semantics
    or write repository files directly.
-5. The task executor applies any generated changes only inside the disposable
+5. Future task execution applies any generated changes only inside the disposable
    workspace and records stdout/stderr or execution logs as explicit artifacts.
-6. The verifier consumes the prepared workspace, case metadata, and execution
-   outputs. It returns deterministic status and structured output; it does not
-   alter adapter result payloads.
-7. The reporter records normalized repo-task artifact paths and status alongside
-   the existing adapter, collector, and scoring fields once the result schema is
-   extended.
-8. Cleanup is deterministic. Retaining `workspace/` for debugging should be an
+6. A future verifier consumes the prepared workspace, case metadata, and
+   execution outputs. It returns deterministic status and structured output; it
+   does not alter adapter result payloads.
+7. The reporter will record normalized repo-task artifact paths and status
+   alongside the existing adapter, collector, and scoring fields once the result
+   schema is extended.
+8. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
 

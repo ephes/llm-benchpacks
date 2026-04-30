@@ -143,9 +143,13 @@ fixture landed 2026-04-30 as metadata only. Deterministic `regex` scoring and a
 short fixed output skeleton for `desktop-django-wrap` landed 2026-04-30. A
 docs-first repo-task contract design landed 2026-04-30, defining disposable
 workspace, directory fixture, artifact, verifier, and mutation-isolation
-semantics before implementation. Phase 3 does not yet include fixture
-execution, directory copying, disposable target repos, repo mutation, patch
-extraction, agent-session replay, prompt templating, or verification scripts.
+semantics before implementation. Measured repo-task workspace preparation
+landed 2026-05-01: each measured execution copies exactly one referenced
+`kind = "repo"` directory fixture into `workspace/<case-id>/rep-NNN/` under the
+run output directory, while repo-task warmups are rejected. Phase 3 does not yet
+include fixture execution, verifier execution, repo mutation by a task harness,
+patch extraction, agent-session replay, prompt templating, repo-task result
+fields, workspace retention options, or verification scripts.
 
 Scope:
 
@@ -167,7 +171,7 @@ Scope:
   repository.
 - Define the repo-task disposable workspace contract before implementation.
   **Landed 2026-04-30** as documentation only: source repo fixtures are
-  immutable; future repo-task cases copy exactly one primary `kind = "repo"`
+  immutable; repo-task cases copy exactly one primary `kind = "repo"`
   directory fixture into a run-owned disposable workspace; mutation is isolated
   to that workspace; expected artifacts include workspace metadata, patch diff,
   task logs, verifier output, and final status; current directory fixtures
@@ -178,9 +182,15 @@ Scope:
   2026-04-30** with executable `regex` scoring and the
   `desktop-django-wrap` `DDS_WRAP_PLAN`/fixed-label output skeleton.
 - Implement disposable directory copy for one pack-owned repo fixture per
-  measured repo-task execution. **Planned next coding slice.**
+  measured repo-task execution. **Landed 2026-05-01** as runner-owned
+  workspace preparation at `workspace/<case-id>/rep-NNN/`, with exactly one
+  referenced `kind = "repo"` directory fixture, source fixture immutability,
+  separate measured repetition copies, destination-exists failures, and
+  no adapter or result schema changes.
 - Add a repo-task runner skeleton that prepares workspaces and records planned
-  artifact paths without changing existing chat adapter behavior. **Planned.**
+  artifact paths without changing existing chat adapter behavior. **Partially
+  landed 2026-05-01** for workspace preparation only; artifact path recording
+  remains planned with the result schema slice.
 - Implement `verify-script` execution against the disposable workspace and
   record verifier artifacts. **Planned.**
 - Capture deterministic patch/diff artifacts from workspace changes. **Planned.**

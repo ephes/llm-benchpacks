@@ -209,6 +209,57 @@ expected = "Paris"
     )
 
 
+def _write_repo_task_pack(
+    tmp_path: Path,
+    *,
+    defaults_extra: str = "",
+    fixture_entries: str | None = None,
+    fixture_refs: str = '["repo"]',
+    case_kind: str = "repo-task",
+) -> Path:
+    pack_dir = tmp_path / "benchpacks" / "smoke-chat"
+    pack_dir.mkdir(parents=True)
+    fixtures_dir = pack_dir / "fixtures"
+    repo_dir = fixtures_dir / "repo"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / "README.md").write_text("source repo\n", encoding="utf-8")
+
+    if fixture_entries is None:
+        fixture_entries = """
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+"""
+
+    (pack_dir / "benchpack.toml").write_text(
+        f"""
+[pack]
+id = "smoke-chat"
+version = "0.1.0"
+
+[defaults]
+temperature = 0
+max_tokens = 32
+stream = false
+{defaults_extra}
+
+{fixture_entries}
+
+[[cases]]
+id = "edit-repo"
+kind = "{case_kind}"
+prompt = "Change the repository."
+fixture_refs = {fixture_refs}
+
+[scoring]
+mode = "contains"
+expected = "Paris"
+"""
+    )
+    return pack_dir
+
+
 def _argv(extra: list[str] | None = None) -> list[str]:
     return [
         "run",
@@ -286,6 +337,315 @@ def test_cli_repetitions_write_distinct_measured_records(
     summary = (out / "summary.md").read_text()
     assert "capital#1" in summary
     assert "capital#2" in summary
+
+
+def test_cli_repo_task_creates_run_owned_workspace(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(tmp_path)
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    assert workspace.is_dir()
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "source repo\n"
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["case"] == "edit-repo"
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert "workspace" not in record
+    assert "artifacts" not in record
+
+
+def test_cli_repo_task_allows_additional_file_fixture_refs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    fixture_entries = """
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+"""
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        fixture_entries=fixture_entries,
+        fixture_refs='["repo", "context"]',
+    )
+    (pack_dir / "fixtures" / "context.md").write_text("context\n", encoding="utf-8")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    assert (out / "workspace" / "edit-repo" / "rep-001").is_dir()
+    assert len(calls) == 1
+    assert "--- BEGIN FIXTURE context" in calls[0]["prompt"]
+    assert "context\n--- END FIXTURE context ---" in calls[0]["prompt"]
+
+
+def test_cli_repo_task_repetitions_get_separate_workspaces(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path, defaults_extra="repetitions = 2")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    rep1 = out / "workspace" / "edit-repo" / "rep-001"
+    rep2 = out / "workspace" / "edit-repo" / "rep-002"
+    assert rep1.is_dir()
+    assert rep2.is_dir()
+
+    (rep1 / "README.md").write_text("changed copy\n", encoding="utf-8")
+
+    source = pack_dir / "fixtures" / "repo" / "README.md"
+    assert source.read_text(encoding="utf-8") == "source repo\n"
+    assert (rep2 / "README.md").read_text(encoding="utf-8") == "source repo\n"
+
+
+def test_cli_repo_task_source_fixture_is_isolated_from_workspace_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path)
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    copied_file = out / "workspace" / "edit-repo" / "rep-001" / "README.md"
+    copied_file.write_text("mutated workspace\n", encoding="utf-8")
+
+    source_file = pack_dir / "fixtures" / "repo" / "README.md"
+    assert source_file.read_text(encoding="utf-8") == "source repo\n"
+
+
+def test_cli_repo_task_missing_repo_fixture_fails_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    fixture_entries = """
+[[fixtures]]
+id = "context"
+kind = "context"
+path = "fixtures/context.md"
+"""
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        fixture_entries=fixture_entries,
+        fixture_refs='["context"]',
+    )
+    (pack_dir / "fixtures" / "context.md").write_text("context\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="exactly one kind='repo'"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_multiple_repo_fixtures_fail_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    fixture_entries = """
+[[fixtures]]
+id = "repo-a"
+kind = "repo"
+path = "fixtures/repo-a"
+
+[[fixtures]]
+id = "repo-b"
+kind = "repo"
+path = "fixtures/repo-b"
+"""
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        fixture_entries=fixture_entries,
+        fixture_refs='["repo-a", "repo-b"]',
+    )
+    (pack_dir / "fixtures" / "repo-a").mkdir()
+    (pack_dir / "fixtures" / "repo-b").mkdir()
+
+    with pytest.raises(SystemExit, match="found 2"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_non_repo_directory_fixture_fails_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    fixture_entries = """
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+
+[[fixtures]]
+id = "docs"
+kind = "context"
+path = "fixtures/docs"
+"""
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        fixture_entries=fixture_entries,
+        fixture_refs='["repo", "docs"]',
+    )
+    (pack_dir / "fixtures" / "docs").mkdir()
+
+    with pytest.raises(SystemExit, match="non-repo directory fixture"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_repo_fixture_must_be_directory(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    fixture_entries = """
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo-file.md"
+"""
+    pack_dir = _write_repo_task_pack(tmp_path, fixture_entries=fixture_entries)
+    (pack_dir / "fixtures" / "repo-file.md").write_text("not a dir\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="not a directory"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_rejects_fixture_symlink_escape_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    try:
+        (pack_dir / "fixtures" / "repo" / "escape.txt").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
+
+    with pytest.raises(SystemExit, match="absolute symlink"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_rejects_relative_fixture_symlink_escape_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path)
+    try:
+        (pack_dir / "fixtures" / "repo" / "escape.txt").symlink_to("../outside.txt")
+    except OSError as exc:
+        pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
+
+    with pytest.raises(SystemExit, match="escaping the repo fixture"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_allows_internal_relative_fixture_symlink(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path)
+    try:
+        (pack_dir / "fixtures" / "repo" / "readme-link.md").symlink_to("README.md")
+    except OSError as exc:
+        pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    copied_link = out / "workspace" / "edit-repo" / "rep-001" / "readme-link.md"
+    assert copied_link.is_symlink()
+    assert copied_link.read_text(encoding="utf-8") == "source repo\n"
+
+
+def test_cli_repo_task_warmup_is_rejected_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(tmp_path, defaults_extra="warmup = 1")
+
+    with pytest.raises(SystemExit, match="repo-task warmups are not supported"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_repo_task_existing_workspace_destination_fails_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(tmp_path)
+    out = tmp_path / "run"
+    stale_workspace = out / "workspace" / "edit-repo" / "rep-001"
+    stale_workspace.mkdir(parents=True)
+
+    with pytest.raises(SystemExit, match="workspace destination already exists"):
+        main(_argv(["--out", str(out)]))
+
+    assert calls == []
+
+
+def test_cli_chat_case_with_repo_directory_fixture_does_not_create_workspace(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(tmp_path, case_kind="chat")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    assert not (out / "workspace").exists()
 
 
 def test_cli_warmup_is_unrecorded_and_measured_repetitions_are_recorded(

@@ -98,9 +98,11 @@ expected = "Paris"
   must not appear more than once in the same case. Referenced file fixtures are
   appended to the loaded case prompt in `fixture_refs` order with stable
   delimiters. Referenced directory fixtures remain metadata-only. Fixture refs
-  do not execute fixtures, copy repositories, create disposable worktrees,
-  mutate repositories, template prompts, change adapter request or result
-  schemas, extract patches, or run verifiers.
+  do not execute fixtures, mutate repositories, template prompts, change
+  adapter request or result schemas, extract patches, or run verifiers. The one
+  current exception is `repo-task`: each measured execution copies exactly one
+  referenced `kind = "repo"` directory fixture into a run-owned disposable
+  workspace under the output directory.
 
 `fixtures`
 : Optional top-level fixture inventory. Each `[[fixtures]]` entry declares a
@@ -112,8 +114,9 @@ expected = "Paris"
   a directory. The runner validates and exposes fixture metadata on loaded
   packs. Referenced file fixtures are read as UTF-8 and appended to
   `Case.prompt`; directory fixtures are not read into prompts. The runner does
-  not copy repositories, create disposable worktrees, mutate repositories,
-  extract patches, execute verifiers, or score from fixtures.
+  not mutate repositories, extract patches, execute verifiers, or score from
+  fixtures. For `repo-task` measured executions only, it copies one referenced
+  `kind = "repo"` directory fixture into a disposable run-owned workspace.
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
@@ -184,8 +187,9 @@ Fixture declarations remain available as metadata on loaded packs. Cases may
 reference fixtures by id with `fixture_refs`. When a referenced fixture path is
 a file, the loader reads it as UTF-8 and appends it to the loaded case prompt.
 When a referenced fixture path is a directory, including a repo snapshot, the
-loader validates the ref but does not read, copy, execute, or inject the
-directory contents.
+loader validates the ref but does not read, execute, or inject the directory
+contents. The runner later copies the single `kind = "repo"` directory fixture
+only for measured `repo-task` executions.
 
 File fixture prompt assembly uses this stable plain-text shape:
 
@@ -203,9 +207,10 @@ that adapters receive. `Case.raw` preserves the original manifest fields, and
 `Case.fixture_refs` preserves the fixture id list.
 
 Fixture assembly does not add prompt templating, variable substitution,
-globbing, include support, fixture execution, repository copying, disposable
-worktrees, repository mutation, patch extraction, verifier execution, adapter
-schema changes, or result schema changes.
+globbing, include support, fixture execution, repository mutation, patch
+extraction, verifier execution, adapter schema changes, or result schema
+changes. Repository copying is limited to the runner-owned measured repo-task
+workspace preparation described below.
 
 ### Case Fixture References
 
@@ -247,22 +252,26 @@ strings. The runner rejects manifests that violate this at load time.
 : A raw prompt-completion case.
 
 `repo-task`
-: Reserved/planned case kind for a task that prepares a disposable repository
-  workspace, applies model or agent changes there, captures a patch, and
-  verifies the result deterministically. There is no current runner support for
-  executing `repo-task` cases.
+: Partially implemented case kind for a task that prepares a disposable
+  repository workspace. Current runner support is limited to copying exactly
+  one referenced `kind = "repo"` directory fixture into
+  `workspace/<case-id>/rep-NNN/` under the run output directory before each
+  measured adapter call. Applying model or agent changes, capturing a patch,
+  verifying the result deterministically, adding repo-task result fields,
+  retention options, and repo-task warmups remain planned.
 
 `replay`
 : A recorded request sequence.
 
-### Planned `repo-task` Contract
+### `repo-task` Contract
 
-`repo-task` is specified here as a future manifest contract only. The current
-loader and runner still implement prompt-output cases: referenced file fixtures
-append to `Case.prompt`, referenced directory fixtures remain metadata-only, and
-no directory is copied, executed, mutated, or verified.
+The current `repo-task` implementation prepares disposable measured workspaces
+only. Referenced file fixtures still append to `Case.prompt`; referenced
+non-repo directory fixtures are rejected for repo-task; the single referenced
+repo directory is copied into a run-owned workspace; no directory is executed,
+mutated by the runner, patched, or verified.
 
-Planned repo-task cases should use this conservative shape:
+Repo-task cases should use this conservative shape:
 
 ```toml
 [[cases]]
@@ -297,17 +306,24 @@ Directory fixture semantics for repo-task cases:
 - The referenced `kind = "repo"` fixture is immutable source. The runner must
   never mutate files under `benchpacks/<pack>/fixtures/`.
 - The runner prepares a fresh copy under the run output directory for every
-  measured execution. If repo-task warmups are later supported, each warmup also
-  gets a fresh copy and does not share mutations with measured repetitions.
-- Mutation is allowed only inside the disposable workspace. Pack fixtures,
-  prompts, verify scripts, and other source artifacts remain read-only by
-  contract.
+  measured execution at `workspace/<case-id>/rep-NNN/`. The runner includes
+  `rep-001` even when `defaults.repetitions = 1`. If the destination already
+  exists, the run fails rather than merging into it. Repo-task warmups are
+  rejected for now; if they are later supported, each warmup also gets a fresh
+  copy and does not share mutations with measured repetitions.
+- Repo fixtures must not contain symlinks that would escape workspace
+  isolation. Absolute symlinks and relative symlinks whose target resolves
+  outside the source repo fixture are rejected before copying. Internal
+  relative symlinks may be preserved.
+- Future mutation is allowed only inside the disposable workspace. Pack
+  fixtures, prompts, verify scripts, and other source artifacts remain
+  read-only by contract.
 - Repo-task execution must not write outside the run output directory and the
   prepared workspace, and pack contracts must not depend on implicit network
   access or private local host paths.
 - Multiple repo fixtures are not allowed until merge/copy rules are explicitly
   documented. Non-repo directory fixtures in repo-task `fixture_refs` are
-  reserved and should be rejected by the future repo-task runner.
+  reserved and are rejected by the current repo-task runner.
 - Referenced file fixtures keep the existing prompt-assembly behavior. They are
   not copied into the workspace or exposed to verifiers unless a later explicit
   field says so.
@@ -316,9 +332,10 @@ Directory fixture semantics for repo-task cases:
 Planned workspace and artifact layout:
 
 - Workspaces live under the run output directory, for example
-  `workspace/<case-id>/rep-NNN/` or an equivalent reporter-owned path.
-- The runner records prepared workspace metadata such as source fixture id,
-  source fixture pack-relative path, workspace path, and cleanup policy.
+  `workspace/<case-id>/rep-NNN/`.
+- Future result schema work should record prepared workspace metadata such as
+  source fixture id, source fixture pack-relative path, workspace path, and
+  cleanup policy.
 - Patch capture should write a deterministic diff artifact such as
   `patch.diff`, derived from changes inside the disposable workspace.
 - Task execution logs should be explicit artifacts, for example

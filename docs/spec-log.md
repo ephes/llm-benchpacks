@@ -16,6 +16,39 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-01 (Phase 3 measured repo-task workspaces)
+
+### Changed
+
+- Implemented the first narrow repo-task runtime slice: measured `repo-task`
+  executions now prepare a disposable run-owned workspace before the adapter
+  call.
+- The runner requires each repo-task case to reference exactly one
+  `kind = "repo"` directory fixture. Additional referenced file fixtures remain
+  prompt/context inputs, while non-repo directory fixtures, missing repo
+  fixtures, multiple repo fixtures, and repo fixtures that are not directories
+  fail before adapter execution.
+- Workspaces are copied under the run output directory at
+  `workspace/<case-id>/rep-NNN/`, including `rep-001` for single-repetition
+  packs. Existing destinations fail rather than being merged.
+- Workspace preparation rejects absolute symlinks and relative symlinks whose
+  target resolves outside the source repo fixture before copying, while
+  allowing internal relative symlinks.
+- Source fixtures under `benchpacks/<pack>/fixtures/` remain immutable by
+  contract. Existing chat cases still treat referenced directory fixtures as
+  metadata-only and do not create workspaces.
+- Repo-task warmups are rejected for now because warmup workspace semantics are
+  intentionally deferred.
+- Adapter requests and `run.jsonl` records are unchanged; no workspace paths,
+  repo-task status fields, verifier output, patch artifacts, agent harness, or
+  live benchmark result artifacts were added.
+
+### Open Questions
+
+- Future slices still need verifier invocation, patch capture, repo-task result
+  schema fields, task or agent execution, warmup workspace support, cleanup and
+  retention options, and curated artifact rules for repo-task outputs.
+
 ## 2026-04-30 (Phase 3 repo-task contract design)
 
 ### Changed
