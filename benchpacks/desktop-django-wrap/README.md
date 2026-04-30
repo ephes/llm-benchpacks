@@ -6,7 +6,7 @@ server-rendered Django app in an Electron desktop shell, but it does not execute
 an agent, mutate a target repository, execute fixtures, extract patches, or run
 verification scripts.
 
-Pack version: `0.1.4`.
+Pack version: `0.1.5`.
 
 ## Cases
 
@@ -17,6 +17,17 @@ Both prompts live in pack-local files under `prompts/`, referenced from
 `benchpack.toml` with `prompt_file`. They are synthetic and portable: no local
 paths, private repository checkout, network access, Apple Silicon assumptions,
 CUDA assumptions, or endpoint-specific behavior.
+
+Both prompts require the same short output skeleton:
+
+```text
+DDS_WRAP_PLAN
+Inspect: ...
+Electron shell: ...
+Django runtime: ...
+Packaging: ...
+Verification: ...
+```
 
 Both cases reference the pack's fixtures by id through `fixture_refs`, in this
 order: `synthetic-django-app`, then `synthetic-django-repo`. The loader appends
@@ -52,17 +63,20 @@ The pack sets:
 - `repetitions = 1`
 - `temperature = 0`
 - `max_tokens = 384`
-- `scoring.mode = "contains"`
-- `scoring.expected = "DDS_WRAP_PLAN"`
+- `scoring.mode = "regex"`
+- `scoring.pattern` requires `DDS_WRAP_PLAN` first, followed by the fixed
+  labels `Inspect:`, `Electron shell:`, `Django runtime:`, `Packaging:`, and
+  `Verification:` in order.
 
 Streaming is enabled deliberately so OpenAI-compatible adapters can measure
 time to first token on a coding-agent-shaped prompt. The pack has no warmup and
 one measured repetition because this first Phase 3 slice is a portable workload
 surface, not a statistical runtime sweep.
 
-The scoring check is only a deterministic sanity check that the model followed
-the requested output shape. Passing `DDS_WRAP_PLAN` containment does not mean
-the model can complete a real repository wrap.
+The scoring check is still a deterministic prompt-following check, not a
+repository verifier. Passing the regex means the model followed the short
+answer skeleton; it does not mean the model can complete a real repository
+wrap.
 
 ## Example Commands
 

@@ -145,8 +145,9 @@ usage-derived metrics when the endpoint does not report usage.
 
 The first Phase 3 coding-agent-shaped workload is the bundled
 `desktop-django-wrap` pack: static chat prompts ask for concise plans to adapt
-a server-rendered Django app to run inside Electron, and deterministic scoring
-is limited to a `contains` check for `DDS_WRAP_PLAN`.
+a server-rendered Django app to run inside Electron. It started with
+deterministic scoring limited to a `contains` check for `DDS_WRAP_PLAN`; D-020
+records the later narrow tightening to regex-scored fixed labels.
 
 Reason: this gave the runner a portable initial workload surface shaped like
 the real `desktop-django-starter` wrap task without adding repo mutation,
@@ -209,3 +210,16 @@ Reason: Phase 3 needs deterministic file context in model inputs before
 repo-task execution exists. Appending file fixtures keeps the adapter API and
 result schema unchanged because adapters still receive a single `Case.prompt`,
 while leaving directory snapshots for a future disposable-worktree contract.
+
+## D-020: Regex-Score The Prompt-Only Wrap Output Skeleton
+
+Tighten `desktop-django-wrap` from marker-only `contains` scoring to executable
+`regex` scoring over a short fixed output skeleton: `DDS_WRAP_PLAN` first,
+followed by `Inspect:`, `Electron shell:`, `Django runtime:`, `Packaging:`, and
+`Verification:` in order.
+
+Reason: the prompt-only Phase 3 pack still must not execute, copy, or mutate a
+repository, but a single marker check is too weak for short output comparison.
+Regex scoring is already part of the manifest vocabulary, so implementing it is
+the narrowest deterministic improvement without adding repo-task semantics,
+verifier scripts, adapter changes, or result schema changes.

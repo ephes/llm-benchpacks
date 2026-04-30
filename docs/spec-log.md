@@ -42,6 +42,33 @@ working history and open questions.
   `desktop-django-starter`, verifier scripts, patch extraction, and eventual
   real agent-session replay.
 
+## 2026-04-30 (Phase 3 regex output contract)
+
+### Changed
+
+- Implemented executable deterministic `regex` scoring with Python
+  `re.search(pattern, output)` and no implicit regex flags.
+- Bumped `desktop-django-wrap` to version `0.1.5`.
+- Tightened both `desktop-django-wrap` prompts to require the same short output
+  skeleton: `DDS_WRAP_PLAN`, then `Inspect:`, `Electron shell:`,
+  `Django runtime:`, `Packaging:`, and `Verification:` in order.
+- Changed `desktop-django-wrap` scoring from marker-only `contains` to `regex`
+  so the marker and fixed labels must appear in order.
+- The `synthetic-django-app` file fixture still assembles into prompts with
+  stable delimiters, and the `synthetic-django-repo` directory fixture remains
+  metadata-only and is not read, copied, executed, or injected into prompts.
+- No live benchmark run, adapter change, compare change, result schema change,
+  repo mutation, disposable worktree, directory copying, fixture execution,
+  verifier execution, patch extraction, prompt templating, agent-session
+  replay, or generated result artifact was added.
+
+### Open Questions
+
+- Future Phase 3 slices still need to define disposable repo-task execution,
+  directory fixture execution or copying semantics, prompt import from
+  `desktop-django-starter`, verifier scripts, patch extraction, and eventual
+  real agent-session replay.
+
 ## 2026-04-30 (Phase 2 closure docs)
 
 ### Changed

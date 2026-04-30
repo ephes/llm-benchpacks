@@ -1,13 +1,8 @@
-"""Deterministic scoring for benchpack cases.
-
-Phase 1 implements only the ``none`` and ``contains`` modes.  The other modes
-documented in ``docs/benchpack-format.md`` parse correctly via
-:mod:`benchpack.packs` but raise :class:`NotImplementedError` here until later
-slices add them.
-"""
+"""Deterministic scoring for benchpack cases."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .packs import Scoring
@@ -27,6 +22,14 @@ def evaluate(scoring: Scoring | None, output: str) -> dict[str, Any] | None:
             raise ValueError("scoring mode 'contains' requires 'expected'")
         return {"mode": "contains", "passed": scoring.expected in output}
 
+    if scoring.mode == "regex":
+        if scoring.pattern is None:
+            raise ValueError("scoring mode 'regex' requires 'pattern'")
+        return {
+            "mode": "regex",
+            "passed": re.search(scoring.pattern, output) is not None,
+        }
+
     raise NotImplementedError(
-        f"scoring mode {scoring.mode!r} is not implemented in Phase 1"
+        f"scoring mode {scoring.mode!r} is not implemented"
     )

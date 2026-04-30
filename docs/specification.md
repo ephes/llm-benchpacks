@@ -45,19 +45,20 @@ Initial packs:
 - `smoke-chat`: tiny single-turn endpoint check.
 - `runtime-sweep`: fixed prompts at several context sizes for TTFT and throughput.
 - `desktop-django-wrap`: first Phase 3 prompt-only coding-agent-shaped pack
-  derived from the `desktop-django-starter` wrapping workflow. Version `0.1.4`
+  derived from the `desktop-django-starter` wrapping workflow. Version `0.1.5`
   asks for concise Django-in-Electron wrapping plans with prompt-file-backed
   static chat prompts, uses `defaults.stream = true`, `defaults.warmup = 0`,
-  `defaults.repetitions = 1`, and `scoring.mode = "contains"` against
-  `DDS_WRAP_PLAN`. It includes a static synthetic context file fixture and a
-  compact static synthetic Django repo snapshot fixture. Both cases reference
-  both fixtures by id. The referenced file fixture is appended to the loaded
-  case prompt with stable delimiters; the directory snapshot remains
-  metadata-only and is not read into prompts. The runner does not execute
-  fixtures, copy directories, mutate repositories, extract patches, create
-  disposable worktrees, replay agent sessions, change adapter or result
-  schemas, change scoring behavior, or run verifier scripts. It is not a
-  repo-mutating wrapping task.
+  `defaults.repetitions = 1`, and `scoring.mode = "regex"`. The regex requires
+  `DDS_WRAP_PLAN` on the first line followed by the fixed labels `Inspect:`,
+  `Electron shell:`, `Django runtime:`, `Packaging:`, and `Verification:` in
+  order. It includes a static synthetic context file fixture and a compact
+  static synthetic Django repo snapshot fixture. Both cases reference both
+  fixtures by id. The referenced file fixture is appended to the loaded case
+  prompt with stable delimiters; the directory snapshot remains metadata-only
+  and is not read into prompts. The runner does not execute fixtures, copy
+  directories, mutate repositories, extract patches, create disposable
+  worktrees, replay agent sessions, change adapter or result schemas, or run
+  verifier scripts. It is not a repo-mutating wrapping task.
 - `patch-from-failure`: small repo plus failing test output; score by test pass and
   diff size.
 - `tool-json`: strict JSON and tool-call formatting checks.

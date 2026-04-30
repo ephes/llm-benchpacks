@@ -118,7 +118,9 @@ to `run.jsonl`:
   measured repetition
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
-  `docs/benchpack-format.md`); `null` when mode is `none` or absent
+  `docs/benchpack-format.md`); `null` when mode is `none` or absent. Current
+  executable modes are `contains` substring checks and `regex` checks using
+  Python `re.search` with the pack-provided pattern.
 
 Adapters do not produce or read these fields. The reporter is also where pack
 id/version get attached for cross-run comparison.

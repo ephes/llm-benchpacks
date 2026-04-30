@@ -1,6 +1,6 @@
 [pack]
 id = "desktop-django-wrap"
-version = "0.1.4"
+version = "0.1.5"
 description = "Prompt-only first Phase 3 workload for Django-in-Electron wrapping plans; not a repo-mutating wrap run"
 
 [defaults]
@@ -35,5 +35,5 @@ prompt_file = "prompts/wrap-plan-context.md"
 fixture_refs = ["synthetic-django-app", "synthetic-django-repo"]
 
 [scoring]
-mode = "contains"
-expected = "DDS_WRAP_PLAN"
+mode = "regex"
+pattern = '^DDS_WRAP_PLAN\r?\nInspect: .+\r?\nElectron shell: .+\r?\nDjango runtime: .+\r?\nPackaging: .+\r?\nVerification: .+'

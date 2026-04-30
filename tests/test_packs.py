@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -1379,7 +1380,7 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     pack_dir = repo_root / "benchpacks" / "desktop-django-wrap"
 
     assert pack.id == "desktop-django-wrap"
-    assert pack.version == "0.1.4"
+    assert pack.version == "0.1.5"
     assert pack.defaults["temperature"] == 0
     assert pack.defaults["max_tokens"] == 384
     assert pack.defaults["stream"] is True
@@ -1391,15 +1392,49 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
     ]
 
     assert pack.scoring is not None
-    assert pack.scoring.mode == "contains"
-    assert pack.scoring.expected == "DDS_WRAP_PLAN"
+    assert pack.scoring.mode == "regex"
+    assert pack.scoring.pattern is not None
+    assert pack.scoring.expected is None
+    assert re.search(
+        pack.scoring.pattern,
+        (
+            "DDS_WRAP_PLAN\n"
+            "Inspect: check settings and entrypoints.\n"
+            "Electron shell: start Django on 127.0.0.1.\n"
+            "Django runtime: move state under app data.\n"
+            "Packaging: split dev and packaged launch.\n"
+            "Verification: run a smoke command."
+        ),
+    )
+    assert not re.search(
+        pack.scoring.pattern,
+        (
+            "DDS_WRAP_PLAN\n"
+            "Inspect: check settings and entrypoints.\n"
+            "Django runtime: move state under app data.\n"
+            "Electron shell: start Django on 127.0.0.1.\n"
+            "Packaging: split dev and packaged launch.\n"
+            "Verification: run a smoke command."
+        ),
+    )
+    output_labels = [
+        "DDS_WRAP_PLAN",
+        "Inspect:",
+        "Electron shell:",
+        "Django runtime:",
+        "Packaging:",
+        "Verification:",
+    ]
 
     forbidden_path_fragments = ("/Users/", "~/", "C:\\")
     for case in pack.cases:
         assert case.kind == "chat"
         assert case.fixture_refs == ["synthetic-django-app", "synthetic-django-repo"]
         assert case.prompt
-        assert "DDS_WRAP_PLAN" in case.prompt
+        for label in output_labels:
+            assert label in case.prompt
+        assert "Use exactly" in case.prompt
+        assert "output skeleton" in case.prompt
         assert "prompt" not in case.raw
         assert "prompt_file" in case.raw
         assert case.raw["fixture_refs"] == [

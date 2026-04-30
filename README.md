@@ -75,13 +75,14 @@ Bundled packs:
   warmup and three measured repetitions per case.
 - `desktop-django-wrap`: streaming prompt-only first Phase 3 coding-agent-shaped
   workload with pack-local prompt files that asks for Django-in-Electron
-  wrapping plans, uses a `DDS_WRAP_PLAN` contains check, and declares two
-  pack-local synthetic fixtures for wrap planning: one context file and one
-  compact static Django repo snapshot directory. Both cases reference both
-  fixtures by id. The file fixture is appended to the loaded prompt with stable
-  delimiters, while the directory fixture remains metadata-only and is not
-  copied, executed, injected, or used to mutate a repository. This is not yet a
-  repo-mutating wrap benchmark.
+  wrapping plans, uses regex scoring to require `DDS_WRAP_PLAN` plus fixed
+  short-answer labels in order, and declares two pack-local synthetic fixtures
+  for wrap planning: one context file and one compact static Django repo
+  snapshot directory. Both cases reference both fixtures by id. The file
+  fixture is appended to the loaded prompt with stable delimiters, while the
+  directory fixture remains metadata-only and is not copied, executed,
+  injected, or used to mutate a repository. This is not yet a repo-mutating
+  wrap benchmark.
 
 ## Initial Shape
 

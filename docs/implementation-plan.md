@@ -131,19 +131,19 @@ Add the first real coding-agent-shaped workload.
 
 **Status:** started 2026-04-29 with the bundled `desktop-django-wrap` pack.
 The first slice is prompt-only: two prompt-file-backed static chat cases ask for
-concise wrapping plans and use deterministic `contains` scoring against
-`DDS_WRAP_PLAN`. Prompt-file loading landed 2026-04-29 so longer static prompts
-can live under pack-local `prompts/` directories. Static fixture metadata
-loading and one portable synthetic `desktop-django-wrap` fixture landed
-2026-04-29. Case-level fixture refs landed 2026-04-30 as metadata-only links
-from cases to top-level fixture ids. Fixture-backed prompt assembly for
+concise wrapping plans. Prompt-file loading landed 2026-04-29 so longer static
+prompts can live under pack-local `prompts/` directories. Static fixture
+metadata loading and one portable synthetic `desktop-django-wrap` fixture
+landed 2026-04-29. Case-level fixture refs landed 2026-04-30 as metadata-only
+links from cases to top-level fixture ids. Fixture-backed prompt assembly for
 referenced file fixtures landed 2026-04-30, appending file fixture contents to
 loaded case prompts with stable delimiters while leaving directory fixtures
 metadata-only. A compact pack-local synthetic Django repo snapshot directory
-fixture landed 2026-04-30 as metadata only. Phase 3 does not yet include
-fixture execution, directory copying, disposable target repos, repo mutation,
-patch extraction, agent-session replay, prompt templating, or verification
-scripts.
+fixture landed 2026-04-30 as metadata only. Deterministic `regex` scoring and a
+short fixed output skeleton for `desktop-django-wrap` landed 2026-04-30. Phase
+3 does not yet include fixture execution, directory copying, disposable target
+repos, repo mutation, patch extraction, agent-session replay, prompt templating,
+or verification scripts.
 
 Scope:
 
@@ -165,7 +165,9 @@ Scope:
   repository.
 - Import or generate the `desktop-django-starter` resolved wrap prompt in a
   later slice when repo-task contracts are ready.
-- Add deterministic constraints for short output comparison.
+- Add deterministic constraints for short output comparison. **Landed
+  2026-04-30** with executable `regex` scoring and the
+  `desktop-django-wrap` `DDS_WRAP_PLAN`/fixed-label output skeleton.
 - Add optional full agent-session replay later.
 
 Validation:

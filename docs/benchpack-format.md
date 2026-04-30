@@ -117,7 +117,9 @@ expected = "Paris"
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
-  inline on individual cases as an override. See **Scoring** below.
+  inline on individual cases as an override. Current executable deterministic
+  modes are `none`, `contains`, and `regex`; reserved modes still parse as
+  manifest values but are not implemented by the scorer. See **Scoring** below.
 
 ### Prompt Files
 
@@ -282,31 +284,37 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 : Output must contain the `expected` string.
 
 `equals`
-: Output must equal `expected` exactly after trimming whitespace.
+: Reserved; not implemented by the scorer yet. Intended behavior is that output
+  must equal `expected` exactly after trimming whitespace.
 
 `regex`
-: Output must match the regular expression in `pattern`.
+: Output must match the regular expression in `pattern`. The scorer uses
+  Python's standard `re.search(pattern, output)` with no implicit flags. Pack
+  authors who need multiline, dotall, or other flag behavior should use inline
+  regex flags or explicit character classes in the pattern. The runner raises a
+  `ValueError` when `mode = "regex"` is evaluated without `pattern`.
 
 `json-schema`
-: Output must parse as JSON and validate against the file at `schema`.
+: Reserved; not implemented by the scorer yet. Intended behavior is that output
+  must parse as JSON and validate against the file at `schema`.
 
 `verify-script`
-: Run the script at `script` (a path relative to the pack root, normally under
+: Reserved; not implemented by the scorer yet. Intended behavior is to run the
+  script at `script` (a path relative to the pack root, normally under
   `verify/`) with the case output and fixtures available. Exit code 0 means
   pass.
 
 `llm-judge`
-: Send the output to a configured judge endpoint. Per D-004 this mode must be
-  declared explicitly in the pack; it is never a default and never inferred.
+: Reserved; not implemented by the scorer yet. Intended behavior is to send the
+  output to a configured judge endpoint. Per D-004 this mode must be declared
+  explicitly in the pack; it is never a default and never inferred.
 
 ### Relationship to `verify/`
 
-Scripts under `verify/` are invoked only when a scoring entry references them
-via `mode = "verify-script"` and a `script = "verify/..."` path. Inline
-declarative modes (`contains`, `equals`, `regex`, `json-schema`) do not need
-`verify/` and should be preferred for fast deterministic checks. A pack may
-mix both: a pack-level default of `contains` for smoke cases plus a per-case
-`verify-script` for cases that need richer logic.
+Scripts under `verify/` are reserved for scoring entries that reference them via
+`mode = "verify-script"` and a `script = "verify/..."` path once that mode is
+implemented. Implemented inline declarative modes (`contains` and `regex`) do
+not need `verify/` and should be preferred for fast deterministic checks.
 
 ## Requires (TBD)
 
