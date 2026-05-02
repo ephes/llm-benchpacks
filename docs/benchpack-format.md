@@ -260,12 +260,14 @@ strings. The runner rejects manifests that violate this at load time.
   support copies exactly one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
   measured adapter call, captures a deterministic patch artifact at
-  `patch/<case-id>/rep-NNN.diff` after the adapter call, executes
-  `verify-script` scoring when declared, and records workspace metadata,
-  `patch.path`, `verify`, `repo_task`, and top-level `scoring` in the measured
-  `run.jsonl` row. Applying model or agent changes, task logs, retention
-  options, repo-task warmups, configurable verifier timeout/environment
-  support, and bundled pack conversion remain planned.
+  `patch/<case-id>/rep-NNN.diff` after the adapter call, writes empty
+  no-op task logs at `task/<case-id>/rep-NNN.stdout.log` and
+  `task/<case-id>/rep-NNN.stderr.log`, executes `verify-script` scoring when
+  declared, and records workspace metadata, `patch.path`, `task`, `verify`,
+  `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
+  Applying model or agent changes, real task execution, retention options,
+  repo-task warmups, configurable verifier timeout/environment support, and
+  bundled pack conversion remain planned.
 
 `replay`
 : A recorded request sequence.
@@ -273,14 +275,15 @@ strings. The runner rejects manifests that violate this at load time.
 ### `repo-task` Contract
 
 The current `repo-task` implementation prepares disposable measured workspaces,
-captures patch artifacts, and executes `verify-script` scoring when declared.
-Referenced file fixtures still append to `Case.prompt`; referenced non-repo
-directory fixtures are rejected for repo-task; the single referenced repo
-directory is copied into a run-owned workspace; the measured result record
-includes the prepared workspace metadata, `patch.path`, verifier artifact
-paths, final verifier status, and top-level `verify-script` scoring. The
-runner still does not execute an agent harness or apply model output as code
-changes.
+captures patch artifacts, writes deterministic empty task stdout/stderr logs
+for a no-op placeholder task phase, and executes `verify-script` scoring when
+declared. Referenced file fixtures still append to `Case.prompt`; referenced
+non-repo directory fixtures are rejected for repo-task; the single referenced
+repo directory is copied into a run-owned workspace; the measured result record
+includes the prepared workspace metadata, `patch.path`, task log artifact
+paths, verifier artifact paths, final verifier status, and top-level
+`verify-script` scoring. The runner still does not execute an agent harness or
+apply model output as code changes.
 
 Repo-task cases should use this conservative shape:
 
@@ -353,6 +356,13 @@ Workspace and artifact layout:
   packs. Measured repo-task records include a top-level `patch` object with the
   run-relative `path`. Empty changes still create an empty patch file and
   record `patch.path`.
+- Task log capture writes deterministic stdout/stderr artifacts at
+  `task/<case-id>/rep-NNN.stdout.log` and
+  `task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
+  single-repetition packs. Measured repo-task records include a top-level
+  `task` object with run-relative `stdout_path` and `stderr_path`. These files
+  are empty in the current no-op task phase until a future agent harness or
+  model-output application slice performs real task execution.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and
@@ -364,8 +374,6 @@ Workspace and artifact layout:
   `repo_task.verify_exit_code` (the integer process exit code, or `null` on
   timeout). Timeout rows keep the same artifact and result object shape and set
   top-level scoring to `{"mode": "verify-script", "passed": false}`.
-- Task execution logs should be explicit artifacts, for example
-  `task.stdout.log` and `task.stderr.log`.
 - Model request/response payloads remain under `raw/`; repo-task workspace,
   patch, task logs, and verifier artifacts are conceptually separate.
 

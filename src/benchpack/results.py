@@ -92,6 +92,7 @@ class RunReporter:
         *,
         workspace: dict[str, Any] | None = None,
         patch: dict[str, Any] | None = None,
+        task: dict[str, Any] | None = None,
         verify: dict[str, Any] | None = None,
         repo_task: dict[str, Any] | None = None,
         scoring_override: dict[str, Any] | None = None,
@@ -141,6 +142,8 @@ class RunReporter:
             record["workspace"] = dict(workspace)
         if patch is not None:
             record["patch"] = dict(patch)
+        if task is not None:
+            record["task"] = dict(task)
         if verify is not None:
             record["verify"] = dict(verify)
         if repo_task is not None:

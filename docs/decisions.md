@@ -239,8 +239,13 @@ final status are explicit result artifacts separate from raw model
 request/response payloads. Measured rows record the prepared workspace metadata
 as run-relative path plus source fixture id and manifest-declared source path,
 and record the deterministic patch artifact path as
-`patch/<case-id>/rep-NNN.diff`. Measured rows using `verify-script` record
-verifier artifact paths as `verify/<case-id>/rep-NNN.json`,
+`patch/<case-id>/rep-NNN.diff`. Measured rows also record deterministic task
+stdout/stderr log artifact paths as `task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log`. These task logs are empty in the current
+runner-owned no-op task phase until a later agent-session harness or
+model-output mutation/application slice fills them. Measured rows using
+`verify-script` record verifier artifact paths as
+`verify/<case-id>/rep-NNN.json`,
 `verify/<case-id>/rep-NNN.stdout.log`, and
 `verify/<case-id>/rep-NNN.stderr.log`, plus `repo_task.status`,
 `repo_task.verify_exit_code`, and top-level `verify-script` scoring from the
@@ -248,8 +253,8 @@ verifier process exit code. Verifier subprocesses use a fixed runner-owned
 timeout in the current implementation; timeouts keep the same artifact paths,
 record `repo_task.status = "failed"`, record
 `repo_task.verify_exit_code = null`, and write authoritative timeout metadata
-into the verifier JSON. Configurable timeout/environment support and task
-execution logs remain planned.
+into the verifier JSON. Configurable timeout/environment support and real task
+execution remain planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

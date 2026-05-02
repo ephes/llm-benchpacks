@@ -49,10 +49,46 @@ working history and open questions.
 
 ### Open Questions
 
-- Future slices still need task or agent execution, model-output patch
-  application, task log artifact paths, warmup workspace support, cleanup and
-  retention options, configurable verifier timeout/environment support, and
-  bundled pack conversion.
+- Future slices still need real task or agent execution, model-output patch
+  application, warmup workspace support, cleanup and retention options,
+  configurable verifier timeout/environment support, and bundled pack
+  conversion.
+
+## 2026-05-02 (Phase 3 repo-task task log artifacts)
+
+### Changed
+
+- Added deterministic task stdout/stderr log artifacts for every measured
+  `repo-task` execution at `task/<case-id>/rep-NNN.stdout.log` and
+  `task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
+  single-repetition packs.
+- The current task phase remains a runner-owned no-op placeholder, so the new
+  task log files are created empty. No agent-session harness, shell command
+  execution, manifest task command, or model-output mutation/application was
+  added.
+- Measured repo-task `run.jsonl` rows now include top-level `task.stdout_path`
+  and `task.stderr_path` with run-relative POSIX paths. Repo-task rows using
+  prompt-output scoring include `workspace`, `patch`, and `task`, while
+  `verify` and `repo_task` remain limited to `verify-script`.
+- Chat records, including chat cases that reference repo directory fixtures,
+  still do not include `workspace`, `patch`, `task`, `verify`, or
+  `repo_task`.
+- Raw model request/response paths under `raw/`, adapter request shape,
+  workspace preparation, patch capture, verifier pass/fail/timeout behavior,
+  repo-task fixture validation, symlink escape rejection, repo-task warmup
+  rejection, prompt-output scoring, and non-repo-task `verify-script`
+  rejection remain unchanged.
+- No manifest task-log fields, CLI flags, environment configuration, task
+  timeout configuration, workspace retention option, repo-task warmup support,
+  bundled pack conversion, live benchmark run, or generated result artifact was
+  added.
+
+### Open Questions
+
+- Future slices still need real task or agent execution, model-output mutation
+  or patch application, warmup workspace support, cleanup and retention options,
+  configurable verifier timeout/environment support, and bundled pack
+  conversion.
 
 ## 2026-05-02 (Phase 3 repo-task verifier artifacts)
 
@@ -96,10 +132,9 @@ working history and open questions.
 
 ### Open Questions
 
-- Future slices still need task or agent execution, model-output patch
-  application, task log artifact paths, warmup workspace support, cleanup and
-  retention options, timeout/environment configuration, and bundled pack
-  conversion.
+- Future slices still need real task or agent execution, model-output patch
+  application, warmup workspace support, cleanup and retention options,
+  timeout/environment configuration, and bundled pack conversion.
 
 ## 2026-05-02 (Phase 3 repo-task patch artifacts)
 

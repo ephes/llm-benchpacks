@@ -74,8 +74,9 @@ results/
    Packs with `repo-task` cases and `defaults.warmup > 0` are rejected before
    execution in this slice.
 6. For `repo-task` measured executions only, validate that the case references
-   exactly one `kind = "repo"` directory fixture and copy it to
-   `workspace/<case-id>/rep-NNN/` under the run output directory. Repo-task
+   exactly one `kind = "repo"` directory fixture, copy it to
+   `workspace/<case-id>/rep-NNN/` under the run output directory, and create
+   empty task stdout/stderr logs for the current no-op task phase. Repo-task
    warmups are rejected for now.
 7. Execute the pack-requested measured repetitions, streaming when supported.
    Runner-level adapter compatibility options, such as the `openai-chat`
@@ -89,8 +90,8 @@ results/
 10. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions. Measured repo-task records also include the prepared workspace
    metadata needed to locate the run-owned copy, the run-relative patch
-   artifact path, verifier artifact paths, and final verifier status when
-   `verify-script` is used.
+   artifact path, task log artifact paths, verifier artifact paths, and final
+   verifier status when `verify-script` is used.
 11. Write `summary.md`.
 
 Adapters still receive a loaded prompt and return the existing result envelope.
@@ -112,8 +113,11 @@ and before each measured adapter execution:
 4. The adapter continues to handle model/runtime calls. A future agent harness
    may sit above adapters, but adapters should not learn pack fixture semantics
    or write repository files directly.
-5. Future task execution applies any generated changes only inside the disposable
-   workspace and records stdout/stderr or execution logs as explicit artifacts.
+5. The current runner-owned task phase is a no-op placeholder that creates empty
+   `task/<case-id>/rep-NNN.stdout.log` and
+   `task/<case-id>/rep-NNN.stderr.log` artifacts. Future task execution applies
+   generated changes only inside the disposable workspace and fills those logs
+   as explicit artifacts.
 6. After the adapter call, the runner compares the immutable source fixture to
    the prepared workspace with a deterministic directory snapshot diff and
    writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty changes still
@@ -126,25 +130,26 @@ and before each measured adapter execution:
    runner-owned subprocess timeout, captures verifier stdout/stderr as explicit
    artifacts, and corrects or creates the structured JSON so `exit_code` and
    `passed` match the process result or timeout outcome.
-8. The reporter records normalized workspace metadata, `patch.path`, `verify`,
-   `repo_task`, and top-level `scoring` for measured repo-task
-   `verify-script` rows. Future slices will add task execution log artifact
-   paths alongside the existing adapter, collector, and scoring fields.
+8. The reporter records normalized workspace metadata, `patch.path`, `task`,
+   `verify`, `repo_task`, and top-level `scoring` for measured repo-task
+   `verify-script` rows.
 9. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
 
 Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
 remains for model request/response payloads. Current repo-task artifacts are
-`workspace/`, `patch/<case-id>/rep-NNN.diff`, and
-`verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`; planned categories
-include task stdout/stderr logs.
+`workspace/`, `patch/<case-id>/rep-NNN.diff`,
+`task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, and
+`verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`. Task logs are empty in
+the current no-op task phase until a later agent harness or model-output
+mutation/application slice fills them.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
-patch artifact metadata, verifier artifact metadata, final repo-task verifier
-status, and `verify-script` scoring. Repo-task rows using prompt-output scoring
-still omit `verify` and `repo_task`, and current chat cases do not use this
-flow.
+patch artifact metadata, task log metadata, verifier artifact metadata, final
+repo-task verifier status, and `verify-script` scoring. Repo-task rows using
+prompt-output scoring still omit `verify` and `repo_task`, and current chat
+cases do not use this flow.
 
 ## Result Record Envelope
 
@@ -198,6 +203,8 @@ to `run.jsonl`:
 - `workspace` — present only for measured `repo-task` records, with
   `path`, `source_fixture_id`, and `source_path`
 - `patch` — present only for measured `repo-task` records, with `path`
+- `task` — present only for measured `repo-task` records, with `stdout_path`
+  and `stderr_path`
 - `verify` — present only for measured `repo-task` records using
   `verify-script`, with `path`, `stdout_path`, and `stderr_path`
 - `repo_task` — present only for measured `repo-task` records using
@@ -228,6 +235,14 @@ relative to the run output directory and uses `patch/<case-id>/rep-NNN.diff`.
 The patch file is written for every measured repo-task execution, including
 no-change executions where the file is empty. Chat records do not include
 `patch`, even when they reference repo directory fixtures as metadata.
+
+The repo-task `task` object is deliberately narrow:
+`task.stdout_path` and `task.stderr_path` are relative to the run output
+directory and use `task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log`. The log files are written for every
+measured repo-task execution, including the current no-op task phase where both
+files are empty. Chat records do not include `task`, even when they reference
+repo directory fixtures as metadata.
 
 The repo-task `verify` object is deliberately narrow: `verify.path`,
 `verify.stdout_path`, and `verify.stderr_path` are relative to the run output

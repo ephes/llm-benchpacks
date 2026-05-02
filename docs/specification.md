@@ -75,13 +75,15 @@ measurement, not model-quality comparison.
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, captures deterministic patch artifacts from
-source-vs-workspace directory snapshots, and executes `verify-script` scoring
-against the prepared workspace with a fixed runner-owned timeout. It does not
-yet run an agent harness, apply model output as repository mutations, support
-repo-task warmups, expose workspace cleanup/retention options, or configure
-verifier timeouts or environments. Measured repo-task records include prepared
-workspace metadata, patch artifact paths, verifier artifact paths, final
-repo-task verifier status, and top-level `verify-script` scoring.
+source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
+log artifacts for the current no-op task phase, and executes `verify-script`
+scoring against the prepared workspace with a fixed runner-owned timeout. It
+does not yet run an agent harness, apply model output as repository mutations,
+support repo-task warmups, expose workspace cleanup/retention options, or
+configure verifier timeouts or environments. Measured repo-task records include
+prepared workspace metadata, patch artifact paths, task log artifact paths,
+verifier artifact paths, final repo-task verifier status, and top-level
+`verify-script` scoring.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -129,12 +131,18 @@ Current repo-task artifacts include:
 - the disposable `workspace/` contents while retained locally
 - `patch/<case-id>/rep-NNN.diff`, captured from workspace changes after the
   adapter call
+- `task/<case-id>/rep-NNN.stdout.log`, task stdout for the current no-op task
+  phase
+- `task/<case-id>/rep-NNN.stderr.log`, task stderr for the current no-op task
+  phase
 - `verify/<case-id>/rep-NNN.json`, structured verifier output
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr
 
-Expected future repo-task artifacts include task stdout/stderr or execution
-logs, such as `task.stdout.log` and `task.stderr.log`.
+The current task phase is a runner-owned no-op placeholder, so task stdout and
+stderr log files are created but empty. Future agent-session execution or
+model-output mutation/application will fill those artifacts with real execution
+logs.
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
 from repo-task workspace and verifier artifacts. Measured repo-task
@@ -145,19 +153,23 @@ from repo-task workspace and verifier artifacts. Measured repo-task
 absolute resolved path. They also record `patch.path`, a run-relative path to
 the deterministic diff artifact under `patch/<case-id>/rep-NNN.diff`, including
 `rep-001` for single-repetition packs. Empty workspace changes still produce an
-empty patch file and a `patch.path` entry. For measured repo-task rows using
+empty patch file and a `patch.path` entry. They also record `task.stdout_path`
+and `task.stderr_path`, run-relative paths to
+`task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
+single-repetition packs. For measured repo-task rows using
 `scoring.mode = "verify-script"`, records also include `verify.path`,
 `verify.stdout_path`, `verify.stderr_path`, `repo_task.status`, and
-`repo_task.verify_exit_code`. `repo_task.status` is `"passed"` when the verifier
-exit code is `0` and `"failed"` when it is nonzero or when the verifier times
-out. `repo_task.verify_exit_code` records the integer process exit code, or
-`null` when no exit code exists because the verifier timed out. Top-level
-`scoring` is `{"mode": "verify-script", "passed": <bool>}` from that verifier
-outcome. Curated result commits may include small summaries, `hardware.json`,
-and compact `run.jsonl` rows, plus small intentional artifacts such as patch
-diffs or `verify.json` when they are needed to explain a result. Full
-disposable workspaces and large execution logs should normally stay local or
-ignored.
+`repo_task.verify_exit_code`. `repo_task.status` is `"passed"` when the
+verifier exit code is `0` and `"failed"` when it is nonzero or when the
+verifier times out. `repo_task.verify_exit_code` records the integer process
+exit code, or `null` when no exit code exists because the verifier timed out.
+Top-level `scoring` is `{"mode": "verify-script", "passed": <bool>}` from that
+verifier outcome. Curated result commits may include small summaries,
+`hardware.json`, and compact `run.jsonl` rows, plus small intentional artifacts
+such as patch diffs or `verify.json` when they are needed to explain a result.
+Full disposable workspaces and large execution logs should normally stay local
+or ignored.
 
 Existing `contains` and `regex` scoring modes score prompt output.
 `verify-script` is implemented only for measured `repo-task` executions: exit

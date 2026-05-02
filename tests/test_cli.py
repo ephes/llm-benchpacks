@@ -382,9 +382,15 @@ def test_cli_repo_task_creates_run_owned_workspace(
         "source_path": "fixtures/repo",
     }
     assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
     assert (out / "patch" / "edit-repo" / "rep-001.diff").read_text(
         encoding="utf-8"
     ) == ""
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
     assert "verify" not in record
     assert "repo_task" not in record
     assert "artifacts" not in record
@@ -432,6 +438,10 @@ with open(args.output, "w", encoding="utf-8") as fh:
         "source_path": "fixtures/repo",
     }
     assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
     assert record["verify"] == {
         "path": "verify/edit-repo/rep-001.json",
         "stdout_path": "verify/edit-repo/rep-001.stdout.log",
@@ -443,6 +453,8 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert verify_json["case"] == "edit-repo"
     assert verify_json["exit_code"] == 0
     assert verify_json["passed"] is True
+    assert (out / record["task"]["stdout_path"]).read_text() == ""
+    assert (out / record["task"]["stderr_path"]).read_text() == ""
     assert (out / record["verify"]["stdout_path"]).read_text() == "verified stdout\n"
     assert (out / record["verify"]["stderr_path"]).read_text() == "verified stderr\n"
 
@@ -508,6 +520,10 @@ def test_cli_repo_task_verify_script_timeout_records_completed_row(
         "source_path": "fixtures/repo",
     }
     assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
     assert record["verify"] == {
         "path": "verify/edit-repo/rep-001.json",
         "stdout_path": "verify/edit-repo/rep-001.stdout.log",
@@ -553,8 +569,18 @@ def test_cli_repo_task_verify_script_repetitions_get_separate_artifacts(
         "verify/edit-repo/rep-001.stdout.log",
         "verify/edit-repo/rep-002.stdout.log",
     ]
+    assert [record["task"]["stdout_path"] for record in records] == [
+        "task/edit-repo/rep-001.stdout.log",
+        "task/edit-repo/rep-002.stdout.log",
+    ]
+    assert [record["task"]["stderr_path"] for record in records] == [
+        "task/edit-repo/rep-001.stderr.log",
+        "task/edit-repo/rep-002.stderr.log",
+    ]
     assert (out / "verify" / "edit-repo" / "rep-001.json").is_file()
     assert (out / "verify" / "edit-repo" / "rep-002.json").is_file()
+    assert (out / "task" / "edit-repo" / "rep-001.stdout.log").read_text() == ""
+    assert (out / "task" / "edit-repo" / "rep-002.stderr.log").read_text() == ""
 
 
 def test_cli_repo_task_allows_additional_file_fixture_refs(
@@ -626,8 +652,18 @@ def test_cli_repo_task_repetitions_get_separate_workspaces(
         "patch/edit-repo/rep-001.diff",
         "patch/edit-repo/rep-002.diff",
     ]
+    assert [record["task"]["stdout_path"] for record in records] == [
+        "task/edit-repo/rep-001.stdout.log",
+        "task/edit-repo/rep-002.stdout.log",
+    ]
+    assert [record["task"]["stderr_path"] for record in records] == [
+        "task/edit-repo/rep-001.stderr.log",
+        "task/edit-repo/rep-002.stderr.log",
+    ]
     assert (out / "patch" / "edit-repo" / "rep-001.diff").is_file()
     assert (out / "patch" / "edit-repo" / "rep-002.diff").is_file()
+    assert (out / "task" / "edit-repo" / "rep-001.stdout.log").read_text() == ""
+    assert (out / "task" / "edit-repo" / "rep-002.stderr.log").read_text() == ""
 
     (rep1 / "README.md").write_text("changed copy\n", encoding="utf-8")
 
@@ -863,11 +899,13 @@ def test_cli_chat_case_with_repo_directory_fixture_does_not_create_workspace(
 
     assert not (out / "workspace").exists()
     assert not (out / "patch").exists()
+    assert not (out / "task").exists()
     assert not (out / "verify").exists()
     record = json.loads((out / "run.jsonl").read_text())
     assert record["case"] == "edit-repo"
     assert "workspace" not in record
     assert "patch" not in record
+    assert "task" not in record
     assert "verify" not in record
     assert "repo_task" not in record
 

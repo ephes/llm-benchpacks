@@ -395,6 +395,30 @@ def test_record_can_include_patch_metadata(tmp_path: Path) -> None:
     assert jsonl_record["patch"] == record["patch"]
 
 
+def test_record_can_include_task_metadata(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    ar = make_adapter_result(out)
+
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        task={
+            "stdout_path": "task/capital/rep-001.stdout.log",
+            "stderr_path": "task/capital/rep-001.stderr.log",
+        },
+    )
+
+    assert record["task"] == {
+        "stdout_path": "task/capital/rep-001.stdout.log",
+        "stderr_path": "task/capital/rep-001.stderr.log",
+    }
+    jsonl_record = json.loads((out / "run.jsonl").read_text())
+    assert jsonl_record["task"] == record["task"]
+
+
 @pytest.mark.parametrize("repetition", [0, -1, True, "1"])
 def test_record_rejects_invalid_repetition(
     tmp_path: Path,

@@ -27,6 +27,7 @@ from .packs import (
 )
 from .patches import PatchError, capture_workspace_patch
 from .results import RunReporter
+from .tasks import TaskError, write_noop_task_logs
 from .verifiers import (
     VerifierError,
     resolve_verify_script,
@@ -159,6 +160,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         for repetition in range(1, repetitions + 1):
             workspace_metadata = None
             patch_metadata = None
+            task_metadata = None
             verify_metadata = None
             repo_task_metadata = None
             scoring_override = None
@@ -172,7 +174,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
                         repetition,
                     )
                     workspace_metadata = workspace_record(prepared_workspace, out_dir)
+                    task_metadata = write_noop_task_logs(out_dir, case, repetition)
                 except WorkspaceError as exc:
+                    raise SystemExit(str(exc)) from exc
+                except TaskError as exc:
                     raise SystemExit(str(exc)) from exc
             request_path, response_path = reporter.measured_paths(
                 case,
@@ -228,6 +233,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 repetition=repetition if repetitions > 1 else None,
                 workspace=workspace_metadata,
                 patch=patch_metadata,
+                task=task_metadata,
                 verify=verify_metadata,
                 repo_task=repo_task_metadata,
                 scoring_override=scoring_override,
