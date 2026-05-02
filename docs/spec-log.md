@@ -49,6 +49,33 @@ working history and open questions.
   schema fields, task or agent execution, warmup workspace support, cleanup and
   retention options, and curated artifact rules for repo-task outputs.
 
+## 2026-05-01 (Phase 3 repo-task workspace result metadata)
+
+### Changed
+
+- Added the next narrow repo-task result schema slice: measured `repo-task`
+  `run.jsonl` rows now include a top-level `workspace` object.
+- The workspace object records `path`, `source_fixture_id`, and `source_path`.
+  `path` is relative to the run output directory, for example
+  `workspace/<case-id>/rep-NNN`, and `source_path` is the manifest-declared
+  fixture path rather than an absolute resolved path.
+- Chat records, including chat cases that reference repo directory fixtures,
+  still do not include `workspace`.
+- Adapter requests remain unchanged and still receive only prompt, model,
+  endpoint, defaults, and raw request/response paths.
+- Raw request/response path behavior, scoring, repo-task fixture validation,
+  symlink escape rejection, and repo-task warmup rejection remain unchanged.
+- No verifier execution, patch capture, final repo-task status, task or agent
+  harness, workspace cleanup/retention option, bundled pack conversion, or live
+  benchmark result artifact was added.
+
+### Open Questions
+
+- Future slices still need verifier invocation, patch capture, repo-task patch
+  and verifier artifact paths, final repo-task status fields, task or agent
+  execution, warmup workspace support, cleanup and retention options, and
+  curated artifact rules for repo-task outputs.
+
 ## 2026-04-30 (Phase 3 repo-task contract design)
 
 ### Changed

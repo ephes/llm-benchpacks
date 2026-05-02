@@ -89,6 +89,8 @@ class RunReporter:
         adapter_result: AdapterResult,
         sample: dict[str, Any],
         repetition: int | None = None,
+        *,
+        workspace: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         scoring_cfg = case.scoring or self.pack.scoring
         scoring_result = evaluate(scoring_cfg, adapter_result.output_text)
@@ -127,6 +129,8 @@ class RunReporter:
             if repetition < 1:
                 raise ValueError("repetition must be an integer >= 1")
             record["repetition"] = repetition
+        if workspace is not None:
+            record["workspace"] = dict(workspace)
         if adapter_result.backend is not None:
             record["backend"] = adapter_result.backend
         if adapter_result.error is not None:

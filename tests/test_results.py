@@ -319,6 +319,32 @@ def test_record_can_include_reporter_owned_repetition(tmp_path: Path) -> None:
     assert record["raw"]["request_path"] == "raw/capital.rep-002.request.json"
 
 
+def test_record_can_include_workspace_metadata(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    ar = make_adapter_result(out)
+
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        workspace={
+            "path": "workspace/capital/rep-001",
+            "source_fixture_id": "repo",
+            "source_path": "fixtures/repo",
+        },
+    )
+
+    assert record["workspace"] == {
+        "path": "workspace/capital/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    jsonl_record = json.loads((out / "run.jsonl").read_text())
+    assert jsonl_record["workspace"] == record["workspace"]
+
+
 @pytest.mark.parametrize("repetition", [0, -1, True, "1"])
 def test_record_rejects_invalid_repetition(
     tmp_path: Path,

@@ -356,11 +356,18 @@ def test_cli_repo_task_creates_run_owned_workspace(
 
     record = json.loads((out / "run.jsonl").read_text())
     assert record["case"] == "edit-repo"
+    assert record["pack"] == {"id": "smoke-chat", "version": "0.1.0"}
+    assert record["adapter"] == "openai-chat"
+    assert record["scoring"] == {"mode": "contains", "passed": True}
     assert record["raw"] == {
         "request_path": "raw/edit-repo.request.json",
         "response_path": "raw/edit-repo.response.json",
     }
-    assert "workspace" not in record
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
     assert "artifacts" not in record
 
 
@@ -412,6 +419,23 @@ def test_cli_repo_task_repetitions_get_separate_workspaces(
     rep2 = out / "workspace" / "edit-repo" / "rep-002"
     assert rep1.is_dir()
     assert rep2.is_dir()
+
+    records = [
+        json.loads(line)
+        for line in (out / "run.jsonl").read_text().strip().splitlines()
+    ]
+    assert [record["workspace"]["path"] for record in records] == [
+        "workspace/edit-repo/rep-001",
+        "workspace/edit-repo/rep-002",
+    ]
+    assert [record["workspace"]["source_fixture_id"] for record in records] == [
+        "repo",
+        "repo",
+    ]
+    assert [record["workspace"]["source_path"] for record in records] == [
+        "fixtures/repo",
+        "fixtures/repo",
+    ]
 
     (rep1 / "README.md").write_text("changed copy\n", encoding="utf-8")
 
@@ -646,6 +670,9 @@ def test_cli_chat_case_with_repo_directory_fixture_does_not_create_workspace(
     assert main(_argv(["--out", str(out)])) == 0
 
     assert not (out / "workspace").exists()
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["case"] == "edit-repo"
+    assert "workspace" not in record
 
 
 def test_cli_warmup_is_unrecorded_and_measured_repetitions_are_recorded(

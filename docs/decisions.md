@@ -236,7 +236,9 @@ workspace and the run output directory. Source fixtures under
 `benchpacks/<pack>/fixtures/` are never mutated. Repo-task artifacts such as
 workspace metadata, `patch.diff`, task stdout/stderr logs, verifier output, and
 final status are explicit result artifacts separate from raw model
-request/response payloads.
+request/response payloads. Measured rows record the prepared workspace metadata
+as run-relative path plus source fixture id and manifest-declared source path;
+patch, verifier, log, and final status artifacts remain planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

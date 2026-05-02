@@ -75,8 +75,9 @@ measurement, not model-quality comparison.
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, but it does not yet execute verifiers,
-capture patches, run agent harnesses, add repo-task result fields, or support
-repo-task warmups.
+capture patches, run agent harnesses, add repo-task status fields, or support
+repo-task warmups. Measured repo-task records now include prepared workspace
+metadata.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -121,7 +122,6 @@ and prepared workspace.
 
 Expected future repo-task artifacts include:
 
-- prepared workspace metadata, such as the source fixture id and workspace path
 - the disposable `workspace/` contents while retained locally
 - `patch.diff` or an equivalent diff artifact captured from workspace changes
 - task stdout/stderr or execution logs, such as `task.stdout.log` and
@@ -130,10 +130,15 @@ Expected future repo-task artifacts include:
 - a final repo-task status suitable for deterministic scoring
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
-from repo-task workspace and verifier artifacts. Current `run.jsonl` rows do
-not record workspace paths or repo-task status. Curated result commits may
-include small summaries, `hardware.json`, and compact `run.jsonl` rows, plus
-small intentional artifacts such as `patch.diff` or `verify.json` when they are
+from repo-task workspace and verifier artifacts. Measured repo-task
+`run.jsonl` rows record only prepared workspace metadata today:
+`workspace.path`, `workspace.source_fixture_id`, and `workspace.source_path`.
+`workspace.path` is relative to the run output directory, and
+`workspace.source_path` is the manifest-declared fixture path rather than an
+absolute resolved path. They do not record repo-task status, patch artifacts,
+verifier output, or task logs yet. Curated result commits may include small
+summaries, `hardware.json`, and compact `run.jsonl` rows, plus small
+intentional artifacts such as `patch.diff` or `verify.json` when they are
 needed to explain a result. Full disposable workspaces and large execution logs
 should normally stay local or ignored.
 
@@ -141,8 +146,8 @@ Existing `contains` and `regex` scoring modes score prompt output. Once
 implemented, `verify-script` should be the deterministic repo-task correctness
 mode: exit code `0` means pass, nonzero means fail, and the verifier should
 receive the prepared workspace plus declared case/run metadata as inputs. Result
-schema additions may be needed later for repo-task status and artifact paths,
-but current `run.jsonl` rows do not contain repo-task fields.
+schema additions are still needed later for repo-task status and artifact paths
+beyond the current workspace metadata.
 
 ## Runtime Adapters
 

@@ -17,8 +17,8 @@ class WorkspaceError(ValueError):
 class PreparedWorkspace:
     """Metadata for a prepared workspace.
 
-    This stays internal to the runner for now. Result rows intentionally do not
-    include repo-task artifact fields until that schema is designed.
+    The runner owns this object; result rows receive only the narrow serialized
+    metadata needed to locate the prepared workspace for this measured record.
     """
 
     source_fixture: Fixture
@@ -80,6 +80,24 @@ def workspace_path(output_dir: Path, case: Case, repetition: int) -> Path:
         raise ValueError("repetition must be an integer >= 1")
     # Case ids are path-component-safe because the pack loader enforces ID_PATTERN.
     return Path(output_dir) / "workspace" / case.id / f"rep-{repetition:03d}"
+
+
+def workspace_record(prepared: PreparedWorkspace, output_dir: Path) -> dict[str, str]:
+    """Return the run.jsonl workspace object for a prepared repo-task workspace."""
+
+    try:
+        relative_path = prepared.path.resolve().relative_to(Path(output_dir).resolve())
+    except (OSError, ValueError) as exc:
+        raise WorkspaceError(
+            f"workspace path {prepared.path} is not under run output directory "
+            f"{output_dir}"
+        ) from exc
+
+    return {
+        "path": relative_path.as_posix(),
+        "source_fixture_id": prepared.source_fixture.id,
+        "source_path": str(prepared.source_fixture.raw["path"]),
+    }
 
 
 def _reject_escaping_symlinks(source_root: Path, case: Case, fixture: Fixture) -> None:

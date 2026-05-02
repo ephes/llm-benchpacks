@@ -256,9 +256,11 @@ strings. The runner rejects manifests that violate this at load time.
   repository workspace. Current runner support is limited to copying exactly
   one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
-  measured adapter call. Applying model or agent changes, capturing a patch,
-  verifying the result deterministically, adding repo-task result fields,
-  retention options, and repo-task warmups remain planned.
+  measured adapter call and recording that workspace metadata in the measured
+  `run.jsonl` row. Applying model or agent changes, capturing a patch,
+  verifying the result deterministically, adding repo-task status and artifact
+  fields beyond workspace metadata, retention options, and repo-task warmups
+  remain planned.
 
 `replay`
 : A recorded request sequence.
@@ -268,8 +270,9 @@ strings. The runner rejects manifests that violate this at load time.
 The current `repo-task` implementation prepares disposable measured workspaces
 only. Referenced file fixtures still append to `Case.prompt`; referenced
 non-repo directory fixtures are rejected for repo-task; the single referenced
-repo directory is copied into a run-owned workspace; no directory is executed,
-mutated by the runner, patched, or verified.
+repo directory is copied into a run-owned workspace; the measured result record
+includes the prepared workspace metadata; no directory is executed, mutated by
+the runner, patched, or verified.
 
 Repo-task cases should use this conservative shape:
 
@@ -329,13 +332,14 @@ Directory fixture semantics for repo-task cases:
   field says so.
 - Directory fixtures outside repo-task execution remain metadata-only.
 
-Planned workspace and artifact layout:
+Workspace and planned artifact layout:
 
 - Workspaces live under the run output directory, for example
   `workspace/<case-id>/rep-NNN/`.
-- Future result schema work should record prepared workspace metadata such as
-  source fixture id, source fixture pack-relative path, workspace path, and
-  cleanup policy.
+- Measured repo-task `run.jsonl` records include a top-level `workspace` object
+  with `path`, `source_fixture_id`, and `source_path`. The path is relative to
+  the run output directory. The source path is the manifest-declared fixture
+  path, not an absolute resolved path.
 - Patch capture should write a deterministic diff artifact such as
   `patch.diff`, derived from changes inside the disposable workspace.
 - Task execution logs should be explicit artifacts, for example

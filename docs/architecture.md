@@ -85,12 +85,12 @@ results/
 9. Apply implemented deterministic scoring for measured executions when the
    pack declares it.
 10. Normalize metrics, resources, and scoring into `run.jsonl` for measured
-   executions.
+   executions. Measured repo-task records also include the prepared workspace
+   metadata needed to locate the run-owned copy.
 11. Write `summary.md`.
 
 Adapters still receive a loaded prompt and return the existing result envelope.
-Workspace paths are not passed to adapters and are not written to `run.jsonl` in
-this slice.
+Workspace paths are not passed to adapters.
 
 ## Repo-Task Flow
 
@@ -113,9 +113,9 @@ and before each measured adapter execution:
 6. A future verifier consumes the prepared workspace, case metadata, and
    execution outputs. It returns deterministic status and structured output; it
    does not alter adapter result payloads.
-7. The reporter will record normalized repo-task artifact paths and status
-   alongside the existing adapter, collector, and scoring fields once the result
-   schema is extended.
+7. The reporter records normalized workspace metadata for measured repo-task
+   rows. Future slices will add repo-task artifact paths and status alongside
+   the existing adapter, collector, and scoring fields.
 8. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
@@ -125,8 +125,9 @@ directory remains for model request/response payloads. Repo-task artifacts are
 expected to include categories such as `workspace/`, `patch.diff`,
 `task.stdout.log`, `task.stderr.log`, `verify.json`, and verifier logs.
 
-No current result rows contain repo-task status or artifact fields, and current
-chat cases do not use this flow.
+Measured repo-task result rows contain workspace metadata only. They do not
+contain repo-task status, patch artifacts, verifier output, or task execution
+logs yet, and current chat cases do not use this flow.
 
 ## Result Record Envelope
 
@@ -177,6 +178,8 @@ to `run.jsonl`:
 - `case` — the case id from the manifest
 - `repetition` — a 1-based integer only when the pack requests more than one
   measured repetition
+- `workspace` — present only for measured `repo-task` records, with
+  `path`, `source_fixture_id`, and `source_path`
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
   `docs/benchpack-format.md`); `null` when mode is `none` or absent. Current
@@ -189,6 +192,13 @@ id/version get attached for cross-run comparison.
 Warmup executions are runner/reporter concerns. They call the same adapter and
 write raw artifacts under `raw/`, but they do not produce result records and are
 not scored.
+
+The repo-task `workspace` object is deliberately narrow:
+`workspace.path` is relative to the run output directory and uses
+`workspace/<case-id>/rep-NNN`; `workspace.source_fixture_id` is the referenced
+repo fixture id; and `workspace.source_path` is the pack manifest fixture path.
+Chat records do not include `workspace`, even when they reference repo
+directory fixtures as metadata.
 
 ### Combined record
 

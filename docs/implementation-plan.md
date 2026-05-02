@@ -148,8 +148,9 @@ landed 2026-05-01: each measured execution copies exactly one referenced
 `kind = "repo"` directory fixture into `workspace/<case-id>/rep-NNN/` under the
 run output directory, while repo-task warmups are rejected. Phase 3 does not yet
 include fixture execution, verifier execution, repo mutation by a task harness,
-patch extraction, agent-session replay, prompt templating, repo-task result
-fields, workspace retention options, or verification scripts.
+patch extraction, agent-session replay, prompt templating, repo-task final
+status fields, workspace retention options, or verification scripts. Measured
+repo-task rows now record prepared workspace metadata.
 
 Scope:
 
@@ -186,16 +187,18 @@ Scope:
   workspace preparation at `workspace/<case-id>/rep-NNN/`, with exactly one
   referenced `kind = "repo"` directory fixture, source fixture immutability,
   separate measured repetition copies, destination-exists failures, and
-  no adapter or result schema changes.
+  no adapter changes.
 - Add a repo-task runner skeleton that prepares workspaces and records planned
   artifact paths without changing existing chat adapter behavior. **Partially
-  landed 2026-05-01** for workspace preparation only; artifact path recording
-  remains planned with the result schema slice.
+  landed 2026-05-01** for workspace preparation and measured workspace metadata
+  in `run.jsonl`; patch, verifier, log, and final status artifact paths remain
+  planned.
 - Implement `verify-script` execution against the disposable workspace and
   record verifier artifacts. **Planned.**
 - Capture deterministic patch/diff artifacts from workspace changes. **Planned.**
-- Extend result records conservatively for repo-task artifact paths and final
-  status once the runner/verifier contract is implemented. **Planned.**
+- Extend result records conservatively for repo-task patch/verifier/log artifact
+  paths and final status once the runner/verifier contract is implemented.
+  **Planned.**
 - Integrate an agent-session harness after disposable workspace, verifier, and
   patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.

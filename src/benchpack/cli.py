@@ -29,6 +29,7 @@ from .workspaces import (
     WorkspaceError,
     prepare_repo_task_workspace,
     validate_repo_task_cases,
+    workspace_record,
 )
 
 
@@ -127,9 +128,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
 
         for repetition in range(1, repetitions + 1):
+            workspace_metadata = None
             if case.kind == "repo-task":
                 try:
-                    prepare_repo_task_workspace(pack, case, out_dir, repetition)
+                    prepared_workspace = prepare_repo_task_workspace(
+                        pack,
+                        case,
+                        out_dir,
+                        repetition,
+                    )
+                    workspace_metadata = workspace_record(prepared_workspace, out_dir)
                 except WorkspaceError as exc:
                     raise SystemExit(str(exc)) from exc
             request_path, response_path = reporter.measured_paths(
@@ -152,6 +160,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 result,
                 sample,
                 repetition=repetition if repetitions > 1 else None,
+                workspace=workspace_metadata,
             )
 
     reporter.write_hardware(hardware)
