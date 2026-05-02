@@ -86,13 +86,13 @@ workspaces for measured executions, applies model output only through a narrow
 fenced unified-diff contract, captures deterministic patch artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
 log artifacts for that patch application phase, and executes `verify-script`
-scoring against the prepared workspace with a fixed runner-owned timeout. It
+scoring against the prepared workspace with a manifest-configurable verifier
+timeout and a fixed `300.0` second default when no timeout is declared. It
 does not yet run an agent harness, support manifest task commands, support
 repo-task warmups, expose workspace cleanup/retention options, or configure
-verifier timeouts or environments. Measured repo-task records include prepared
-workspace metadata, patch artifact paths, task log artifact paths, verifier
-artifact paths, final repo-task verifier status, and top-level `verify-script`
-scoring.
+verifier environments. Measured repo-task records include prepared workspace
+metadata, patch artifact paths, task log artifact paths, verifier artifact
+paths, final repo-task verifier status, and top-level `verify-script` scoring.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -194,9 +194,11 @@ deterministic verifier JSON/stdout/stderr artifact paths for a measured
 verifier attempt. On timeout, stdout/stderr logs are still created, captured
 partial output is preserved when Python exposes it, and the structured verifier
 JSON is created or corrected with `exit_code: null`, `passed: false`,
-`timed_out: true`, and the fixed `timeout_s` value. Non-repo-task cases that
-request `verify-script` fail clearly instead of falling back to prompt-output
-scoring.
+`timed_out: true`, and the actual configured `timeout_s` value. If
+`scoring.timeout_s` is absent from the effective `verify-script` scoring table,
+the verifier timeout remains `300.0` seconds. This timeout is not repeated as a
+normal top-level `run.jsonl` field. Non-repo-task cases that request
+`verify-script` fail clearly instead of falling back to prompt-output scoring.
 
 ## Runtime Adapters
 

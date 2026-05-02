@@ -29,6 +29,7 @@ from .patches import PatchError, capture_workspace_patch
 from .results import RunReporter
 from .tasks import TaskError, run_model_patch_task
 from .verifiers import (
+    DEFAULT_VERIFY_TIMEOUT_S,
     VerifierError,
     resolve_verify_script,
     run_repo_task_verifier,
@@ -218,6 +219,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
                         f"repo-task workspace for case {case.id!r}"
                     )
                 try:
+                    timeout_s = (
+                        scoring.timeout_s
+                        if scoring.timeout_s is not None
+                        else DEFAULT_VERIFY_TIMEOUT_S
+                    )
                     verifier_result = run_repo_task_verifier(
                         pack=pack,
                         case=case,
@@ -226,6 +232,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                         patch_path=out_dir / patch_metadata["path"],
                         output_dir=out_dir,
                         repetition=repetition,
+                        timeout_s=timeout_s,
                     )
                 except VerifierError as exc:
                     raise SystemExit(str(exc)) from exc

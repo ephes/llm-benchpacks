@@ -268,7 +268,7 @@ strings. The runner rejects manifests that violate this at load time.
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
   Full agent execution, manifest task commands, retention options, repo-task
-  warmups, configurable verifier timeout/environment support, and bundled pack
+  warmups, configurable verifier environment support, and bundled pack
   conversion remain planned.
 
 `replay`
@@ -296,7 +296,7 @@ id = "wrap-repo"
 kind = "repo-task"
 prompt_file = "prompts/wrap-repo.md"
 fixture_refs = ["synthetic-django-repo", "synthetic-django-app"]
-scoring = { mode = "verify-script", script = "verify/wrap-repo.py" }
+scoring = { mode = "verify-script", script = "verify/wrap-repo.py", timeout_s = 30 }
 ```
 
 Fields:
@@ -312,7 +312,8 @@ Fields:
   must be non-directory file fixtures and remain prompt/context inputs.
 - `scoring`: should use `mode = "verify-script"` for deterministic repo-task
   correctness. `contains` and `regex` remain prompt-output scoring modes and
-  are not sufficient for repository correctness.
+  are not sufficient for repository correctness. `timeout_s` is optional and
+  controls only the verifier subprocess timeout.
 
 The contract intentionally does not define broad generic blobs such as
 `workspace`, `commands`, or `environment` yet. Add explicit fields only when a
@@ -460,6 +461,14 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   workspace preparation, adapter execution, and patch capture, but before
   writing the measured row.
 
+  `timeout_s` may be declared in the same effective scoring table as
+  `mode = "verify-script"` and `script`. It must be a positive TOML integer or
+  float; booleans, strings, zero, and negative values are rejected at manifest
+  load time. When `timeout_s` is absent, the verifier timeout defaults to
+  `300.0` seconds. This is manifest-only verifier timeout configuration: there
+  is no CLI timeout flag, no task timeout configuration, and no verifier
+  environment configuration in this slice.
+
   The verifier receives deterministic arguments:
   `--workspace <absolute prepared workspace path>`, `--case <case id>`,
   `--pack-id <pack id>`, `--pack-version <pack version>`,
@@ -468,9 +477,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `--output <absolute verify JSON path>`.
 
   Exit code `0` means pass; any nonzero exit code means fail. Verifier
-  subprocesses are bounded by a fixed runner-owned default timeout in the
-  current implementation. A timeout is recorded as a completed failed measured
-  row with `repo_task.verify_exit_code = null` and top-level scoring
+  subprocesses are bounded by the effective scoring timeout. A timeout is
+  recorded as a completed failed measured row with
+  `repo_task.verify_exit_code = null` and top-level scoring
   `{"mode": "verify-script", "passed": false}`.
 
   The runner captures stdout/stderr to deterministic log artifacts and ensures
@@ -484,8 +493,8 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   If timeout-time JSON is missing, malformed, or not an object, the runner
   replaces it with that minimal authoritative timeout object. Non-repo-task
   cases that request `verify-script` fail clearly. The verifier must not mutate
-  pack-owned source fixtures. Configurable timeout and environment support
-  remain planned.
+  pack-owned source fixtures. Configurable verifier environment support remains
+  planned.
 
 `llm-judge`
 : Reserved; not implemented by the scorer yet. Intended behavior is to send the

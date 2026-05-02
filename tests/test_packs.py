@@ -16,6 +16,7 @@ from benchpack.packs import (
     InvalidFixtureRefError,
     InvalidIdError,
     InvalidPromptSourceError,
+    PackError,
     load_pack,
     repetitions_from_defaults,
     warmup_from_defaults,
@@ -1179,6 +1180,93 @@ scoring = { mode = "none" }
     assert pack.cases[0].scoring is None
     assert pack.cases[1].scoring is not None
     assert pack.cases[1].scoring.mode == "none"
+
+
+def test_load_pack_scoring_timeout_int_is_first_class_field(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "timeoutpack"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+timeout_s = 30
+custom_key = "kept"
+""",
+    )
+
+    scoring = load_pack(pack_dir).scoring
+
+    assert scoring is not None
+    assert scoring.timeout_s == 30.0
+    assert isinstance(scoring.timeout_s, float)
+    assert scoring.extra == {"custom_key": "kept"}
+
+
+def test_load_pack_case_scoring_timeout_float_is_first_class_field(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "timeoutpack"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+scoring = { mode = "verify-script", script = "verify/check.py", timeout_s = 2.5 }
+""",
+    )
+
+    scoring = load_pack(pack_dir).cases[0].scoring
+
+    assert scoring is not None
+    assert scoring.timeout_s == 2.5
+    assert "timeout_s" not in scoring.extra
+
+
+@pytest.mark.parametrize(
+    "timeout_s",
+    ["0", "0.0", "-1", "true", "false", '"30"'],
+)
+def test_load_pack_rejects_invalid_scoring_timeout(
+    tmp_path: Path,
+    timeout_s: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "badtimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+timeout_s = {timeout_s}
+""",
+    )
+
+    with pytest.raises(PackError, match="scoring.timeout_s"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_rejects_path_unsafe_case_id(tmp_path: Path) -> None:

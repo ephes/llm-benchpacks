@@ -137,8 +137,9 @@ and before each measured adapter execution:
    verifier consumes the prepared workspace, case metadata, pack metadata,
    source fixture id, patch artifact path, and requested output path as
    command-line arguments. It returns deterministic status through its process
-   exit code and may write structured JSON. The runner enforces a fixed
-   runner-owned subprocess timeout, captures verifier stdout/stderr as explicit
+   exit code and may write structured JSON. The runner enforces the effective
+   `verify-script` scoring timeout, defaulting to `300.0` seconds when
+   `scoring.timeout_s` is absent, captures verifier stdout/stderr as explicit
    artifacts, and corrects or creates the structured JSON so `exit_code` and
    `passed` match the process result or timeout outcome.
 9. The reporter records normalized workspace metadata, `patch.path`, `task`,

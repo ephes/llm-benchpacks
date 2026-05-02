@@ -152,12 +152,14 @@ workspace metadata landed 2026-05-01. Deterministic patch capture landed
 `patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
 include fixture execution, repo mutation by a task harness, agent-session
 replay, prompt templating, workspace retention options, verifier
-environment configuration, configurable verifier timeout, or bundled pack
-conversion. Measured repo-task verifier execution and final verifier status
-landed 2026-05-02 for `verify-script` rows only. A fixed runner-owned verifier
-subprocess timeout landed 2026-05-02 so measured verifier hangs become
-completed failed rows instead of runner hangs. Deterministic no-op task log
-artifacts landed 2026-05-02: each measured repo-task execution writes empty
+environment configuration, or bundled pack conversion. Measured repo-task
+verifier execution and final verifier status landed 2026-05-02 for
+`verify-script` rows only. A fixed-default runner-owned verifier subprocess
+timeout landed 2026-05-02 so measured verifier hangs become completed failed
+rows instead of runner hangs, and manifest-configurable verifier timeout via
+`scoring.timeout_s` landed 2026-05-02 while preserving the `300.0` second
+default. Deterministic no-op task log artifacts landed 2026-05-02: each
+measured repo-task execution writes empty
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` files and records `task.stdout_path` and
 `task.stderr_path`. Fenced model-output patch application landed 2026-05-02:
@@ -219,11 +221,13 @@ Scope:
   `verify/<case-id>/rep-NNN.*`, and result rows include `verify`, `repo_task`,
   and top-level `verify-script` scoring.
 - Add bounded verifier subprocess execution. **Landed 2026-05-02** for
-  measured `repo-task` `verify-script` executions only: the runner uses a fixed
-  default verifier timeout, records timeouts as completed failed measured rows,
-  keeps verifier JSON/stdout/stderr artifact paths stable, writes
+  measured `repo-task` `verify-script` executions only: the runner uses a
+  fixed default verifier timeout, records timeouts as completed failed measured
+  rows, keeps verifier JSON/stdout/stderr artifact paths stable, writes
   `repo_task.verify_exit_code = null`, and marks timeout JSON with
-  `timed_out` and `timeout_s`. Manifest fields, CLI flags, environment
+  `timed_out` and `timeout_s`. Manifest-configurable verifier timeout via
+  `scoring.timeout_s` also landed 2026-05-02, preserving the `300.0` second
+  default when absent. CLI flags, environment configuration, task timeout
   configuration, and broader timeout policy remain planned.
 - Capture deterministic patch/diff artifacts from workspace changes. **Landed
   2026-05-02** as source-vs-workspace directory snapshot diffs written to

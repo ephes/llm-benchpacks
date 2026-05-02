@@ -82,6 +82,7 @@ class Scoring:
     pattern: str | None = None
     schema: str | None = None
     script: str | None = None
+    timeout_s: float | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -127,7 +128,8 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
             f"unknown scoring mode {mode!r}; expected one of "
             f"{sorted(KNOWN_SCORING_MODES)}"
         )
-    known = {"mode", "expected", "pattern", "schema", "script"}
+    timeout_s = _scoring_timeout_from_value(data.get("timeout_s"))
+    known = {"mode", "expected", "pattern", "schema", "script", "timeout_s"}
     extra = {k: v for k, v in data.items() if k not in known}
     return Scoring(
         mode=mode,
@@ -135,8 +137,24 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
         pattern=data.get("pattern"),
         schema=data.get("schema"),
         script=data.get("script"),
+        timeout_s=timeout_s,
         extra=extra,
     )
+
+
+def _scoring_timeout_from_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PackError(
+            f"scoring.timeout_s must be a positive number; got {value!r}"
+        )
+    timeout_s = float(value)
+    if timeout_s <= 0:
+        raise PackError(
+            f"scoring.timeout_s must be a positive number; got {value!r}"
+        )
+    return timeout_s
 
 
 def _validated_int_default(

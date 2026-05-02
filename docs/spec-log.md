@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-02 (Phase 3 manifest verifier timeout)
+
+### Changed
+
+- Added manifest-configurable verifier timeouts for measured `repo-task`
+  `verify-script` scoring through optional `scoring.timeout_s`.
+- `timeout_s` is a first-class scoring field, not an opaque extra key, and is
+  validated as a positive TOML int or float. Booleans, strings, zero, and
+  negative values fail manifest loading.
+- Verifier execution now uses the effective scoring table's timeout, so
+  case-local scoring overrides pack-level scoring for `timeout_s` the same way
+  they already override `mode` and `script`.
+- The default remains `300.0` seconds when `timeout_s` is absent. Timeout
+  verifier JSON records the actual configured value, while normal result rows
+  do not gain new top-level timeout fields.
+- Adapter request shape, raw request/response paths, workspace, patch, task,
+  verify, repo_task, and scoring row shapes, repo-task warmup rejection,
+  prompt-output scoring, non-repo-task `verify-script` rejection, verifier
+  environment handling, task timeout handling, and workspace retention behavior
+  remain unchanged.
+
+### Open Questions
+
+- Future slices still need full agent-session harness integration, richer task
+  status/reporting if needed, repo-task warmup support, cleanup and retention
+  options, configurable verifier environment support, and larger bundled
+  repo-task conversion.
+
 ## 2026-05-02 (Phase 3 bundled repo-task patch pack)
 
 ### Changed
@@ -48,7 +76,7 @@ working history and open questions.
 
 - Future slices still need full agent-session harness integration, richer task
   status/reporting if needed, repo-task warmup support, cleanup and retention
-  options, configurable verifier timeout/environment support, and larger
+  options, configurable verifier environment support, and larger
   bundled repo-task conversion.
 
 ## 2026-05-02 (Phase 3 repo-task verifier timeout)
@@ -86,7 +114,7 @@ working history and open questions.
 
 - Future slices still need real task or agent execution, model-output patch
   application, warmup workspace support, cleanup and retention options,
-  configurable verifier timeout/environment support, and bundled pack
+  configurable verifier environment support, and bundled pack
   conversion.
 
 ## 2026-05-02 (Phase 3 repo-task model-output patch application)
@@ -125,7 +153,7 @@ working history and open questions.
 
 - Future slices still need full agent-session harness integration, richer task
   status/reporting if needed, repo-task warmup support, cleanup and retention
-  options, configurable verifier timeout/environment support, and bundled pack
+  options, configurable verifier environment support, and bundled pack
   conversion.
 
 ## 2026-05-02 (Phase 3 repo-task task log artifacts)
@@ -161,7 +189,7 @@ working history and open questions.
 
 - Future slices still need real task or agent execution, model-output mutation
   or patch application, warmup workspace support, cleanup and retention options,
-  configurable verifier timeout/environment support, and bundled pack
+  configurable verifier environment support, and bundled pack
   conversion.
 
 ## 2026-05-02 (Phase 3 repo-task verifier artifacts)
