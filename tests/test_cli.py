@@ -27,6 +27,12 @@ from benchpack.adapters.openai_chat import (
 from benchpack.cli import main
 
 
+NO_PATCH_TASK_STDERR = (
+    "No fenced diff or patch block found in model output; "
+    "workspace left unchanged.\n"
+)
+
+
 def _install_fake_adapter(monkeypatch) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
@@ -90,6 +96,54 @@ def _install_recording_adapter(monkeypatch) -> list[dict[str, str]]:
             )
 
     monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", RecordingAdapter)
+    return calls
+
+
+def _install_output_adapter(monkeypatch, output_text: str) -> list[dict[str, str]]:
+    calls: list[dict[str, str]] = []
+
+    class OutputAdapter:
+        name = "openai-chat"
+
+        def run(self, request: AdapterRequest) -> AdapterResult:
+            calls.append(
+                {
+                    "prompt": request.prompt,
+                    "request_path": request.request_path.name,
+                    "response_path": request.response_path.name,
+                }
+            )
+            request.request_path.write_text(json.dumps({"prompt": request.prompt}))
+            request.response_path.write_text(
+                json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": output_text,
+                                }
+                            }
+                        ],
+                        "usage": {"prompt_tokens": 7, "completion_tokens": 2},
+                    }
+                )
+            )
+            return AdapterResult(
+                adapter=self.name,
+                endpoint="http://example.test/v1/chat/completions",
+                model=request.model,
+                ok=True,
+                timing=Timing(wall_s=1.0),
+                tokens=Tokens(prompt=7, output=2),
+                raw=RawPaths(
+                    request_path=str(request.request_path),
+                    response_path=str(request.response_path),
+                ),
+                output_text=output_text,
+            )
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", OutputAdapter)
     return calls
 
 
@@ -390,10 +444,112 @@ def test_cli_repo_task_creates_run_owned_workspace(
         encoding="utf-8"
     ) == ""
     assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == ""
-    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (
+        out / record["task"]["stderr_path"]
+    ).read_text(encoding="utf-8") == NO_PATCH_TASK_STDERR
     assert "verify" not in record
     assert "repo_task" not in record
     assert "artifacts" not in record
+
+
+def test_cli_repo_task_applies_fenced_diff_before_patch_capture(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """Applied change.
+
+```diff
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-source repo
++patched repo
+```
+"""
+    _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(tmp_path, scoring='[scoring]\nmode = "none"\n')
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "patched repo\n"
+    source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
+    assert source.read_text(encoding="utf-8") == "source repo\n"
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+patched repo\n"
+    )
+    assert "artifacts" not in record
+
+
+def test_cli_repo_task_verify_script_observes_applied_diff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """```diff
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-source repo
++verified repo
+```
+"""
+    _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+content = Path(args.workspace, "README.md").read_text(encoding="utf-8")
+if content != "verified repo\\n":
+    raise SystemExit(2)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"content": content}, fh)
+""",
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "content": "verified repo\n",
+        "exit_code": 0,
+        "passed": True,
+    }
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
 
 
 def test_cli_repo_task_verify_script_success_records_artifacts(
@@ -454,7 +610,7 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert verify_json["exit_code"] == 0
     assert verify_json["passed"] is True
     assert (out / record["task"]["stdout_path"]).read_text() == ""
-    assert (out / record["task"]["stderr_path"]).read_text() == ""
+    assert (out / record["task"]["stderr_path"]).read_text() == NO_PATCH_TASK_STDERR
     assert (out / record["verify"]["stdout_path"]).read_text() == "verified stdout\n"
     assert (out / record["verify"]["stderr_path"]).read_text() == "verified stderr\n"
 
@@ -580,7 +736,9 @@ def test_cli_repo_task_verify_script_repetitions_get_separate_artifacts(
     assert (out / "verify" / "edit-repo" / "rep-001.json").is_file()
     assert (out / "verify" / "edit-repo" / "rep-002.json").is_file()
     assert (out / "task" / "edit-repo" / "rep-001.stdout.log").read_text() == ""
-    assert (out / "task" / "edit-repo" / "rep-002.stderr.log").read_text() == ""
+    assert (
+        out / "task" / "edit-repo" / "rep-002.stderr.log"
+    ).read_text() == NO_PATCH_TASK_STDERR
 
 
 def test_cli_repo_task_allows_additional_file_fixture_refs(
@@ -663,7 +821,9 @@ def test_cli_repo_task_repetitions_get_separate_workspaces(
     assert (out / "patch" / "edit-repo" / "rep-001.diff").is_file()
     assert (out / "patch" / "edit-repo" / "rep-002.diff").is_file()
     assert (out / "task" / "edit-repo" / "rep-001.stdout.log").read_text() == ""
-    assert (out / "task" / "edit-repo" / "rep-002.stderr.log").read_text() == ""
+    assert (
+        out / "task" / "edit-repo" / "rep-002.stderr.log"
+    ).read_text() == NO_PATCH_TASK_STDERR
 
     (rep1 / "README.md").write_text("changed copy\n", encoding="utf-8")
 

@@ -160,8 +160,12 @@ completed failed rows instead of runner hangs. Deterministic no-op task log
 artifacts landed 2026-05-02: each measured repo-task execution writes empty
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` files and records `task.stdout_path` and
-`task.stderr_path`, while real task execution, agent harness integration, and
-model-output mutation/application remain planned.
+`task.stderr_path`. Fenced model-output patch application landed 2026-05-02:
+for measured repo-task executions, the runner extracts the first fenced `diff`
+or `patch` block from model output, applies it as a unified diff inside the
+prepared workspace, logs the task-phase outcome, then captures the
+source-vs-workspace patch and runs any verifier. Full agent harness
+integration and manifest task command execution remain planned.
 
 Scope:
 
@@ -204,7 +208,7 @@ Scope:
   landed** for workspace preparation and measured workspace metadata in
   `run.jsonl` on 2026-05-01, and measured patch artifact paths on 2026-05-02;
   verifier artifact paths and final verifier status landed later on
-  2026-05-02; no-op task execution log paths landed on 2026-05-02.
+  2026-05-02; task execution log paths landed on 2026-05-02.
 - Implement `verify-script` execution against the disposable workspace and
   record verifier artifacts. **Landed 2026-05-02** for measured `repo-task`
   executions only: scripts run as `sys.executable <pack-relative script>` after
@@ -226,7 +230,14 @@ Scope:
   paths and final status once the runner/verifier contract is implemented.
   **Partially landed 2026-05-02** for `patch.path`; verifier artifact paths and
   final verifier status also landed 2026-05-02 for `verify-script`; task log
-  artifact paths landed 2026-05-02 for the current no-op task phase.
+  artifact paths landed 2026-05-02.
+- Apply model output to the prepared workspace through a narrow explicit patch
+  contract. **Landed 2026-05-02** for measured `repo-task` executions only: the
+  runner uses the first fenced `diff` or `patch` block in adapter output as a
+  unified diff, applies it inside the prepared workspace after the adapter call
+  and before patch capture, writes task stdout/stderr logs, keeps rows
+  completed for missing or unapplicable patches, and leaves the adapter boundary
+  and result object shapes unchanged.
 - Integrate an agent-session harness after disposable workspace, verifier, and
   patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.

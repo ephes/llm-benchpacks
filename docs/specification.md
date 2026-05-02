@@ -74,16 +74,17 @@ measurement, not model-quality comparison.
 `repo-task` is the case kind for coding-agent-shaped workloads that must change
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
-workspaces for measured executions, captures deterministic patch artifacts from
+workspaces for measured executions, applies model output only through a narrow
+fenced unified-diff contract, captures deterministic patch artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
-log artifacts for the current no-op task phase, and executes `verify-script`
+log artifacts for that patch application phase, and executes `verify-script`
 scoring against the prepared workspace with a fixed runner-owned timeout. It
-does not yet run an agent harness, apply model output as repository mutations,
-support repo-task warmups, expose workspace cleanup/retention options, or
-configure verifier timeouts or environments. Measured repo-task records include
-prepared workspace metadata, patch artifact paths, task log artifact paths,
-verifier artifact paths, final repo-task verifier status, and top-level
-`verify-script` scoring.
+does not yet run an agent harness, support manifest task commands, support
+repo-task warmups, expose workspace cleanup/retention options, or configure
+verifier timeouts or environments. Measured repo-task records include prepared
+workspace metadata, patch artifact paths, task log artifact paths, verifier
+artifact paths, final repo-task verifier status, and top-level `verify-script`
+scoring.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -130,19 +131,24 @@ Current repo-task artifacts include:
 
 - the disposable `workspace/` contents while retained locally
 - `patch/<case-id>/rep-NNN.diff`, captured from workspace changes after the
-  adapter call
-- `task/<case-id>/rep-NNN.stdout.log`, task stdout for the current no-op task
-  phase
-- `task/<case-id>/rep-NNN.stderr.log`, task stderr for the current no-op task
-  phase
+  model-output patch application phase
+- `task/<case-id>/rep-NNN.stdout.log`, task stdout for the model-output patch
+  application phase
+- `task/<case-id>/rep-NNN.stderr.log`, task stderr for the model-output patch
+  application phase
 - `verify/<case-id>/rep-NNN.json`, structured verifier output
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr
 
-The current task phase is a runner-owned no-op placeholder, so task stdout and
-stderr log files are created but empty. Future agent-session execution or
-model-output mutation/application will fill those artifacts with real execution
-logs.
+The current task phase extracts the first fenced code block whose info string is
+exactly `diff` or `patch` from the adapter output. That block content is treated
+as a unified diff and applied inside the prepared workspace after the adapter
+call and before patch capture. Non-matching fenced blocks are ignored. If no
+matching block exists, or if the diff is empty, unsafe, or cannot be applied
+cleanly, the runner leaves the workspace unchanged, writes a deterministic
+message to task stderr, and still records the measured row. On success, task
+stdout records a short deterministic success message and task stderr remains
+empty. This is a small model-output bridge, not a full agent harness.
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
 from repo-task workspace and verifier artifacts. Measured repo-task

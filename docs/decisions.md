@@ -241,9 +241,11 @@ as run-relative path plus source fixture id and manifest-declared source path,
 and record the deterministic patch artifact path as
 `patch/<case-id>/rep-NNN.diff`. Measured rows also record deterministic task
 stdout/stderr log artifact paths as `task/<case-id>/rep-NNN.stdout.log` and
-`task/<case-id>/rep-NNN.stderr.log`. These task logs are empty in the current
-runner-owned no-op task phase until a later agent-session harness or
-model-output mutation/application slice fills them. Measured rows using
+`task/<case-id>/rep-NNN.stderr.log`. The current task phase is a narrow
+model-output patch bridge: it extracts the first fenced `diff` or `patch` block
+from adapter output, applies that unified diff only inside the prepared
+workspace, and writes deterministic task stdout/stderr describing success,
+missing patch content, unsafe paths, or failed application. Measured rows using
 `verify-script` record verifier artifact paths as
 `verify/<case-id>/rep-NNN.json`,
 `verify/<case-id>/rep-NNN.stdout.log`, and
@@ -254,7 +256,7 @@ timeout in the current implementation; timeouts keep the same artifact paths,
 record `repo_task.status = "failed"`, record
 `repo_task.verify_exit_code = null`, and write authoritative timeout metadata
 into the verifier JSON. Configurable timeout/environment support and real task
-execution remain planned.
+execution through a full agent-session harness remain planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

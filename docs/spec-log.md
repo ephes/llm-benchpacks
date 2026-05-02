@@ -54,6 +54,45 @@ working history and open questions.
   configurable verifier timeout/environment support, and bundled pack
   conversion.
 
+## 2026-05-02 (Phase 3 repo-task model-output patch application)
+
+### Changed
+
+- Added the next narrow measured `repo-task` task phase: after adapter
+  execution, the runner extracts the first fenced code block whose info string
+  is exactly `diff` or `patch`, treats that block body as a unified diff, and
+  applies it inside the prepared workspace before source-vs-workspace patch
+  capture and verifier execution.
+- Non-matching fenced blocks are ignored. Missing matching blocks, empty patch
+  blocks, unsafe paths, and unapplicable diffs are written as deterministic task
+  stderr messages and do not crash the benchmark row.
+- Successful application writes a short deterministic task stdout message and
+  leaves task stderr empty. The existing top-level `task.stdout_path` and
+  `task.stderr_path` row metadata shape is unchanged.
+- Patch capture now observes any applied model patch, so
+  `patch/<case-id>/rep-NNN.diff` reflects the mutated workspace. `verify-script`
+  verifiers also observe the mutated workspace because they still run after
+  patch capture.
+- Path preflight rejects absolute paths, `..` traversal, null bytes, and paths
+  that resolve outside the prepared workspace. Pack-owned source fixtures remain
+  immutable and are not passed to the patch applier.
+- Raw request/response paths, adapter request shape, workspace metadata,
+  patch metadata, verifier pass/fail/timeout behavior, repo-task fixture
+  validation, symlink escape rejection, repo-task warmup rejection,
+  prompt-output scoring, non-repo-task `verify-script` rejection, and chat row
+  shapes remain unchanged.
+- No agent-session harness, shell command manifest, environment configuration,
+  task timeout configuration, CLI task flags, workspace retention option,
+  repo-task warmup support, bundled pack conversion, live benchmark run, broad
+  generic `artifacts` object, or new task status/result field was added.
+
+### Open Questions
+
+- Future slices still need full agent-session harness integration, richer task
+  status/reporting if needed, repo-task warmup support, cleanup and retention
+  options, configurable verifier timeout/environment support, and bundled pack
+  conversion.
+
 ## 2026-05-02 (Phase 3 repo-task task log artifacts)
 
 ### Changed

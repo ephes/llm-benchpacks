@@ -259,15 +259,17 @@ strings. The runner rejects manifests that violate this at load time.
   repository workspace and can verify it deterministically. Current runner
   support copies exactly one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
-  measured adapter call, captures a deterministic patch artifact at
-  `patch/<case-id>/rep-NNN.diff` after the adapter call, writes empty
-  no-op task logs at `task/<case-id>/rep-NNN.stdout.log` and
+  measured adapter call, applies the first fenced `diff` or `patch` block from
+  model output as a unified diff inside that workspace, captures a
+  deterministic patch artifact at `patch/<case-id>/rep-NNN.diff` after the
+  model-output patch phase, writes task logs at
+  `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`, executes `verify-script` scoring when
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
-  Applying model or agent changes, real task execution, retention options,
-  repo-task warmups, configurable verifier timeout/environment support, and
-  bundled pack conversion remain planned.
+  Full agent execution, manifest task commands, retention options, repo-task
+  warmups, configurable verifier timeout/environment support, and bundled pack
+  conversion remain planned.
 
 `replay`
 : A recorded request sequence.
@@ -275,15 +277,16 @@ strings. The runner rejects manifests that violate this at load time.
 ### `repo-task` Contract
 
 The current `repo-task` implementation prepares disposable measured workspaces,
-captures patch artifacts, writes deterministic empty task stdout/stderr logs
-for a no-op placeholder task phase, and executes `verify-script` scoring when
-declared. Referenced file fixtures still append to `Case.prompt`; referenced
-non-repo directory fixtures are rejected for repo-task; the single referenced
-repo directory is copied into a run-owned workspace; the measured result record
+applies model output only through an explicit fenced unified-diff contract,
+captures patch artifacts, writes deterministic task stdout/stderr logs for that
+patch application phase, and executes `verify-script` scoring when declared.
+Referenced file fixtures still append to `Case.prompt`; referenced non-repo
+directory fixtures are rejected for repo-task; the single referenced repo
+directory is copied into a run-owned workspace; the measured result record
 includes the prepared workspace metadata, `patch.path`, task log artifact
 paths, verifier artifact paths, final verifier status, and top-level
 `verify-script` scoring. The runner still does not execute an agent harness or
-apply model output as code changes.
+manifest-declared task commands.
 
 Repo-task cases should use this conservative shape:
 
@@ -332,6 +335,14 @@ Directory fixture semantics for repo-task cases:
 - Future mutation is allowed only inside the disposable workspace. Pack
   fixtures, prompts, verify scripts, and other source artifacts remain
   read-only by contract.
+- The current mutation source is narrow and model-output-only: after the
+  adapter call, the runner extracts the first fenced code block whose info
+  string is exactly `diff` or `patch`, treats the block body as a unified diff,
+  and applies it from the prepared workspace root. Non-matching fenced blocks
+  are ignored. If no matching block exists, if the block is empty, if paths are
+  unsafe, or if the diff cannot be applied cleanly, the workspace remains
+  unchanged, task stderr records a deterministic message, and the measured row
+  is still written.
 - Repo-task execution must not write outside the run output directory and the
   prepared workspace, and pack contracts must not depend on implicit network
   access or private local host paths.
@@ -361,8 +372,10 @@ Workspace and artifact layout:
   `task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
   single-repetition packs. Measured repo-task records include a top-level
   `task` object with run-relative `stdout_path` and `stderr_path`. These files
-  are empty in the current no-op task phase until a future agent harness or
-  model-output application slice performs real task execution.
+  record the current fenced unified-diff extraction/application phase. On
+  successful application stdout contains a short deterministic success message
+  and stderr is empty; no-patch and rejected-patch outcomes are recorded in
+  stderr.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and
