@@ -20,6 +20,7 @@ from benchpack.packs import (
     repetitions_from_defaults,
     warmup_from_defaults,
 )
+from benchpack.workspaces import validate_repo_task_case
 
 
 def write_manifest(tmp_path: Path, body: str) -> Path:
@@ -1514,3 +1515,56 @@ def test_bundled_desktop_django_wrap_pack_contract() -> None:
             fixture_contents = fixture_file.read_text(encoding="utf-8")
             for fragment in forbidden_path_fragments:
                 assert fragment not in fixture_contents
+
+
+def test_bundled_patch_from_failure_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "patch-from-failure")
+    pack_dir = repo_root / "benchpacks" / "patch-from-failure"
+
+    assert pack.id == "patch-from-failure"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 256
+    assert pack.defaults["stream"] is False
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert pack.scoring is None
+
+    assert [fixture.id for fixture in pack.fixtures] == ["repo"]
+    fixture = pack.fixtures[0]
+    assert fixture.kind == "repo"
+    assert fixture.raw["path"] == "fixtures/repo"
+    assert fixture.path.is_relative_to(pack_dir.resolve())
+    assert fixture.path.is_dir()
+
+    assert len(pack.cases) == 1
+    case = pack.cases[0]
+    assert case.id == "fix-greeting"
+    assert case.kind == "repo-task"
+    assert case.fixture_refs == ["repo"]
+    assert case.raw["prompt_file"] == "prompts/fix-greeting.md"
+    assert "prompt" not in case.raw
+    assert case.prompt is not None
+    assert "```diff" in case.prompt
+    assert "info string exactly `diff`" in case.prompt
+    assert "`greeter.py`" in case.prompt
+    assert "Hello, Ada!" in case.prompt
+    assert "Do not include shell commands" in case.prompt
+
+    assert case.scoring is not None
+    assert case.scoring.mode == "verify-script"
+    assert case.scoring.script == "verify/check.py"
+    assert validate_repo_task_case(pack, case).id == "repo"
+
+    fixture_files = {
+        path.relative_to(fixture.path).as_posix()
+        for path in fixture.path.rglob("*")
+        if path.is_file()
+    }
+    assert fixture_files == {"greeter.py", "tests/test_greeter.py"}
+    assert (
+        fixture.path.joinpath("greeter.py").read_text(encoding="utf-8")
+        == 'def greet(name: str) -> str:\n    return f"Hello {name}."\n'
+    )
+    assert pack_dir.joinpath("verify/check.py").is_file()

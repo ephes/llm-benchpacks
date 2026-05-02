@@ -16,6 +16,41 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-02 (Phase 3 bundled repo-task patch pack)
+
+### Changed
+
+- Added the first bundled measured repo-mutating `repo-task` pack:
+  `patch-from-failure` version `0.1.0`.
+- The pack declares one tiny stdlib-only Python `kind = "repo"` fixture and one
+  measured `fix-greeting` case with `defaults.warmup = 0`,
+  `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`.
+- The prompt tells the model to return only a fenced `diff` block containing a
+  unified diff from the repository root, exercising the current model-output
+  patch bridge as an actual bundled benchmark surface.
+- The verifier is stdlib-only and deterministic: it imports `greeter.py` from
+  the prepared workspace, requires `greet("Ada") == "Hello, Ada!"`, requires a
+  non-empty captured patch artifact, writes JSON to the runner-provided output
+  path, and uses the process exit code as the pass/fail authority.
+- Added bundled pack loading coverage and a mocked-adapter CLI test that runs
+  `patch-from-failure` by name, applies a fenced diff, confirms source fixture
+  immutability, and checks the existing `workspace`, `patch`, `task`, `verify`,
+  `repo_task`, `scoring`, and `raw` row shapes without adding a generic
+  `artifacts` object.
+- No adapter request fields, CLI flags, manifest shell commands, manifest task
+  commands, environment configuration, task timeout configuration, repo-task
+  warmups, workspace retention options, live benchmark output, larger bundled
+  repo-task conversion, broad generic artifact object, or new task status/result
+  fields were added.
+
+### Open Questions
+
+- Future slices still need full agent-session harness integration, richer task
+  status/reporting if needed, repo-task warmup support, cleanup and retention
+  options, configurable verifier timeout/environment support, and larger
+  bundled repo-task conversion.
+
 ## 2026-05-02 (Phase 3 repo-task verifier timeout)
 
 ### Changed

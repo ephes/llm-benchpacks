@@ -165,7 +165,10 @@ for measured repo-task executions, the runner extracts the first fenced `diff`
 or `patch` block from model output, applies it as a unified diff inside the
 prepared workspace, logs the task-phase outcome, then captures the
 source-vs-workspace patch and runs any verifier. Full agent harness
-integration and manifest task command execution remain planned.
+integration and manifest task command execution remain planned. The first
+bundled measured repo-mutating repo-task pack, `patch-from-failure`, landed
+2026-05-02 as a narrow fixture/prompt/verifier slice over that fenced diff
+contract.
 
 Scope:
 
@@ -238,6 +241,12 @@ Scope:
   and before patch capture, writes task stdout/stderr logs, keeps rows
   completed for missing or unapplicable patches, and leaves the adapter boundary
   and result object shapes unchanged.
+- Add the first bundled measured repo-mutating repo-task pack over the fenced
+  unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
+  tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
+  `defaults.warmup = 0`, `defaults.repetitions = 1`, a prompt that requires a
+  fenced `diff` block, and a stdlib `verify-script` that checks the patched
+  workspace.
 - Integrate an agent-session harness after disposable workspace, verifier, and
   patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.
@@ -252,7 +261,8 @@ Move beyond speed into correctness.
 
 Scope:
 
-- `patch-from-failure` pack.
+- `patch-from-failure` pack. **Landed 2026-05-02** as the first bundled
+  measured repo-mutating repo-task pack using fenced model-output diffs.
 - Disposable worktree setup.
 - Model output to patch extraction or agent-harness integration.
 - Deterministic scoring by tests passing, diff size, and timeout.

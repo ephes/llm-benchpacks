@@ -36,6 +36,7 @@ uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
+uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
@@ -83,6 +84,11 @@ Bundled packs:
   directory fixture remains metadata-only and is not copied, executed,
   injected, or used to mutate a repository. This is not yet a repo-mutating
   wrap benchmark.
+- `patch-from-failure`: non-streaming single-case `repo-task` pack with one
+  tiny Python repo fixture. The case asks the model to return only a fenced
+  `diff` block, applies that unified diff inside a run-owned workspace, captures
+  `patch/fix-greeting/rep-001.diff`, and uses a stdlib `verify-script` to check
+  that `greet("Ada")` returns exactly `Hello, Ada!`.
 
 ## Initial Shape
 
@@ -91,13 +97,12 @@ The first implementation stays small:
 1. A CLI that can run one benchmark pack against one endpoint.
 2. An OpenAI-compatible adapter for `mlx_lm.server`, `llama-server`, vLLM, LM Studio, and similar servers.
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
-4. Smoke and runtime-sweep benchmarks, plus the prompt-only
-   `desktop-django-wrap` Phase 3 starter pack derived from the
-   `desktop-django-starter` wrapping workflow, with static fixture metadata
-   referenced by fixture id from cases. Referenced file fixtures are assembled
-   into prompts, while referenced directory fixtures stay metadata-only.
-   Fixtures are not templated, copied, executed, or used to mutate
-   repositories.
+4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
+   the prompt-only `desktop-django-wrap` starter pack and the first measured
+   repo-mutating `patch-from-failure` pack using the fenced unified-diff
+   contract. `desktop-django-wrap` still treats directory fixtures as
+   metadata-only; `patch-from-failure` copies its repo fixture into a run-owned
+   workspace, applies the model diff there, and verifies the result.
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

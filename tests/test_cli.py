@@ -343,6 +343,22 @@ def _argv(extra: list[str] | None = None) -> list[str]:
     ]
 
 
+def _patch_from_failure_argv(extra: list[str] | None = None) -> list[str]:
+    return [
+        "run",
+        "patch-from-failure",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "test-model",
+        "--endpoint",
+        "http://example.test/v1",
+        "--host-label",
+        "unit-test",
+        *(extra or []),
+    ]
+
+
 def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> None:
     _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -550,6 +566,98 @@ with open(args.output, "w", encoding="utf-8") as fh:
         "passed": True,
     }
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_cli_bundled_patch_from_failure_runs_repo_task_flow(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """```diff
+--- a/greeter.py
++++ b/greeter.py
+@@ -1,2 +1,2 @@
+ def greet(name: str) -> str:
+-    return f"Hello {name}."
++    return f"Hello, {name}!"
+```
+"""
+    calls = _install_output_adapter(monkeypatch, output)
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    out = tmp_path / "run"
+
+    assert main(_patch_from_failure_argv(["--out", str(out)])) == 0
+
+    workspace_file = out / "workspace" / "fix-greeting" / "rep-001" / "greeter.py"
+    assert workspace_file.read_text(encoding="utf-8") == (
+        'def greet(name: str) -> str:\n    return f"Hello, {name}!"\n'
+    )
+    source_file = (
+        repo_root
+        / "benchpacks"
+        / "patch-from-failure"
+        / "fixtures"
+        / "repo"
+        / "greeter.py"
+    )
+    assert source_file.read_text(encoding="utf-8") == (
+        'def greet(name: str) -> str:\n    return f"Hello {name}."\n'
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["request_path"] == "fix-greeting.request.json"
+    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "`greeter.py`" in calls[0]["prompt"]
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {"id": "patch-from-failure", "version": "0.1.0"}
+    assert record["case"] == "fix-greeting"
+    assert record["adapter"] == "openai-chat"
+    assert record["raw"] == {
+        "request_path": "raw/fix-greeting.request.json",
+        "response_path": "raw/fix-greeting.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/fix-greeting/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/fix-greeting/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/fix-greeting/rep-001.stdout.log",
+        "stderr_path": "task/fix-greeting/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/fix-greeting/rep-001.json",
+        "stdout_path": "verify/fix-greeting/rep-001.stdout.log",
+        "stderr_path": "verify/fix-greeting/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert patch
+    assert "--- a/greeter.py" in patch
+    assert '+    return f"Hello, {name}!"' in patch
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["actual"] == "Hello, Ada!"
+    assert verify_json["expected"] == "Hello, Ada!"
+    assert verify_json["case"] == "fix-greeting"
+    assert verify_json["pack_id"] == "patch-from-failure"
+    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["source_fixture_id"] == "repo"
+    assert verify_json["patch_exists"] is True
+    assert verify_json["patch_bytes"] > 0
+    assert verify_json["exit_code"] == 0
+    assert verify_json["passed"] is True
 
 
 def test_cli_repo_task_verify_script_success_records_artifacts(

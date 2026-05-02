@@ -59,8 +59,16 @@ Initial packs:
   directories, mutate repositories, extract patches, create disposable
   worktrees, replay agent sessions, change adapter or result schemas, or run
   verifier scripts. It is not a repo-mutating wrapping task.
-- `patch-from-failure`: small repo plus failing test output; score by test pass and
-  diff size.
+- `patch-from-failure`: first bundled measured repo-mutating `repo-task` pack.
+  Version `0.1.0` has one tiny stdlib-only Python repo fixture and one
+  `fix-greeting` measured case. The prompt asks the model to return only a
+  fenced `diff` unified diff that fixes `greeter.py`; the runner copies the
+  repo fixture into `workspace/fix-greeting/rep-001/`, applies the model patch
+  inside that workspace, captures `patch/fix-greeting/rep-001.diff`, and runs a
+  stdlib `verify-script` that requires `greet("Ada")` to return exactly
+  `Hello, Ada!`. The pack sets `defaults.warmup = 0`,
+  `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains

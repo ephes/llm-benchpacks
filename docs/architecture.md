@@ -38,6 +38,7 @@ benchpacks/
   smoke-chat/
   runtime-sweep/
   desktop-django-wrap/
+  patch-from-failure/
 src/
   benchpack/
     cli.py

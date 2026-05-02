@@ -1,0 +1,24 @@
+[pack]
+id = "patch-from-failure"
+version = "0.1.0"
+description = "Tiny repo-task pack that applies a fenced unified diff and verifies the patched workspace"
+
+[defaults]
+temperature = 0
+max_tokens = 256
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Tiny Python greeting repo with one intentional bug"
+
+[[cases]]
+id = "fix-greeting"
+kind = "repo-task"
+prompt_file = "prompts/fix-greeting.md"
+fixture_refs = ["repo"]
+scoring = { mode = "verify-script", script = "verify/check.py" }
