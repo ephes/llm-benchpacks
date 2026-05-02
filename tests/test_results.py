@@ -345,6 +345,24 @@ def test_record_can_include_workspace_metadata(tmp_path: Path) -> None:
     assert jsonl_record["workspace"] == record["workspace"]
 
 
+def test_record_can_include_patch_metadata(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    ar = make_adapter_result(out)
+
+    record = reporter.record(
+        pack.cases[0],
+        ar,
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        patch={"path": "patch/capital/rep-001.diff"},
+    )
+
+    assert record["patch"] == {"path": "patch/capital/rep-001.diff"}
+    jsonl_record = json.loads((out / "run.jsonl").read_text())
+    assert jsonl_record["patch"] == record["patch"]
+
+
 @pytest.mark.parametrize("repetition", [0, -1, True, "1"])
 def test_record_rejects_invalid_repetition(
     tmp_path: Path,

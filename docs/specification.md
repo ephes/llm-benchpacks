@@ -74,10 +74,11 @@ measurement, not model-quality comparison.
 `repo-task` is the case kind for coding-agent-shaped workloads that must change
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
-workspaces for measured executions, but it does not yet execute verifiers,
-capture patches, run agent harnesses, add repo-task status fields, or support
+workspaces for measured executions and captures deterministic patch artifacts
+from source-vs-workspace directory snapshots, but it does not yet execute
+verifiers, run agent harnesses, add repo-task status fields, or support
 repo-task warmups. Measured repo-task records now include prepared workspace
-metadata.
+metadata and patch artifact paths.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -120,10 +121,14 @@ directory. Pack contracts must not require implicit network access or private
 host paths. Repo-task execution must not write outside the run output directory
 and prepared workspace.
 
-Expected future repo-task artifacts include:
+Current repo-task artifacts include:
 
 - the disposable `workspace/` contents while retained locally
-- `patch.diff` or an equivalent diff artifact captured from workspace changes
+- `patch/<case-id>/rep-NNN.diff`, captured from workspace changes after the
+  adapter call
+
+Expected future repo-task artifacts include:
+
 - task stdout/stderr or execution logs, such as `task.stdout.log` and
   `task.stderr.log`
 - verifier output, such as `verify.json` and verifier stdout/stderr logs
@@ -131,14 +136,17 @@ Expected future repo-task artifacts include:
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
 from repo-task workspace and verifier artifacts. Measured repo-task
-`run.jsonl` rows record only prepared workspace metadata today:
+`run.jsonl` rows record prepared workspace metadata:
 `workspace.path`, `workspace.source_fixture_id`, and `workspace.source_path`.
 `workspace.path` is relative to the run output directory, and
 `workspace.source_path` is the manifest-declared fixture path rather than an
-absolute resolved path. They do not record repo-task status, patch artifacts,
-verifier output, or task logs yet. Curated result commits may include small
-summaries, `hardware.json`, and compact `run.jsonl` rows, plus small
-intentional artifacts such as `patch.diff` or `verify.json` when they are
+absolute resolved path. They also record `patch.path`, a run-relative path to
+the deterministic diff artifact under `patch/<case-id>/rep-NNN.diff`, including
+`rep-001` for single-repetition packs. Empty workspace changes still produce an
+empty patch file and a `patch.path` entry. Repo-task rows do not record
+repo-task status, verifier output, or task logs yet. Curated result commits may
+include small summaries, `hardware.json`, and compact `run.jsonl` rows, plus
+small intentional artifacts such as patch diffs or `verify.json` when they are
 needed to explain a result. Full disposable workspaces and large execution logs
 should normally stay local or ignored.
 
@@ -147,7 +155,7 @@ implemented, `verify-script` should be the deterministic repo-task correctness
 mode: exit code `0` means pass, nonzero means fail, and the verifier should
 receive the prepared workspace plus declared case/run metadata as inputs. Result
 schema additions are still needed later for repo-task status and artifact paths
-beyond the current workspace metadata.
+beyond the current workspace metadata and patch path.
 
 ## Runtime Adapters
 

@@ -24,8 +24,10 @@ from .packs import (
     repetitions_from_defaults,
     warmup_from_defaults,
 )
+from .patches import PatchError, capture_workspace_patch
 from .results import RunReporter
 from .workspaces import (
+    PreparedWorkspace,
     WorkspaceError,
     prepare_repo_task_workspace,
     validate_repo_task_cases,
@@ -129,6 +131,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
         for repetition in range(1, repetitions + 1):
             workspace_metadata = None
+            patch_metadata = None
+            prepared_workspace: PreparedWorkspace | None = None
             if case.kind == "repo-task":
                 try:
                     prepared_workspace = prepare_repo_task_workspace(
@@ -155,12 +159,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 response_path=response_path,
                 openai_stream_usage=args.openai_stream_usage,
             )
+            if prepared_workspace is not None:
+                try:
+                    patch_metadata = capture_workspace_patch(
+                        prepared_workspace,
+                        out_dir,
+                        case,
+                        repetition,
+                    )
+                except PatchError as exc:
+                    raise SystemExit(str(exc)) from exc
             reporter.record(
                 case,
                 result,
                 sample,
                 repetition=repetition if repetitions > 1 else None,
                 workspace=workspace_metadata,
+                patch=patch_metadata,
             )
 
     reporter.write_hardware(hardware)

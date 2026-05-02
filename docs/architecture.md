@@ -86,11 +86,12 @@ results/
    pack declares it.
 10. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions. Measured repo-task records also include the prepared workspace
-   metadata needed to locate the run-owned copy.
+   metadata needed to locate the run-owned copy and the run-relative patch
+   artifact path.
 11. Write `summary.md`.
 
 Adapters still receive a loaded prompt and return the existing result envelope.
-Workspace paths are not passed to adapters.
+Workspace and patch paths are not passed to adapters.
 
 ## Repo-Task Flow
 
@@ -113,21 +114,25 @@ and before each measured adapter execution:
 6. A future verifier consumes the prepared workspace, case metadata, and
    execution outputs. It returns deterministic status and structured output; it
    does not alter adapter result payloads.
-7. The reporter records normalized workspace metadata for measured repo-task
-   rows. Future slices will add repo-task artifact paths and status alongside
-   the existing adapter, collector, and scoring fields.
-8. Cleanup is still planned. Retaining `workspace/` for debugging should be an
+7. After the adapter call, the runner compares the immutable source fixture to
+   the prepared workspace with a deterministic directory snapshot diff and
+   writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty changes still
+   create an empty patch file.
+8. The reporter records normalized workspace metadata and `patch.path` for
+   measured repo-task rows. Future slices will add verifier/log artifact paths
+   and status alongside the existing adapter, collector, and scoring fields.
+9. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
 
-Planned repo-task artifacts should live beside, not inside, `raw/`. The `raw/`
-directory remains for model request/response payloads. Repo-task artifacts are
-expected to include categories such as `workspace/`, `patch.diff`,
+Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
+remains for model request/response payloads. Current repo-task artifacts are
+`workspace/` and `patch/<case-id>/rep-NNN.diff`; planned categories include
 `task.stdout.log`, `task.stderr.log`, `verify.json`, and verifier logs.
 
-Measured repo-task result rows contain workspace metadata only. They do not
-contain repo-task status, patch artifacts, verifier output, or task execution
-logs yet, and current chat cases do not use this flow.
+Measured repo-task result rows contain workspace metadata and patch artifact
+metadata. They do not contain repo-task status, verifier output, or task
+execution logs yet, and current chat cases do not use this flow.
 
 ## Result Record Envelope
 
@@ -180,6 +185,7 @@ to `run.jsonl`:
   measured repetition
 - `workspace` — present only for measured `repo-task` records, with
   `path`, `source_fixture_id`, and `source_path`
+- `patch` — present only for measured `repo-task` records, with `path`
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
   `docs/benchpack-format.md`); `null` when mode is `none` or absent. Current
@@ -199,6 +205,12 @@ The repo-task `workspace` object is deliberately narrow:
 repo fixture id; and `workspace.source_path` is the pack manifest fixture path.
 Chat records do not include `workspace`, even when they reference repo
 directory fixtures as metadata.
+
+The repo-task `patch` object is also deliberately narrow: `patch.path` is
+relative to the run output directory and uses `patch/<case-id>/rep-NNN.diff`.
+The patch file is written for every measured repo-task execution, including
+no-change executions where the file is empty. Chat records do not include
+`patch`, even when they reference repo directory fixtures as metadata.
 
 ### Combined record
 

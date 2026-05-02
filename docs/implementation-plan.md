@@ -146,11 +146,13 @@ workspace, directory fixture, artifact, verifier, and mutation-isolation
 semantics before implementation. Measured repo-task workspace preparation
 landed 2026-05-01: each measured execution copies exactly one referenced
 `kind = "repo"` directory fixture into `workspace/<case-id>/rep-NNN/` under the
-run output directory, while repo-task warmups are rejected. Phase 3 does not yet
+run output directory, while repo-task warmups are rejected. Measured repo-task
+workspace metadata landed 2026-05-01. Deterministic patch capture landed
+2026-05-02: each measured repo-task execution writes
+`patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
 include fixture execution, verifier execution, repo mutation by a task harness,
-patch extraction, agent-session replay, prompt templating, repo-task final
-status fields, workspace retention options, or verification scripts. Measured
-repo-task rows now record prepared workspace metadata.
+agent-session replay, prompt templating, repo-task final status fields,
+workspace retention options, or verification scripts.
 
 Scope:
 
@@ -190,15 +192,19 @@ Scope:
   no adapter changes.
 - Add a repo-task runner skeleton that prepares workspaces and records planned
   artifact paths without changing existing chat adapter behavior. **Partially
-  landed 2026-05-01** for workspace preparation and measured workspace metadata
-  in `run.jsonl`; patch, verifier, log, and final status artifact paths remain
-  planned.
+  landed** for workspace preparation and measured workspace metadata in
+  `run.jsonl` on 2026-05-01, and measured patch artifact paths on 2026-05-02;
+  verifier, log, and final status artifact paths remain planned.
 - Implement `verify-script` execution against the disposable workspace and
   record verifier artifacts. **Planned.**
-- Capture deterministic patch/diff artifacts from workspace changes. **Planned.**
+- Capture deterministic patch/diff artifacts from workspace changes. **Landed
+  2026-05-02** as source-vs-workspace directory snapshot diffs written to
+  `patch/<case-id>/rep-NNN.diff`, with `patch.path` recorded in measured
+  repo-task rows.
 - Extend result records conservatively for repo-task patch/verifier/log artifact
   paths and final status once the runner/verifier contract is implemented.
-  **Planned.**
+  **Partially landed 2026-05-02** for `patch.path`; verifier/log artifact paths
+  and final status remain planned.
 - Integrate an agent-session harness after disposable workspace, verifier, and
   patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.

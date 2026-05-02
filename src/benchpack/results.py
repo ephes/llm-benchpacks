@@ -91,6 +91,7 @@ class RunReporter:
         repetition: int | None = None,
         *,
         workspace: dict[str, Any] | None = None,
+        patch: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         scoring_cfg = case.scoring or self.pack.scoring
         scoring_result = evaluate(scoring_cfg, adapter_result.output_text)
@@ -131,6 +132,8 @@ class RunReporter:
             record["repetition"] = repetition
         if workspace is not None:
             record["workspace"] = dict(workspace)
+        if patch is not None:
+            record["patch"] = dict(patch)
         if adapter_result.backend is not None:
             record["backend"] = adapter_result.backend
         if adapter_result.error is not None:

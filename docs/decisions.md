@@ -234,11 +234,13 @@ resolve outside the source repo fixture before copying. Repository writes, task
 execution, patch capture, and verification happen only inside that disposable
 workspace and the run output directory. Source fixtures under
 `benchpacks/<pack>/fixtures/` are never mutated. Repo-task artifacts such as
-workspace metadata, `patch.diff`, task stdout/stderr logs, verifier output, and
+workspace metadata, patch diffs, task stdout/stderr logs, verifier output, and
 final status are explicit result artifacts separate from raw model
 request/response payloads. Measured rows record the prepared workspace metadata
-as run-relative path plus source fixture id and manifest-declared source path;
-patch, verifier, log, and final status artifacts remain planned.
+as run-relative path plus source fixture id and manifest-declared source path,
+and record the deterministic patch artifact path as
+`patch/<case-id>/rep-NNN.diff`. Verifier, log, and final status artifacts remain
+planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

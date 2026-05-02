@@ -16,6 +16,43 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-02 (Phase 3 repo-task patch artifacts)
+
+### Changed
+
+- Added deterministic patch artifact capture for measured `repo-task`
+  executions. After the adapter call, the runner compares the immutable source
+  repo fixture directory to the prepared workspace directory and writes
+  `patch/<case-id>/rep-NNN.diff`.
+- Measured repo-task `run.jsonl` rows now include a top-level `patch` object
+  with run-relative `patch.path`, alongside the existing `workspace` metadata.
+- Patch files are written for every measured repo-task execution, including
+  no-change runs where the patch file is empty. The path includes `rep-001`
+  even when the pack has one measured repetition.
+- Patch capture uses a deterministic directory snapshot diff rather than
+  `git diff`, so repo fixtures do not need to be Git repositories. Text changes
+  use unified diff output, added/deleted files are represented deterministically,
+  symlink target changes are text diffs of link targets, UTF-8 text line endings
+  are normalized before comparison, and binary changes use deterministic marker
+  lines.
+- Chat records, including chat cases that reference repo directory fixtures,
+  still do not include `workspace` or `patch`.
+- Adapter requests remain unchanged and still receive only prompt, model,
+  endpoint, defaults, and raw request/response paths.
+- Raw request/response path behavior, scoring, repo-task fixture validation,
+  symlink escape rejection, measured workspace preparation, and repo-task
+  warmup rejection remain unchanged.
+- No verifier execution, final repo-task status, task or agent harness,
+  workspace cleanup/retention option, bundled pack conversion, or live
+  benchmark result artifact was added.
+
+### Open Questions
+
+- Future slices still need verifier invocation, verifier/log artifact paths,
+  final repo-task status fields, task or agent execution, warmup workspace
+  support, cleanup and retention options, and curated artifact rules for
+  repo-task outputs.
+
 ## 2026-05-01 (Phase 3 measured repo-task workspaces)
 
 ### Changed

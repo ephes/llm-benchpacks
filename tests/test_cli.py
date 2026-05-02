@@ -368,6 +368,10 @@ def test_cli_repo_task_creates_run_owned_workspace(
         "source_fixture_id": "repo",
         "source_path": "fixtures/repo",
     }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert (out / "patch" / "edit-repo" / "rep-001.diff").read_text(
+        encoding="utf-8"
+    ) == ""
     assert "artifacts" not in record
 
 
@@ -436,6 +440,12 @@ def test_cli_repo_task_repetitions_get_separate_workspaces(
         "fixtures/repo",
         "fixtures/repo",
     ]
+    assert [record["patch"]["path"] for record in records] == [
+        "patch/edit-repo/rep-001.diff",
+        "patch/edit-repo/rep-002.diff",
+    ]
+    assert (out / "patch" / "edit-repo" / "rep-001.diff").is_file()
+    assert (out / "patch" / "edit-repo" / "rep-002.diff").is_file()
 
     (rep1 / "README.md").write_text("changed copy\n", encoding="utf-8")
 
@@ -670,9 +680,11 @@ def test_cli_chat_case_with_repo_directory_fixture_does_not_create_workspace(
     assert main(_argv(["--out", str(out)])) == 0
 
     assert not (out / "workspace").exists()
+    assert not (out / "patch").exists()
     record = json.loads((out / "run.jsonl").read_text())
     assert record["case"] == "edit-repo"
     assert "workspace" not in record
+    assert "patch" not in record
 
 
 def test_cli_warmup_is_unrecorded_and_measured_repetitions_are_recorded(

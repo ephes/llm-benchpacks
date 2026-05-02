@@ -102,7 +102,8 @@ expected = "Paris"
   adapter request or result schemas, extract patches, or run verifiers. The one
   current exception is `repo-task`: each measured execution copies exactly one
   referenced `kind = "repo"` directory fixture into a run-owned disposable
-  workspace under the output directory.
+  workspace under the output directory and captures a deterministic patch from
+  the source fixture to that workspace.
 
 `fixtures`
 : Optional top-level fixture inventory. Each `[[fixtures]]` entry declares a
@@ -114,9 +115,10 @@ expected = "Paris"
   a directory. The runner validates and exposes fixture metadata on loaded
   packs. Referenced file fixtures are read as UTF-8 and appended to
   `Case.prompt`; directory fixtures are not read into prompts. The runner does
-  not mutate repositories, extract patches, execute verifiers, or score from
-  fixtures. For `repo-task` measured executions only, it copies one referenced
-  `kind = "repo"` directory fixture into a disposable run-owned workspace.
+  not mutate repositories, execute verifiers, or score from fixtures. For
+  `repo-task` measured executions only, it copies one referenced `kind = "repo"`
+  directory fixture into a disposable run-owned workspace and captures a
+  deterministic source-vs-workspace patch artifact after the adapter call.
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
@@ -256,11 +258,12 @@ strings. The runner rejects manifests that violate this at load time.
   repository workspace. Current runner support is limited to copying exactly
   one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
-  measured adapter call and recording that workspace metadata in the measured
-  `run.jsonl` row. Applying model or agent changes, capturing a patch,
-  verifying the result deterministically, adding repo-task status and artifact
-  fields beyond workspace metadata, retention options, and repo-task warmups
-  remain planned.
+  measured adapter call, capturing a deterministic patch artifact at
+  `patch/<case-id>/rep-NNN.diff` after the adapter call, and recording
+  workspace metadata plus `patch.path` in the measured `run.jsonl` row.
+  Applying model or agent changes, verifying the result deterministically,
+  adding repo-task status and artifact fields beyond the patch path, retention
+  options, and repo-task warmups remain planned.
 
 `replay`
 : A recorded request sequence.
@@ -268,11 +271,11 @@ strings. The runner rejects manifests that violate this at load time.
 ### `repo-task` Contract
 
 The current `repo-task` implementation prepares disposable measured workspaces
-only. Referenced file fixtures still append to `Case.prompt`; referenced
-non-repo directory fixtures are rejected for repo-task; the single referenced
-repo directory is copied into a run-owned workspace; the measured result record
-includes the prepared workspace metadata; no directory is executed, mutated by
-the runner, patched, or verified.
+and patch artifacts only. Referenced file fixtures still append to
+`Case.prompt`; referenced non-repo directory fixtures are rejected for
+repo-task; the single referenced repo directory is copied into a run-owned
+workspace; the measured result record includes the prepared workspace metadata
+and `patch.path`; no directory is executed, mutated by the runner, or verified.
 
 Repo-task cases should use this conservative shape:
 
@@ -332,7 +335,7 @@ Directory fixture semantics for repo-task cases:
   field says so.
 - Directory fixtures outside repo-task execution remain metadata-only.
 
-Workspace and planned artifact layout:
+Workspace and artifact layout:
 
 - Workspaces live under the run output directory, for example
   `workspace/<case-id>/rep-NNN/`.
@@ -340,8 +343,11 @@ Workspace and planned artifact layout:
   with `path`, `source_fixture_id`, and `source_path`. The path is relative to
   the run output directory. The source path is the manifest-declared fixture
   path, not an absolute resolved path.
-- Patch capture should write a deterministic diff artifact such as
-  `patch.diff`, derived from changes inside the disposable workspace.
+- Patch capture writes a deterministic diff artifact at
+  `patch/<case-id>/rep-NNN.diff`, including `rep-001` for single-repetition
+  packs. Measured repo-task records include a top-level `patch` object with the
+  run-relative `path`. Empty changes still create an empty patch file and
+  record `patch.path`.
 - Task execution logs should be explicit artifacts, for example
   `task.stdout.log` and `task.stderr.log`.
 - Verifier output should be explicit, for example `verify.json` plus verifier
@@ -349,11 +355,20 @@ Workspace and planned artifact layout:
 - Model request/response payloads remain under `raw/`; repo-task workspace,
   patch, task logs, and verifier artifacts are conceptually separate.
 
+The current directory snapshot diff is deterministic and does not require the
+fixture or workspace to be a Git repository. It compares the immutable source
+fixture directory to the prepared workspace after the adapter call, orders paths
+lexicographically by POSIX-style relative path, emits unified diffs for UTF-8
+text file additions, deletions, and changes, emits deterministic marker lines
+for binary additions, deletions, and changes, represents changed symlink targets
+as text diffs of the link target strings, normalizes UTF-8 text line endings to
+`\n` before comparison, and ignores empty directories.
+
 Cleanup should be deterministic. Keeping a workspace after a run should be an
 explicit runner option or future manifest-independent debug setting, not
 implicit behavior. Curated commits should normally include small summaries,
 `hardware.json`, compact `run.jsonl`, and small explanatory artifacts such as
-`patch.diff` or `verify.json` when useful; full workspaces and large logs should
+patch diffs or `verify.json` when useful; full workspaces and large logs should
 usually remain local or ignored.
 
 ## Scoring
