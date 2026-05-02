@@ -23,8 +23,8 @@ than changing the adapter boundary:
   workspace for each measured repo-task execution.
 - **Task executor or agent harness**: future runner-side component that applies
   model or agent actions inside the prepared workspace.
-- **Verifier**: deterministic checker for repo-task outcomes, expected to start
-  with `verify-script` once implemented.
+- **Verifier**: deterministic checker for measured repo-task outcomes, currently
+  implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
   artifacts such as workspace metadata, patch diffs, execution logs, verifier
   output, and final status.
@@ -83,11 +83,14 @@ results/
    loaded pack defaults are not mutated.
 8. Persist raw requests and responses for warmups and measured executions.
 9. Apply implemented deterministic scoring for measured executions when the
-   pack declares it.
+   pack declares it. For measured `repo-task` executions with
+   `scoring.mode = "verify-script"`, the runner executes the verifier after
+   patch capture and before recording the result row.
 10. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions. Measured repo-task records also include the prepared workspace
-   metadata needed to locate the run-owned copy and the run-relative patch
-   artifact path.
+   metadata needed to locate the run-owned copy, the run-relative patch
+   artifact path, verifier artifact paths, and final verifier status when
+   `verify-script` is used.
 11. Write `summary.md`.
 
 Adapters still receive a loaded prompt and return the existing result envelope.
@@ -99,8 +102,8 @@ Current `repo-task` execution inserts workspace preparation after pack loading
 and before each measured adapter execution:
 
 1. The pack loader validates fixture declarations and refs only. It does not
-   copy directories, choose workspace paths, run verifiers, or mutate source
-   fixtures.
+   copy directories, choose workspace paths, execute verifiers, or mutate
+   source fixtures.
 2. The runner identifies the case's single primary `kind = "repo"` directory
    fixture and creates a fresh run-owned workspace under the output directory.
 3. The workspace preparer rejects absolute symlinks and symlinks escaping the
@@ -111,28 +114,36 @@ and before each measured adapter execution:
    or write repository files directly.
 5. Future task execution applies any generated changes only inside the disposable
    workspace and records stdout/stderr or execution logs as explicit artifacts.
-6. A future verifier consumes the prepared workspace, case metadata, and
-   execution outputs. It returns deterministic status and structured output; it
-   does not alter adapter result payloads.
-7. After the adapter call, the runner compares the immutable source fixture to
+6. After the adapter call, the runner compares the immutable source fixture to
    the prepared workspace with a deterministic directory snapshot diff and
    writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty changes still
    create an empty patch file.
-8. The reporter records normalized workspace metadata and `patch.path` for
-   measured repo-task rows. Future slices will add verifier/log artifact paths
-   and status alongside the existing adapter, collector, and scoring fields.
+7. For measured repo-task executions with `scoring.mode = "verify-script"`, the
+   verifier consumes the prepared workspace, case metadata, pack metadata,
+   source fixture id, patch artifact path, and requested output path as
+   command-line arguments. It returns deterministic status through its process
+   exit code and may write structured JSON. The runner captures verifier
+   stdout/stderr as explicit artifacts and corrects or creates the structured
+   JSON so `exit_code` and `passed` match the process result.
+8. The reporter records normalized workspace metadata, `patch.path`, `verify`,
+   `repo_task`, and top-level `scoring` for measured repo-task
+   `verify-script` rows. Future slices will add task execution log artifact
+   paths alongside the existing adapter, collector, and scoring fields.
 9. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
 
 Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
 remains for model request/response payloads. Current repo-task artifacts are
-`workspace/` and `patch/<case-id>/rep-NNN.diff`; planned categories include
-`task.stdout.log`, `task.stderr.log`, `verify.json`, and verifier logs.
+`workspace/`, `patch/<case-id>/rep-NNN.diff`, and
+`verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`; planned categories
+include task stdout/stderr logs.
 
-Measured repo-task result rows contain workspace metadata and patch artifact
-metadata. They do not contain repo-task status, verifier output, or task
-execution logs yet, and current chat cases do not use this flow.
+Measured repo-task `verify-script` result rows contain workspace metadata,
+patch artifact metadata, verifier artifact metadata, final repo-task verifier
+status, and `verify-script` scoring. Repo-task rows using prompt-output scoring
+still omit `verify` and `repo_task`, and current chat cases do not use this
+flow.
 
 ## Result Record Envelope
 
@@ -186,11 +197,16 @@ to `run.jsonl`:
 - `workspace` — present only for measured `repo-task` records, with
   `path`, `source_fixture_id`, and `source_path`
 - `patch` — present only for measured `repo-task` records, with `path`
+- `verify` — present only for measured `repo-task` records using
+  `verify-script`, with `path`, `stdout_path`, and `stderr_path`
+- `repo_task` — present only for measured `repo-task` records using
+  `verify-script`, with `status` and `verify_exit_code`
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
   `docs/benchpack-format.md`); `null` when mode is `none` or absent. Current
   executable modes are `contains` substring checks and `regex` checks using
-  Python `re.search` with the pack-provided pattern.
+  Python `re.search` with the pack-provided pattern. For measured repo-task
+  `verify-script` rows, the runner sets scoring from the verifier exit code.
 
 Adapters do not produce or read these fields. The reporter is also where pack
 id/version get attached for cross-run comparison.
@@ -211,6 +227,17 @@ relative to the run output directory and uses `patch/<case-id>/rep-NNN.diff`.
 The patch file is written for every measured repo-task execution, including
 no-change executions where the file is empty. Chat records do not include
 `patch`, even when they reference repo directory fixtures as metadata.
+
+The repo-task `verify` object is deliberately narrow: `verify.path`,
+`verify.stdout_path`, and `verify.stderr_path` are relative to the run output
+directory and use `verify/<case-id>/rep-NNN.json`,
+`verify/<case-id>/rep-NNN.stdout.log`, and
+`verify/<case-id>/rep-NNN.stderr.log`. Chat records do not include `verify`.
+
+The repo-task `repo_task` object is deliberately narrow:
+`repo_task.status` is `"passed"` when the verifier exit code is `0` and
+`"failed"` for any nonzero exit code. `repo_task.verify_exit_code` records the
+integer process exit code. Chat records do not include `repo_task`.
 
 ### Combined record
 

@@ -150,9 +150,11 @@ run output directory, while repo-task warmups are rejected. Measured repo-task
 workspace metadata landed 2026-05-01. Deterministic patch capture landed
 2026-05-02: each measured repo-task execution writes
 `patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
-include fixture execution, verifier execution, repo mutation by a task harness,
-agent-session replay, prompt templating, repo-task final status fields,
-workspace retention options, or verification scripts.
+include fixture execution, repo mutation by a task harness, agent-session
+replay, prompt templating, workspace retention options, verifier
+timeout/environment configuration, or bundled pack conversion. Measured
+repo-task verifier execution and final verifier status landed 2026-05-02 for
+`verify-script` rows only.
 
 Scope:
 
@@ -194,17 +196,23 @@ Scope:
   artifact paths without changing existing chat adapter behavior. **Partially
   landed** for workspace preparation and measured workspace metadata in
   `run.jsonl` on 2026-05-01, and measured patch artifact paths on 2026-05-02;
-  verifier, log, and final status artifact paths remain planned.
+  verifier artifact paths and final verifier status landed later on 2026-05-02;
+  task execution log paths remain planned.
 - Implement `verify-script` execution against the disposable workspace and
-  record verifier artifacts. **Planned.**
+  record verifier artifacts. **Landed 2026-05-02** for measured `repo-task`
+  executions only: scripts run as `sys.executable <pack-relative script>` after
+  patch capture, stdout/stderr and structured JSON are written under
+  `verify/<case-id>/rep-NNN.*`, and result rows include `verify`, `repo_task`,
+  and top-level `verify-script` scoring.
 - Capture deterministic patch/diff artifacts from workspace changes. **Landed
   2026-05-02** as source-vs-workspace directory snapshot diffs written to
   `patch/<case-id>/rep-NNN.diff`, with `patch.path` recorded in measured
   repo-task rows.
 - Extend result records conservatively for repo-task patch/verifier/log artifact
   paths and final status once the runner/verifier contract is implemented.
-  **Partially landed 2026-05-02** for `patch.path`; verifier/log artifact paths
-  and final status remain planned.
+  **Partially landed 2026-05-02** for `patch.path`; verifier artifact paths and
+  final verifier status also landed 2026-05-02 for `verify-script`; task log
+  artifact paths remain planned.
 - Integrate an agent-session harness after disposable workspace, verifier, and
   patch artifacts exist. **Planned later.**
 - Add optional full agent-session replay later.

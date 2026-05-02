@@ -16,6 +16,53 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-02 (Phase 3 repo-task verifier artifacts)
+
+### Changed
+
+- Added measured `repo-task` verifier execution for
+  `scoring.mode = "verify-script"`. The runner executes verifier scripts after
+  workspace preparation, adapter execution, and patch capture, but before
+  writing the measured `run.jsonl` row.
+- Verifier scripts are resolved as pack-relative paths, must exist, and are
+  rejected if absolute or escaping the pack root. The initial execution shape is
+  `sys.executable <script>` with deterministic command-line arguments for the
+  prepared workspace, case id, pack id/version, source fixture id, patch path,
+  and requested output JSON path.
+- Verifier artifacts are written beside `raw/` under
+  `verify/<case-id>/rep-NNN.json`,
+  `verify/<case-id>/rep-NNN.stdout.log`, and
+  `verify/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
+  single-repetition packs.
+- If a verifier does not create structured JSON, the runner writes a minimal
+  object containing `exit_code` and `passed`. If the verifier writes a JSON
+  object, the runner preserves it while making `exit_code` and `passed`
+  authoritative from the process result.
+- Measured repo-task `verify-script` rows now include top-level `verify`,
+  `repo_task`, and `scoring` objects. `repo_task.status` is `"passed"` for exit
+  code `0` and `"failed"` for nonzero; `repo_task.verify_exit_code` records the
+  integer process exit code; top-level scoring is
+  `{"mode": "verify-script", "passed": <bool>}`.
+- Non-repo-task cases that request `verify-script` fail clearly. Normal chat
+  records, including chat cases with repo directory fixtures, still do not
+  include `workspace`, `patch`, `verify`, or `repo_task`.
+- Adapter requests remain unchanged and still receive only prompt, model,
+  endpoint, defaults, and raw request/response paths.
+- Existing raw path behavior, prompt-output scoring, workspace metadata, patch
+  metadata, repo-task fixture validation, symlink escape rejection, and
+  repo-task warmup rejection remain unchanged.
+- No agent-session harness, model-output mutation/application, workspace
+  cleanup/retention option, repo-task warmup support, timeout/environment
+  configuration, bundled pack conversion, live benchmark run, or generated
+  result artifact was added.
+
+### Open Questions
+
+- Future slices still need task or agent execution, model-output patch
+  application, task log artifact paths, warmup workspace support, cleanup and
+  retention options, timeout/environment configuration, and bundled pack
+  conversion.
+
 ## 2026-05-02 (Phase 3 repo-task patch artifacts)
 
 ### Changed

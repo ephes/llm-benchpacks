@@ -216,6 +216,7 @@ def _write_repo_task_pack(
     fixture_entries: str | None = None,
     fixture_refs: str = '["repo"]',
     case_kind: str = "repo-task",
+    scoring: str | None = None,
 ) -> Path:
     pack_dir = tmp_path / "benchpacks" / "smoke-chat"
     pack_dir.mkdir(parents=True)
@@ -230,6 +231,12 @@ def _write_repo_task_pack(
 id = "repo"
 kind = "repo"
 path = "fixtures/repo"
+"""
+    if scoring is None:
+        scoring = """
+[scoring]
+mode = "contains"
+expected = "Paris"
 """
 
     (pack_dir / "benchpack.toml").write_text(
@@ -252,12 +259,17 @@ kind = "{case_kind}"
 prompt = "Change the repository."
 fixture_refs = {fixture_refs}
 
-[scoring]
-mode = "contains"
-expected = "Paris"
+{scoring}
 """
     )
     return pack_dir
+
+
+def _write_verifier_script(pack_dir: Path, body: str) -> Path:
+    script = pack_dir / "verify" / "check.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(body, encoding="utf-8")
+    return script
 
 
 def _argv(extra: list[str] | None = None) -> list[str]:
@@ -372,7 +384,122 @@ def test_cli_repo_task_creates_run_owned_workspace(
     assert (out / "patch" / "edit-repo" / "rep-001.diff").read_text(
         encoding="utf-8"
     ) == ""
+    assert "verify" not in record
+    assert "repo_task" not in record
     assert "artifacts" not in record
+
+
+def test_cli_repo_task_verify_script_success_records_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+print("verified stdout")
+print("verified stderr", file=sys.stderr)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"case": args.case, "workspace": args.workspace}, fh)
+""",
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["case"] == "edit-repo"
+    assert verify_json["exit_code"] == 0
+    assert verify_json["passed"] is True
+    assert (out / record["verify"]["stdout_path"]).read_text() == "verified stdout\n"
+    assert (out / record["verify"]["stderr_path"]).read_text() == "verified stderr\n"
+
+
+def test_cli_repo_task_verify_script_failure_records_completed_row(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(pack_dir, "raise SystemExit(5)\n")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["repo_task"] == {"status": "failed", "verify_exit_code": 5}
+    assert record["scoring"] == {"mode": "verify-script", "passed": False}
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "exit_code": 5,
+        "passed": False,
+    }
+
+
+def test_cli_repo_task_verify_script_repetitions_get_separate_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        defaults_extra="repetitions = 2",
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(pack_dir, "")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    records = [
+        json.loads(line)
+        for line in (out / "run.jsonl").read_text().strip().splitlines()
+    ]
+    assert [record["verify"]["path"] for record in records] == [
+        "verify/edit-repo/rep-001.json",
+        "verify/edit-repo/rep-002.json",
+    ]
+    assert [record["verify"]["stdout_path"] for record in records] == [
+        "verify/edit-repo/rep-001.stdout.log",
+        "verify/edit-repo/rep-002.stdout.log",
+    ]
+    assert (out / "verify" / "edit-repo" / "rep-001.json").is_file()
+    assert (out / "verify" / "edit-repo" / "rep-002.json").is_file()
 
 
 def test_cli_repo_task_allows_additional_file_fixture_refs(
@@ -681,10 +808,68 @@ def test_cli_chat_case_with_repo_directory_fixture_does_not_create_workspace(
 
     assert not (out / "workspace").exists()
     assert not (out / "patch").exists()
+    assert not (out / "verify").exists()
     record = json.loads((out / "run.jsonl").read_text())
     assert record["case"] == "edit-repo"
     assert "workspace" not in record
     assert "patch" not in record
+    assert "verify" not in record
+    assert "repo_task" not in record
+
+
+def test_cli_non_repo_task_verify_script_fails_clearly_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        case_kind="chat",
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(pack_dir, "")
+
+    with pytest.raises(SystemExit, match="only supported for measured repo-task"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_missing_verify_script_fails_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/missing.py"\n',
+    )
+
+    with pytest.raises(SystemExit, match="does not exist"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
+
+
+def test_cli_escaping_verify_script_fails_before_adapter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    outside = tmp_path / "outside.py"
+    outside.write_text("", encoding="utf-8")
+    _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "../../outside.py"\n',
+    )
+
+    with pytest.raises(SystemExit, match="escapes the pack directory"):
+        main(_argv(["--out", str(tmp_path / "run")]))
+
+    assert calls == []
 
 
 def test_cli_warmup_is_unrecorded_and_measured_repetitions_are_recorded(

@@ -20,12 +20,18 @@ from .hardware import collect_hardware, sample_resources
 from .packs import (
     Case,
     Pack,
+    Scoring,
     load_pack,
     repetitions_from_defaults,
     warmup_from_defaults,
 )
 from .patches import PatchError, capture_workspace_patch
 from .results import RunReporter
+from .verifiers import (
+    VerifierError,
+    resolve_verify_script,
+    run_repo_task_verifier,
+)
 from .workspaces import (
     PreparedWorkspace,
     WorkspaceError,
@@ -33,6 +39,26 @@ from .workspaces import (
     validate_repo_task_cases,
     workspace_record,
 )
+
+
+def _effective_scoring(pack: Pack, case: Case) -> Scoring | None:
+    return case.scoring or pack.scoring
+
+
+def _validate_verify_script_usage(pack: Pack) -> None:
+    for case in pack.cases:
+        scoring = _effective_scoring(pack, case)
+        if scoring is None or scoring.mode != "verify-script":
+            continue
+        if case.kind != "repo-task":
+            raise SystemExit(
+                "scoring mode 'verify-script' is only supported for measured "
+                f"repo-task cases; case {case.id!r} has kind {case.kind!r}"
+            )
+        try:
+            resolve_verify_script(pack, scoring)
+        except VerifierError as exc:
+            raise SystemExit(str(exc)) from exc
 
 
 def _derive_host_label(hardware: dict) -> str:
@@ -89,6 +115,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         validate_repo_task_cases(pack)
     except WorkspaceError as exc:
         raise SystemExit(str(exc)) from exc
+    _validate_verify_script_usage(pack)
     if warmup > 0 and any(case.kind == "repo-task" for case in pack.cases):
         raise SystemExit(
             "repo-task warmups are not supported yet; set defaults.warmup = 0"
@@ -132,6 +159,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         for repetition in range(1, repetitions + 1):
             workspace_metadata = None
             patch_metadata = None
+            verify_metadata = None
+            repo_task_metadata = None
+            scoring_override = None
             prepared_workspace: PreparedWorkspace | None = None
             if case.kind == "repo-task":
                 try:
@@ -169,6 +199,28 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     )
                 except PatchError as exc:
                     raise SystemExit(str(exc)) from exc
+            scoring = _effective_scoring(pack, case)
+            if scoring is not None and scoring.mode == "verify-script":
+                if prepared_workspace is None or patch_metadata is None:
+                    raise SystemExit(
+                        "scoring mode 'verify-script' requires a measured "
+                        f"repo-task workspace for case {case.id!r}"
+                    )
+                try:
+                    verifier_result = run_repo_task_verifier(
+                        pack=pack,
+                        case=case,
+                        scoring=scoring,
+                        prepared_workspace=prepared_workspace,
+                        patch_path=out_dir / patch_metadata["path"],
+                        output_dir=out_dir,
+                        repetition=repetition,
+                    )
+                except VerifierError as exc:
+                    raise SystemExit(str(exc)) from exc
+                verify_metadata = verifier_result.verify
+                repo_task_metadata = verifier_result.repo_task
+                scoring_override = verifier_result.scoring
             reporter.record(
                 case,
                 result,
@@ -176,6 +228,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 repetition=repetition if repetitions > 1 else None,
                 workspace=workspace_metadata,
                 patch=patch_metadata,
+                verify=verify_metadata,
+                repo_task=repo_task_metadata,
+                scoring_override=scoring_override,
             )
 
     reporter.write_hardware(hardware)

@@ -123,8 +123,9 @@ expected = "Paris"
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
   inline on individual cases as an override. Current executable deterministic
-  modes are `none`, `contains`, and `regex`; reserved modes still parse as
-  manifest values but are not implemented by the scorer. See **Scoring** below.
+  modes are `none`, `contains`, `regex`, and `verify-script` for measured
+  `repo-task` executions. Other reserved modes still parse as manifest values
+  but are not implemented by the scorer. See **Scoring** below.
 
 ### Prompt Files
 
@@ -255,27 +256,31 @@ strings. The runner rejects manifests that violate this at load time.
 
 `repo-task`
 : Partially implemented case kind for a task that prepares a disposable
-  repository workspace. Current runner support is limited to copying exactly
-  one referenced `kind = "repo"` directory fixture into
+  repository workspace and can verify it deterministically. Current runner
+  support copies exactly one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
-  measured adapter call, capturing a deterministic patch artifact at
-  `patch/<case-id>/rep-NNN.diff` after the adapter call, and recording
-  workspace metadata plus `patch.path` in the measured `run.jsonl` row.
-  Applying model or agent changes, verifying the result deterministically,
-  adding repo-task status and artifact fields beyond the patch path, retention
-  options, and repo-task warmups remain planned.
+  measured adapter call, captures a deterministic patch artifact at
+  `patch/<case-id>/rep-NNN.diff` after the adapter call, executes
+  `verify-script` scoring when declared, and records workspace metadata,
+  `patch.path`, `verify`, `repo_task`, and top-level `scoring` in the measured
+  `run.jsonl` row. Applying model or agent changes, task logs, retention
+  options, repo-task warmups, verifier timeout/environment configuration, and
+  bundled pack conversion remain planned.
 
 `replay`
 : A recorded request sequence.
 
 ### `repo-task` Contract
 
-The current `repo-task` implementation prepares disposable measured workspaces
-and patch artifacts only. Referenced file fixtures still append to
-`Case.prompt`; referenced non-repo directory fixtures are rejected for
-repo-task; the single referenced repo directory is copied into a run-owned
-workspace; the measured result record includes the prepared workspace metadata
-and `patch.path`; no directory is executed, mutated by the runner, or verified.
+The current `repo-task` implementation prepares disposable measured workspaces,
+captures patch artifacts, and executes `verify-script` scoring when declared.
+Referenced file fixtures still append to `Case.prompt`; referenced non-repo
+directory fixtures are rejected for repo-task; the single referenced repo
+directory is copied into a run-owned workspace; the measured result record
+includes the prepared workspace metadata, `patch.path`, verifier artifact
+paths, final verifier status, and top-level `verify-script` scoring. The
+runner still does not execute an agent harness or apply model output as code
+changes.
 
 Repo-task cases should use this conservative shape:
 
@@ -300,8 +305,8 @@ Fields:
   repository snapshot for the disposable workspace. Additional refs, if any,
   must be non-directory file fixtures and remain prompt/context inputs.
 - `scoring`: should use `mode = "verify-script"` for deterministic repo-task
-  correctness once that scorer is implemented. `contains` and `regex` remain
-  prompt-output scoring modes and are not sufficient for repository correctness.
+  correctness. `contains` and `regex` remain prompt-output scoring modes and
+  are not sufficient for repository correctness.
 
 The contract intentionally does not define broad generic blobs such as
 `workspace`, `commands`, or `environment` yet. Add explicit fields only when a
@@ -348,10 +353,16 @@ Workspace and artifact layout:
   packs. Measured repo-task records include a top-level `patch` object with the
   run-relative `path`. Empty changes still create an empty patch file and
   record `patch.path`.
+- Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
+  `verify/<case-id>/rep-NNN.json`,
+  `verify/<case-id>/rep-NNN.stdout.log`, and
+  `verify/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
+  single-repetition packs. Measured repo-task records include a top-level
+  `verify` object with run-relative `path`, `stdout_path`, and `stderr_path`.
+  They also include `repo_task.status` (`"passed"` for exit code `0`,
+  `"failed"` for nonzero) and `repo_task.verify_exit_code`.
 - Task execution logs should be explicit artifacts, for example
   `task.stdout.log` and `task.stderr.log`.
-- Verifier output should be explicit, for example `verify.json` plus verifier
-  stdout/stderr logs when useful.
 - Model request/response payloads remain under `raw/`; repo-task workspace,
   patch, task logs, and verifier artifacts are conceptually separate.
 
@@ -418,14 +429,28 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   must parse as JSON and validate against the file at `schema`.
 
 `verify-script`
-: Reserved; not implemented by the scorer yet. Intended behavior is to run the
-  script at `script` (a path relative to the pack root, normally under
-  `verify/`) with deterministic inputs. For future repo-task cases those inputs
-  should include the prepared disposable workspace, case id, pack id/version,
-  source repo fixture id, patch artifact path when available, and task execution
-  logs. Exit code `0` means pass; any nonzero exit code means fail. Verifier
-  stdout/stderr and structured output such as `verify.json` should be recorded
-  as artifacts. The verifier must not mutate pack-owned source fixtures.
+: Implemented for measured `repo-task` executions only. The runner resolves
+  `script` as a pack-relative path, rejects absolute paths and paths that
+  resolve outside the pack root, and requires an existing file. It runs the
+  script with the current Python interpreter as `sys.executable <script>` after
+  workspace preparation, adapter execution, and patch capture, but before
+  writing the measured row.
+
+  The verifier receives deterministic arguments:
+  `--workspace <absolute prepared workspace path>`, `--case <case id>`,
+  `--pack-id <pack id>`, `--pack-version <pack version>`,
+  `--source-fixture-id <repo fixture id>`,
+  `--patch <absolute patch artifact path>`, and
+  `--output <absolute verify JSON path>`.
+
+  Exit code `0` means pass; any nonzero exit code means fail. The runner
+  captures stdout/stderr to deterministic log artifacts and ensures the
+  structured JSON exists. If the script does not create the requested JSON, the
+  runner writes `{"exit_code": <int>, "passed": <bool>}`. If the script writes
+  a JSON object, the runner preserves it while forcing `exit_code` and `passed`
+  to match the process result. Non-repo-task cases that request
+  `verify-script` fail clearly. The verifier must not mutate pack-owned source
+  fixtures. Timeout and environment configuration remain planned.
 
 `llm-judge`
 : Reserved; not implemented by the scorer yet. Intended behavior is to send the
@@ -434,12 +459,11 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 
 ### Relationship to `verify/`
 
-Scripts under `verify/` are reserved for scoring entries that reference them via
-`mode = "verify-script"` and a `script = "verify/..."` path once that mode is
-implemented. Implemented inline declarative modes (`contains` and `regex`) do
-not need `verify/` and should be preferred for fast deterministic prompt-output
-checks. `verify-script` is the intended deterministic scoring mode for
-repo-task correctness, but it remains reserved and unimplemented today.
+Scripts under `verify/` are used by scoring entries that reference them via
+`mode = "verify-script"` and a `script = "verify/..."` path. Implemented inline
+declarative modes (`contains` and `regex`) do not need `verify/` and should be
+preferred for fast deterministic prompt-output checks. `verify-script` is the
+deterministic scoring mode for measured repo-task correctness.
 
 ## Requires (TBD)
 

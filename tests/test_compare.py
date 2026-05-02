@@ -97,6 +97,34 @@ def test_load_result_run_reads_jsonl_from_directory(tmp_path: Path) -> None:
     assert len(run.records) == 2
 
 
+def test_compare_tolerates_repo_task_artifact_fields(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    row_a = _record("edit-repo", prompt_tokens=10, cached_prompt=0)
+    row_a["workspace"] = {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    row_a["patch"] = {"path": "patch/edit-repo/rep-001.diff"}
+    row_a["verify"] = {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    row_a["repo_task"] = {"status": "passed", "verify_exit_code": 0}
+    _write_run(run_a, rows=[row_a])
+    _write_run(
+        run_b,
+        rows=[_record("edit-repo", wall_s=2.0, prompt_tokens=10, cached_prompt=0)],
+    )
+
+    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+
+    assert "| run-a | edit-repo | 1 | 1 | 1.000 |" in output
+    assert "| run-b | edit-repo | 1 | 1 | 2.000 |" in output
+
+
 def test_load_result_run_rejects_missing_empty_and_malformed_inputs(
     tmp_path: Path,
 ) -> None:

@@ -239,8 +239,12 @@ final status are explicit result artifacts separate from raw model
 request/response payloads. Measured rows record the prepared workspace metadata
 as run-relative path plus source fixture id and manifest-declared source path,
 and record the deterministic patch artifact path as
-`patch/<case-id>/rep-NNN.diff`. Verifier, log, and final status artifacts remain
-planned.
+`patch/<case-id>/rep-NNN.diff`. Measured rows using `verify-script` record
+verifier artifact paths as `verify/<case-id>/rep-NNN.json`,
+`verify/<case-id>/rep-NNN.stdout.log`, and
+`verify/<case-id>/rep-NNN.stderr.log`, plus `repo_task.status`,
+`repo_task.verify_exit_code`, and top-level `verify-script` scoring from the
+verifier process exit code. Task execution logs remain planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

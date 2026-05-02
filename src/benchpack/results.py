@@ -92,9 +92,16 @@ class RunReporter:
         *,
         workspace: dict[str, Any] | None = None,
         patch: dict[str, Any] | None = None,
+        verify: dict[str, Any] | None = None,
+        repo_task: dict[str, Any] | None = None,
+        scoring_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         scoring_cfg = case.scoring or self.pack.scoring
-        scoring_result = evaluate(scoring_cfg, adapter_result.output_text)
+        scoring_result = (
+            dict(scoring_override)
+            if scoring_override is not None
+            else evaluate(scoring_cfg, adapter_result.output_text)
+        )
 
         timing = adapter_result.timing.to_dict()
         timing["total_tps"] = _total_tps(
@@ -134,6 +141,10 @@ class RunReporter:
             record["workspace"] = dict(workspace)
         if patch is not None:
             record["patch"] = dict(patch)
+        if verify is not None:
+            record["verify"] = dict(verify)
+        if repo_task is not None:
+            record["repo_task"] = dict(repo_task)
         if adapter_result.backend is not None:
             record["backend"] = adapter_result.backend
         if adapter_result.error is not None:

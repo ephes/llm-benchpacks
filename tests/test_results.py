@@ -196,6 +196,38 @@ def test_record_scoring_null_when_pack_has_none(tmp_path: Path) -> None:
     assert record["scoring"] is None
 
 
+def test_record_can_include_verifier_fields_and_scoring_override(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(
+        tmp_path,
+        scoring=Scoring(mode="verify-script", script="verify/check.py"),
+    )
+    reporter = RunReporter(out, pack)
+
+    record = reporter.record(
+        pack.cases[0],
+        make_adapter_result(out, output_text="not prompt-scored"),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        verify={
+            "path": "verify/capital/rep-001.json",
+            "stdout_path": "verify/capital/rep-001.stdout.log",
+            "stderr_path": "verify/capital/rep-001.stderr.log",
+        },
+        repo_task={"status": "passed", "verify_exit_code": 0},
+        scoring_override={"mode": "verify-script", "passed": True},
+    )
+
+    assert record["verify"] == {
+        "path": "verify/capital/rep-001.json",
+        "stdout_path": "verify/capital/rep-001.stdout.log",
+        "stderr_path": "verify/capital/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+
+
 def test_total_tps_null_when_inputs_missing(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path)
