@@ -16,6 +16,44 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-02 (Phase 3 repo-task verifier timeout)
+
+### Changed
+
+- Added a fixed runner-owned timeout for measured `repo-task`
+  `verify-script` subprocess execution so verifier hangs do not hang the whole
+  benchmark run.
+- Verifier timeouts are recorded as completed failed measured rows rather than
+  runner crashes. Timeout rows keep the existing `workspace`, `patch`,
+  `verify`, `repo_task`, and top-level `scoring` shape.
+- Timeout rows set `repo_task.status = "failed"`,
+  `repo_task.verify_exit_code = null`, and top-level scoring to
+  `{"mode": "verify-script", "passed": false}`.
+- Timeout verifier JSON is created or corrected with authoritative
+  `exit_code: null`, `passed: false`, `timed_out: true`, and `timeout_s`.
+  If timeout-time JSON is an object, non-authoritative fields are preserved; if
+  it is missing, malformed, or not an object, it is replaced with the minimal
+  timeout object.
+- Timeout stdout/stderr logs are always written at the deterministic verifier
+  artifact paths. Captured partial output from `subprocess.TimeoutExpired` is
+  preserved when Python exposes it; otherwise empty log files are created.
+- Non-timeout verifier behavior, script path safety, prompt-output scoring,
+  raw request/response paths, adapter request shape, workspace preparation,
+  patch capture, repo-task fixture validation, symlink escape rejection,
+  repo-task warmup rejection, and non-repo-task `verify-script` rejection remain
+  unchanged.
+- No manifest timeout field, CLI timeout flag, environment configuration, task
+  execution logs, agent-session harness, model-output mutation/application,
+  workspace retention option, repo-task warmup support, bundled pack
+  conversion, live benchmark run, or generated result artifact was added.
+
+### Open Questions
+
+- Future slices still need task or agent execution, model-output patch
+  application, task log artifact paths, warmup workspace support, cleanup and
+  retention options, configurable verifier timeout/environment support, and
+  bundled pack conversion.
+
 ## 2026-05-02 (Phase 3 repo-task verifier artifacts)
 
 ### Changed

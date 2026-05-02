@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -263,3 +264,150 @@ with open(args.output, "w", encoding="utf-8") as fh:
     }
     assert result.repo_task == {"status": "passed", "verify_exit_code": 0}
     assert result.scoring == {"mode": "verify-script", "passed": True}
+
+
+def test_run_verifier_timeout_writes_captured_logs_and_failed_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    write_script(pack_dir, "")
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    patch = tmp_path / "run" / "patch" / "edit-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("", encoding="utf-8")
+
+    def timeout_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(
+            command,
+            kwargs["timeout"],
+            output="partial stdout\n",
+            stderr=b"partial stderr\n",
+        )
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+
+    result = run_repo_task_verifier(
+        pack=pack,
+        case=pack.cases[0],
+        scoring=pack.cases[0].scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=patch,
+        output_dir=tmp_path / "run",
+        repetition=1,
+        timeout_s=12.5,
+    )
+
+    assert result.exit_code is None
+    assert result.repo_task == {"status": "failed", "verify_exit_code": None}
+    assert result.scoring == {"mode": "verify-script", "passed": False}
+    assert (tmp_path / "run" / result.verify["stdout_path"]).read_text() == (
+        "partial stdout\n"
+    )
+    assert (tmp_path / "run" / result.verify["stderr_path"]).read_text() == (
+        "partial stderr\n"
+    )
+    assert json.loads((tmp_path / "run" / result.verify["path"]).read_text()) == {
+        "exit_code": None,
+        "passed": False,
+        "timed_out": True,
+        "timeout_s": 12.5,
+    }
+
+
+def test_run_verifier_timeout_preserves_object_json_with_authoritative_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    write_script(pack_dir, "")
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    patch = tmp_path / "run" / "patch" / "edit-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("", encoding="utf-8")
+
+    def timeout_run(command, **kwargs):
+        output_path = Path(command[command.index("--output") + 1])
+        output_path.write_text(
+            json.dumps(
+                {
+                    "detail": "kept",
+                    "exit_code": 0,
+                    "passed": True,
+                    "timed_out": False,
+                    "timeout_s": 99,
+                }
+            ),
+            encoding="utf-8",
+        )
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+
+    result = run_repo_task_verifier(
+        pack=pack,
+        case=pack.cases[0],
+        scoring=pack.cases[0].scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=patch,
+        output_dir=tmp_path / "run",
+        repetition=1,
+        timeout_s=7.0,
+    )
+
+    assert json.loads((tmp_path / "run" / result.verify["path"]).read_text()) == {
+        "detail": "kept",
+        "exit_code": None,
+        "passed": False,
+        "timed_out": True,
+        "timeout_s": 7.0,
+    }
+    assert (tmp_path / "run" / result.verify["stdout_path"]).read_text() == ""
+    assert (tmp_path / "run" / result.verify["stderr_path"]).read_text() == ""
+    assert result.repo_task == {"status": "failed", "verify_exit_code": None}
+    assert result.scoring == {"mode": "verify-script", "passed": False}
+
+
+@pytest.mark.parametrize("script_json", ["[\"not\", \"an\", \"object\"]", "{bad json"])
+def test_run_verifier_timeout_replaces_invalid_script_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    script_json: str,
+) -> None:
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    write_script(pack_dir, "")
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    patch = tmp_path / "run" / "patch" / "edit-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("", encoding="utf-8")
+
+    def timeout_run(command, **kwargs):
+        output_path = Path(command[command.index("--output") + 1])
+        output_path.write_text(script_json, encoding="utf-8")
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+
+    result = run_repo_task_verifier(
+        pack=pack,
+        case=pack.cases[0],
+        scoring=pack.cases[0].scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=patch,
+        output_dir=tmp_path / "run",
+        repetition=1,
+        timeout_s=3.0,
+    )
+
+    assert json.loads((tmp_path / "run" / result.verify["path"]).read_text()) == {
+        "exit_code": None,
+        "passed": False,
+        "timed_out": True,
+        "timeout_s": 3.0,
+    }

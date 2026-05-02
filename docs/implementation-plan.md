@@ -152,9 +152,11 @@ workspace metadata landed 2026-05-01. Deterministic patch capture landed
 `patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
 include fixture execution, repo mutation by a task harness, agent-session
 replay, prompt templating, workspace retention options, verifier
-timeout/environment configuration, or bundled pack conversion. Measured
-repo-task verifier execution and final verifier status landed 2026-05-02 for
-`verify-script` rows only.
+environment configuration, configurable verifier timeout, or bundled pack
+conversion. Measured repo-task verifier execution and final verifier status
+landed 2026-05-02 for `verify-script` rows only. A fixed runner-owned verifier
+subprocess timeout landed 2026-05-02 so measured verifier hangs become
+completed failed rows instead of runner hangs.
 
 Scope:
 
@@ -204,6 +206,13 @@ Scope:
   patch capture, stdout/stderr and structured JSON are written under
   `verify/<case-id>/rep-NNN.*`, and result rows include `verify`, `repo_task`,
   and top-level `verify-script` scoring.
+- Add bounded verifier subprocess execution. **Landed 2026-05-02** for
+  measured `repo-task` `verify-script` executions only: the runner uses a fixed
+  default verifier timeout, records timeouts as completed failed measured rows,
+  keeps verifier JSON/stdout/stderr artifact paths stable, writes
+  `repo_task.verify_exit_code = null`, and marks timeout JSON with
+  `timed_out` and `timeout_s`. Manifest fields, CLI flags, environment
+  configuration, and broader timeout policy remain planned.
 - Capture deterministic patch/diff artifacts from workspace changes. **Landed
   2026-05-02** as source-vs-workspace directory snapshot diffs written to
   `patch/<case-id>/rep-NNN.diff`, with `patch.path` recorded in measured

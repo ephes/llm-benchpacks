@@ -76,12 +76,12 @@ a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, captures deterministic patch artifacts from
 source-vs-workspace directory snapshots, and executes `verify-script` scoring
-against the prepared workspace. It does not yet run an agent harness, apply
-model output as repository mutations, support repo-task warmups, expose
-workspace cleanup/retention options, or configure verifier timeouts or
-environments. Measured repo-task records include prepared workspace metadata,
-patch artifact paths, verifier artifact paths, final repo-task verifier status,
-and top-level `verify-script` scoring.
+against the prepared workspace with a fixed runner-owned timeout. It does not
+yet run an agent harness, apply model output as repository mutations, support
+repo-task warmups, expose workspace cleanup/retention options, or configure
+verifier timeouts or environments. Measured repo-task records include prepared
+workspace metadata, patch artifact paths, verifier artifact paths, final
+repo-task verifier status, and top-level `verify-script` scoring.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -149,19 +149,28 @@ empty patch file and a `patch.path` entry. For measured repo-task rows using
 `scoring.mode = "verify-script"`, records also include `verify.path`,
 `verify.stdout_path`, `verify.stderr_path`, `repo_task.status`, and
 `repo_task.verify_exit_code`. `repo_task.status` is `"passed"` when the verifier
-exit code is `0` and `"failed"` when it is nonzero. Top-level `scoring` is
-`{"mode": "verify-script", "passed": <bool>}` from that exit code. Curated
-result commits may include small summaries, `hardware.json`, and compact
-`run.jsonl` rows, plus small intentional artifacts such as patch diffs or
-`verify.json` when they are needed to explain a result. Full disposable
-workspaces and large execution logs should normally stay local or ignored.
+exit code is `0` and `"failed"` when it is nonzero or when the verifier times
+out. `repo_task.verify_exit_code` records the integer process exit code, or
+`null` when no exit code exists because the verifier timed out. Top-level
+`scoring` is `{"mode": "verify-script", "passed": <bool>}` from that verifier
+outcome. Curated result commits may include small summaries, `hardware.json`,
+and compact `run.jsonl` rows, plus small intentional artifacts such as patch
+diffs or `verify.json` when they are needed to explain a result. Full
+disposable workspaces and large execution logs should normally stay local or
+ignored.
 
 Existing `contains` and `regex` scoring modes score prompt output.
 `verify-script` is implemented only for measured `repo-task` executions: exit
-code `0` means pass, nonzero means fail, and the verifier receives the prepared
-workspace plus declared case/run metadata as command-line inputs. Non-repo-task
-cases that request `verify-script` fail clearly instead of falling back to
-prompt-output scoring.
+code `0` means pass, nonzero means fail, timeout means fail with a null verifier
+exit code, and the verifier receives the prepared workspace plus declared
+case/run metadata as command-line inputs. The runner always writes the
+deterministic verifier JSON/stdout/stderr artifact paths for a measured
+verifier attempt. On timeout, stdout/stderr logs are still created, captured
+partial output is preserved when Python exposes it, and the structured verifier
+JSON is created or corrected with `exit_code: null`, `passed: false`,
+`timed_out: true`, and the fixed `timeout_s` value. Non-repo-task cases that
+request `verify-script` fail clearly instead of falling back to prompt-output
+scoring.
 
 ## Runtime Adapters
 

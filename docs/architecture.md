@@ -122,9 +122,10 @@ and before each measured adapter execution:
    verifier consumes the prepared workspace, case metadata, pack metadata,
    source fixture id, patch artifact path, and requested output path as
    command-line arguments. It returns deterministic status through its process
-   exit code and may write structured JSON. The runner captures verifier
-   stdout/stderr as explicit artifacts and corrects or creates the structured
-   JSON so `exit_code` and `passed` match the process result.
+   exit code and may write structured JSON. The runner enforces a fixed
+   runner-owned subprocess timeout, captures verifier stdout/stderr as explicit
+   artifacts, and corrects or creates the structured JSON so `exit_code` and
+   `passed` match the process result or timeout outcome.
 8. The reporter records normalized workspace metadata, `patch.path`, `verify`,
    `repo_task`, and top-level `scoring` for measured repo-task
    `verify-script` rows. Future slices will add task execution log artifact
@@ -236,8 +237,10 @@ directory and use `verify/<case-id>/rep-NNN.json`,
 
 The repo-task `repo_task` object is deliberately narrow:
 `repo_task.status` is `"passed"` when the verifier exit code is `0` and
-`"failed"` for any nonzero exit code. `repo_task.verify_exit_code` records the
-integer process exit code. Chat records do not include `repo_task`.
+`"failed"` for any nonzero exit code or verifier timeout.
+`repo_task.verify_exit_code` records the integer process exit code, or `null`
+when the verifier timed out and no exit code exists. Chat records do not
+include `repo_task`.
 
 ### Combined record
 

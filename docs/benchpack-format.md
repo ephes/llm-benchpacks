@@ -264,8 +264,8 @@ strings. The runner rejects manifests that violate this at load time.
   `verify-script` scoring when declared, and records workspace metadata,
   `patch.path`, `verify`, `repo_task`, and top-level `scoring` in the measured
   `run.jsonl` row. Applying model or agent changes, task logs, retention
-  options, repo-task warmups, verifier timeout/environment configuration, and
-  bundled pack conversion remain planned.
+  options, repo-task warmups, configurable verifier timeout/environment
+  support, and bundled pack conversion remain planned.
 
 `replay`
 : A recorded request sequence.
@@ -360,7 +360,10 @@ Workspace and artifact layout:
   single-repetition packs. Measured repo-task records include a top-level
   `verify` object with run-relative `path`, `stdout_path`, and `stderr_path`.
   They also include `repo_task.status` (`"passed"` for exit code `0`,
-  `"failed"` for nonzero) and `repo_task.verify_exit_code`.
+  `"failed"` for nonzero or verifier timeout) and
+  `repo_task.verify_exit_code` (the integer process exit code, or `null` on
+  timeout). Timeout rows keep the same artifact and result object shape and set
+  top-level scoring to `{"mode": "verify-script", "passed": false}`.
 - Task execution logs should be explicit artifacts, for example
   `task.stdout.log` and `task.stderr.log`.
 - Model request/response payloads remain under `raw/`; repo-task workspace,
@@ -443,14 +446,25 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `--patch <absolute patch artifact path>`, and
   `--output <absolute verify JSON path>`.
 
-  Exit code `0` means pass; any nonzero exit code means fail. The runner
-  captures stdout/stderr to deterministic log artifacts and ensures the
-  structured JSON exists. If the script does not create the requested JSON, the
-  runner writes `{"exit_code": <int>, "passed": <bool>}`. If the script writes
-  a JSON object, the runner preserves it while forcing `exit_code` and `passed`
-  to match the process result. Non-repo-task cases that request
-  `verify-script` fail clearly. The verifier must not mutate pack-owned source
-  fixtures. Timeout and environment configuration remain planned.
+  Exit code `0` means pass; any nonzero exit code means fail. Verifier
+  subprocesses are bounded by a fixed runner-owned default timeout in the
+  current implementation. A timeout is recorded as a completed failed measured
+  row with `repo_task.verify_exit_code = null` and top-level scoring
+  `{"mode": "verify-script", "passed": false}`.
+
+  The runner captures stdout/stderr to deterministic log artifacts and ensures
+  the structured JSON exists. If the script does not create the requested JSON,
+  the runner writes `{"exit_code": <int>, "passed": <bool>}`. If the script
+  writes a JSON object, the runner preserves it while forcing `exit_code` and
+  `passed` to match the process result. On timeout, stdout/stderr logs are
+  still created, captured partial output is written when Python exposes it, and
+  the structured JSON is created or corrected with authoritative
+  `exit_code: null`, `passed: false`, `timed_out: true`, and `timeout_s`.
+  If timeout-time JSON is missing, malformed, or not an object, the runner
+  replaces it with that minimal authoritative timeout object. Non-repo-task
+  cases that request `verify-script` fail clearly. The verifier must not mutate
+  pack-owned source fixtures. Configurable timeout and environment support
+  remain planned.
 
 `llm-judge`
 : Reserved; not implemented by the scorer yet. Intended behavior is to send the

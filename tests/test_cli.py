@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -468,6 +469,60 @@ def test_cli_repo_task_verify_script_failure_records_completed_row(
         "exit_code": 5,
         "passed": False,
     }
+
+
+def test_cli_repo_task_verify_script_timeout_records_completed_row(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(pack_dir, "")
+    real_run = subprocess.run
+
+    def timeout_verifier_run(command, *args, **kwargs):
+        if isinstance(command, list) and any(
+            str(part).endswith("verify/check.py") for part in command
+        ):
+            raise subprocess.TimeoutExpired(
+                command,
+                kwargs["timeout"],
+                output="timeout stdout\n",
+                stderr="timeout stderr\n",
+            )
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_verifier_run)
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "failed", "verify_exit_code": None}
+    assert record["scoring"] == {"mode": "verify-script", "passed": False}
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "exit_code": None,
+        "passed": False,
+        "timed_out": True,
+        "timeout_s": 300.0,
+    }
+    assert (out / record["verify"]["stdout_path"]).read_text() == "timeout stdout\n"
+    assert (out / record["verify"]["stderr_path"]).read_text() == "timeout stderr\n"
 
 
 def test_cli_repo_task_verify_script_repetitions_get_separate_artifacts(

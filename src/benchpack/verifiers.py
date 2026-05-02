@@ -13,6 +13,9 @@ from .packs import Case, Pack, Scoring
 from .workspaces import PreparedWorkspace
 
 
+DEFAULT_VERIFY_TIMEOUT_S = 300.0
+
+
 class VerifierError(ValueError):
     """Raised when a repo-task verifier cannot be resolved or executed safely."""
 
@@ -30,7 +33,7 @@ class VerifyArtifactPaths:
 class VerifierResult:
     """Result fields added to one measured repo-task row."""
 
-    exit_code: int
+    exit_code: int | None
     verify: dict[str, str]
     repo_task: dict[str, Any]
     scoring: dict[str, Any]
@@ -130,6 +133,7 @@ def run_repo_task_verifier(
     patch_path: Path,
     output_dir: Path,
     repetition: int,
+    timeout_s: float = DEFAULT_VERIFY_TIMEOUT_S,
 ) -> VerifierResult:
     """Run a repo-task verifier and return fields for the result record."""
 
@@ -162,9 +166,25 @@ def run_repo_task_verifier(
             check=False,
             capture_output=True,
             text=True,
+            timeout=timeout_s,
         )
         paths.stdout.write_text(completed.stdout, encoding="utf-8")
         paths.stderr.write_text(completed.stderr, encoding="utf-8")
+    except subprocess.TimeoutExpired as exc:
+        paths.stdout.write_text(_timeout_stream_to_text(exc.stdout), encoding="utf-8")
+        paths.stderr.write_text(_timeout_stream_to_text(exc.stderr), encoding="utf-8")
+        _write_authoritative_json(
+            paths.json,
+            exit_code=None,
+            passed=False,
+            extra_fields={"timed_out": True, "timeout_s": timeout_s},
+        )
+        return VerifierResult(
+            exit_code=None,
+            verify=verify_record(paths, output_dir),
+            repo_task={"status": "failed", "verify_exit_code": None},
+            scoring={"mode": "verify-script", "passed": False},
+        )
     except OSError as exc:
         raise VerifierError(
             f"could not run verifier for repo-task case {case.id!r}"
@@ -183,7 +203,23 @@ def run_repo_task_verifier(
     )
 
 
-def _write_authoritative_json(path: Path, *, exit_code: int, passed: bool) -> None:
+def _timeout_stream_to_text(value: str | bytes | None) -> str:
+    """Normalize captured TimeoutExpired output to text for log artifacts."""
+
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _write_authoritative_json(
+    path: Path,
+    *,
+    exit_code: int | None,
+    passed: bool,
+    extra_fields: dict[str, Any] | None = None,
+) -> None:
     """Create or correct structured verifier JSON after process exit."""
 
     payload: dict[str, Any]
@@ -196,6 +232,8 @@ def _write_authoritative_json(path: Path, *, exit_code: int, passed: bool) -> No
     else:
         payload = {}
 
+    if extra_fields is not None:
+        payload.update(extra_fields)
     payload["exit_code"] = exit_code
     payload["passed"] = passed
     path.write_text(
