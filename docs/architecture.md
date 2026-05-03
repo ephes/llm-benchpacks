@@ -29,14 +29,18 @@ than changing the adapter boundary:
   CLI selection. Its runner-side request carries the prepared workspace path,
   case metadata, model output text, the run output directory, measured
   repetition, deterministic task log paths, and validated workspace-relative
-  helpers for listing regular files, checking file existence, reading or
-  writing UTF-8 text, and deleting files; richer future harnesses may add pack
-  metadata and model/adapter/endpoint/default context needed for harness-owned
-  model calls.
+  helpers for listing regular files and directories, checking file existence,
+  reading or writing UTF-8 text, and deleting files; richer future harnesses
+  may add pack metadata and model/adapter/endpoint/default context needed for
+  harness-owned model calls.
   The harness may inspect and mutate only the prepared workspace and may write
   only the existing task logs under the run output directory; it must preserve
   pack fixtures, prompts, verifier scripts, and source docs. Harness selection
-  and configuration are not manifest or CLI surfaces yet.
+  and configuration are not manifest or CLI surfaces yet. A future public
+  manifest selection contract should be explicit, case-local, and keyed by a
+  small `harness = { id = "..." }` table for `repo-task` cases; absence keeps
+  the current fenced `diff`/`patch` executor default rather than inferring an
+  external harness.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -147,26 +151,30 @@ and before each measured adapter execution:
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
    task log paths, plus validated workspace-relative helpers for listing
-   regular files, checking file existence, reading or writing UTF-8 text, and
-   deleting files.
+   regular files and directories, checking file existence, reading or writing
+   UTF-8 text, and deleting files.
    File listings are deterministic sorted POSIX workspace-relative paths and
    observe files created earlier in the same harness invocation. Symlinks to
    regular files are listed only when their target resolves inside the prepared
-   workspace. Existence checks return true only for regular files, including
-   in-workspace symlinks to regular files, and false for missing paths or
-   directories. Delete checks use the same boundary, return true after deleting
-   an existing regular file or in-workspace symlink-to-file workspace entry,
-   return false for missing paths and directories, and unlink symlink entries
-   without deleting their targets. Future harnesses may also receive pack
-   metadata and model/adapter/endpoint/default context as needed. It may inspect
-   and mutate only the prepared workspace and may write only the existing task
-   logs under the run output directory. It must not mutate pack-owned fixtures,
-   prompts, verifier scripts, source docs, or adapter/result schemas by
-   default. The task log paths in step 7 remain stable for future harnesses
-   unless a later result-schema slice changes them deliberately. Harness
-   failures that prevent the runner from writing required artifacts, including
-   unsafe or unreadable workspace helper paths, unsafe deletes, delete
-   `OSError`s, or failed workspace listing, remain runner failures;
+   workspace. Directory listings are deterministic sorted POSIX
+   workspace-relative paths, include nested directories, exclude the workspace
+   root, files, and symlinks including symlinks to directories, and observe
+   directories created earlier in the same harness invocation. Existence checks
+   return true only for regular files, including in-workspace symlinks to
+   regular files, and false for missing paths or directories. Delete checks use
+   the same boundary, return true after deleting an existing regular file or
+   in-workspace symlink-to-file workspace entry, return false for missing paths
+   and directories, and unlink symlink entries without deleting their targets.
+   Future harnesses may also receive pack metadata and
+   model/adapter/endpoint/default context as needed. It may inspect and mutate
+   only the prepared workspace and may write only the existing task logs under
+   the run output directory. It must not mutate pack-owned fixtures, prompts,
+   verifier scripts, source docs, or adapter/result schemas by default. The
+   task log paths in step 7 remain stable for future harnesses unless a later
+   result-schema slice changes them deliberately. Harness failures that prevent
+   the runner from writing required artifacts, including unsafe or unreadable
+   workspace helper paths, unsafe deletes, delete `OSError`s, or failed
+   workspace listing, remain runner failures;
    ordinary task outcomes should be captured through the existing task logs
    until a later status-reporting slice proves a new row field is necessary.
 7. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
@@ -206,6 +214,19 @@ the executor-owned task phase: the default fenced unified-diff
 extraction/application phase for current CLI runs, or an internal harness phase
 when runner-side code supplies one. A later full agent harness may replace or
 extend that phase without changing the adapter or reporter boundaries.
+
+Future public harness selection is a manifest-format concern, not an adapter
+concern. The planned design is an explicit `harness = { id = "..." }` table on
+`repo-task` cases. The initial public id should preserve the current
+compatibility behavior, for example `fenced-patch`; external coding-agent ids
+remain later work. Selection must not be inferred from model names, adapters,
+endpoints, fixture shape, verifier choice, or host environment. It must also
+leave raw request/response paths, task log paths, patch capture after the task
+phase, verifier execution after patch capture, and existing measured row shapes
+unchanged unless a later schema slice deliberately changes them. Task
+environment, task timeout, retention, richer task status/reporting, pack-level
+harness defaults, and repo-task warmups remain separate future design and
+implementation slices.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final

@@ -113,10 +113,11 @@ default. The internal harness input includes the prepared workspace path, case
 metadata, model output text, run output directory, measured repetition number,
 deterministic task stdout/stderr log paths, and validated helpers for reading
 and writing UTF-8 text below the prepared workspace, deleting workspace files,
-listing workspace file paths, and checking workspace file existence. Future
-production harnesses may add pack metadata and model/adapter/endpoint/default
-context as needed for harness-owned model calls. Those inputs remain internal
-implementation details, not new manifest fields or adapter request fields.
+listing workspace file and directory paths, and checking workspace file
+existence. Future production harnesses may add pack metadata and
+model/adapter/endpoint/default context as needed for harness-owned model calls.
+Those inputs remain internal implementation details, not new manifest fields or
+adapter request fields.
 
 The internal harness path may inspect and mutate only the prepared workspace and
 may write only the existing task stdout/stderr logs under the run output
@@ -125,6 +126,10 @@ absolute paths and `..` escapes. `list_workspace_paths()` returns deterministic
 sorted POSIX workspace-relative paths for regular files only, including files
 created earlier in the same harness invocation. Symlinks to regular files are
 listed only when their target resolves inside the prepared workspace.
+`list_workspace_dirs()` returns deterministic sorted POSIX workspace-relative
+directory paths, including nested directories and directories created earlier in
+the same harness invocation, excluding the workspace root, files, and symlinks
+including symlinks to directories.
 `workspace_file_exists()` uses the same path boundary and returns true only for
 existing regular files, including in-workspace symlinks to regular files;
 missing paths and directories return false. `delete_workspace_file()` uses the
@@ -134,11 +139,11 @@ and directories, and leaves symlink targets intact when deleting a symlink
 entry. Unsafe delete paths, including symlink escapes outside the prepared
 workspace, and `OSError` delete failures are runner failures before task logs
 are recorded. Failed helper reads, writes, unsafe existence checks, unsafe
-deletes, or failed workspace listing are runner failures before task logs are
-recorded. It must not mutate pack-owned fixtures, prompts, verifier scripts,
-source docs, or other files under the pack. If a later harness needs model
-calls, those calls are runner/harness concerns and must not change the normal
-adapter request or result schemas by default. Task logs remain
+deletes, or failed workspace file or directory listing are runner failures
+before task logs are recorded. It must not mutate pack-owned fixtures, prompts,
+verifier scripts, source docs, or other files under the pack. If a later
+harness needs model calls, those calls are runner/harness concerns and must not
+change the normal adapter request or result schemas by default. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
 that deliberately. Patch capture still happens after task execution, so
@@ -148,6 +153,32 @@ Runner failures, such as an unreadable workspace or unwritable task log, remain
 distinct from task outcomes, such as a model or harness failing to produce a
 useful change; this docs slice does not add task status fields to express that
 distinction.
+
+Public repo-task harness selection is a future manifest contract, not current
+behavior. The planned public shape is an explicit case-local table on
+`repo-task` cases:
+
+```toml
+[[cases]]
+id = "fix-repo"
+kind = "repo-task"
+harness = { id = "fenced-patch" }
+```
+
+If implemented later, `harness.id` will name a runner-known harness. Absence of
+the field must not infer an external harness; the compatibility default remains
+the current fenced `diff`/`patch` executor. Public harness selection must not
+change adapter request or adapter result schemas by default, and existing
+`task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log` remain the task-phase artifact paths unless
+a later result-schema slice deliberately changes them. Task environment
+configuration, task timeout configuration, workspace retention, richer
+status/reporting, pack-level harness defaults, and production external
+coding-agent integration remain explicit future slices rather than implicit
+support in the selection field. Repo-task warmups remain rejected. Patch
+capture still reflects the post-task workspace, verifier execution still runs
+after patch capture, and this docs-first contract adds no new `run.jsonl` row
+fields.
 
 Repo-task cases use `kind = "repo"` directory fixtures as immutable source
 repository snapshots:

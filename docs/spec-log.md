@@ -47,8 +47,73 @@ working history and open questions.
   external coding-agent integration, richer task status/reporting if needed,
   repo-task warmup support, cleanup and retention options, task environment
   support if needed, task timeout support if needed, source fixture metadata if
-  later needed, directory-listing helpers if later needed, recursive directory
-  deletion if later needed, and larger bundled repo-task conversion.
+  later needed, recursive directory deletion if later needed, and larger
+  bundled repo-task conversion.
+
+## 2026-05-03 (Phase 3 docs-first public harness selection contract)
+
+### Changed
+
+- Defined a future public repo-task harness selection shape as an explicit
+  case-local `harness = { id = "..." }` table.
+- Kept the contract design-only: no manifest parser changes, validation
+  changes, CLI flags, harness registry, executor selection behavior, adapter
+  schema changes, raw artifact path changes, task log path changes, or
+  `run.jsonl` row fields were added.
+- Documented that absence of `harness` keeps the current fenced model-output
+  `diff`/`patch` executor default, and harness selection must not be inferred
+  from model names, adapters, endpoints, fixture shape, verifier choice, host
+  environment, or pack id.
+- Documented compatibility boundaries for future selection: adapter
+  request/result schemas stay unchanged by default; existing task stdout/stderr
+  paths remain the task-phase artifact paths unless a later schema slice
+  changes them; patch capture still reflects the post-task workspace; verifier
+  execution still happens after patch capture; repo-task warmups remain
+  rejected.
+- Left task environment, task timeout, workspace retention, richer
+  status/reporting, pack-level harness defaults, and production external
+  coding-agent integration as explicit future slices.
+
+### Open Questions
+
+- Future slices still need actual public manifest parsing and executor
+  selection if needed, production external coding-agent integration, richer
+  task status/reporting if needed, repo-task warmup support, workspace
+  cleanup/retention options, task environment support, task timeout support,
+  pack-level harness defaults if needed, and larger bundled repo-task
+  conversion.
+
+## 2026-05-03 (Phase 3 internal harness workspace directory discovery helper)
+
+### Changed
+
+- Added `AgentSessionHarnessRequest.list_workspace_dirs()` for runner-side
+  internal harnesses.
+- The directory listing helper returns deterministic sorted POSIX
+  workspace-relative paths for directories under the prepared workspace.
+- Directory listings include nested directories and directories created earlier
+  in the same harness invocation, exclude the workspace root and files, and
+  exclude symlinks including symlinks to directories.
+- Failed directory listing, including a prepared workspace path that is not a
+  directory, raises `TaskError` before task stdout/stderr logs are recorded.
+- Focused tests now prove sorted POSIX nested directory paths, file and root
+  exclusion, same-invocation created directory visibility, symlink-to-directory
+  exclusion, no task logs after listing failure, and a fake harness flow using
+  file and directory helpers together.
+- No public harness selection behavior, CLI flags, manifest parser changes,
+  adapter schema changes, result row fields, raw artifact path changes, task
+  log path changes, task timeout or environment support, repo-task warmups,
+  workspace retention options, directory deletion, recursive deletion, or
+  production external coding-agent integration were added.
+
+### Open Questions
+
+- Future slices still need actual public harness selection if needed,
+  production external coding-agent integration, richer task status/reporting if
+  needed, repo-task warmup support, cleanup and retention options, task
+  environment support, task timeout support, source fixture metadata if later
+  needed, recursive directory deletion if later needed, and larger bundled
+  repo-task conversion.
 
 ## 2026-05-03 (Phase 3 internal harness workspace discovery helpers)
 

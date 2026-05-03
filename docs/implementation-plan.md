@@ -199,7 +199,17 @@ resolve inside the prepared workspace. An internal workspace file-delete helper
 landed 2026-05-03: runner-side harnesses can remove existing regular files and
 in-workspace symlink-to-file entries through the same workspace boundary, with
 missing paths and directories returning false and unsafe paths remaining runner
-failures before task logs are recorded.
+failures before task logs are recorded. An internal workspace directory
+discovery helper landed 2026-05-03: runner-side harnesses can list
+deterministic sorted workspace-relative POSIX directory paths, including nested
+directories created earlier in the same harness invocation, excluding the
+workspace root, files, and symlinks including symlinks to directories. A
+docs-first public harness selection contract landed 2026-05-03 without
+implementation: future repo-task cases may explicitly declare
+`harness = { id = "..." }`, absence keeps the current fenced `diff`/`patch`
+executor default, and public selection must not change adapter schemas, result
+row shapes, raw artifact paths, task log paths, patch/verifier ordering, or
+repo-task warmup rejection by default.
 
 Scope:
 
@@ -321,6 +331,21 @@ Scope:
   safety boundary as workspace reads and writes, returns false for missing
   paths and directories, leaves symlink targets intact, and keeps unsafe paths
   or delete `OSError`s as runner failures before task logs are recorded.
+- Add an internal workspace directory discovery helper to
+  `AgentSessionHarnessRequest`. **Landed 2026-05-03** without adding manifest
+  or CLI selection: `list_workspace_dirs()` returns sorted POSIX
+  workspace-relative directory paths under the prepared workspace, including
+  nested directories and directories created earlier in the same harness
+  invocation, excluding the workspace root, files, and symlinks including
+  symlinks to directories.
+- Define a docs-first public harness selection contract. **Landed
+  2026-05-03** as documentation only: a future explicit case-local
+  `harness = { id = "..." }` table may select runner-known repo-task
+  harnesses, absence keeps the fenced `diff`/`patch` executor as the
+  compatibility default, selection is not inferred, and adapter schemas, result
+  row shapes, task log paths, raw artifact paths, patch capture ordering,
+  verifier ordering, and repo-task warmup rejection remain unchanged in this
+  slice.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -329,9 +354,10 @@ Scope:
   workspace.
 - Integrate a production agent-session harness after disposable workspace,
   verifier, and patch artifacts exist. **Partially landed 2026-05-03** as an
-  internal executor path for runner-side callers only. Public harness
-  selection, external coding-agent integration, and richer harness
-  configuration remain planned later.
+  internal executor path for runner-side callers only plus a docs-first public
+  selection contract. Actual public manifest parsing, CLI behavior, external
+  coding-agent integration, and richer harness configuration remain planned
+  later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

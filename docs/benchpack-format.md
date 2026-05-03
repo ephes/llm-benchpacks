@@ -272,7 +272,7 @@ strings. The runner rejects manifests that violate this at load time.
   A minimal internal agent-session harness path exists behind the same
   executor boundary for runner-side callers and tests, but current CLI runs
   still use the fenced `diff`/`patch` executor by default. This format does not
-  currently add harness selection, manifest task commands, retention options,
+  currently add public harness selection, manifest task commands, retention options,
   repo-task warmups, task environment configuration, task timeout
   configuration, or bundled pack conversion.
 
@@ -338,20 +338,70 @@ Agent-session harness inputs are runner-side concerns, not manifest syntax in
 this slice. The current internal harness path may use the prepared workspace,
 case metadata, model output text, output directory, repetition, and
 deterministic task log paths internally, plus validated helpers to list
-workspace file paths, check workspace file existence, read or write UTF-8
-workspace text, and delete workspace files. File listings include regular files
-only, use sorted POSIX workspace-relative paths, and observe files created
-earlier in the same harness invocation. Symlinks to regular files are listed
-only when their target resolves inside the prepared workspace. File existence
-checks return true only for existing regular files, including in-workspace
-symlinks to regular files, while missing paths and directories return false.
-File deletes use the same path boundary, return true after deleting an existing
-regular file or in-workspace symlink-to-file workspace entry, return false for
-missing paths and directories, and unlink symlink entries without deleting
-their targets. Future harnesses may add pack metadata and
-model/adapter/endpoint/default context. Pack authors should not rely on
-manifest-declared shell commands, task environment, task timeouts, harness
-selection, or workspace retention because none of those fields exist yet.
+workspace file paths and directory paths, check workspace file existence, read
+or write UTF-8 workspace text, and delete workspace files. File listings
+include regular files only, use sorted POSIX workspace-relative paths, and
+observe files created earlier in the same harness invocation. Symlinks to
+regular files are listed only when their target resolves inside the prepared
+workspace. Directory listings include nested directories, use sorted POSIX
+workspace-relative paths, exclude the workspace root, files, and symlinks
+including symlinks to directories, and observe directories created earlier in
+the same harness invocation. File existence checks return true only for
+existing regular files, including in-workspace symlinks to regular files, while
+missing paths and directories return false. File deletes use the same path
+boundary, return true after deleting an existing regular file or in-workspace
+symlink-to-file workspace entry, return false for missing paths and directories,
+and unlink symlink entries without deleting their targets. Future harnesses may
+add pack metadata and model/adapter/endpoint/default context. Pack authors
+should not rely on manifest-declared shell commands, task environment, task
+timeouts, public harness selection, or workspace retention because none of
+those fields exist yet.
+
+#### Future Public Harness Selection Contract (Design Only)
+
+Public harness selection is not implemented. Current CLI repo-task runs still
+use the fenced model-output `diff`/`patch` executor by default, and manifests
+that declare new harness fields do not get public selection behavior in this
+slice.
+
+The planned manifest shape is an explicit case-local table on `repo-task`
+cases:
+
+```toml
+[[cases]]
+id = "fix-repo"
+kind = "repo-task"
+prompt_file = "prompts/fix-repo.md"
+fixture_refs = ["repo"]
+harness = { id = "fenced-patch" }
+scoring = { mode = "verify-script", script = "verify/fix-repo.py" }
+```
+
+Rules for the future implementation:
+
+- `harness.id` names a runner-known harness. It must be explicit when selecting
+  anything other than the compatibility default; selection must not be inferred
+  from model names, adapters, endpoints, fixture shape, verifier choice, host
+  environment, or pack id.
+- When `harness` is absent, the default/current behavior remains the fenced
+  `diff`/`patch` executor for compatibility.
+- Public harness selection must not change adapter request or result schemas by
+  default. Harness-owned model calls, if added later, are runner/harness
+  concerns rather than normal adapter request fields.
+- Existing task logs remain `task/<case-id>/rep-NNN.stdout.log` and
+  `task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice
+  deliberately changes them.
+- Patch capture still happens after the selected task phase and reflects the
+  post-task workspace. Verifier execution still happens after patch capture.
+- Repo-task warmups remain rejected until a later warmup contract defines fresh
+  workspace isolation and artifact behavior.
+- Task environment configuration, task timeout configuration, workspace
+  retention, richer task status/reporting, pack-level harness defaults, and
+  production external coding-agent integration are separate future slices, not
+  implicit support in `harness`.
+- This docs-first design adds no `run.jsonl` fields and no manifest parsing,
+  validation, CLI flags, harness registry, executor selection behavior, adapter
+  schema changes, raw artifact path changes, or task log path changes.
 
 Directory fixture semantics for repo-task cases:
 

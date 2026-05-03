@@ -849,6 +849,55 @@ def test_run_repo_task_executor_internal_harness_workspace_discovery_flow(
     assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
 
 
+def test_agent_session_harness_list_workspace_dirs_returns_sorted_nested_dirs(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "z-src" / "inner").mkdir(parents=True)
+    (workspace / "docs").mkdir()
+    (workspace / "docs" / "guide.md").write_text("guide\n", encoding="utf-8")
+    (workspace / "root.txt").write_text("root\n", encoding="utf-8")
+    request = make_harness_request(tmp_path, workspace)
+
+    assert request.list_workspace_dirs() == ("docs", "z-src", "z-src/inner")
+
+
+def test_agent_session_harness_list_workspace_dirs_observes_created_dirs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.list_workspace_dirs() == ()
+        request.write_workspace_text("src/app.py", "print('hello')\n")
+        request.write_workspace_text("tests/unit/test_app.py", "def test_app():\n")
+        assert request.list_workspace_dirs() == ("src", "tests", "tests/unit")
+        return AgentSessionHarnessResult(stdout="dirs observed\n", stderr="")
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "dirs observed\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
 def test_run_repo_task_executor_internal_harness_workspace_discovery_symlinks(
     tmp_path: Path,
 ) -> None:
@@ -889,6 +938,25 @@ def test_run_repo_task_executor_internal_harness_workspace_discovery_symlinks(
         "stdout_path": "task/edit-repo/rep-001.stdout.log",
         "stderr_path": "task/edit-repo/rep-001.stderr.log",
     }
+
+
+def test_agent_session_harness_list_workspace_dirs_excludes_symlinks_to_dirs(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    target = workspace / "target-dir"
+    target.mkdir()
+    (target / "inner-sub").mkdir()
+    try:
+        (workspace / "target-link").symlink_to("target-dir", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    request = make_harness_request(tmp_path, workspace)
+
+    dirs = request.list_workspace_dirs()
+    assert dirs == ("target-dir", "target-dir/inner-sub")
+    assert "target-link/inner-sub" not in dirs
 
 
 def test_agent_session_harness_delete_workspace_file_removes_regular_file(
@@ -1012,6 +1080,37 @@ def test_run_repo_task_executor_internal_harness_unsafe_delete_writes_no_task_lo
     assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()
 
 
+def test_run_repo_task_executor_internal_harness_dir_listing_failure_writes_no_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.parent.mkdir(parents=True)
+    workspace.write_text("not a directory\n", encoding="utf-8")
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.list_workspace_dirs()
+        return AgentSessionHarnessResult(stdout="should not record\n", stderr="")
+
+    with pytest.raises(
+        TaskError,
+        match="could not list harness workspace directories",
+    ):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()
+
+
 def test_run_repo_task_executor_internal_harness_delete_oserror_writes_no_task_logs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1075,13 +1174,16 @@ def test_run_repo_task_executor_internal_harness_workspace_mutation_full_surface
     )
 
     def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.list_workspace_dirs() == ()
         assert request.list_workspace_paths() == ("README.md", "obsolete.txt")
         assert request.workspace_file_exists("README.md") is True
         assert request.read_workspace_text("README.md") == "# Source\n"
+        request.write_workspace_text("logs/trace.txt", "trace\n")
+        assert request.list_workspace_dirs() == ("logs",)
         request.write_workspace_text("README.md", "# Edited\n")
         assert request.delete_workspace_file("obsolete.txt") is True
         assert request.workspace_file_exists("obsolete.txt") is False
-        assert request.list_workspace_paths() == ("README.md",)
+        assert request.list_workspace_paths() == ("README.md", "logs/trace.txt")
         return AgentSessionHarnessResult(
             stdout="fake-harness edited and deleted\n",
             stderr="",
@@ -1117,6 +1219,8 @@ def test_run_repo_task_executor_internal_harness_workspace_mutation_full_surface
     assert "--- a/README.md\n+++ b/README.md\n" in patch_text
     assert "-# Source\n" in patch_text
     assert "+# Edited\n" in patch_text
+    assert "+++ b/logs/trace.txt\n" in patch_text
+    assert "+trace\n" in patch_text
     assert "--- a/obsolete.txt\n+++ /dev/null\n" in patch_text
     assert "-obsolete\n" in patch_text
 

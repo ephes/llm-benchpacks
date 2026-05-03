@@ -88,6 +88,27 @@ class AgentSessionHarnessRequest:
             ) from exc
         return tuple(sorted(paths))
 
+    def list_workspace_dirs(self) -> tuple[str, ...]:
+        """Return sorted POSIX directory paths below the prepared workspace."""
+
+        workspace_root = self.workspace.resolve(strict=False)
+        try:
+            if not workspace_root.is_dir():
+                raise OSError(f"workspace is not a directory: {workspace_root}")
+            paths = [
+                child.relative_to(workspace_root).as_posix()
+                for child in workspace_root.rglob("*")
+                if not child.is_symlink()
+                and child.is_dir()
+                and child.resolve(strict=False).is_relative_to(workspace_root)
+            ]
+        except OSError as exc:
+            raise TaskError(
+                f"could not list harness workspace directories for repo-task case "
+                f"{self.case.id!r}"
+            ) from exc
+        return tuple(sorted(paths))
+
     def workspace_file_exists(self, relative_path: str) -> bool:
         """Return whether a regular file exists below the prepared workspace."""
 

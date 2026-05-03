@@ -283,17 +283,21 @@ and keeps executor choice out of the manifest and CLI. The first narrow
 internal harness path is runner-side only: it can receive the prepared
 workspace path, case metadata, model output text, the run output directory,
 measured repetition, deterministic task log paths, and validated
-workspace-relative helpers for listing regular files, checking file existence,
-reading or writing UTF-8 text, and deleting files. File listings are
-deterministic sorted POSIX workspace-relative paths and include files created
-earlier in the same harness invocation. Symlinks to regular files are listed
-only when their target resolves inside the prepared workspace; existence checks
-return true only for existing regular files, including in-workspace symlinks to
-regular files. File deletes use the same path boundary, return true after
-deleting an existing regular file or in-workspace symlink-to-file workspace
-entry, return false for missing paths and directories, and unlink symlink
-entries without deleting their targets. Unsafe delete paths and delete
-`OSError`s are runner failures before task logs are written. Future production
+workspace-relative helpers for listing regular files and directories, checking
+file existence, reading or writing UTF-8 text, and deleting files. File
+listings are deterministic sorted POSIX workspace-relative paths and include
+files created earlier in the same harness invocation. Symlinks to regular files
+are listed only when their target resolves inside the prepared workspace.
+Directory listings are deterministic sorted POSIX workspace-relative paths,
+include nested directories and directories created earlier in the same harness
+invocation, and exclude the workspace root, files, and symlinks including
+symlinks to directories. Existence checks return true only for existing regular
+files, including in-workspace symlinks to regular files. File deletes use the
+same path boundary, return true after deleting an existing regular file or
+in-workspace symlink-to-file workspace entry, return false for missing paths
+and directories, and unlink symlink entries without deleting their targets.
+Unsafe delete paths and delete `OSError`s are runner failures before task logs
+are written. Future production
 harnesses may add pack metadata and model/adapter/endpoint/default context as
 needed for harness-owned model calls. The harness may inspect and mutate only
 the prepared workspace and may write only the existing task logs under the run
@@ -309,3 +313,26 @@ environment, task timeout, retention, and richer status semantics are still
 unsettled. Keeping the first harness internal lets implementation validate the
 runner responsibilities without expanding the public pack format or result
 schema prematurely.
+
+## D-023: Public Repo-Task Harness Selection Must Be Explicit
+
+Future public repo-task harness selection should use an explicit case-local
+manifest table, shaped as `harness = { id = "..." }` on `repo-task` cases. The
+field is documentation-only until a later implementation adds manifest parsing
+and executor selection. When the field is absent, current compatibility
+behavior remains the fenced model-output `diff`/`patch` executor. Selection
+must not be inferred from model names, adapters, endpoints, fixture shape,
+verifier choice, host environment, or pack id. Public harness selection must
+not change normal adapter request/result schemas by default, and existing task
+log artifact paths remain `task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
+them deliberately. Patch capture still happens after the selected task phase,
+verifier execution still happens after patch capture, repo-task warmups remain
+rejected, and this design slice adds no result row fields.
+
+Reason: public harness selection crosses manifest compatibility, executor
+dispatch, task logs, status reporting, timeout and environment policy,
+workspace retention, and external coding-agent integration. Naming the future
+field while keeping implementation out of this slice lets the runner preserve
+current CLI behavior and result compatibility until those adjacent contracts
+are designed and tested.
