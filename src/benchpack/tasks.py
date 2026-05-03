@@ -23,6 +23,17 @@ class TaskArtifactPaths:
     stderr: Path
 
 
+@dataclass(frozen=True)
+class TaskExecutionRequest:
+    """Runner-side request for executing one measured repo-task phase."""
+
+    output_dir: Path
+    case: Case
+    repetition: int
+    workspace: Path
+    model_output_text: str
+
+
 class _PatchContractError(ValueError):
     """Raised when model output does not satisfy the narrow patch contract."""
 
@@ -87,6 +98,36 @@ def run_model_patch_task(
 ) -> dict[str, str]:
     """Apply the first fenced model patch block and write task logs.
 
+    Retained for direct helper tests and callers that predate the internal
+    executor boundary; the CLI uses ``run_repo_task_executor``.
+    """
+
+    return _run_fenced_model_patch_executor(
+        TaskExecutionRequest(
+            output_dir=output_dir,
+            case=case,
+            repetition=repetition,
+            workspace=workspace,
+            model_output_text=output_text,
+        )
+    )
+
+
+def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
+    """Execute the current internal repo-task task phase.
+
+    The only implemented executor is the fenced model-output patch bridge.
+    Selection of other executors is intentionally not a manifest or CLI surface.
+    """
+
+    return _run_fenced_model_patch_executor(request)
+
+
+def _run_fenced_model_patch_executor(
+    request: TaskExecutionRequest,
+) -> dict[str, str]:
+    """Apply the first fenced model patch block and write task logs.
+
     Missing or unapplicable model patches are task-phase outcomes, not runner
     failures. They are written to stderr so downstream patch capture and
     verifier execution can observe the unchanged workspace.
@@ -94,25 +135,28 @@ def run_model_patch_task(
 
     stdout = ""
     stderr = ""
-    patch = extract_fenced_patch(output_text)
+    patch = extract_fenced_patch(request.model_output_text)
     if patch is None:
         stderr = (
             "No fenced diff or patch block found in model output; "
             "workspace left unchanged.\n"
         )
     else:
-        _, stdout, stderr = apply_unified_diff_to_workspace(patch, workspace)
+        _, stdout, stderr = apply_unified_diff_to_workspace(
+            patch,
+            request.workspace,
+        )
 
-    paths = task_artifact_paths(output_dir, case, repetition)
+    paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
     try:
         paths.stdout.parent.mkdir(parents=True, exist_ok=True)
         paths.stdout.write_text(stdout, encoding="utf-8")
         paths.stderr.write_text(stderr, encoding="utf-8")
     except OSError as exc:
         raise TaskError(
-            f"could not write task logs for repo-task case {case.id!r}"
+            f"could not write task logs for repo-task case {request.case.id!r}"
         ) from exc
-    return task_record(paths, output_dir)
+    return task_record(paths, request.output_dir)
 
 
 def extract_fenced_patch(output_text: str) -> str | None:

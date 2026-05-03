@@ -85,10 +85,12 @@ results/
    streaming usage mode, are merged into a per-request defaults copy so the
    loaded pack defaults are not mutated.
 8. Persist raw requests and responses for warmups and measured executions.
-9. For measured `repo-task` executions only, extract the first fenced `diff` or
-   `patch` block from model output, apply it as a unified diff in the prepared
-   workspace, and write deterministic task stdout/stderr logs. Missing or
-   unapplicable patches are logged and do not crash the benchmark row.
+9. For measured `repo-task` executions only, invoke the internal task executor
+   boundary. The only current executor extracts the first fenced `diff` or
+   `patch` block from model output, applies it as a unified diff in the
+   prepared workspace, and writes deterministic task stdout/stderr logs.
+   Missing or unapplicable patches are logged and do not crash the benchmark
+   row.
 10. Apply implemented deterministic scoring for measured executions when the
    pack declares it. For measured `repo-task` executions with
    `scoring.mode = "verify-script"`, the runner executes the verifier after
@@ -120,17 +122,18 @@ and before each measured adapter execution:
 4. The adapter continues to handle model/runtime calls. The adapter boundary
    remains unchanged; adapters do not receive workspace paths, learn pack
    fixture semantics, or write repository files directly.
-5. After the adapter call, the runner extracts the first fenced code block whose
-   info string is exactly `diff` or `patch` from `AdapterResult.output_text`.
-   The block body is treated as a unified diff and applied from the prepared
-   workspace root. Non-matching fences are ignored. Missing blocks and rejected
-   or unapplicable diffs are deterministic task stderr outcomes, not runner
-   crashes.
+5. After the adapter call, the runner invokes the internal task executor
+   boundary. The only current executor extracts the first fenced code block
+   whose info string is exactly `diff` or `patch` from
+   `AdapterResult.output_text`. The block body is treated as a unified diff and
+   applied from the prepared workspace root. Non-matching fences are ignored.
+   Missing blocks and rejected or unapplicable diffs are deterministic task
+   stderr outcomes, not runner crashes.
 6. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
    `task/<case-id>/rep-NNN.stderr.log` artifacts. Successful application writes
    a short stdout message and leaves stderr empty; no-patch or failed-apply
    outcomes leave the workspace unchanged and explain the outcome in stderr.
-7. After model-output patch application, the runner compares the immutable
+7. After task executor completion, the runner compares the immutable
    source fixture to the prepared workspace with a deterministic directory
    snapshot diff and writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty
    changes still create an empty patch file.
@@ -159,8 +162,9 @@ remains for model request/response payloads. Current repo-task artifacts are
 `workspace/`, `patch/<case-id>/rep-NNN.diff`,
 `task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, and
 `verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`. Task logs now describe
-the narrow fenced unified-diff extraction/application phase; a later full
-agent harness may replace or extend that phase.
+the executor-owned narrow fenced unified-diff extraction/application phase; a
+later full agent harness may replace or extend that phase without changing the
+adapter or reporter boundaries.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final
@@ -259,9 +263,9 @@ The repo-task `task` object is deliberately narrow:
 `task.stdout_path` and `task.stderr_path` are relative to the run output
 directory and use `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log`. The log files are written for every
-measured repo-task execution. They record only the current fenced unified-diff
-patch application phase. Chat records do not include `task`, even when they
-reference repo directory fixtures as metadata.
+measured repo-task execution. They record only the current internal executor's
+fenced unified-diff patch application phase. Chat records do not include
+`task`, even when they reference repo directory fixtures as metadata.
 
 The repo-task `verify` object is deliberately narrow: `verify.path`,
 `verify.stdout_path`, and `verify.stderr_path` are relative to the run output

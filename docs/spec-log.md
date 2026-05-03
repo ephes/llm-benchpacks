@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 repo-task task-executor boundary)
+
+### Changed
+
+- Introduced a narrow internal repo-task task-executor boundary around the
+  existing measured fenced model-output patch phase.
+- The only implemented executor remains the behavior-preserving fenced
+  `diff`/`patch` model-output bridge: it extracts the first matching fenced
+  block, applies it as a unified diff inside the prepared workspace, and writes
+  the same deterministic task stdout/stderr artifacts.
+- The CLI now invokes the task phase through that internal boundary after the
+  adapter call and before patch capture. Patch capture and verifier execution
+  order remain unchanged.
+- Adapter request shape, raw request/response paths, workspace, patch, task,
+  verify, repo_task, and scoring row shapes, task log paths and contents,
+  repo-task warmup rejection, prompt-output scoring, non-repo-task behavior,
+  verifier timeout and environment handling, and bundled `patch-from-failure`
+  behavior remain unchanged.
+- No real agent-session harness, manifest task commands, task environment
+  configuration, task timeout configuration, CLI task flags, workspace
+  retention options, repo-task warmups, broad generic artifact object, or new
+  result fields were added.
+
+### Open Questions
+
+- Future slices still need full agent-session harness integration, richer task
+  status/reporting if needed, repo-task warmup support, cleanup and retention
+  options, task environment support if needed, and larger bundled repo-task
+  conversion.
+
 ## 2026-05-02 (Phase 3 manifest verifier timeout)
 
 ### Changed

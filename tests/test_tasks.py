@@ -10,9 +10,11 @@ from benchpack.packs import Case
 from benchpack.tasks import (
     TaskArtifactPaths,
     TaskError,
+    TaskExecutionRequest,
     apply_unified_diff_to_workspace,
     extract_fenced_patch,
     run_model_patch_task,
+    run_repo_task_executor,
     task_artifact_paths,
     task_record,
     write_noop_task_logs,
@@ -303,6 +305,89 @@ def test_run_model_patch_task_invalid_patch_logs_stderr_and_keeps_row_flow(
     assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
         "Patch rejected: unified diff could not be applied cleanly; "
         "workspace left unchanged.\n"
+    )
+
+
+def test_run_repo_task_executor_runs_fenced_model_output_patch_executor(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text=(
+                "```diff\n"
+                "--- a/README.md\n"
+                "+++ b/README.md\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+                "```\n"
+            ),
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "new\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize(
+    ("model_output_text", "expected_stderr"),
+    [
+        (
+            "No patch here.\n```python\nprint('ignored')\n```\n",
+            (
+                "No fenced diff or patch block found in model output; "
+                "workspace left unchanged.\n"
+            ),
+        ),
+        (
+            "```diff\n--- a/README.md\n+++ b/README.md\nnot a hunk\n```\n",
+            (
+                "Patch rejected: unified diff could not be applied cleanly; "
+                "workspace left unchanged.\n"
+            ),
+        ),
+    ],
+)
+def test_run_repo_task_executor_logs_patch_outcomes_as_task_results(
+    tmp_path: Path,
+    model_output_text: str,
+    expected_stderr: str,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text=model_output_text,
+        )
+    )
+
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "old\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        expected_stderr
     )
 
 

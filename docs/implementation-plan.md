@@ -174,7 +174,9 @@ source-vs-workspace patch and runs any verifier. Full agent harness
 integration and manifest task command execution remain planned. The first
 bundled measured repo-mutating repo-task pack, `patch-from-failure`, landed
 2026-05-02 as a narrow fixture/prompt/verifier slice over that fenced diff
-contract.
+contract. An internal repo-task task-executor boundary landed 2026-05-03 around
+the existing fenced model-output patch phase, preserving behavior while keeping
+full agent-session harness integration planned for a later slice.
 
 Scope:
 
@@ -256,6 +258,11 @@ Scope:
   and before patch capture, writes task stdout/stderr logs, keeps rows
   completed for missing or unapplicable patches, and leaves the adapter boundary
   and result object shapes unchanged.
+- Introduce an internal repo-task task-executor boundary around the existing
+  fenced model-output patch phase. **Landed 2026-05-03** without adding
+  manifest fields, CLI flags, executor selection, task commands, task
+  environment configuration, task timeout configuration, agent harness
+  semantics, or result schema changes.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

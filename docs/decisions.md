@@ -241,11 +241,13 @@ as run-relative path plus source fixture id and manifest-declared source path,
 and record the deterministic patch artifact path as
 `patch/<case-id>/rep-NNN.diff`. Measured rows also record deterministic task
 stdout/stderr log artifact paths as `task/<case-id>/rep-NNN.stdout.log` and
-`task/<case-id>/rep-NNN.stderr.log`. The current task phase is a narrow
-model-output patch bridge: it extracts the first fenced `diff` or `patch` block
-from adapter output, applies that unified diff only inside the prepared
-workspace, and writes deterministic task stdout/stderr describing success,
-missing patch content, unsafe paths, or failed application. Measured rows using
+`task/<case-id>/rep-NNN.stderr.log`. The current task phase runs through a
+narrow internal task-executor boundary. The only implemented executor remains
+the fenced model-output patch bridge: it extracts the first fenced `diff` or
+`patch` block from adapter output, applies that unified diff only inside the
+prepared workspace, and writes deterministic task stdout/stderr describing
+success, missing patch content, unsafe paths, or failed application. Measured
+rows using
 `verify-script` record verifier artifact paths as
 `verify/<case-id>/rep-NNN.json`,
 `verify/<case-id>/rep-NNN.stdout.log`, and
@@ -262,7 +264,8 @@ runner preserves inherited environment behavior when it is absent; when present,
 it copies the current runner environment, overlays the manifest string keys and
 values, and passes that copy only to the verifier subprocess without adding
 environment values to result rows. Real task execution through a full
-agent-session harness remains planned.
+agent-session harness remains planned; executor choice is not a manifest or CLI
+surface.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

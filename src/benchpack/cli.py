@@ -27,7 +27,7 @@ from .packs import (
 )
 from .patches import PatchError, capture_workspace_patch
 from .results import RunReporter
-from .tasks import TaskError, run_model_patch_task
+from .tasks import TaskError, TaskExecutionRequest, run_repo_task_executor
 from .verifiers import (
     DEFAULT_VERIFY_TIMEOUT_S,
     VerifierError,
@@ -194,12 +194,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
             if prepared_workspace is not None:
                 try:
-                    task_metadata = run_model_patch_task(
-                        out_dir,
-                        case,
-                        repetition,
-                        prepared_workspace.path,
-                        result.output_text,
+                    task_metadata = run_repo_task_executor(
+                        TaskExecutionRequest(
+                            output_dir=out_dir,
+                            case=case,
+                            repetition=repetition,
+                            workspace=prepared_workspace.path,
+                            model_output_text=result.output_text,
+                        )
                     )
                     patch_metadata = capture_workspace_patch(
                         prepared_workspace,
