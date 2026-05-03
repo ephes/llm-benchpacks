@@ -503,6 +503,263 @@ with open(args.output, "w", encoding="utf-8") as fh:
     }
 
 
+def test_run_repo_task_executor_internal_harness_realistic_fake_agent_sequence(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack_dir = tmp_path / "pack"
+    source = pack_dir / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("# Source Repository\n", encoding="utf-8")
+    (source / "pyproject.toml").write_text(
+        "[project]\nname = \"source-repo\"\n",
+        encoding="utf-8",
+    )
+    (workspace / "README.md").write_text("# Source Repository\n", encoding="utf-8")
+    (workspace / "pyproject.toml").write_text(
+        "[project]\nname = \"source-repo\"\n",
+        encoding="utf-8",
+    )
+    case = Case(
+        id="edit-repo",
+        kind="repo-task",
+        prompt="Make the repository runnable.",
+        scoring=Scoring(mode="verify-script", script="verify/check.py"),
+        raw={},
+        fixture_refs=["repo"],
+    )
+
+    stdout = (
+        "fake-agent: rewrote README.md\n"
+        "fake-agent: created src/app.py\n"
+        "fake-agent: created src/utils/formatting.py\n"
+        "fake-agent: created tests/test_app.py\n"
+        "fake-agent: created docs/notes.md\n"
+    )
+    stderr = "fake-agent: deterministic trace\n"
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.output_dir == out
+        assert request.case == case
+        assert request.repetition == 1
+        assert request.workspace == workspace
+        assert request.model_output_text == "adapter output for fake agent"
+        assert request.workspace_path("README.md") == workspace / "README.md"
+        request.write_workspace_text("README.md", "# Draft Repository\n")
+        request.write_workspace_text("README.md", "# Edited Repository\n")
+        request.write_workspace_text(
+            "src/app.py",
+            (
+                "from utils.formatting import format_greeting\n"
+                "\n"
+                "\n"
+                "def run(name: str) -> str:\n"
+                "    return format_greeting(name)\n"
+            ),
+        )
+        request.write_workspace_text(
+            "src/utils/formatting.py",
+            (
+                "def format_greeting(name: str) -> str:\n"
+                "    return f\"Hello, {name}!\"\n"
+            ),
+        )
+        request.write_workspace_text(
+            "tests/test_app.py",
+            (
+                "from src.app import run\n"
+                "\n"
+                "\n"
+                "def test_run_formats_greeting():\n"
+                "    assert run(\"Ada\") == \"Hello, Ada!\"\n"
+            ),
+        )
+        request.write_workspace_text(
+            "docs/notes.md",
+            "# Notes\n\nFake agent created sibling docs and source trees.\n",
+        )
+        return AgentSessionHarnessResult(stdout=stdout, stderr=stderr)
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=case,
+            repetition=1,
+            workspace=workspace,
+            model_output_text="adapter output for fake agent",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == stdout
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == stderr
+
+    assert (source / "README.md").read_text(encoding="utf-8") == (
+        "# Source Repository\n"
+    )
+    assert (source / "pyproject.toml").read_text(encoding="utf-8") == (
+        "[project]\nname = \"source-repo\"\n"
+    )
+    for relative_path in [
+        "src/app.py",
+        "src/utils/formatting.py",
+        "tests/test_app.py",
+        "docs/notes.md",
+    ]:
+        assert not (source / relative_path).exists()
+
+    assert (workspace / "README.md").read_text(encoding="utf-8") == (
+        "# Edited Repository\n"
+    )
+    assert (workspace / "src" / "app.py").read_text(encoding="utf-8") == (
+        "from utils.formatting import format_greeting\n"
+        "\n"
+        "\n"
+        "def run(name: str) -> str:\n"
+        "    return format_greeting(name)\n"
+    )
+    assert (workspace / "src" / "utils" / "formatting.py").read_text(
+        encoding="utf-8"
+    ) == (
+        "def format_greeting(name: str) -> str:\n"
+        "    return f\"Hello, {name}!\"\n"
+    )
+    assert (workspace / "tests" / "test_app.py").read_text(encoding="utf-8") == (
+        "from src.app import run\n"
+        "\n"
+        "\n"
+        "def test_run_formats_greeting():\n"
+        "    assert run(\"Ada\") == \"Hello, Ada!\"\n"
+    )
+    assert (workspace / "docs" / "notes.md").read_text(encoding="utf-8") == (
+        "# Notes\n\nFake agent created sibling docs and source trees.\n"
+    )
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, case, 1)
+    assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
+    patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
+    assert "pyproject.toml" not in patch_text
+    for expected in [
+        "--- a/README.md\n+++ b/README.md\n",
+        "+++ b/docs/notes.md\n",
+        "+++ b/src/app.py\n",
+        "+++ b/src/utils/formatting.py\n",
+        "+++ b/tests/test_app.py\n",
+        "-# Source Repository\n",
+        "+# Edited Repository\n",
+        "+from utils.formatting import format_greeting\n",
+        "+def format_greeting(name: str) -> str:\n",
+        "+def test_run_formats_greeting():\n",
+        "+Fake agent created sibling docs and source trees.\n",
+    ]:
+        assert expected in patch_text
+
+    script = pack_dir / "verify" / "check.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+workspace = Path(args.workspace)
+expected = {
+    "README.md": "# Edited Repository\\n",
+    "src/app.py": (
+        "from utils.formatting import format_greeting\\n"
+        "\\n"
+        "\\n"
+        "def run(name: str) -> str:\\n"
+        "    return format_greeting(name)\\n"
+    ),
+    "src/utils/formatting.py": (
+        "def format_greeting(name: str) -> str:\\n"
+        "    return f\\"Hello, {name}!\\"\\n"
+    ),
+    "tests/test_app.py": (
+        "from src.app import run\\n"
+        "\\n"
+        "\\n"
+        "def test_run_formats_greeting():\\n"
+        "    assert run(\\"Ada\\") == \\"Hello, Ada!\\"\\n"
+    ),
+    "docs/notes.md": "# Notes\\n\\nFake agent created sibling docs and source trees.\\n",
+}
+for relative_path, expected_content in expected.items():
+    if (workspace / relative_path).read_text(encoding="utf-8") != expected_content:
+        raise SystemExit(2)
+patch_path = Path(args.patch)
+if not patch_path.exists():
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump(
+        {
+            "case": args.case,
+            "files": sorted(expected),
+            "patch_exists": patch_path.exists(),
+            "source_fixture_id": args.source_fixture_id,
+        },
+        fh,
+    )
+""",
+        encoding="utf-8",
+    )
+    pack = Pack(
+        id="repo-pack",
+        version="0.1.0",
+        description="",
+        defaults={},
+        cases=[case],
+        scoring=None,
+        path=pack_dir,
+        fixtures=[fixture],
+    )
+
+    verifier_result = run_repo_task_verifier(
+        pack=pack,
+        case=case,
+        scoring=case.scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=out / patch_metadata["path"],
+        output_dir=out,
+        repetition=1,
+        timeout_s=5.0,
+    )
+
+    assert verifier_result.repo_task == {"status": "passed", "verify_exit_code": 0}
+    assert verifier_result.scoring == {"mode": "verify-script", "passed": True}
+    assert json.loads((out / verifier_result.verify["path"]).read_text()) == {
+        "case": "edit-repo",
+        "exit_code": 0,
+        "files": [
+            "README.md",
+            "docs/notes.md",
+            "src/app.py",
+            "src/utils/formatting.py",
+            "tests/test_app.py",
+        ],
+        "passed": True,
+        "patch_exists": True,
+        "source_fixture_id": "repo",
+    }
+
+
 def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_write(
     tmp_path: Path,
 ) -> None:
