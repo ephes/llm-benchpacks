@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -412,6 +413,147 @@ def test_run_repo_task_executor_explicit_fenced_patch_uses_default_executor(
     assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
 
 
+def test_run_repo_task_executor_explicit_timeout_keeps_fenced_patch_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+    real_run = subprocess.run
+    timeouts: list[float | None] = []
+
+    def recording_run(command, *args, **kwargs):
+        if command[:2] == ["git", "apply"]:
+            timeouts.append(kwargs.get("timeout"))
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr("benchpack.tasks.subprocess.run", recording_run)
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text=(
+                "```diff\n"
+                "--- a/README.md\n"
+                "+++ b/README.md\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+                "```\n"
+            ),
+            harness_id="fenced-patch",
+            task_timeout_s=2.5,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert timeouts == [2.5, 2.5]
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "new\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_run_repo_task_executor_preflight_timeout_logs_task_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+
+    def timeout_check(command, *args, **kwargs):
+        assert command == ["git", "apply", "--check", "--whitespace=nowarn"]
+        assert kwargs["timeout"] == 0.25
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr("benchpack.tasks.subprocess.run", timeout_check)
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text=(
+                "```diff\n"
+                "--- a/README.md\n"
+                "+++ b/README.md\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+                "```\n"
+            ),
+            harness_id="fenced-patch",
+            task_timeout_s=0.25,
+        )
+    )
+
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "old\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "Patch rejected: git apply --check timed out; workspace left unchanged.\n"
+    )
+
+
+def test_run_repo_task_executor_application_timeout_is_runner_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def timeout_apply(command, *args, **kwargs):
+        calls.append(command)
+        assert kwargs["timeout"] == 0.25
+        if "--check" in command:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr("benchpack.tasks.subprocess.run", timeout_apply)
+
+    with pytest.raises(TaskError, match="workspace may be partially changed"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text=(
+                    "```diff\n"
+                    "--- a/README.md\n"
+                    "+++ b/README.md\n"
+                    "@@ -1 +1 @@\n"
+                    "-old\n"
+                    "+new\n"
+                    "```\n"
+                ),
+                harness_id="fenced-patch",
+                task_timeout_s=0.25,
+            )
+        )
+
+    assert calls == [
+        ["git", "apply", "--check", "--whitespace=nowarn"],
+        ["git", "apply", "--whitespace=nowarn"],
+    ]
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()
+
+
 def test_run_repo_task_executor_rejects_unknown_harness_before_logs(
     tmp_path: Path,
 ) -> None:
@@ -456,6 +598,36 @@ def test_run_repo_task_executor_rejects_public_and_internal_harness_combination(
                 workspace=workspace,
                 model_output_text="",
                 harness_id="fenced-patch",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert called is False
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_rejects_internal_harness_timeout_before_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    called = False
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        nonlocal called
+        called = True
+        return AgentSessionHarnessResult(stdout="unexpected\n")
+
+    with pytest.raises(TaskError, match="task_timeout_s cannot be combined"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                task_timeout_s=1.0,
                 agent_session_harness=harness,
             )
         )

@@ -174,6 +174,7 @@ class TaskExecutionRequest:
     workspace: Path
     model_output_text: str
     harness_id: str | None = None
+    task_timeout_s: float | None = None
     agent_session_harness: AgentSessionHarness | None = None
 
 
@@ -270,6 +271,13 @@ def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
             "public harness_id cannot be combined with internal "
             "agent_session_harness"
         )
+    if (
+        request.task_timeout_s is not None
+        and request.agent_session_harness is not None
+    ):
+        raise TaskError(
+            "task_timeout_s cannot be combined with internal agent_session_harness"
+        )
     if request.harness_id is not None:
         if request.harness_id != PUBLIC_HARNESS_FENCED_PATCH:
             raise TaskError(f"unknown repo-task harness id {request.harness_id!r}")
@@ -304,6 +312,7 @@ def _run_fenced_model_patch_executor(
         _, stdout, stderr = apply_unified_diff_to_workspace(
             patch,
             request.workspace,
+            timeout_s=request.task_timeout_s,
         )
 
     return _write_task_logs(request, stdout=stdout, stderr=stderr)
@@ -366,8 +375,17 @@ def extract_fenced_patch(output_text: str) -> str | None:
     return None
 
 
-def apply_unified_diff_to_workspace(diff: str, workspace: Path) -> tuple[bool, str, str]:
-    """Apply a unified diff in ``workspace`` using the narrow task contract."""
+def apply_unified_diff_to_workspace(
+    diff: str,
+    workspace: Path,
+    *,
+    timeout_s: float | None = None,
+) -> tuple[bool, str, str]:
+    """Apply a unified diff in ``workspace`` using the narrow task contract.
+
+    Post-preflight apply timeouts raise ``TaskError`` because the workspace may
+    be partially changed.
+    """
 
     if not diff.strip():
         return (
@@ -390,6 +408,14 @@ def apply_unified_diff_to_workspace(diff: str, workspace: Path) -> tuple[bool, s
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            False,
+            "",
+            "Patch rejected: git apply --check timed out; workspace left "
+            "unchanged.\n",
         )
     except FileNotFoundError:
         return (
@@ -420,7 +446,13 @@ def apply_unified_diff_to_workspace(diff: str, workspace: Path) -> tuple[bool, s
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout_s,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise TaskError(
+            "patch application timed out after preflight; workspace may be "
+            "partially changed"
+        ) from exc
     except OSError:
         return (
             False,

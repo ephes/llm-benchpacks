@@ -85,7 +85,8 @@ implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, parses an optional case-local public
 `harness = { id = "fenced-patch" }` selection for `repo-task` cases, runs the
 task phase through a narrow internal executor boundary whose default CLI
-implementation applies model output through a fenced unified-diff contract,
+implementation applies model output through a fenced unified-diff contract with
+optional case-local task timeout support on that harness declaration,
 captures deterministic patch
 artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
@@ -169,19 +170,42 @@ harness = { id = "fenced-patch" }
 
 `harness.id` names a runner-known public harness. The only implemented public
 id is currently `fenced-patch`, and it routes to the same fenced `diff`/`patch`
-executor used when `harness` is absent. Absence of the field does not infer an
-external harness; the compatibility default remains the current fenced
-executor. The loader rejects `harness` on non-`repo-task` cases, unknown ids,
-missing or non-string `id` values, non-table `harness` values, and unexpected
-extra keys. Public harness selection does not change adapter request or adapter
-result schemas, existing raw request/response paths, existing `run.jsonl` row
-shapes, or existing task log paths. Task logs remain
+executor used when `harness` is absent. Future production external harnesses
+will also be public repo-task harnesses selected by explicit case-local
+`harness.id` values. They must not be inferred from model names, adapters,
+endpoints, fixture shape, verifier choice, host environment, or pack id.
+Absence of the field does not infer an external harness; the compatibility
+default remains the current fenced executor.
+
+The loader rejects `harness` on non-`repo-task` cases, unknown ids, missing or
+non-string `id` values, non-table `harness` values, and unexpected extra keys.
+The supported keys are currently `id` and optional `timeout_s`. When present,
+`harness.timeout_s` must be a positive TOML integer or float and bounds the
+selected task harness/executor phase; booleans, strings, zero, negative values,
+arrays, and tables are rejected. It is currently enforced only for the
+subprocess-backed fenced-patch executor. A timeout during `git apply --check`
+is a task outcome: the workspace is known unchanged, task stderr records the
+timeout, patch capture still runs, and verifier execution still follows patch
+capture. A timeout during the actual `git apply` after successful preflight is
+a runner failure because the workspace may be partially changed. Runner-side
+internal agent-session harness callables cannot be combined with
+`task_timeout_s`, because Python cannot safely preempt arbitrary in-process
+code.
+
+Public harness selection and task timeout support do not change adapter request
+or adapter result schemas, existing raw request/response paths, existing
+`run.jsonl` row shapes, or existing task log paths. Normal adapter
+request/result schemas remain unchanged by default. If a future external
+harness owns model calls, those calls are runner/harness concerns, not normal
+adapter request fields. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
-`task/<case-id>/rep-NNN.stderr.log`. Task environment configuration, task
-timeout configuration, workspace retention, richer status/reporting,
-pack-level harness defaults, and production external coding-agent integration
-remain explicit future slices rather than implicit support in the selection
-field. Repo-task warmups remain rejected. Patch capture still reflects the
+`task/<case-id>/rep-NNN.stderr.log`. External harnesses may mutate only the
+prepared workspace and write only allowed run-output artifacts. Pack-owned
+fixtures, prompts, verifier scripts, source docs, and raw model artifacts
+remain immutable or runner-owned as currently documented. Task environment
+configuration, workspace retention, richer status/reporting, pack-level
+harness defaults, repo-task warmups, and production external coding-agent
+integration remain explicit future slices. Patch capture still reflects the
 post-task workspace, verifier execution still runs after patch capture, and
 this narrow public selection adds no new `run.jsonl` row fields.
 
@@ -237,21 +261,25 @@ The current default task executor, also selected explicitly by
 info string is exactly `diff` or `patch` from the adapter output. That block
 content is treated as a unified diff and applied inside the prepared workspace
 after the adapter call and before patch capture. Non-matching fenced blocks are
-ignored. If no matching block exists, or if the diff is empty, unsafe, or
-cannot be applied cleanly, the runner leaves the workspace unchanged, writes a
-deterministic message to task stderr, and still records the measured row. On
-success, task stdout records a short deterministic success message and task
-stderr remains empty. This remains the behavior for current CLI repo-task runs.
+ignored. If no matching block exists, or if the diff is empty, unsafe, cannot
+be applied cleanly, or times out during `git apply --check`, the runner leaves
+the workspace unchanged, writes a deterministic message to task stderr, and
+still records the measured row. If timeout occurs during the actual
+`git apply` after successful preflight, the runner fails rather than recording
+a possibly partial workspace as a task outcome. On success, task stdout records
+a short deterministic success message and task stderr remains empty. This
+remains the behavior for current CLI repo-task runs.
 The separate internal harness path is not a public executor selection system
 and does not add new row fields.
 
-Future executor implementations, including richer agent-session harnesses,
+Future executor implementations, including production external harnesses and
+richer agent-session harnesses,
 must preserve the same surrounding order and boundaries unless a later
 specification slice deliberately changes them: workspace preparation first,
 task execution inside the prepared workspace second, patch capture third,
 verifier execution fourth, and reporter record last. Task environment
-configuration, task timeout configuration, repo-task warmups, workspace
-retention options, richer task status/reporting, and larger bundled repo-task
+configuration, repo-task warmups, workspace retention options, richer task
+status/reporting, pack-level harness defaults, and larger bundled repo-task
 conversion remain planned follow-ups rather than current support.
 
 Raw model request/response artifacts under `raw/` stay conceptually separate

@@ -324,7 +324,8 @@ compatibility behavior remains the same fenced executor. Selection must not be
 inferred from model names, adapters, endpoints, fixture shape, verifier choice,
 host environment, or pack id. The manifest loader rejects `harness` on
 non-`repo-task` cases, unknown ids, missing or non-string ids, non-table
-`harness` values, and unexpected keys. Public harness selection does not change
+`harness` values, and unsupported keys beyond the currently implemented `id`
+and `timeout_s`. Public harness selection does not change
 normal adapter request/result schemas, raw request/response paths, result row
 shapes, or task log artifact paths. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
@@ -332,8 +333,8 @@ shapes, or task log artifact paths. Task logs remain
 selected task phase, verifier execution still happens after patch capture,
 repo-task warmups remain rejected, and this narrow implementation adds no
 result row fields. Production external coding-agent integration, task
-environment, task timeout, workspace retention, richer status/reporting, and
-pack-level harness defaults remain future work.
+environment, workspace retention, richer status/reporting, and pack-level
+harness defaults remain future work.
 
 Reason: public harness selection crosses manifest compatibility, executor
 dispatch, task logs, status reporting, timeout and environment policy,
@@ -341,3 +342,39 @@ workspace retention, and external coding-agent integration. Implementing only
 the compatibility `fenced-patch` id proves the public boundary while preserving
 current CLI behavior and result compatibility until those adjacent contracts are
 designed and tested.
+
+## D-024: External Harness Contract Is Public And Task Timeouts Stay Narrow
+
+Future production external repo-task harnesses are public harnesses selected by
+explicit case-local `harness.id` values. The runner must not infer an external
+harness from model names, adapters, endpoints, fixture shape, verifier choice,
+host environment, or pack id. The only implemented public id remains
+`fenced-patch`. Normal adapter request/result schemas stay unchanged by
+default; if future harnesses own model calls, those calls are runner/harness
+concerns rather than normal adapter request fields. External harnesses may
+mutate only the prepared workspace and write only allowed run-output artifacts.
+Pack-owned fixtures, prompts, verifier scripts, source docs, and raw model
+artifacts remain immutable or runner-owned. Existing task stdout/stderr paths,
+raw paths, result row shapes, patch capture after task execution, verifier
+execution after patch capture, repo-task warmup rejection, and source fixture
+immutability remain unchanged.
+
+Task timeout support is deliberately narrow and lives on the case-local harness
+table as `harness.timeout_s`. It must be a positive TOML integer or float and
+is accepted only for `repo-task` harness declarations. It currently bounds the
+subprocess-backed fenced executor's `git apply --check` and `git apply` calls.
+A preflight timeout is a task outcome because the workspace is known unchanged:
+the runner writes deterministic task stderr and continues to patch capture and
+verification. A timeout during actual patch application after successful
+preflight is a runner failure because partial workspace mutation cannot be
+ruled out. Internal in-process agent-session harness callables reject
+`task_timeout_s` because Python cannot safely preempt arbitrary callable
+execution. This slice adds no production external coding-agent integration, CLI
+flags, task commands, task environment support, workspace retention options,
+pack-level harness defaults, or new adapter/result fields.
+
+Reason: production external harness integration needs bounded execution before
+it is safe to run, but the external harness process, model-call, environment,
+retention, and status-reporting policies are still future work. Keeping timeout
+case-local and tied to the selected harness avoids broad task configuration
+while preserving existing artifacts and result compatibility.

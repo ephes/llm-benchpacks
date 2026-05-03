@@ -97,6 +97,7 @@ class Scoring:
 @dataclass(frozen=True)
 class HarnessSelection:
     id: str
+    timeout_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -461,11 +462,11 @@ def _harness_from_case_entry(
     if "id" not in raw_harness:
         raise InvalidHarnessError(f"case {case_id!r} harness missing 'id'")
 
-    extra_keys = sorted(set(raw_harness) - {"id"})
+    extra_keys = sorted(set(raw_harness) - {"id", "timeout_s"})
     if extra_keys:
         raise InvalidHarnessError(
             f"case {case_id!r} harness has unsupported keys {extra_keys!r}; "
-            "expected only 'id'"
+            "expected only 'id' and 'timeout_s'"
         )
 
     harness_id = raw_harness["id"]
@@ -478,7 +479,29 @@ def _harness_from_case_entry(
             f"of {sorted(KNOWN_PUBLIC_HARNESS_IDS)}"
         )
 
-    return HarnessSelection(id=harness_id)
+    timeout_s = _harness_timeout_from_value(
+        raw_harness.get("timeout_s"),
+        case_id=case_id,
+    )
+
+    return HarnessSelection(id=harness_id, timeout_s=timeout_s)
+
+
+def _harness_timeout_from_value(value: Any, *, case_id: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidHarnessError(
+            f"case {case_id!r} harness.timeout_s must be a positive number; "
+            f"got {value!r}"
+        )
+    timeout_s = float(value)
+    if timeout_s <= 0:
+        raise InvalidHarnessError(
+            f"case {case_id!r} harness.timeout_s must be a positive number; "
+            f"got {value!r}"
+        )
+    return timeout_s
 
 
 def _append_referenced_file_fixtures(

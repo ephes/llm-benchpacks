@@ -213,7 +213,13 @@ repo-task warmup rejection by default. Narrow public manifest parsing and
 executor routing for `harness = { id = "fenced-patch" }` landed 2026-05-03:
 the loader accepts only that public id on `repo-task` cases, the CLI routes it
 to the existing fenced model-output `diff`/`patch` executor, absence preserves
-the same default, and external coding-agent harnesses remain future work.
+the same default, and external coding-agent harnesses remain future work. A
+docs-first production external harness contract plus narrow task timeout
+support landed 2026-05-03: future external harnesses must be explicit
+case-local public `harness.id` values, adapter schemas and result rows stay
+unchanged by default, and optional `harness.timeout_s` now bounds the
+subprocess-backed fenced task executor without adding CLI flags or production
+external coding-agent integration.
 
 Scope:
 
@@ -270,8 +276,8 @@ Scope:
   `repo_task.verify_exit_code = null`, and marks timeout JSON with
   `timed_out` and `timeout_s`. Manifest-configurable verifier timeout via
   `scoring.timeout_s` also landed 2026-05-02, preserving the `300.0` second
-  default when absent. CLI flags, task timeout configuration, and broader
-  timeout policy remain planned.
+  default when absent. CLI timeout flags and broader timeout policy remain
+  planned; narrow task timeout later landed under `harness.timeout_s`.
 - Add manifest-configurable verifier environment support. **Landed 2026-05-02**
   for measured `repo-task` `verify-script` executions only: optional
   `scoring.environment` is a validated string-to-string table in the effective
@@ -299,7 +305,8 @@ Scope:
   fenced model-output patch phase. **Landed 2026-05-03** without adding
   manifest fields, CLI flags, executor selection, task commands, task
   environment configuration, task timeout configuration, agent harness
-  semantics, or result schema changes.
+  semantics, or result schema changes. Narrow task timeout later landed under
+  the public harness table.
 - Define the docs-first internal agent-session harness contract behind the
   repo-task executor boundary. **Landed 2026-05-03** as documentation only:
   future harness input may include the prepared workspace, case and pack
@@ -360,6 +367,21 @@ Scope:
   path changes, row-shape changes, task commands, task environment, task
   timeout, workspace retention, repo-task warmups, pack-level harness defaults,
   or external coding-agent integration were added.
+- Define the docs-first production external harness contract and add narrow
+  task timeout support. **Landed 2026-05-03** as one scoped slice: future
+  production external harnesses are public repo-task harnesses selected by
+  explicit case-local `harness.id`, never inferred from model, adapter,
+  endpoint, fixture shape, verifier, host, or pack id. Normal adapter
+  request/result schemas remain unchanged by default; harness-owned model calls
+  are runner/harness concerns; task logs, raw paths, row shapes, patch capture
+  after task execution, verifier execution after patch capture, source fixture
+  immutability, and repo-task warmup rejection remain unchanged. The manifest
+  now accepts `harness = { id = "fenced-patch", timeout_s = <positive number> }`
+  for `repo-task` cases only. The timeout bounds the fenced executor's
+  subprocess preflight and apply calls. Preflight timeout is a task outcome with
+  unchanged workspace; apply timeout after preflight is a runner failure because
+  partial mutation cannot be ruled out. Internal in-process harness callables
+  reject task timeout.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -375,8 +397,8 @@ Scope:
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
-  environment support if needed, task timeout support if needed, and larger
-  bundled repo-task conversion. **Planned later.**
+  environment support if needed, broader timeout/reporting policy if needed,
+  and larger bundled repo-task conversion. **Planned later.**
 - Add optional full agent-session replay later.
 
 Validation:

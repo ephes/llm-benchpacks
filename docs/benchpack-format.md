@@ -273,10 +273,12 @@ strings. The runner rejects manifests that violate this at load time.
   executor boundary for runner-side callers and tests. Current CLI runs use the
   fenced `diff`/`patch` executor by default, and repo-task cases may explicitly
   select that same public compatibility executor with
-  `harness = { id = "fenced-patch" }`. This format does not currently add
+  `harness = { id = "fenced-patch" }`. That harness table may also declare a
+  narrow positive numeric `timeout_s` for the task executor phase. This format
+  does not currently add
   external coding-agent integration, manifest task commands, retention options,
-  repo-task warmups, task environment configuration, task timeout
-  configuration, or bundled pack conversion.
+  repo-task warmups, task environment configuration, pack-level harness
+  defaults, or bundled pack conversion.
 
 `replay`
 : A recorded request sequence.
@@ -355,9 +357,10 @@ boundary, return true after deleting an existing regular file or in-workspace
 symlink-to-file workspace entry, return false for missing paths and directories,
 and unlink symlink entries without deleting their targets. Future harnesses may
 add pack metadata and model/adapter/endpoint/default context. Pack authors
-should not rely on manifest-declared shell commands, task environment, task
-timeouts, external coding-agent harnesses, pack-level harness defaults, or
-workspace retention because none of those fields exist yet.
+should not rely on manifest-declared shell commands, task environment, external
+coding-agent harnesses, pack-level harness defaults, or workspace retention
+because those fields do not exist yet. The only task timeout field is the
+narrow `harness.timeout_s` policy described below.
 
 #### Public Harness Selection
 
@@ -370,7 +373,7 @@ id = "fix-repo"
 kind = "repo-task"
 prompt_file = "prompts/fix-repo.md"
 fixture_refs = ["repo"]
-harness = { id = "fenced-patch" }
+harness = { id = "fenced-patch", timeout_s = 5 }
 scoring = { mode = "verify-script", script = "verify/fix-repo.py" }
 ```
 
@@ -379,14 +382,29 @@ Rules:
 - `harness.id` names a runner-known public harness. The only implemented public
   id is `fenced-patch`, which routes to the existing fenced model-output
   `diff`/`patch` executor.
+- Future production external harnesses are also public repo-task harnesses and
+  must be selected by explicit case-local `harness.id` values. Selection must
+  not be inferred from model names, adapters, endpoints, fixture shape,
+  verifier choice, host environment, or pack id.
 - When `harness` is absent, the default/current behavior remains the fenced
   `diff`/`patch` executor for compatibility.
 - `harness` is accepted only on `repo-task` cases. The loader rejects
   non-table `harness` values, missing `id`, non-string `id`, unknown ids, and
-  unexpected keys.
-- Selection must be explicit and must not be inferred from model names,
-  adapters, endpoints, fixture shape, verifier choice, host environment, or
-  pack id.
+  unexpected keys. The only supported keys are currently `id` and
+  `timeout_s`.
+- `harness.timeout_s` is optional. When present, it must be a positive TOML
+  integer or float. Booleans, strings, zero, negative values, arrays, and
+  tables are rejected. It bounds the selected task harness/executor phase, not
+  the adapter request and not the verifier subprocess.
+- In this slice, task timeout is enforced only by the subprocess-backed
+  `fenced-patch` executor. It is passed to both `git apply --check` and
+  `git apply`. A timeout during `git apply --check` leaves the workspace
+  unchanged, writes deterministic task stderr, and still allows patch capture
+  and verifier execution. A timeout during the actual `git apply` after
+  successful preflight is a runner failure because the workspace may be
+  partially changed.
+- Runner-side internal in-process harness callables cannot be combined with
+  task timeout.
 - Public harness selection does not change adapter request or result schemas.
   Harness-owned model calls, if added later, are runner/harness concerns rather
   than normal adapter request fields.
@@ -396,10 +414,13 @@ Rules:
   post-task workspace. Verifier execution still happens after patch capture.
 - Repo-task warmups remain rejected until a later warmup contract defines fresh
   workspace isolation and artifact behavior.
-- Task environment configuration, task timeout configuration, workspace
-  retention, richer task status/reporting, pack-level harness defaults, and
-  production external coding-agent integration are separate future slices, not
-  implicit support in `harness`.
+- External harnesses may mutate only the prepared workspace and write only
+  allowed run-output artifacts. Pack-owned fixtures, prompts, verifier scripts,
+  source docs, and raw model artifacts remain immutable or runner-owned.
+- Task environment configuration, workspace retention, richer task
+  status/reporting, pack-level harness defaults, production external
+  coding-agent integration, and repo-task warmups are separate future slices,
+  not implicit support in `harness`.
 - This narrow selection adds no CLI flags, `run.jsonl` fields, adapter schema
   changes, raw artifact path changes, or task log path changes.
 
@@ -555,9 +576,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `mode = "verify-script"` and `script`. It must be a positive TOML integer or
   float; booleans, strings, zero, and negative values are rejected at manifest
   load time. When `timeout_s` is absent, the verifier timeout defaults to
-  `300.0` seconds. This is manifest-only verifier timeout configuration: there
-  is no CLI timeout flag, no task timeout configuration, and no broader timeout
-  policy.
+  `300.0` seconds. This is manifest-only verifier timeout configuration:
+  `harness.timeout_s` is the separate repo-task task-phase timeout. There is no
+  CLI timeout flag and no broader timeout policy.
 
   `environment` may be declared in the same effective scoring table as
   `mode = "verify-script"` and `script`. It must be a TOML table whose keys and

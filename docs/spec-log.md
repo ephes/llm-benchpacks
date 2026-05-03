@@ -16,6 +16,52 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 external harness contract and task timeout)
+
+### Changed
+
+- Defined the production external repo-task harness contract as a docs-first
+  boundary without implementing a production external coding-agent harness.
+- Future external harnesses are public repo-task harnesses selected only by
+  explicit case-local `harness.id`; selection must not be inferred from model,
+  adapter, endpoint, fixture shape, verifier, host, or pack id.
+- Documented that normal adapter request/result schemas remain unchanged by
+  default, and future harness-owned model calls are runner/harness concerns
+  rather than normal adapter request fields.
+- Documented external harness write boundaries: mutate only the prepared
+  workspace and write only allowed run-output artifacts; pack fixtures,
+  prompts, verifier scripts, source docs, and raw model artifacts remain
+  immutable or runner-owned.
+- Added `harness.timeout_s` for `repo-task` harness declarations. Positive TOML
+  integers and floats are accepted; booleans, strings, zero, negative values,
+  arrays, tables, extra harness keys, and harness timeout on non-`repo-task`
+  cases are rejected.
+- The only implemented public harness id remains `fenced-patch`. Explicit
+  `harness = { id = "fenced-patch", timeout_s = ... }` routes to the existing
+  fenced model-output `diff`/`patch` executor with subprocess timeout
+  enforcement on both `git apply --check` and `git apply`.
+- A preflight timeout is a deterministic task outcome with unchanged workspace,
+  task stderr, patch capture afterward, and verifier execution afterward. An
+  apply timeout after successful preflight is a runner failure because partial
+  workspace mutation cannot be ruled out.
+- Internal in-process agent-session harness callables reject task timeout.
+- Adapter schemas, raw artifact paths, task stdout/stderr paths, `run.jsonl`
+  row shapes, patch capture ordering, verifier ordering, repo-task warmup
+  rejection, source fixture immutability, and bundled `patch-from-failure`
+  behavior remain unchanged.
+- No CLI flags, production external coding-agent integration, manifest task
+  commands, task environment, workspace retention options, broad artifacts
+  object, pack-level harness defaults, repo-task warmups, or new adapter fields
+  were added.
+
+### Open Questions
+
+- Future slices still need production external coding-agent integration, richer
+  task status/reporting if needed, repo-task warmup support, workspace
+  cleanup/retention options, task environment support, source fixture metadata
+  if later needed, recursive directory deletion if later needed, pack-level
+  harness defaults if later needed, and larger bundled repo-task conversion.
+
 ## 2026-05-03 (Phase 3 public fenced-patch harness selection)
 
 ### Changed

@@ -534,7 +534,7 @@ def test_cli_repo_task_explicit_fenced_patch_harness_matches_default_shape(
     monkeypatch.chdir(tmp_path)
     _write_repo_task_pack(
         tmp_path,
-        case_extra='harness = { id = "fenced-patch" }',
+        case_extra='harness = { id = "fenced-patch", timeout_s = 2.5 }',
         scoring='[scoring]\nmode = "none"\n',
     )
     out = tmp_path / "run"
@@ -589,6 +589,120 @@ def test_cli_invalid_harness_manifest_fails_before_execution(
 
     assert calls == []
     assert not out.exists()
+
+
+def test_cli_invalid_harness_timeout_manifest_fails_before_execution(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "unused")
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra='harness = { id = "fenced-patch", timeout_s = "slow" }',
+    )
+    out = tmp_path / "run"
+
+    with pytest.raises(InvalidHarnessError, match="harness.timeout_s"):
+        main(_argv(["--out", str(out)]))
+
+    assert calls == []
+    assert not out.exists()
+
+
+def test_cli_repo_task_harness_timeout_preflight_keeps_patch_then_verify_order(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """```diff
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-source repo
++patched repo
+```
+"""
+    _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        case_extra='harness = { id = "fenced-patch", timeout_s = 0.1 }',
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+content = Path(args.workspace, "README.md").read_text(encoding="utf-8")
+patch_text = Path(args.patch).read_text(encoding="utf-8")
+if content != "source repo\\n":
+    raise SystemExit(2)
+if patch_text != "":
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"content": content, "patch_text": patch_text}, fh)
+""",
+    )
+    real_run = subprocess.run
+    timeouts: list[float] = []
+
+    def timeout_task_preflight(command, *args, **kwargs):
+        if command == ["git", "apply", "--check", "--whitespace=nowarn"]:
+            timeouts.append(kwargs["timeout"])
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr("benchpack.tasks.subprocess.run", timeout_task_preflight)
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+    assert timeouts == [0.1]
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == (
+        "Patch rejected: git apply --check timed out; workspace left unchanged.\n"
+    )
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "content": "source repo\n",
+        "exit_code": 0,
+        "passed": True,
+        "patch_text": "",
+    }
 
 
 def test_cli_repo_task_verify_script_observes_applied_diff(

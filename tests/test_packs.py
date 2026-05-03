@@ -335,7 +335,130 @@ harness = { id = "fenced-patch" }
 
     assert case.harness is not None
     assert case.harness.id == "fenced-patch"
+    assert case.harness.timeout_s is None
     assert case.raw["harness"] == {"id": "fenced-patch"}
+
+
+def test_load_pack_parses_repo_task_harness_timeout_float(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "harnesstimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = "fenced-patch", timeout_s = 2.5 }
+""",
+    )
+
+    case = load_pack(pack_dir).cases[0]
+
+    assert case.harness is not None
+    assert case.harness.id == "fenced-patch"
+    assert case.harness.timeout_s == 2.5
+    assert case.raw["harness"] == {"id": "fenced-patch", "timeout_s": 2.5}
+
+
+def test_load_pack_parses_repo_task_harness_timeout_int_as_float(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "harnesstimeoutint"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = "fenced-patch", timeout_s = 30 }
+""",
+    )
+
+    timeout_s = load_pack(pack_dir).cases[0].harness.timeout_s  # type: ignore[union-attr]
+
+    assert timeout_s == 30.0
+    assert isinstance(timeout_s, float)
+
+
+@pytest.mark.parametrize("timeout_s", ["0", "0.0", "-1"])
+def test_load_pack_rejects_non_positive_harness_timeout(
+    tmp_path: Path,
+    timeout_s: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "badharnesstimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = {{ id = "fenced-patch", timeout_s = {timeout_s} }}
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="harness.timeout_s"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("timeout_s", ["true", "false"])
+def test_load_pack_rejects_bool_harness_timeout(
+    tmp_path: Path,
+    timeout_s: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "boolharnesstimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = {{ id = "fenced-patch", timeout_s = {timeout_s} }}
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="harness.timeout_s"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("timeout_s", ['"30"', '["30"]', '{ seconds = 30 }'])
+def test_load_pack_rejects_non_numeric_harness_timeout(
+    tmp_path: Path,
+    timeout_s: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "nonnumharnesstimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = {{ id = "fenced-patch", timeout_s = {timeout_s} }}
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="harness.timeout_s"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_rejects_unknown_harness_id(tmp_path: Path) -> None:
@@ -430,7 +553,7 @@ version = "0.1.0"
 id = "edit-repo"
 kind = "repo-task"
 prompt = "Change the repository."
-harness = { id = "fenced-patch", timeout_s = 30 }
+harness = { id = "fenced-patch", environment = { A = "B" } }
 """,
     )
 
@@ -451,6 +574,28 @@ id = "capital"
 kind = "chat"
 prompt = "What is the capital of France?"
 harness = { id = "fenced-patch" }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="only supported for repo-task"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_harness_timeout_on_non_repo_task_case(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "chatharnesstimeout"
+version = "0.1.0"
+
+[[cases]]
+id = "capital"
+kind = "chat"
+prompt = "What is the capital of France?"
+harness = { id = "fenced-patch", timeout_s = 1 }
 """,
     )
 

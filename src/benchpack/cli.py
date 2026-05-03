@@ -204,6 +204,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
                             harness_id=(
                                 case.harness.id if case.harness is not None else None
                             ),
+                            task_timeout_s=(
+                                case.harness.timeout_s
+                                if case.harness is not None
+                                else None
+                            ),
                         )
                     )
                     patch_metadata = capture_workspace_patch(

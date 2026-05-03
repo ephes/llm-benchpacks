@@ -26,7 +26,9 @@ than changing the adapter boundary:
   applies only the first fenced `diff` or `patch` block from model output as a
   unified diff. A repo-task case may now explicitly declare
   `harness = { id = "fenced-patch" }` to select that same public compatibility
-  executor; absence keeps the same default. A minimal internal agent-session
+  executor; absence keeps the same default. `harness.timeout_s` is an optional
+  case-local task phase timeout for subprocess-backed task executors. A minimal
+  internal agent-session
   harness path also exists behind this boundary for runner-side callers and
   tests, without manifest or CLI selection. Its runner-side request carries the
   prepared workspace path, case metadata, model output text, the run output
@@ -41,8 +43,8 @@ than changing the adapter boundary:
   pack fixtures, prompts, verifier scripts, and source docs. The only public
   manifest harness id currently implemented is `fenced-patch`; unknown ids and
   harness declarations on non-`repo-task` cases are rejected. External
-  coding-agent harnesses, task environment, task timeout, retention, richer
-  status/reporting, and pack-level harness defaults remain future work.
+  coding-agent harness production integration, task environment, retention,
+  richer status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -109,9 +111,15 @@ results/
    executor extracts the first fenced `diff` or `patch` block from model output,
    applies it as a unified diff in the prepared workspace, and writes
    deterministic task stdout/stderr logs. Missing or unapplicable patches are
-   logged and do not crash the benchmark row. Runner-side code can supply an internal
-   agent-session harness behind this same boundary without changing the adapter
-   request shape or public result row shape by default.
+   logged and do not crash the benchmark row. If the case declares
+   `harness.timeout_s`, the fenced executor passes that timeout to both
+   `git apply --check` and `git apply`. A preflight timeout leaves the
+   workspace unchanged and is logged as a task outcome; an apply timeout after
+   preflight is a runner failure because partial mutation cannot be ruled out.
+   Runner-side code can supply an internal agent-session harness behind this
+   same boundary without changing the adapter request shape or public result
+   row shape by default, but direct internal harness callables reject
+   `task_timeout_s`.
 10. Apply implemented deterministic scoring for measured executions when the
    pack declares it. For measured `repo-task` executions with
    `scoring.mode = "verify-script"`, the runner executes the verifier after
@@ -149,7 +157,11 @@ and before each measured adapter execution:
    `AdapterResult.output_text`. The block body is treated as a unified diff and
    applied from the prepared workspace root. Non-matching fences are ignored.
    Missing blocks and rejected or unapplicable diffs are deterministic task
-   stderr outcomes, not runner crashes.
+   stderr outcomes, not runner crashes. `harness.timeout_s`, when present,
+   bounds the fenced executor subprocess calls. A `git apply --check` timeout
+   leaves the workspace unchanged and is logged in task stderr. A timeout during
+   the actual `git apply` after preflight is a runner failure because the
+   workspace state may be partial.
 6. An internal agent-session harness can occupy the same runner-owned task
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
@@ -180,6 +192,8 @@ and before each measured adapter execution:
    workspace listing, remain runner failures;
    ordinary task outcomes should be captured through the existing task logs
    until a later status-reporting slice proves a new row field is necessary.
+   Direct internal harness callables cannot be combined with task timeout,
+   because in-process Python callables cannot be safely preempted.
 7. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
    `task/<case-id>/rep-NNN.stderr.log` artifacts. Successful application writes
    a short stdout message and leaves stderr empty; no-patch or failed-apply
@@ -220,18 +234,27 @@ extend that phase without changing the adapter or reporter boundaries.
 
 Public harness selection is a manifest-format concern, not an adapter concern.
 The implemented public shape is an explicit `harness = { id = "fenced-patch" }`
-table on `repo-task` cases. That id preserves the current compatibility
-behavior by routing to the existing fenced `diff`/`patch` executor. When the
-field is absent, the same fenced executor remains the default. Selection is not
-inferred from model names, adapters, endpoints, fixture shape, verifier choice,
-host environment, or pack id. Unknown ids are rejected by the manifest loader
-and again at the task-executor boundary if they somehow reach it. This selection
-leaves adapter request/result schemas, raw request/response paths, task log
-paths, patch capture after the task phase, verifier execution after patch
-capture, and existing measured row shapes unchanged. External coding-agent
-integration, task environment, task timeout, retention, richer task
-status/reporting, pack-level harness defaults, and repo-task warmups remain
-separate future design and implementation slices.
+table on `repo-task` cases, optionally with `timeout_s`:
+`harness = { id = "fenced-patch", timeout_s = 5 }`. That id preserves the
+current compatibility behavior by routing to the existing fenced `diff`/`patch`
+executor. When the field is absent, the same fenced executor remains the
+default. Future production external harnesses are public repo-task harnesses
+selected by explicit case-local `harness.id`; selection is not inferred from
+model names, adapters, endpoints, fixture shape, verifier choice, host
+environment, or pack id. Unknown ids are rejected by the manifest loader and
+again at the task-executor boundary if they somehow reach it.
+
+This selection leaves adapter request/result schemas, raw request/response
+paths, task log paths, patch capture after the task phase, verifier execution
+after patch capture, and existing measured row shapes unchanged. Normal adapter
+schemas remain unchanged by default; harness-owned model calls, if added later,
+are runner/harness concerns rather than normal adapter request fields. External
+harnesses may mutate only the prepared workspace and write only allowed
+run-output artifacts. Pack-owned fixtures, prompts, verifier scripts, source
+docs, and raw model artifacts remain immutable or runner-owned. Task
+environment, retention, richer task status/reporting, pack-level harness
+defaults, production external coding-agent integration, and repo-task warmups
+remain separate future design and implementation slices.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final
