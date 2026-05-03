@@ -181,7 +181,12 @@ internal agent-session harness contract landed 2026-05-03, specifying the
 future harness input shape, write boundaries, task log relationship, patch and
 verifier ordering, and adapter/result boundary constraints without implementing
 the harness or adding public manifest, CLI, adapter, artifact, or result schema
-surface.
+surface. The first narrow internal agent-session harness path landed
+2026-05-03 behind `run_repo_task_executor`: runner-side callers can supply a
+harness that receives the prepared workspace and deterministic task log paths,
+mutates only the prepared workspace through validated helpers, writes the
+existing task logs, and leaves patch capture, verifier execution, current CLI
+defaults, adapter schemas, and result row shapes unchanged.
 
 Scope:
 
@@ -276,16 +281,24 @@ Scope:
   prepared workspace and run output directory; pack-owned fixtures, prompts,
   verifier scripts, source docs, adapter request/result schemas, existing
   artifact paths, and row shapes remain unchanged.
+- Add the first narrow internal agent-session harness executor path behind the
+  repo-task executor boundary. **Landed 2026-05-03** without adding manifest or
+  CLI selection: runner-side callers can supply a harness to
+  `run_repo_task_executor`; current CLI repo-task runs still use the fenced
+  model-output `diff`/`patch` executor by default; task log paths and record
+  shape remain unchanged; patch capture and verifier execution observe the
+  harness-mutated prepared workspace.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
   `defaults.warmup = 0`, `defaults.repetitions = 1`, a prompt that requires a
   fenced `diff` block, and a stdlib `verify-script` that checks the patched
   workspace.
-- Integrate an agent-session harness after disposable workspace, verifier, and
-  patch artifacts exist. **Planned later.** The first implementation should be
-  able to start as an internal executor behind the existing boundary without
-  manifest or CLI selection.
+- Integrate a production agent-session harness after disposable workspace,
+  verifier, and patch artifacts exist. **Partially landed 2026-05-03** as an
+  internal executor path for runner-side callers only. Public harness
+  selection, external coding-agent integration, and richer harness
+  configuration remain planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

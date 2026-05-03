@@ -83,7 +83,7 @@ measurement, not model-quality comparison.
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, runs the task phase through a narrow
-internal executor boundary whose only current implementation applies model
+internal executor boundary whose default CLI implementation applies model
 output through a fenced unified-diff contract, captures deterministic patch
 artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
@@ -92,9 +92,10 @@ the prepared workspace with a manifest-configurable verifier timeout and a
 fixed `300.0` second default when no timeout is declared. The effective
 `verify-script` scoring table may also declare a verifier-only string-to-string
 `environment` table, which is overlaid onto a copy of the runner environment for
-the verifier subprocess. It does not yet run a real agent harness, support
-manifest task commands, support repo-task warmups, expose workspace
-cleanup/retention options, or configure task environments. Measured repo-task
+the verifier subprocess. It does not yet expose or run a public external
+coding-agent harness, support manifest task commands, support repo-task warmups,
+expose workspace cleanup/retention options, or configure task environments.
+Measured repo-task
 records include prepared workspace metadata, patch artifact paths, task log
 artifact paths, verifier artifact paths, final repo-task verifier status, and
 top-level `verify-script` scoring.
@@ -104,21 +105,23 @@ directory fixture is validated as metadata but is not copied, executed,
 injected into prompts, mutated, turned into a worktree, used for patch
 extraction, or passed to a verifier.
 
-The planned real agent-session harness is an internal task executor behind the
-same repo-task executor boundary. It is not implemented yet. The first
-implementation should be able to run without manifest or CLI selection while
-the public pack and result contracts stay unchanged. Its runner-side input may
-include the prepared workspace path, case metadata, pack metadata needed for
-portable context, model/adapter/endpoint/default context needed for harness
-model calls, the run output directory, measured repetition number, and the
-deterministic task stdout/stderr log paths. Those inputs are internal
-implementation details, not new manifest fields or adapter request fields.
+An initial internal agent-session harness path now exists behind the same
+repo-task executor boundary. It can be supplied only by runner-side code, such
+as focused tests, and is not manifest or CLI selectable. Current CLI repo-task
+runs continue to use the fenced model-output `diff`/`patch` executor by
+default. The internal harness input includes the prepared workspace path, case
+metadata, model output text, run output directory, measured repetition number,
+and deterministic task stdout/stderr log paths. Future production harnesses may
+add pack metadata and model/adapter/endpoint/default context as needed for
+harness-owned model calls. Those inputs remain internal implementation details,
+not new manifest fields or adapter request fields.
 
-The future harness may mutate only the prepared workspace and may write only
-under the run output directory. It must not mutate pack-owned fixtures, prompts,
-verifier scripts, source docs, or other files under the pack. If it needs model
-calls, those calls are runner/harness concerns and must not change the normal
-adapter request or result schemas by default. Task logs remain
+The internal harness path may mutate only the prepared workspace and may write
+only the existing task stdout/stderr logs under the run output directory. It
+must not mutate pack-owned fixtures, prompts, verifier scripts, source docs, or
+other files under the pack. If a later harness needs model calls, those calls
+are runner/harness concerns and must not change the normal adapter request or
+result schemas by default. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
 that deliberately. Patch capture still happens after task execution, so
@@ -176,18 +179,19 @@ Current repo-task artifacts include:
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr
 
-The current task executor extracts the first fenced code block whose info string
-is exactly `diff` or `patch` from the adapter output. That block content is
-treated as a unified diff and applied inside the prepared workspace after the
-adapter call and before patch capture. Non-matching fenced blocks are ignored.
-If no matching block exists, or if the diff is empty, unsafe, or cannot be
-applied cleanly, the runner leaves the workspace unchanged, writes a
+The current default task executor extracts the first fenced code block whose
+info string is exactly `diff` or `patch` from the adapter output. That block
+content is treated as a unified diff and applied inside the prepared workspace
+after the adapter call and before patch capture. Non-matching fenced blocks are
+ignored. If no matching block exists, or if the diff is empty, unsafe, or
+cannot be applied cleanly, the runner leaves the workspace unchanged, writes a
 deterministic message to task stderr, and still records the measured row. On
 success, task stdout records a short deterministic success message and task
-stderr remains empty. This is a small internal model-output executor, not a
-full agent harness or public executor selection system.
+stderr remains empty. This remains the behavior for current CLI repo-task runs.
+The separate internal harness path is not a public executor selection system
+and does not add new row fields.
 
-Future executor implementations, including the planned agent-session harness,
+Future executor implementations, including richer agent-session harnesses,
 must preserve the same surrounding order and boundaries unless a later
 specification slice deliberately changes them: workspace preparation first,
 task execution inside the prepared workspace second, patch capture third,

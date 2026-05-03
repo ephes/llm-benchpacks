@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -24,6 +25,55 @@ class TaskArtifactPaths:
 
 
 @dataclass(frozen=True)
+class AgentSessionHarnessResult:
+    """Internal result from one agent-session harness task phase."""
+
+    stdout: str = ""
+    stderr: str = ""
+
+
+@dataclass(frozen=True)
+class AgentSessionHarnessRequest:
+    """Internal runner-owned context for an agent-session harness.
+
+    ``task_paths`` are deterministic destinations the runner populates from the
+    returned stdout/stderr strings; harnesses should not write them directly.
+    """
+
+    output_dir: Path
+    case: Case
+    repetition: int
+    workspace: Path
+    model_output_text: str
+    task_paths: TaskArtifactPaths
+
+    def workspace_path(self, relative_path: str) -> Path:
+        """Resolve a harness workspace-relative path, rejecting escapes."""
+
+        workspace_root = self.workspace.resolve(strict=False)
+        try:
+            return _resolve_workspace_relative_path(relative_path, workspace_root)
+        except _PatchContractError as exc:
+            raise TaskError(f"unsafe harness workspace path: {exc}") from exc
+
+    def write_workspace_text(self, relative_path: str, content: str) -> None:
+        """Write UTF-8 text below the prepared workspace only."""
+
+        path = self.workspace_path(relative_path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            raise TaskError(
+                f"could not write harness workspace file {relative_path!r} "
+                f"for repo-task case {self.case.id!r}"
+            ) from exc
+
+
+AgentSessionHarness = Callable[[AgentSessionHarnessRequest], AgentSessionHarnessResult]
+
+
+@dataclass(frozen=True)
 class TaskExecutionRequest:
     """Runner-side request for executing one measured repo-task phase."""
 
@@ -32,6 +82,7 @@ class TaskExecutionRequest:
     repetition: int
     workspace: Path
     model_output_text: str
+    agent_session_harness: AgentSessionHarness | None = None
 
 
 class _PatchContractError(ValueError):
@@ -116,10 +167,17 @@ def run_model_patch_task(
 def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
     """Execute the current internal repo-task task phase.
 
-    The only implemented executor is the fenced model-output patch bridge.
-    Selection of other executors is intentionally not a manifest or CLI surface.
+    The default executor is the fenced model-output patch bridge. An internal
+    agent-session harness can be supplied by runner-side tests or future
+    implementation code; executor selection is intentionally not a manifest or
+    CLI surface.
     """
 
+    if request.agent_session_harness is not None:
+        return _run_agent_session_harness_executor(
+            request,
+            request.agent_session_harness,
+        )
     return _run_fenced_model_patch_executor(request)
 
 
@@ -146,6 +204,42 @@ def _run_fenced_model_patch_executor(
             patch,
             request.workspace,
         )
+
+    return _write_task_logs(request, stdout=stdout, stderr=stderr)
+
+
+def _run_agent_session_harness_executor(
+    request: TaskExecutionRequest,
+    harness: AgentSessionHarness,
+) -> dict[str, str]:
+    """Run an internal agent-session harness and record existing task logs."""
+
+    paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
+    harness_request = AgentSessionHarnessRequest(
+        output_dir=request.output_dir,
+        case=request.case,
+        repetition=request.repetition,
+        workspace=request.workspace,
+        model_output_text=request.model_output_text,
+        task_paths=paths,
+    )
+    result = harness(harness_request)
+    if not isinstance(result, AgentSessionHarnessResult):
+        raise TaskError(
+            "agent-session harness must return AgentSessionHarnessResult"
+        )
+    if not isinstance(result.stdout, str) or not isinstance(result.stderr, str):
+        raise TaskError("agent-session harness stdout/stderr must be strings")
+    return _write_task_logs(request, stdout=result.stdout, stderr=result.stderr)
+
+
+def _write_task_logs(
+    request: TaskExecutionRequest,
+    *,
+    stdout: str,
+    stderr: str,
+) -> dict[str, str]:
+    """Write deterministic task stdout/stderr logs for one execution."""
 
     paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
     try:
@@ -295,6 +389,10 @@ def _strip_diff_prefix(path: str) -> str:
 
 
 def _validate_workspace_relative_path(path: str, workspace_root: Path) -> None:
+    _resolve_workspace_relative_path(path, workspace_root)
+
+
+def _resolve_workspace_relative_path(path: str, workspace_root: Path) -> Path:
     if "\x00" in path:
         raise _PatchContractError("path contains a null byte")
     relative = PurePosixPath(path)
@@ -306,3 +404,4 @@ def _validate_workspace_relative_path(path: str, workspace_root: Path) -> None:
     candidate = (workspace_root / Path(*relative.parts)).resolve(strict=False)
     if not candidate.is_relative_to(workspace_root):
         raise _PatchContractError(f"path escapes workspace: {path}")
+    return candidate

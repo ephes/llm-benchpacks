@@ -242,12 +242,14 @@ and record the deterministic patch artifact path as
 `patch/<case-id>/rep-NNN.diff`. Measured rows also record deterministic task
 stdout/stderr log artifact paths as `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log`. The current task phase runs through a
-narrow internal task-executor boundary. The only implemented executor remains
-the fenced model-output patch bridge: it extracts the first fenced `diff` or
-`patch` block from adapter output, applies that unified diff only inside the
-prepared workspace, and writes deterministic task stdout/stderr describing
-success, missing patch content, unsafe paths, or failed application. Measured
-rows using
+narrow internal task-executor boundary. Current CLI repo-task runs use the
+fenced model-output patch bridge by default: it extracts the first fenced
+`diff` or `patch` block from adapter output, applies that unified diff only
+inside the prepared workspace, and writes deterministic task stdout/stderr
+describing success, missing patch content, unsafe paths, or failed application.
+A minimal internal agent-session harness path also exists behind the same
+boundary for runner-side callers and tests, without manifest or CLI selection.
+Measured rows using
 `verify-script` record verifier artifact paths as
 `verify/<case-id>/rep-NNN.json`,
 `verify/<case-id>/rep-NNN.stdout.log`, and
@@ -263,7 +265,7 @@ the effective `verify-script` scoring table's optional `environment` field. The
 runner preserves inherited environment behavior when it is absent; when present,
 it copies the current runner environment, overlays the manifest string keys and
 values, and passes that copy only to the verifier subprocess without adding
-environment values to result rows. Real task execution through a full
+environment values to result rows. Production task execution through a full
 agent-session harness remains planned; executor choice is not a manifest or CLI
 surface.
 
@@ -276,15 +278,17 @@ semantics.
 
 ## D-022: Agent-Session Harness Stays Behind The Executor Boundary First
 
-A future real agent-session harness uses D-021's internal repo-task executor
-boundary and keeps executor choice out of the manifest and CLI. Its runner-side
-input may include the prepared workspace path, case and pack metadata,
-model/adapter/endpoint/default context as needed for harness-owned model calls,
-the run output directory, measured repetition, and deterministic task log paths.
-The harness may mutate only the prepared workspace and may write only under the
-run output directory. It must not mutate pack-owned fixtures, prompts, verifier
-scripts, source docs, or public adapter/result schemas by default. Task logs,
-patch capture after task execution, verifier execution after patch capture, and
+Agent-session harness work uses D-021's internal repo-task executor boundary
+and keeps executor choice out of the manifest and CLI. The first narrow
+internal harness path is runner-side only: it can receive the prepared
+workspace path, case metadata, model output text, the run output directory,
+measured repetition, and deterministic task log paths. Future production
+harnesses may add pack metadata and model/adapter/endpoint/default context as
+needed for harness-owned model calls. The harness may mutate only the prepared
+workspace and may write only the existing task logs under the run output
+directory. It must not mutate pack-owned fixtures, prompts, verifier scripts,
+source docs, or public adapter/result schemas by default. Task logs, patch
+capture after task execution, verifier execution after patch capture, and
 existing workspace, patch, task, verify, repo_task, and scoring row shapes stay
 unchanged until a later implementation proves a narrower schema change is
 necessary.

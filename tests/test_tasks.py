@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from benchpack.packs import Case
+from benchpack.packs import Case, Fixture, Pack, Scoring
+from benchpack.patches import capture_workspace_patch
 from benchpack.tasks import (
+    AgentSessionHarnessRequest,
+    AgentSessionHarnessResult,
     TaskArtifactPaths,
     TaskError,
     TaskExecutionRequest,
@@ -19,6 +23,8 @@ from benchpack.tasks import (
     task_record,
     write_noop_task_logs,
 )
+from benchpack.verifiers import run_repo_task_verifier
+from benchpack.workspaces import PreparedWorkspace
 
 
 def make_case() -> Case:
@@ -28,6 +34,16 @@ def make_case() -> Case:
         prompt="Change the repository.",
         scoring=None,
         raw={},
+    )
+
+
+def make_repo_fixture(source: Path) -> Fixture:
+    return Fixture(
+        id="repo",
+        kind="repo",
+        path=source,
+        description="",
+        raw={"id": "repo", "kind": "repo", "path": "fixtures/repo"},
     )
 
 
@@ -343,6 +359,199 @@ def test_run_repo_task_executor_runs_fenced_model_output_patch_executor(
         "Applied fenced model patch to workspace.\n"
     )
     assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_run_repo_task_executor_internal_harness_mutation_reaches_patch_and_verifier(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack_dir = tmp_path / "pack"
+    source = pack_dir / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("source repo\n", encoding="utf-8")
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    case = Case(
+        id="edit-repo",
+        kind="repo-task",
+        prompt="Change the repository.",
+        scoring=Scoring(mode="verify-script", script="verify/check.py"),
+        raw={},
+        fixture_refs=["repo"],
+    )
+    seen: dict[str, Path] = {}
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        seen["workspace"] = request.workspace
+        seen["stdout"] = request.task_paths.stdout
+        seen["stderr"] = request.task_paths.stderr
+        assert request.task_paths == task_artifact_paths(out, case, 1)
+        request.write_workspace_text("README.md", "harness repo\n")
+        request.write_workspace_text("nested/created.txt", "created\n")
+        with pytest.raises(TaskError, match="unsafe harness workspace path"):
+            request.write_workspace_text("../outside.txt", "bad\n")
+        return AgentSessionHarnessResult(
+            stdout="harness stdout\n",
+            stderr="harness stderr\n",
+        )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=case,
+            repetition=1,
+            workspace=workspace,
+            model_output_text="adapter output remains available",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert seen == {
+        "workspace": workspace,
+        "stdout": out / "task" / "edit-repo" / "rep-001.stdout.log",
+        "stderr": out / "task" / "edit-repo" / "rep-001.stderr.log",
+    }
+    assert (source / "README.md").read_text(encoding="utf-8") == "source repo\n"
+    assert outside.read_text(encoding="utf-8") == "outside\n"
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "harness repo\n"
+    assert (workspace / "nested" / "created.txt").read_text(
+        encoding="utf-8"
+    ) == "created\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "harness stdout\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "harness stderr\n"
+    )
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, case, 1)
+    assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
+    assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+harness repo\n"
+        "--- /dev/null\n"
+        "+++ b/nested/created.txt\n"
+        "@@ -0,0 +1 @@\n"
+        "+created\n"
+    )
+
+    script = pack_dir / "verify" / "check.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+content = Path(args.workspace, "README.md").read_text(encoding="utf-8")
+if content != "harness repo\\n":
+    raise SystemExit(2)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"content": content, "patch_exists": Path(args.patch).exists()}, fh)
+""",
+        encoding="utf-8",
+    )
+    pack = Pack(
+        id="repo-pack",
+        version="0.1.0",
+        description="",
+        defaults={},
+        cases=[case],
+        scoring=None,
+        path=pack_dir,
+        fixtures=[fixture],
+    )
+
+    verifier_result = run_repo_task_verifier(
+        pack=pack,
+        case=case,
+        scoring=case.scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=out / patch_metadata["path"],
+        output_dir=out,
+        repetition=1,
+        timeout_s=5.0,
+    )
+
+    assert verifier_result.repo_task == {"status": "passed", "verify_exit_code": 0}
+    assert verifier_result.scoring == {"mode": "verify-script", "passed": True}
+    assert json.loads((out / verifier_result.verify["path"]).read_text()) == {
+        "content": "harness repo\n",
+        "exit_code": 0,
+        "passed": True,
+        "patch_exists": True,
+    }
+
+
+def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_write(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.write_workspace_text("/tmp/outside.txt", "bad\n")
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
+def test_run_repo_task_executor_internal_harness_rejects_non_string_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        return AgentSessionHarnessResult(stdout=None)  # type: ignore[arg-type]
+
+    with pytest.raises(TaskError, match="stdout/stderr must be strings"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
 
 
 @pytest.mark.parametrize(

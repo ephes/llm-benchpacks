@@ -16,6 +16,41 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 internal agent-session harness path)
+
+### Changed
+
+- Added the first narrow internal agent-session harness executor path behind
+  `run_repo_task_executor`.
+- Runner-side callers can supply a harness that receives the prepared
+  workspace path, case metadata, model output text, run output directory,
+  measured repetition, and deterministic task log paths.
+- The internal harness context provides validated workspace-relative text
+  writes, so focused tests can prove harness mutation stays in the prepared
+  workspace while pack-owned source fixtures remain unchanged.
+- Harness task outcomes use the existing
+  `task/<case-id>/rep-NNN.stdout.log` and
+  `task/<case-id>/rep-NNN.stderr.log` artifacts and the existing
+  `{"stdout_path": ..., "stderr_path": ...}` task record shape.
+- Patch capture still runs after the task phase and observes harness workspace
+  mutations; verifier execution still runs after patch capture and observes the
+  same mutated workspace.
+- Current CLI repo-task runs still use the fenced model-output `diff`/`patch`
+  executor by default, and bundled `patch-from-failure` behavior remains
+  unchanged.
+- No manifest harness selection, CLI task flags, manifest task commands, task
+  environment configuration, task timeout configuration, repo-task warmups,
+  workspace retention options, broad generic artifact object, adapter schema
+  changes, or result row fields were added.
+
+### Open Questions
+
+- Future slices still need public harness selection if needed, production
+  external coding-agent integration, richer task status/reporting if needed,
+  repo-task warmup support, cleanup and retention options, task environment
+  support if needed, task timeout support if needed, and larger bundled
+  repo-task conversion.
+
 ## 2026-05-03 (Phase 3 repo-task task-executor boundary)
 
 ### Changed

@@ -260,18 +260,20 @@ strings. The runner rejects manifests that violate this at load time.
   support copies exactly one referenced `kind = "repo"` directory fixture into
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
   measured adapter call, runs an internal task executor after the adapter call,
-  applies the first fenced `diff` or `patch` block from model output as a
-  unified diff inside that workspace through the only current executor,
+  and current CLI runs apply the first fenced `diff` or `patch` block from
+  model output as a unified diff inside that workspace through the default
+  executor,
   captures a deterministic patch artifact at `patch/<case-id>/rep-NNN.diff`
   after the task phase, writes task logs at
   `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`, executes `verify-script` scoring when
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
-  A real agent-session harness is not implemented yet. Future harness work is
-  expected to stay behind the internal executor boundary first; this format
-  does not currently add harness selection, manifest task commands, retention
-  options, repo-task warmups, task environment configuration, task timeout
+  A minimal internal agent-session harness path exists behind the same
+  executor boundary for runner-side callers and tests, but current CLI runs
+  still use the fenced `diff`/`patch` executor by default. This format does not
+  currently add harness selection, manifest task commands, retention options,
+  repo-task warmups, task environment configuration, task timeout
   configuration, or bundled pack conversion.
 
 `replay`
@@ -289,8 +291,9 @@ directory fixtures are rejected for repo-task; the single referenced repo
 directory is copied into a run-owned workspace; the measured result record
 includes the prepared workspace metadata, `patch.path`, task log artifact
 paths, verifier artifact paths, final verifier status, and top-level
-`verify-script` scoring. The runner still does not execute an agent harness or
-manifest-declared task commands.
+`verify-script` scoring. The runner has an internal harness path, but it still
+does not expose agent harness selection or execute manifest-declared task
+commands.
 
 Repo-task cases should use this conservative shape:
 
@@ -331,10 +334,11 @@ deliberately limited to the effective `verify-script` scoring table. Add
 explicit fields only when a future implementation needs them and the semantics
 are narrow enough to test.
 
-Future agent-session harness inputs are runner-side concerns, not manifest
-syntax in this slice. A harness may use the prepared workspace, case and pack
-metadata, model/adapter/endpoint/default context, output directory, repetition,
-and deterministic task log paths internally. Pack authors should not rely on
+Agent-session harness inputs are runner-side concerns, not manifest syntax in
+this slice. The current internal harness path may use the prepared workspace,
+case metadata, model output text, output directory, repetition, and
+deterministic task log paths internally; future harnesses may add pack metadata
+and model/adapter/endpoint/default context. Pack authors should not rely on
 manifest-declared shell commands, task environment, task timeouts, harness
 selection, or workspace retention because none of those fields exist yet.
 
@@ -355,19 +359,18 @@ Directory fixture semantics for repo-task cases:
 - Future mutation is allowed only inside the disposable workspace. Pack
   fixtures, prompts, verify scripts, and other source artifacts remain
   read-only by contract.
-- A future agent-session harness must follow the same write boundary: it may
-  mutate the prepared workspace and write under the run output directory, but
-  must not mutate pack-owned fixtures, prompts, verifier scripts, source docs,
-  or public adapter/result schemas by default.
-- The current mutation source is narrow and model-output-only: after the
-  adapter call, the runner invokes an internal task executor. The only current
-  executor extracts the first fenced code block whose info string is exactly
-  `diff` or `patch`, treats the block body as a unified diff, and applies it
-  from the prepared workspace root. Non-matching fenced blocks are ignored. If
-  no matching block exists, if the block is empty, if paths are unsafe, or if
-  the diff cannot be applied cleanly, the workspace remains unchanged, task
-  stderr records a deterministic message, and the measured row is still
-  written.
+- The internal agent-session harness path follows the same write boundary: it
+  may mutate the prepared workspace and write the existing task logs under the
+  run output directory, but must not mutate pack-owned fixtures, prompts,
+  verifier scripts, source docs, or public adapter/result schemas by default.
+- The current CLI mutation source is narrow and model-output-only: after the
+  adapter call, the runner invokes the default internal task executor. It
+  extracts the first fenced code block whose info string is exactly `diff` or
+  `patch`, treats the block body as a unified diff, and applies it from the
+  prepared workspace root. Non-matching fenced blocks are ignored. If no
+  matching block exists, if the block is empty, if paths are unsafe, or if the
+  diff cannot be applied cleanly, the workspace remains unchanged, task stderr
+  records a deterministic message, and the measured row is still written.
 - Repo-task execution must not write outside the run output directory and the
   prepared workspace, and pack contracts must not depend on implicit network
   access or private local host paths.
@@ -396,11 +399,12 @@ Workspace and artifact layout:
   `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
   single-repetition packs. Measured repo-task records include a top-level
-  `task` object with run-relative `stdout_path` and `stderr_path`. These files
-  record the current internal executor's fenced unified-diff
+  `task` object with run-relative `stdout_path` and `stderr_path`. For current
+  CLI runs, these files record the default fenced unified-diff
   extraction/application phase. On successful application stdout contains a
   short deterministic success message and stderr is empty; no-patch and
-  rejected-patch outcomes are recorded in stderr.
+  rejected-patch outcomes are recorded in stderr. For internal harness runs,
+  the same files record the harness task phase without adding result fields.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and
