@@ -56,6 +56,18 @@ class AgentSessionHarnessRequest:
         except _PatchContractError as exc:
             raise TaskError(f"unsafe harness workspace path: {exc}") from exc
 
+    def read_workspace_text(self, relative_path: str) -> str:
+        """Read UTF-8 text from a file below the prepared workspace only."""
+
+        path = self.workspace_path(relative_path)
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise TaskError(
+                f"could not read harness workspace file {relative_path!r} "
+                f"for repo-task case {self.case.id!r}"
+            ) from exc
+
     def write_workspace_text(self, relative_path: str, content: str) -> None:
         """Write UTF-8 text below the prepared workspace only."""
 

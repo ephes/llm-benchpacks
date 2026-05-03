@@ -111,17 +111,21 @@ as focused tests, and is not manifest or CLI selectable. Current CLI repo-task
 runs continue to use the fenced model-output `diff`/`patch` executor by
 default. The internal harness input includes the prepared workspace path, case
 metadata, model output text, run output directory, measured repetition number,
-and deterministic task stdout/stderr log paths. Future production harnesses may
-add pack metadata and model/adapter/endpoint/default context as needed for
-harness-owned model calls. Those inputs remain internal implementation details,
-not new manifest fields or adapter request fields.
+deterministic task stdout/stderr log paths, and validated helpers for reading
+and writing UTF-8 text below the prepared workspace. Future production
+harnesses may add pack metadata and model/adapter/endpoint/default context as
+needed for harness-owned model calls. Those inputs remain internal
+implementation details, not new manifest fields or adapter request fields.
 
-The internal harness path may mutate only the prepared workspace and may write
-only the existing task stdout/stderr logs under the run output directory. It
-must not mutate pack-owned fixtures, prompts, verifier scripts, source docs, or
-other files under the pack. If a later harness needs model calls, those calls
-are runner/harness concerns and must not change the normal adapter request or
-result schemas by default. Task logs remain
+The internal harness path may inspect and mutate only the prepared workspace and
+may write only the existing task stdout/stderr logs under the run output
+directory. Harness workspace text helpers reject unsafe relative paths,
+including absolute paths and `..` escapes; failed helper reads or writes are
+runner failures before task logs are recorded. It must not mutate pack-owned
+fixtures, prompts, verifier scripts, source docs, or other files under the
+pack. If a later harness needs model calls, those calls are runner/harness
+concerns and must not change the normal adapter request or result schemas by
+default. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
 that deliberately. Patch capture still happens after task execution, so

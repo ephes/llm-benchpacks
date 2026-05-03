@@ -389,8 +389,11 @@ def test_run_repo_task_executor_internal_harness_mutation_reaches_patch_and_veri
         seen["stdout"] = request.task_paths.stdout
         seen["stderr"] = request.task_paths.stderr
         assert request.task_paths == task_artifact_paths(out, case, 1)
+        assert request.read_workspace_text("README.md") == "source repo\n"
         request.write_workspace_text("README.md", "harness repo\n")
         request.write_workspace_text("nested/created.txt", "created\n")
+        with pytest.raises(TaskError, match="unsafe harness workspace path"):
+            request.read_workspace_text("../outside.txt")
         with pytest.raises(TaskError, match="unsafe harness workspace path"):
             request.write_workspace_text("../outside.txt", "bad\n")
         return AgentSessionHarnessResult(
@@ -547,6 +550,10 @@ def test_run_repo_task_executor_internal_harness_realistic_fake_agent_sequence(
         assert request.workspace == workspace
         assert request.model_output_text == "adapter output for fake agent"
         assert request.workspace_path("README.md") == workspace / "README.md"
+        assert request.read_workspace_text("README.md") == "# Source Repository\n"
+        assert request.read_workspace_text("pyproject.toml") == (
+            "[project]\nname = \"source-repo\"\n"
+        )
         request.write_workspace_text("README.md", "# Draft Repository\n")
         request.write_workspace_text("README.md", "# Edited Repository\n")
         request.write_workspace_text(
@@ -758,6 +765,88 @@ with open(args.output, "w", encoding="utf-8") as fh:
         "patch_exists": True,
         "source_fixture_id": "repo",
     }
+
+
+@pytest.mark.parametrize("relative_path", ["../outside.txt", "/tmp/outside.txt"])
+def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_read(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.read_workspace_text(relative_path)
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
+def test_run_repo_task_executor_internal_harness_rejects_missing_workspace_read(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.read_workspace_text("missing.txt")
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="could not read harness workspace file"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
+def test_run_repo_task_executor_internal_harness_rejects_non_utf8_workspace_read(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "binary.dat").write_bytes(b"\xff\xfe\x00\x00")
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.read_workspace_text("binary.dat")
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="could not read harness workspace file"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
 
 
 def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_write(

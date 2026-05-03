@@ -28,12 +28,13 @@ than changing the adapter boundary:
   behind this boundary for runner-side callers and tests, without manifest or
   CLI selection. Its runner-side request carries the prepared workspace path,
   case metadata, model output text, the run output directory, measured
-  repetition, and deterministic task log paths; richer future harnesses may add
-  pack metadata and model/adapter/endpoint/default context needed for
-  harness-owned model calls. The harness may mutate only the prepared workspace
-  and may write only the existing task logs under the run output directory; it
-  must preserve pack fixtures, prompts, verifier scripts, and source docs.
-  Harness selection and configuration are not manifest or CLI surfaces yet.
+  repetition, deterministic task log paths, and validated workspace-relative
+  UTF-8 text read/write helpers; richer future harnesses may add pack metadata
+  and model/adapter/endpoint/default context needed for harness-owned model
+  calls. The harness may inspect and mutate only the prepared workspace and may
+  write only the existing task logs under the run output directory; it must
+  preserve pack fixtures, prompts, verifier scripts, and source docs. Harness
+  selection and configuration are not manifest or CLI surfaces yet.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -143,16 +144,18 @@ and before each measured adapter execution:
 6. An internal agent-session harness can occupy the same runner-owned task
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
-   task log paths. Future harnesses may also receive pack metadata and
-   model/adapter/endpoint/default context as needed. It may mutate only the
-   prepared workspace and may write only the existing task logs under the run
-   output directory. It must not mutate pack-owned fixtures, prompts, verifier
-   scripts, source docs, or adapter/result schemas by default. The task log
-   paths in step 7 remain stable for future harnesses unless a later
+   task log paths, plus validated workspace-relative UTF-8 text read/write
+   helpers. Future harnesses may also receive pack metadata and
+   model/adapter/endpoint/default context as needed. It may inspect and mutate
+   only the prepared workspace and may write only the existing task logs under
+   the run output directory. It must not mutate pack-owned fixtures, prompts,
+   verifier scripts, source docs, or adapter/result schemas by default. The task
+   log paths in step 7 remain stable for future harnesses unless a later
    result-schema slice changes them deliberately. Harness failures that prevent
-   the runner from writing required artifacts remain runner failures; ordinary
-   task outcomes should be captured through the existing task logs until a
-   later status-reporting slice proves a new row field is necessary.
+   the runner from writing required artifacts, including unsafe or unreadable
+   workspace helper paths, remain runner failures; ordinary task outcomes should
+   be captured through the existing task logs until a later status-reporting
+   slice proves a new row field is necessary.
 7. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
    `task/<case-id>/rep-NNN.stderr.log` artifacts. Successful application writes
    a short stdout message and leaves stderr empty; no-patch or failed-apply

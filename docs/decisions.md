@@ -282,9 +282,10 @@ Agent-session harness work uses D-021's internal repo-task executor boundary
 and keeps executor choice out of the manifest and CLI. The first narrow
 internal harness path is runner-side only: it can receive the prepared
 workspace path, case metadata, model output text, the run output directory,
-measured repetition, and deterministic task log paths. Future production
-harnesses may add pack metadata and model/adapter/endpoint/default context as
-needed for harness-owned model calls. The harness may mutate only the prepared
+measured repetition, deterministic task log paths, and validated
+workspace-relative UTF-8 text read/write helpers. Future production harnesses
+may add pack metadata and model/adapter/endpoint/default context as needed for
+harness-owned model calls. The harness may inspect and mutate only the prepared
 workspace and may write only the existing task logs under the run output
 directory. It must not mutate pack-owned fixtures, prompts, verifier scripts,
 source docs, or public adapter/result schemas by default. Task logs, patch

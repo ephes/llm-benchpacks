@@ -186,7 +186,11 @@ surface. The first narrow internal agent-session harness path landed
 harness that receives the prepared workspace and deterministic task log paths,
 mutates only the prepared workspace through validated helpers, writes the
 existing task logs, and leaves patch capture, verifier execution, current CLI
-defaults, adapter schemas, and result row shapes unchanged.
+defaults, adapter schemas, and result row shapes unchanged. A narrow internal
+read-helper slice landed 2026-05-03 on the same request shape, giving harnesses
+a validated workspace-relative UTF-8 text read helper alongside the existing
+write helper without adding public harness selection or changing adapter/result
+schemas.
 
 Scope:
 
@@ -288,6 +292,12 @@ Scope:
   model-output `diff`/`patch` executor by default; task log paths and record
   shape remain unchanged; patch capture and verifier execution observe the
   harness-mutated prepared workspace.
+- Add a validated internal workspace text read helper to
+  `AgentSessionHarnessRequest`. **Landed 2026-05-03** without adding manifest
+  or CLI selection: runner-side harnesses can read existing UTF-8 workspace
+  files through the same path safety boundary used for workspace writes, while
+  unsafe or unreadable paths remain runner failures before task logs are
+  recorded.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

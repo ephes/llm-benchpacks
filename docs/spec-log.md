@@ -16,6 +16,33 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 internal harness workspace read helper)
+
+### Changed
+
+- Added `AgentSessionHarnessRequest.read_workspace_text(relative_path)` for
+  runner-side internal harnesses.
+- The read helper uses the same validated workspace-relative path boundary as
+  existing harness workspace writes and returns UTF-8 text from the prepared
+  workspace.
+- Unsafe paths, absolute paths, `..` escapes, missing files, and unreadable
+  text reads raise `TaskError` before task stdout/stderr logs are recorded.
+- Focused tests now prove harness read-before-write behavior, unsafe read
+  rejection, missing-file read rejection, and the existing realistic fake-agent
+  edit sequence using reads and writes together.
+- No manifest harness selection, CLI task flags, adapter schema changes, result
+  row fields, raw artifact path changes, task log path changes, task timeout or
+  environment support, repo-task warmups, workspace retention options, or
+  production external coding-agent integration were added.
+
+### Open Questions
+
+- Future slices still need public harness selection if needed, production
+  external coding-agent integration, richer task status/reporting if needed,
+  repo-task warmup support, cleanup and retention options, task environment
+  support if needed, task timeout support if needed, and larger bundled
+  repo-task conversion.
+
 ## 2026-05-03 (Phase 3 internal agent-session harness path)
 
 ### Changed
