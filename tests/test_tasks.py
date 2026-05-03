@@ -47,6 +47,19 @@ def make_repo_fixture(source: Path) -> Fixture:
     )
 
 
+def make_harness_request(tmp_path: Path, workspace: Path) -> AgentSessionHarnessRequest:
+    out = tmp_path / "run"
+    case = make_case()
+    return AgentSessionHarnessRequest(
+        output_dir=out,
+        case=case,
+        repetition=1,
+        workspace=workspace,
+        model_output_text="",
+        task_paths=task_artifact_paths(out, case, 1),
+    )
+
+
 def test_task_artifact_paths_use_run_relative_layout(tmp_path: Path) -> None:
     paths = task_artifact_paths(tmp_path / "run", make_case(), 1)
 
@@ -875,6 +888,302 @@ def test_run_repo_task_executor_internal_harness_workspace_discovery_symlinks(
     assert record == {
         "stdout_path": "task/edit-repo/rep-001.stdout.log",
         "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+
+
+def test_agent_session_harness_delete_workspace_file_removes_regular_file(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    deleted = workspace / "delete-me.txt"
+    deleted.write_text("delete me\n", encoding="utf-8")
+    request = make_harness_request(tmp_path, workspace)
+
+    assert request.delete_workspace_file("delete-me.txt") is True
+
+    assert not deleted.exists()
+    assert request.workspace_file_exists("delete-me.txt") is False
+
+
+def test_agent_session_harness_delete_workspace_file_returns_false_for_missing(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    request = make_harness_request(tmp_path, workspace)
+
+    assert request.delete_workspace_file("missing.txt") is False
+
+
+def test_agent_session_harness_delete_workspace_file_returns_false_for_directory(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    directory = workspace / "docs"
+    directory.mkdir(parents=True)
+    (directory / "guide.md").write_text("guide\n", encoding="utf-8")
+    request = make_harness_request(tmp_path, workspace)
+
+    assert request.delete_workspace_file("docs") is False
+
+    assert directory.is_dir()
+    assert (directory / "guide.md").read_text(encoding="utf-8") == "guide\n"
+
+
+@pytest.mark.parametrize("relative_path", ["../outside.txt", "/tmp/outside.txt"])
+def test_agent_session_harness_delete_workspace_file_rejects_unsafe_path(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    request = make_harness_request(tmp_path, workspace)
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        request.delete_workspace_file(relative_path)
+
+
+def test_agent_session_harness_delete_workspace_file_deletes_symlink_entry(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    target = workspace / "target.txt"
+    link = workspace / "link.txt"
+    target.write_text("target\n", encoding="utf-8")
+    try:
+        link.symlink_to("target.txt")
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    request = make_harness_request(tmp_path, workspace)
+
+    assert request.delete_workspace_file("link.txt") is True
+
+    assert not link.exists()
+    assert not link.is_symlink()
+    assert target.read_text(encoding="utf-8") == "target\n"
+
+
+def test_agent_session_harness_delete_workspace_file_rejects_escaping_symlink(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "run" / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    try:
+        (workspace / "outside-link.txt").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    request = make_harness_request(tmp_path, workspace)
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        request.delete_workspace_file("outside-link.txt")
+
+    assert outside.read_text(encoding="utf-8") == "outside\n"
+    assert (workspace / "outside-link.txt").is_symlink()
+
+
+def test_run_repo_task_executor_internal_harness_unsafe_delete_writes_no_task_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.delete_workspace_file("../outside.txt")
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()
+
+
+def test_run_repo_task_executor_internal_harness_delete_oserror_writes_no_task_logs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "locked.txt").write_text("locked\n", encoding="utf-8")
+    original_unlink = Path.unlink
+
+    def fail_locked_unlink(self: Path, *args, **kwargs) -> None:
+        if self.resolve(strict=False) == (workspace / "locked.txt").resolve(
+            strict=False
+        ):
+            raise OSError("locked")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_locked_unlink)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.delete_workspace_file("locked.txt")
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="could not delete harness workspace file"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert (workspace / "locked.txt").read_text(encoding="utf-8") == "locked\n"
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()
+
+
+def test_run_repo_task_executor_internal_harness_workspace_mutation_full_surface(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack_dir = tmp_path / "pack"
+    source = pack_dir / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("# Source\n", encoding="utf-8")
+    (source / "obsolete.txt").write_text("obsolete\n", encoding="utf-8")
+    (workspace / "README.md").write_text("# Source\n", encoding="utf-8")
+    (workspace / "obsolete.txt").write_text("obsolete\n", encoding="utf-8")
+    case = Case(
+        id="edit-repo",
+        kind="repo-task",
+        prompt="Edit and remove files.",
+        scoring=Scoring(mode="verify-script", script="verify/check.py"),
+        raw={},
+        fixture_refs=["repo"],
+    )
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.list_workspace_paths() == ("README.md", "obsolete.txt")
+        assert request.workspace_file_exists("README.md") is True
+        assert request.read_workspace_text("README.md") == "# Source\n"
+        request.write_workspace_text("README.md", "# Edited\n")
+        assert request.delete_workspace_file("obsolete.txt") is True
+        assert request.workspace_file_exists("obsolete.txt") is False
+        assert request.list_workspace_paths() == ("README.md",)
+        return AgentSessionHarnessResult(
+            stdout="fake-harness edited and deleted\n",
+            stderr="",
+        )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=case,
+            repetition=1,
+            workspace=workspace,
+            model_output_text="adapter output for fake harness",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "fake-harness edited and deleted\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (source / "obsolete.txt").read_text(encoding="utf-8") == "obsolete\n"
+    assert not (workspace / "obsolete.txt").exists()
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, case, 1)
+    patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
+    assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
+    assert "--- a/README.md\n+++ b/README.md\n" in patch_text
+    assert "-# Source\n" in patch_text
+    assert "+# Edited\n" in patch_text
+    assert "--- a/obsolete.txt\n+++ /dev/null\n" in patch_text
+    assert "-obsolete\n" in patch_text
+
+    script = pack_dir / "verify" / "check.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+workspace = Path(args.workspace)
+if (workspace / "README.md").read_text(encoding="utf-8") != "# Edited\\n":
+    raise SystemExit(2)
+if (workspace / "obsolete.txt").exists():
+    raise SystemExit(3)
+patch_text = Path(args.patch).read_text(encoding="utf-8")
+if "+++ /dev/null" not in patch_text:
+    raise SystemExit(4)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump(
+        {
+            "deleted": not (workspace / "obsolete.txt").exists(),
+            "patch_mentions_deletion": "+++ /dev/null" in patch_text,
+        },
+        fh,
+    )
+""",
+        encoding="utf-8",
+    )
+    pack = Pack(
+        id="repo-pack",
+        version="0.1.0",
+        description="",
+        defaults={},
+        cases=[case],
+        scoring=None,
+        path=pack_dir,
+        fixtures=[fixture],
+    )
+
+    verifier_result = run_repo_task_verifier(
+        pack=pack,
+        case=case,
+        scoring=case.scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=out / patch_metadata["path"],
+        output_dir=out,
+        repetition=1,
+        timeout_s=5.0,
+    )
+
+    assert verifier_result.repo_task == {"status": "passed", "verify_exit_code": 0}
+    assert verifier_result.scoring == {"mode": "verify-script", "passed": True}
+    assert json.loads((out / verifier_result.verify["path"]).read_text()) == {
+        "deleted": True,
+        "exit_code": 0,
+        "passed": True,
+        "patch_mentions_deletion": True,
     }
 
 

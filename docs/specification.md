@@ -112,11 +112,11 @@ runs continue to use the fenced model-output `diff`/`patch` executor by
 default. The internal harness input includes the prepared workspace path, case
 metadata, model output text, run output directory, measured repetition number,
 deterministic task stdout/stderr log paths, and validated helpers for reading
-and writing UTF-8 text below the prepared workspace, listing workspace file
-paths, and checking workspace file existence. Future production harnesses may
-add pack metadata and model/adapter/endpoint/default context as needed for
-harness-owned model calls. Those inputs remain internal implementation details,
-not new manifest fields or adapter request fields.
+and writing UTF-8 text below the prepared workspace, deleting workspace files,
+listing workspace file paths, and checking workspace file existence. Future
+production harnesses may add pack metadata and model/adapter/endpoint/default
+context as needed for harness-owned model calls. Those inputs remain internal
+implementation details, not new manifest fields or adapter request fields.
 
 The internal harness path may inspect and mutate only the prepared workspace and
 may write only the existing task stdout/stderr logs under the run output
@@ -127,12 +127,18 @@ created earlier in the same harness invocation. Symlinks to regular files are
 listed only when their target resolves inside the prepared workspace.
 `workspace_file_exists()` uses the same path boundary and returns true only for
 existing regular files, including in-workspace symlinks to regular files;
-missing paths and directories return false. Failed helper reads, writes, unsafe
-existence checks, or failed workspace listing are runner failures before task
-logs are recorded. It must not mutate pack-owned fixtures, prompts, verifier
-scripts, source docs, or other files under the pack. If a later harness needs
-model calls, those calls are runner/harness concerns and must not change the
-normal adapter request or result schemas by default. Task logs remain
+missing paths and directories return false. `delete_workspace_file()` uses the
+same path boundary, returns true after deleting an existing regular file or
+in-workspace symlink-to-file workspace entry, returns false for missing paths
+and directories, and leaves symlink targets intact when deleting a symlink
+entry. Unsafe delete paths, including symlink escapes outside the prepared
+workspace, and `OSError` delete failures are runner failures before task logs
+are recorded. Failed helper reads, writes, unsafe existence checks, unsafe
+deletes, or failed workspace listing are runner failures before task logs are
+recorded. It must not mutate pack-owned fixtures, prompts, verifier scripts,
+source docs, or other files under the pack. If a later harness needs model
+calls, those calls are runner/harness concerns and must not change the normal
+adapter request or result schemas by default. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
 that deliberately. Patch capture still happens after task execution, so

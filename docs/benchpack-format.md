@@ -338,17 +338,20 @@ Agent-session harness inputs are runner-side concerns, not manifest syntax in
 this slice. The current internal harness path may use the prepared workspace,
 case metadata, model output text, output directory, repetition, and
 deterministic task log paths internally, plus validated helpers to list
-workspace file paths, check workspace file existence, and read or write UTF-8
-workspace text. File listings include regular files only, use sorted POSIX
-workspace-relative paths, and observe files created earlier in the same harness
-invocation. Symlinks to regular files are listed only when their target resolves
-inside the prepared workspace. File existence checks return true only for
-existing regular files, including in-workspace symlinks to regular files, while
-missing paths and directories return false. Future harnesses may add pack
-metadata and model/adapter/endpoint/default context. Pack authors should not
-rely on manifest-declared shell commands, task environment, task timeouts,
-harness selection, or workspace retention because none of those fields exist
-yet.
+workspace file paths, check workspace file existence, read or write UTF-8
+workspace text, and delete workspace files. File listings include regular files
+only, use sorted POSIX workspace-relative paths, and observe files created
+earlier in the same harness invocation. Symlinks to regular files are listed
+only when their target resolves inside the prepared workspace. File existence
+checks return true only for existing regular files, including in-workspace
+symlinks to regular files, while missing paths and directories return false.
+File deletes use the same path boundary, return true after deleting an existing
+regular file or in-workspace symlink-to-file workspace entry, return false for
+missing paths and directories, and unlink symlink entries without deleting
+their targets. Future harnesses may add pack metadata and
+model/adapter/endpoint/default context. Pack authors should not rely on
+manifest-declared shell commands, task environment, task timeouts, harness
+selection, or workspace retention because none of those fields exist yet.
 
 Directory fixture semantics for repo-task cases:
 

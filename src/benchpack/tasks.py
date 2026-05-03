@@ -100,6 +100,32 @@ class AgentSessionHarnessRequest:
                 f"for repo-task case {self.case.id!r}"
             ) from exc
 
+    def delete_workspace_file(self, relative_path: str) -> bool:
+        """Delete a regular file entry below the prepared workspace if present."""
+
+        workspace_root = self.workspace.resolve(strict=False)
+        try:
+            path = _resolve_workspace_relative_path(relative_path, workspace_root)
+            raw_path = _raw_workspace_relative_path(relative_path, workspace_root)
+        except _PatchContractError as exc:
+            raise TaskError(f"unsafe harness workspace path: {exc}") from exc
+
+        try:
+            if raw_path.is_symlink():
+                if not path.is_file():
+                    return False
+                raw_path.unlink()
+                return True
+            if not path.exists() or not path.is_file():
+                return False
+            path.unlink()
+        except OSError as exc:
+            raise TaskError(
+                f"could not delete harness workspace file {relative_path!r} "
+                f"for repo-task case {self.case.id!r}"
+            ) from exc
+        return True
+
     def write_workspace_text(self, relative_path: str, content: str) -> None:
         """Write UTF-8 text below the prepared workspace only."""
 
@@ -437,6 +463,19 @@ def _validate_workspace_relative_path(path: str, workspace_root: Path) -> None:
 
 
 def _resolve_workspace_relative_path(path: str, workspace_root: Path) -> Path:
+    parts = _workspace_relative_parts(path)
+    candidate = (workspace_root / Path(*parts)).resolve(strict=False)
+    if not candidate.is_relative_to(workspace_root):
+        raise _PatchContractError(f"path escapes workspace: {path}")
+    return candidate
+
+
+def _raw_workspace_relative_path(path: str, workspace_root: Path) -> Path:
+    parts = _workspace_relative_parts(path)
+    return workspace_root / Path(*parts)
+
+
+def _workspace_relative_parts(path: str) -> tuple[str, ...]:
     if "\x00" in path:
         raise _PatchContractError("path contains a null byte")
     relative = PurePosixPath(path)
@@ -444,8 +483,4 @@ def _resolve_workspace_relative_path(path: str, workspace_root: Path) -> Path:
         raise _PatchContractError(f"path escapes workspace: {path}")
     if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
         raise _PatchContractError(f"path escapes workspace: {path}")
-
-    candidate = (workspace_root / Path(*relative.parts)).resolve(strict=False)
-    if not candidate.is_relative_to(workspace_root):
-        raise _PatchContractError(f"path escapes workspace: {path}")
-    return candidate
+    return relative.parts

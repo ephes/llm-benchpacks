@@ -195,7 +195,11 @@ harnesses can list deterministic sorted workspace-relative POSIX file paths and
 check whether candidate regular files exist, still without public harness
 selection, CLI flags, manifest fields, or adapter/result schema changes.
 Symlinks to regular files are treated as file entries only when their targets
-resolve inside the prepared workspace.
+resolve inside the prepared workspace. An internal workspace file-delete helper
+landed 2026-05-03: runner-side harnesses can remove existing regular files and
+in-workspace symlink-to-file entries through the same workspace boundary, with
+missing paths and directories returning false and unsafe paths remaining runner
+failures before task logs are recorded.
 
 Scope:
 
@@ -310,6 +314,13 @@ Scope:
   invocation and in-workspace symlinks to regular files, and
   `workspace_file_exists(relative_path)` checks candidate files through the same
   path safety boundary as workspace reads and writes.
+- Add an internal workspace file-delete helper to
+  `AgentSessionHarnessRequest`. **Landed 2026-05-03** without adding manifest
+  or CLI selection: `delete_workspace_file(relative_path)` removes existing
+  regular files and in-workspace symlink-to-file entries through the same path
+  safety boundary as workspace reads and writes, returns false for missing
+  paths and directories, leaves symlink targets intact, and keeps unsafe paths
+  or delete `OSError`s as runner failures before task logs are recorded.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

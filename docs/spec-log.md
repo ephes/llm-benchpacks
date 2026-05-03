@@ -16,6 +16,40 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 internal harness workspace file delete helper)
+
+### Changed
+
+- Added `AgentSessionHarnessRequest.delete_workspace_file(relative_path)` for
+  runner-side internal harnesses.
+- The delete helper uses the same validated workspace-relative path boundary as
+  existing read/write/exists helpers.
+- It returns true after deleting an existing regular file or in-workspace
+  symlink-to-file workspace entry, returns false for missing paths and
+  directories, and leaves symlink targets intact when deleting a symlink entry.
+- Unsafe delete paths, absolute paths, `..` escapes, symlink escapes outside
+  the prepared workspace, and delete `OSError`s raise `TaskError` before task
+  stdout/stderr logs are recorded.
+- Focused tests now prove regular-file delete, missing path false, directory
+  false, unsafe delete rejection, escaping symlink rejection, in-workspace
+  symlink-entry deletion, no task logs after unsafe helper failure, patch
+  capture of harness deletions, verifier observation after patch capture, and a
+  fake harness flow using list, exists, read, write, and delete together.
+- No manifest harness selection, CLI task flags, adapter schema changes, result
+  row fields, raw artifact path changes, task log path changes, task timeout or
+  environment support, repo-task warmups, workspace retention options, source
+  fixture metadata on the harness request, directory deletion, recursive
+  deletion, or production external coding-agent integration were added.
+
+### Open Questions
+
+- Future slices still need public harness selection if needed, production
+  external coding-agent integration, richer task status/reporting if needed,
+  repo-task warmup support, cleanup and retention options, task environment
+  support if needed, task timeout support if needed, source fixture metadata if
+  later needed, directory-listing helpers if later needed, recursive directory
+  deletion if later needed, and larger bundled repo-task conversion.
+
 ## 2026-05-03 (Phase 3 internal harness workspace discovery helpers)
 
 ### Changed

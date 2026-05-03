@@ -284,20 +284,25 @@ internal harness path is runner-side only: it can receive the prepared
 workspace path, case metadata, model output text, the run output directory,
 measured repetition, deterministic task log paths, and validated
 workspace-relative helpers for listing regular files, checking file existence,
-and reading or writing UTF-8 text. File listings are deterministic sorted POSIX
-workspace-relative paths and include files created earlier in the same harness
-invocation. Symlinks to regular files are listed only when their target resolves
-inside the prepared workspace; existence checks return true only for existing
-regular files, including in-workspace symlinks to regular files. Future
-production harnesses may add pack metadata and model/adapter/endpoint/default
-context as needed for harness-owned model calls. The harness may inspect and
-mutate only the prepared workspace and may write only the existing task logs
-under the run output directory. It must not mutate pack-owned fixtures, prompts,
-verifier scripts, source docs, or public adapter/result schemas by default.
-Task logs, patch capture after task execution, verifier execution after patch
-capture, and existing workspace, patch, task, verify, repo_task, and scoring row
-shapes stay unchanged until a later implementation proves a narrower schema
-change is necessary.
+reading or writing UTF-8 text, and deleting files. File listings are
+deterministic sorted POSIX workspace-relative paths and include files created
+earlier in the same harness invocation. Symlinks to regular files are listed
+only when their target resolves inside the prepared workspace; existence checks
+return true only for existing regular files, including in-workspace symlinks to
+regular files. File deletes use the same path boundary, return true after
+deleting an existing regular file or in-workspace symlink-to-file workspace
+entry, return false for missing paths and directories, and unlink symlink
+entries without deleting their targets. Unsafe delete paths and delete
+`OSError`s are runner failures before task logs are written. Future production
+harnesses may add pack metadata and model/adapter/endpoint/default context as
+needed for harness-owned model calls. The harness may inspect and mutate only
+the prepared workspace and may write only the existing task logs under the run
+output directory. It must not mutate pack-owned fixtures, prompts, verifier
+scripts, source docs, or public adapter/result schemas by default. Task logs,
+patch capture after task execution, verifier execution after patch capture, and
+existing workspace, patch, task, verify, repo_task, and scoring row shapes stay
+unchanged until a later implementation proves a narrower schema change is
+necessary.
 
 Reason: the executor boundary now exists, but harness selection, task
 environment, task timeout, retention, and richer status semantics are still

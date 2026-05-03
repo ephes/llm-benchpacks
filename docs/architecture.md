@@ -29,9 +29,10 @@ than changing the adapter boundary:
   CLI selection. Its runner-side request carries the prepared workspace path,
   case metadata, model output text, the run output directory, measured
   repetition, deterministic task log paths, and validated workspace-relative
-  helpers for listing regular files, checking file existence, and reading or
-  writing UTF-8 text; richer future harnesses may add pack metadata and
-  model/adapter/endpoint/default context needed for harness-owned model calls.
+  helpers for listing regular files, checking file existence, reading or
+  writing UTF-8 text, and deleting files; richer future harnesses may add pack
+  metadata and model/adapter/endpoint/default context needed for harness-owned
+  model calls.
   The harness may inspect and mutate only the prepared workspace and may write
   only the existing task logs under the run output directory; it must preserve
   pack fixtures, prompts, verifier scripts, and source docs. Harness selection
@@ -146,21 +147,26 @@ and before each measured adapter execution:
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
    task log paths, plus validated workspace-relative helpers for listing
-   regular files, checking file existence, and reading or writing UTF-8 text.
+   regular files, checking file existence, reading or writing UTF-8 text, and
+   deleting files.
    File listings are deterministic sorted POSIX workspace-relative paths and
    observe files created earlier in the same harness invocation. Symlinks to
    regular files are listed only when their target resolves inside the prepared
    workspace. Existence checks return true only for regular files, including
    in-workspace symlinks to regular files, and false for missing paths or
-   directories. Future harnesses may also receive pack metadata and
-   model/adapter/endpoint/default context as needed. It may inspect and mutate
-   only the prepared workspace and may write only the existing task logs under
-   the run output directory. It must not mutate pack-owned fixtures, prompts,
-   verifier scripts, source docs, or adapter/result schemas by default. The task
-   log paths in step 7 remain stable for future harnesses unless a later
-   result-schema slice changes them deliberately. Harness failures that prevent
-   the runner from writing required artifacts, including unsafe or unreadable
-   workspace helper paths or failed workspace listing, remain runner failures;
+   directories. Delete checks use the same boundary, return true after deleting
+   an existing regular file or in-workspace symlink-to-file workspace entry,
+   return false for missing paths and directories, and unlink symlink entries
+   without deleting their targets. Future harnesses may also receive pack
+   metadata and model/adapter/endpoint/default context as needed. It may inspect
+   and mutate only the prepared workspace and may write only the existing task
+   logs under the run output directory. It must not mutate pack-owned fixtures,
+   prompts, verifier scripts, source docs, or adapter/result schemas by
+   default. The task log paths in step 7 remain stable for future harnesses
+   unless a later result-schema slice changes them deliberately. Harness
+   failures that prevent the runner from writing required artifacts, including
+   unsafe or unreadable workspace helper paths, unsafe deletes, delete
+   `OSError`s, or failed workspace listing, remain runner failures;
    ordinary task outcomes should be captured through the existing task logs
    until a later status-reporting slice proves a new row field is necessary.
 7. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
