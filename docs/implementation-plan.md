@@ -137,9 +137,12 @@ commands, fairness checks, interpretation boundaries, and troubleshooting. The
 runner can already execute useful first-pass benchmarks for this goal with
 `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
 `patch-from-failure`. Apple host model metadata and report-ready matrix
-guidance have also landed. Remaining work is live benchmark execution,
-curated run-log entries, production external harness execution, and larger
-repo-task packs, not benchmark semantics.
+guidance have also landed. A read-only Markdown report generator also landed to
+assemble run-log and comparison-note skeletons from existing result
+directories while reusing compare median, warning, cache-row, and
+`prefill parity` semantics. Remaining work is deeper live benchmark
+interpretation, production external harness execution, and larger repo-task
+packs, not benchmark semantics.
 
 Scope:
 
@@ -184,6 +187,12 @@ Scope:
   manually captured runtime/model/cache/power notes, calls out result
   directories, records compare warnings and prefill parity statuses, and keeps
   per-pack interpretation boundaries explicit.
+- Add a read-only report generator to reduce manual run-log/report assembly
+  after paired M4/M5 runs. **Landed 2026-05-03** as `benchpack report`, which
+  loads existing result directories, includes optional `hardware.json` host
+  identity, summarizes adapter/model/endpoint and scoring pass/fail counts, and
+  reuses compare helpers for medians, warnings, cache rows, and
+  `prefill parity`.
 
 Suggested implementation handoffs:
 
@@ -197,6 +206,9 @@ Suggested implementation handoffs:
 - Benchmark matrix / reporting polish slice: document the recommended matrix,
   compare commands, caveats, and result-reading guidance. **Landed 2026-05-03**
   as documentation only.
+- Reporting generator slice: produce pasteable Markdown from existing result
+  directories without writing artifacts or changing benchmark semantics.
+  **Landed 2026-05-03** as `benchpack report`.
 
 Validation:
 

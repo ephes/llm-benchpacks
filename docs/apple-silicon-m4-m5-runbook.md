@@ -273,6 +273,28 @@ uv run benchpack compare \
   results/<date>-m4-max-patch
 ```
 
+After checking individual comparisons, use `benchpack report` as the preferred
+way to assemble pasteable comparison notes. It reads the same `run.jsonl` rows
+as compare, includes optional `hardware.json` host identity, counts scoring
+passes/failures, and reuses compare's median, warning, cache-row, and
+`prefill parity` logic:
+
+```sh
+uv run benchpack report \
+  results/<date>-m5-max-runtime \
+  results/<date>-m4-max-runtime
+
+uv run benchpack report \
+  results/<date>-m5-max-smoke \
+  results/<date>-m4-max-smoke \
+  results/<date>-m5-max-runtime \
+  results/<date>-m4-max-runtime \
+  results/<date>-m5-max-wrap \
+  results/<date>-m4-max-wrap \
+  results/<date>-m5-max-patch \
+  results/<date>-m4-max-patch
+```
+
 `benchpack compare` reports both emitted `WARNING:` lines and a table
 `prefill parity` column. Treat both as part of result interpretation, but keep
 their meanings separate.
@@ -331,6 +353,12 @@ power mode, thermal state, and cache settings in run notes or curated
 Before treating M4/M5 output as comparable, create a short report or run note
 that separates host metadata captured by the runner from runtime details that
 must be captured manually.
+
+Start with `benchpack report` output for the relevant result directories, then
+add the manual runtime, model, operating-condition, and interpretation notes
+below. The report output should replace manual copying of medians from multiple
+`benchpack compare` invocations, but it does not infer runtime versions, server
+commands, checksums, power state, thermal state, or background load.
 
 Hardware identity from each result directory's `hardware.json`:
 

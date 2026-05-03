@@ -26,6 +26,7 @@ from .packs import (
     warmup_from_defaults,
 )
 from .patches import PatchError, capture_workspace_patch
+from .report import ReportError, load_report_runs, render_report
 from .results import RunReporter
 from .tasks import TaskError, TaskExecutionRequest, run_repo_task_executor
 from .verifiers import (
@@ -280,6 +281,15 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    try:
+        runs = load_report_runs(args.result_dirs)
+    except ReportError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(render_report(runs))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchpack")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -313,6 +323,16 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Result directories containing run.jsonl",
     )
+
+    report = sub.add_parser(
+        "report",
+        help="Render a read-only Markdown report from existing result directories",
+    )
+    report.add_argument(
+        "result_dirs",
+        nargs="+",
+        help="Result directories containing run.jsonl",
+    )
     return parser
 
 
@@ -323,6 +343,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_run(args)
     if args.command == "compare":
         return _cmd_compare(args)
+    if args.command == "report":
+        return _cmd_report(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

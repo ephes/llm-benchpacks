@@ -40,9 +40,10 @@ uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:lat
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
+uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
-Each invocation writes `results/<date>-<host-label>/` containing
+Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
 collision rules, and `uv run pytest` for the test suite.
@@ -70,6 +71,15 @@ prompt mismatch warning is meaningful, but the table does not add a second
 coverage column. Old rows may lack `tokens.prompt`, `tokens.cached_prompt`, or
 `timing.prefill_tps`, and missing values do not establish parity or prefill
 speed.
+
+`benchpack report` is also read-only and emits a pasteable Markdown report from
+existing result directories. It reads `run.jsonl` and optional `hardware.json`,
+then summarizes inputs, pack id/version, host identity when available,
+adapter/model/endpoint, row and `ok` counts, scoring pass/fail/unscored counts,
+and the same compare medians, cache rows, warnings, and `prefill parity`
+statuses used by `benchpack compare`. It is intended for assembling run notes
+and M4/M5 comparison reports without copying medians from several compare
+outputs by hand.
 
 Bundled packs:
 

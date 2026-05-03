@@ -144,28 +144,73 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
     return summaries
 
 
+def disambiguate_runs(runs: list[ResultRun]) -> list[ResultRun]:
+    """Return runs with stable labels when input basenames collide."""
+
+    return _disambiguate_labels(runs)
+
+
+def pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
+    """Return distinct pack id/version pairs present in loaded records."""
+
+    return _pack_versions(runs)
+
+
+def pack_warning_lines(runs: list[ResultRun]) -> list[str]:
+    """Return compare warning lines for pack id/version mismatches."""
+
+    version_set = pack_versions(runs)
+    if len(version_set) <= 1:
+        return []
+    rendered = ", ".join(
+        f"{pack_id} {version}" for pack_id, version in sorted(version_set)
+    )
+    return [
+        "WARNING: compared records use different pack ids or versions: "
+        f"{rendered}"
+    ]
+
+
+def cache_warnings(summaries: list[CaseSummary]) -> list[str]:
+    """Return compare warning lines for prompt/cache metadata issues."""
+
+    return _cache_warnings(summaries)
+
+
+def prefill_parity_statuses(summaries: list[CaseSummary]) -> dict[str, str]:
+    """Return case-level prefill parity statuses."""
+
+    return _prefill_parity_statuses(summaries)
+
+
+def format_float(value: float | None, digits: int) -> str:
+    """Format a nullable floating-point metric for compare-style tables."""
+
+    return _format_float(value, digits)
+
+
+def format_tokens(value: float | None) -> str:
+    """Format a nullable token metric for compare-style tables."""
+
+    return _format_tokens(value)
+
+
 def render_comparison(runs: list[ResultRun]) -> str:
     """Render a compact Markdown table comparing loaded result runs."""
 
-    runs = _disambiguate_labels(runs)
-    pack_versions = _pack_versions(runs)
+    runs = disambiguate_runs(runs)
+    pack_version_set = pack_versions(runs)
     lines: list[str] = ["# benchpack compare", "", "Inputs:"]
     for run in runs:
         row_word = "row" if len(run.records) == 1 else "rows"
         lines.append(f"- `{run.label}`: `{run.path}` ({len(run.records)} {row_word})")
     lines.append("")
 
-    if len(pack_versions) == 1:
-        pack_id, version = next(iter(pack_versions))
+    if len(pack_version_set) == 1:
+        pack_id, version = next(iter(pack_version_set))
         lines.append(f"Pack: `{pack_id}` version `{version}`")
     else:
-        rendered = ", ".join(
-            f"{pack_id} {version}" for pack_id, version in sorted(pack_versions)
-        )
-        lines.append(
-            "WARNING: compared records use different pack ids or versions: "
-            f"{rendered}"
-        )
+        lines.extend(pack_warning_lines(runs))
     lines.append("")
     lines.append(
         "Note: medians ignore null metric values."
@@ -183,11 +228,11 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines.append("")
 
     summaries = summarize_runs(runs)
-    prefill_parity_statuses = _prefill_parity_statuses(summaries)
-    cache_warnings = _cache_warnings(summaries)
-    for warning in cache_warnings:
+    prefill_statuses = prefill_parity_statuses(summaries)
+    warning_lines = cache_warnings(summaries)
+    for warning in warning_lines:
         lines.append(warning)
-    if cache_warnings:
+    if warning_lines:
         lines.append("")
 
     lines.append(
@@ -202,7 +247,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
         "-------------------|------------|----------------|"
     )
     for summary in summaries:
-        prefill_parity = prefill_parity_statuses[summary.case]
+        prefill_parity = prefill_statuses[summary.case]
         # Summary keeps the median; display is gated by case-level parity.
         prefill_tps = (
             _format_float(summary.prefill_tps, digits=2)

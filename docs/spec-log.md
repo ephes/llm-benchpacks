@@ -16,6 +16,38 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Apple Silicon comparison report generator)
+
+### Changed
+
+- Added `benchpack report`, a read-only Markdown report generator over existing
+  result directories.
+- The report command loads `run.jsonl` through the compare loader and optionally
+  reads sibling `hardware.json` for host identity fields. Missing
+  `hardware.json` is tolerated and reported explicitly.
+- Report output includes input directories, pack id/version, adapter/model/
+  endpoint values, row and `ok` counts, scoring pass/fail/unscored counts, and
+  compare medians for wall time, TTFT, prefill TPS, decode TPS, total TPS,
+  output tokens, prompt tokens, cached prompt tokens, cache rows, warnings, and
+  `prefill parity`.
+- The report median/parity section reuses compare summarization, warning, and
+  prefill-parity helpers so it does not diverge from `benchpack compare`.
+- Updated README, specification, architecture, Apple Silicon runbook, and
+  implementation plan for the new reporting workflow.
+- Kept the command read-only: no benchmark execution, adapter loading,
+  hardware collection, `raw/` reads, result artifact writes, result-directory
+  mutation, row schema changes, compare behavior changes, pack semantic
+  changes, or hardware collector changes were added.
+
+### Open Questions
+
+- Future reporting may need runtime metadata capture if manual server-command,
+  runtime-version, checksum, power, thermal, and background-load notes remain
+  error-prone.
+- Curated result subsets for live M4/M5 runs remain a separate decision; broad
+  generated `raw/`, `workspace/`, `patch/`, `task/`, and `verify/` artifacts
+  should still stay out of normal commits.
+
 ## 2026-05-03 (Apple Silicon comparison reporting polish)
 
 ### Changed

@@ -394,8 +394,8 @@ does not by itself prove that two compared runs used equivalent cache state.
 
 ## CLI
 
-The runner exposes subcommands for executing packs and comparing existing result
-directories.
+The runner exposes subcommands for executing packs, comparing existing result
+directories, and rendering read-only Markdown reports from existing results.
 
 ### `benchpack run`
 
@@ -538,6 +538,37 @@ durations.
 The 2026-04-29 `llama-server` runtime-sweep rows were warm-cache rows. Compare
 output must not be interpreted as cross-server cold prefill speed unless cache
 parity is established separately.
+
+### `benchpack report`
+
+```text
+benchpack report <result-dir> [<result-dir> ...]
+```
+
+`benchpack report` reads existing result directories and writes only Markdown to
+stdout. Each input must be a directory containing `run.jsonl`; when
+`hardware.json` is present beside it, the report includes host identity fields
+such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
+`hardware_model_identifier`, `ram_mb`, `os`, and `gpus`. Missing
+`hardware.json` is tolerated and reported explicitly.
+
+The report is meant to be pasted into run notes or used as a comparison-report
+skeleton. It summarizes:
+
+- input result directories and row counts
+- pack id/version values
+- adapter, model, and endpoint values from normalized rows
+- row and `ok` counts by run/case
+- scoring pass, fail, and unscored counts by run/case
+- the same median wall time, TTFT, prefill TPS, decode TPS, total TPS, output
+  tokens, prompt tokens, cached prompt tokens, cache rows, warnings, and
+  `prefill parity` statuses used by `benchpack compare`
+
+The report command is read-only: it does not execute packs, collect hardware,
+load adapters, read `raw/`, write result artifacts, mutate result directories,
+or change `benchpack compare` behavior. Its comparison section reuses the
+compare summarization and parity helpers so report medians and statuses do not
+silently diverge from `benchpack compare`.
 
 ## Result Artifacts
 

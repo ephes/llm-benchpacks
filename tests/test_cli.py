@@ -1881,3 +1881,39 @@ def test_cli_compare_rejects_single_result_dir(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="at least two result directories"):
         main(["compare", str(run_a)])
+
+
+def test_cli_report_prints_markdown_for_result_dirs(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a, wall_s=1.0)
+    _write_compare_run(run_b, wall_s=2.0)
+    (run_a / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas.local", "chip": "Apple M5 Max"}) + "\n"
+    )
+
+    assert main(["report", str(run_a), str(run_b)]) == 0
+
+    output = capsys.readouterr().out
+    assert "# benchpack report" in output
+    assert "## Run Metadata" in output
+    assert "hostname=atlas.local; chip=Apple M5 Max" in output
+    assert "## Case Outcomes" in output
+    assert "## Compare Medians" in output
+    assert (
+        "| run-a | short | 1 | 1 | 1.000 | 0.100 | — | 40.00 | 30.00 | "
+        "60 | 10 | — | 0/1 | cache-missing |"
+    ) in output
+
+
+def test_cli_report_rejects_missing_run_jsonl(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    run_b = tmp_path / "run-b"
+    run_b.mkdir()
+
+    with pytest.raises(SystemExit, match="missing run.jsonl"):
+        main(["report", str(run_a), str(run_b)])

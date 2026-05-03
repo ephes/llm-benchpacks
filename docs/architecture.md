@@ -12,8 +12,8 @@
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
 - **Reporter**: JSONL artifacts plus human-readable summaries.
-- **Compare utility**: read-only reporting over existing `run.jsonl` result
-  directories.
+- **Compare/report utilities**: read-only reporting over existing `run.jsonl`
+  result directories and optional per-run `hardware.json` files.
 
 Repo-task execution adds responsibilities around the existing concepts rather
 than changing the adapter boundary:
@@ -68,6 +68,7 @@ src/
     packs.py
     results.py
     compare.py
+    report.py
     hardware.py
 docs/
   specification.md
@@ -455,6 +456,24 @@ only after case and prompt parity hold. Missing case/run groups suppress
 prompt-token and cached-token median mismatch warnings for that case. Compare
 does not read `raw/` files or infer prompt/cache state from timing or prompt
 shape.
+
+## Report Flow
+
+`benchpack report` is also outside the execution flow. It reads existing result
+directories, loads `run.jsonl` through the same loader as compare, optionally
+reads sibling `hardware.json`, and writes Markdown to stdout only. Missing
+`hardware.json` is tolerated because older or pulled-back compare inputs may
+contain only `run.jsonl`.
+
+The report renderer is intended for run-log and comparison-note assembly. It
+summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
+identity when available, row and `ok` counts, and scoring pass/fail/unscored
+counts. Its compare-median section reuses the compare summarization,
+prompt/cache warning, and prefill-parity helpers so the report cannot silently
+disagree with `benchpack compare` on median values, cache rows, warnings, or
+`prefill parity` status. It does not load adapters, collect hardware, execute
+packs, read `raw/`, write result artifacts, mutate result directories, or alter
+the result schema.
 
 ## Spec And Log Management
 
