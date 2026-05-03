@@ -201,6 +201,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
                             repetition=repetition,
                             workspace=prepared_workspace.path,
                             model_output_text=result.output_text,
+                            harness_id=(
+                                case.harness.id if case.harness is not None else None
+                            ),
                         )
                     )
                     patch_metadata = capture_workspace_patch(

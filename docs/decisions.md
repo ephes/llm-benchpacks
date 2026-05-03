@@ -316,23 +316,28 @@ schema prematurely.
 
 ## D-023: Public Repo-Task Harness Selection Must Be Explicit
 
-Future public repo-task harness selection should use an explicit case-local
-manifest table, shaped as `harness = { id = "..." }` on `repo-task` cases. The
-field is documentation-only until a later implementation adds manifest parsing
-and executor selection. When the field is absent, current compatibility
-behavior remains the fenced model-output `diff`/`patch` executor. Selection
-must not be inferred from model names, adapters, endpoints, fixture shape,
-verifier choice, host environment, or pack id. Public harness selection must
-not change normal adapter request/result schemas by default, and existing task
-log artifact paths remain `task/<case-id>/rep-NNN.stdout.log` and
-`task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
-them deliberately. Patch capture still happens after the selected task phase,
-verifier execution still happens after patch capture, repo-task warmups remain
-rejected, and this design slice adds no result row fields.
+Public repo-task harness selection uses an explicit case-local manifest table,
+shaped as `harness = { id = "..." }` on `repo-task` cases. The only implemented
+public id is currently `fenced-patch`, and it routes to the existing fenced
+model-output `diff`/`patch` executor. When the field is absent, current
+compatibility behavior remains the same fenced executor. Selection must not be
+inferred from model names, adapters, endpoints, fixture shape, verifier choice,
+host environment, or pack id. The manifest loader rejects `harness` on
+non-`repo-task` cases, unknown ids, missing or non-string ids, non-table
+`harness` values, and unexpected keys. Public harness selection does not change
+normal adapter request/result schemas, raw request/response paths, result row
+shapes, or task log artifact paths. Task logs remain
+`task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log`. Patch capture still happens after the
+selected task phase, verifier execution still happens after patch capture,
+repo-task warmups remain rejected, and this narrow implementation adds no
+result row fields. Production external coding-agent integration, task
+environment, task timeout, workspace retention, richer status/reporting, and
+pack-level harness defaults remain future work.
 
 Reason: public harness selection crosses manifest compatibility, executor
 dispatch, task logs, status reporting, timeout and environment policy,
-workspace retention, and external coding-agent integration. Naming the future
-field while keeping implementation out of this slice lets the runner preserve
-current CLI behavior and result compatibility until those adjacent contracts
-are designed and tested.
+workspace retention, and external coding-agent integration. Implementing only
+the compatibility `fenced-patch` id proves the public boundary while preserving
+current CLI behavior and result compatibility until those adjacent contracts are
+designed and tested.

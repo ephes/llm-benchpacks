@@ -14,6 +14,7 @@ from benchpack.packs import (
     InvalidDefaultError,
     InvalidFixtureError,
     InvalidFixtureRefError,
+    InvalidHarnessError,
     InvalidIdError,
     InvalidPromptSourceError,
     PackError,
@@ -311,6 +312,150 @@ prompt = "x"
 
     assert pack.fixtures == []
     assert pack.cases[0].fixture_refs == []
+    assert pack.cases[0].harness is None
+
+
+def test_load_pack_parses_repo_task_fenced_patch_harness(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "harnesspack"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = "fenced-patch" }
+""",
+    )
+
+    case = load_pack(pack_dir).cases[0]
+
+    assert case.harness is not None
+    assert case.harness.id == "fenced-patch"
+    assert case.raw["harness"] == {"id": "fenced-patch"}
+
+
+def test_load_pack_rejects_unknown_harness_id(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "unknownharness"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = "external-agent" }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="unknown harness id"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_harness_missing_id(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "missingharnessid"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = {}
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="missing 'id'"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_string_harness_id(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "nonstringharnessid"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = 123 }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="harness.id must be a string"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_non_table_harness(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "nontableharness"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = "fenced-patch"
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="harness must be a table"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_extra_harness_keys(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "extraharnesskeys"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = { id = "fenced-patch", timeout_s = 30 }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="unsupported keys"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_harness_on_non_repo_task_case(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "chatharness"
+version = "0.1.0"
+
+[[cases]]
+id = "capital"
+kind = "chat"
+prompt = "What is the capital of France?"
+harness = { id = "fenced-patch" }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="only supported for repo-task"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_rejects_non_list_fixture_refs(tmp_path: Path) -> None:

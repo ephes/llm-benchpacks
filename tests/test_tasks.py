@@ -374,6 +374,96 @@ def test_run_repo_task_executor_runs_fenced_model_output_patch_executor(
     assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
 
 
+def test_run_repo_task_executor_explicit_fenced_patch_uses_default_executor(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text=(
+                "```patch\n"
+                "--- a/README.md\n"
+                "+++ b/README.md\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+                "```\n"
+            ),
+            harness_id="fenced-patch",
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "new\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_run_repo_task_executor_rejects_unknown_harness_before_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(TaskError, match="unknown repo-task harness id"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                harness_id="external-agent",
+            )
+        )
+
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_rejects_public_and_internal_harness_combination(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    called = False
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        nonlocal called
+        called = True
+        return AgentSessionHarnessResult(stdout="unexpected\n")
+
+    with pytest.raises(TaskError, match="cannot be combined"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                harness_id="fenced-patch",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert called is False
+    assert not (out / "task").exists()
+
+
 def test_run_repo_task_executor_internal_harness_mutation_reaches_patch_and_verifier(
     tmp_path: Path,
 ) -> None:

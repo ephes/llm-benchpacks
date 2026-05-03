@@ -30,6 +30,8 @@ KNOWN_SCORING_MODES = frozenset(
         "llm-judge",
     }
 )
+PUBLIC_HARNESS_FENCED_PATCH = "fenced-patch"
+KNOWN_PUBLIC_HARNESS_IDS = frozenset({PUBLIC_HARNESS_FENCED_PATCH})
 
 
 class PackError(Exception):
@@ -68,6 +70,10 @@ class InvalidFixtureRefError(PackError):
     """Raised when a case fixture reference is invalid."""
 
 
+class InvalidHarnessError(PackError):
+    """Raised when a case harness declaration is invalid."""
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.match(value):
         raise InvalidIdError(
@@ -89,6 +95,11 @@ class Scoring:
 
 
 @dataclass(frozen=True)
+class HarnessSelection:
+    id: str
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     kind: str
@@ -96,6 +107,7 @@ class Case:
     scoring: Scoring | None
     raw: dict[str, Any]
     fixture_refs: list[str] = field(default_factory=list)
+    harness: HarnessSelection | None = None
 
 
 @dataclass(frozen=True)
@@ -427,6 +439,48 @@ def _fixture_refs_from_case_entry(
     return fixture_refs
 
 
+def _harness_from_case_entry(
+    entry: dict[str, Any],
+    *,
+    case_id: str,
+    case_kind: str,
+) -> HarnessSelection | None:
+    if "harness" not in entry:
+        return None
+
+    if case_kind != "repo-task":
+        raise InvalidHarnessError(
+            f"case {case_id!r} harness is only supported for repo-task cases; "
+            f"case kind is {case_kind!r}"
+        )
+
+    raw_harness = entry["harness"]
+    if not isinstance(raw_harness, dict):
+        raise InvalidHarnessError(f"case {case_id!r} harness must be a table")
+
+    if "id" not in raw_harness:
+        raise InvalidHarnessError(f"case {case_id!r} harness missing 'id'")
+
+    extra_keys = sorted(set(raw_harness) - {"id"})
+    if extra_keys:
+        raise InvalidHarnessError(
+            f"case {case_id!r} harness has unsupported keys {extra_keys!r}; "
+            "expected only 'id'"
+        )
+
+    harness_id = raw_harness["id"]
+    if not isinstance(harness_id, str):
+        raise InvalidHarnessError(f"case {case_id!r} harness.id must be a string")
+
+    if harness_id not in KNOWN_PUBLIC_HARNESS_IDS:
+        raise InvalidHarnessError(
+            f"case {case_id!r} unknown harness id {harness_id!r}; expected one "
+            f"of {sorted(KNOWN_PUBLIC_HARNESS_IDS)}"
+        )
+
+    return HarnessSelection(id=harness_id)
+
+
 def _append_referenced_file_fixtures(
     prompt: str,
     *,
@@ -491,6 +545,7 @@ def load_pack(path: Path | str) -> Pack:
     seen: set[str] = set()
     for entry in raw_cases:
         case_id = _validate_id(entry.get("id"), "case")
+        case_kind = entry.get("kind", "chat")
         if case_id in seen:
             raise DuplicateCaseIdError(
                 f"duplicate case id {case_id!r} in pack {pack_id!r}"
@@ -513,13 +568,19 @@ def load_pack(path: Path | str) -> Pack:
                 fixtures_by_id=fixtures_by_id,
                 case_id=case_id,
             )
+        harness = _harness_from_case_entry(
+            entry,
+            case_id=case_id,
+            case_kind=case_kind,
+        )
         cases.append(
             Case(
                 id=case_id,
-                kind=entry.get("kind", "chat"),
+                kind=case_kind,
                 prompt=prompt,
                 scoring=_scoring_from_dict(entry.get("scoring")),
                 raw=dict(entry),
+                harness=harness,
                 fixture_refs=fixture_refs,
             )
         )

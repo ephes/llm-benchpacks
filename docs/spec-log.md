@@ -16,6 +16,40 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 public fenced-patch harness selection)
+
+### Changed
+
+- Added typed manifest parsing for case-local
+  `harness = { id = "fenced-patch" }` on `repo-task` cases.
+- The only implemented public harness id is `fenced-patch`; malformed harness
+  tables, unknown ids, extra keys, and harness declarations on non-`repo-task`
+  cases are rejected at manifest load time.
+- CLI repo-task runs now pass the parsed public harness id into the task
+  executor. Explicit `fenced-patch` and absent `harness` both route to the
+  existing fenced model-output `diff`/`patch` executor.
+- The task executor rejects unknown public harness ids if they somehow reach
+  that layer, and rejects ambiguous direct calls that combine public
+  `harness_id` with the internal runner-side `agent_session_harness`.
+- Adapter request/result schemas, raw request/response paths, `run.jsonl` row
+  shapes, task stdout/stderr paths, patch capture after the task phase,
+  verifier execution after patch capture, repo-task warmup rejection, bundled
+  `patch-from-failure` behavior, and chat behavior remain unchanged except for
+  clear validation when chat cases declare `harness`.
+- No CLI flags, production external coding-agent integration, manifest task
+  commands, task environment, task timeout, workspace retention, richer task
+  status/reporting, pack-level harness defaults, repo-task warmups, or new
+  result fields were added.
+
+### Open Questions
+
+- Future slices still need production external coding-agent integration, richer
+  task status/reporting if needed, repo-task warmup support, workspace
+  cleanup/retention options, task environment support, task timeout support,
+  source fixture metadata if later needed, recursive directory deletion if
+  later needed, pack-level harness defaults if later needed, and larger bundled
+  repo-task conversion.
+
 ## 2026-05-03 (Phase 3 internal harness workspace file delete helper)
 
 ### Changed

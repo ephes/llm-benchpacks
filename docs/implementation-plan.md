@@ -209,7 +209,11 @@ implementation: future repo-task cases may explicitly declare
 `harness = { id = "..." }`, absence keeps the current fenced `diff`/`patch`
 executor default, and public selection must not change adapter schemas, result
 row shapes, raw artifact paths, task log paths, patch/verifier ordering, or
-repo-task warmup rejection by default.
+repo-task warmup rejection by default. Narrow public manifest parsing and
+executor routing for `harness = { id = "fenced-patch" }` landed 2026-05-03:
+the loader accepts only that public id on `repo-task` cases, the CLI routes it
+to the existing fenced model-output `diff`/`patch` executor, absence preserves
+the same default, and external coding-agent harnesses remain future work.
 
 Scope:
 
@@ -346,6 +350,16 @@ Scope:
   row shapes, task log paths, raw artifact paths, patch capture ordering,
   verifier ordering, and repo-task warmup rejection remain unchanged in this
   slice.
+- Implement narrow public `fenced-patch` harness selection. **Landed
+  2026-05-03** for `repo-task` cases only: manifests may declare
+  `harness = { id = "fenced-patch" }`, the loader rejects malformed harness
+  tables, unknown ids, extra keys, and harness declarations on non-`repo-task`
+  cases, and the CLI routes explicit `fenced-patch` to the existing fenced
+  model-output `diff`/`patch` executor. Absence keeps the same default fenced
+  executor. No CLI flags, adapter schema changes, raw path changes, task log
+  path changes, row-shape changes, task commands, task environment, task
+  timeout, workspace retention, repo-task warmups, pack-level harness defaults,
+  or external coding-agent integration were added.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -354,9 +368,9 @@ Scope:
   workspace.
 - Integrate a production agent-session harness after disposable workspace,
   verifier, and patch artifacts exist. **Partially landed 2026-05-03** as an
-  internal executor path for runner-side callers only plus a docs-first public
-  selection contract. Actual public manifest parsing, CLI behavior, external
-  coding-agent integration, and richer harness configuration remain planned
+  internal executor path for runner-side callers only plus public
+  `fenced-patch` selection for the existing compatibility executor. External
+  coding-agent integration and richer harness configuration remain planned
   later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**

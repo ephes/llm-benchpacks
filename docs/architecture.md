@@ -24,10 +24,13 @@ than changing the adapter boundary:
 - **Task executor or agent harness**: runner-side component that applies model
   or agent actions inside the prepared workspace. The current CLI default
   applies only the first fenced `diff` or `patch` block from model output as a
-  unified diff. A minimal internal agent-session harness path also exists
-  behind this boundary for runner-side callers and tests, without manifest or
-  CLI selection. Its runner-side request carries the prepared workspace path,
-  case metadata, model output text, the run output directory, measured
+  unified diff. A repo-task case may now explicitly declare
+  `harness = { id = "fenced-patch" }` to select that same public compatibility
+  executor; absence keeps the same default. A minimal internal agent-session
+  harness path also exists behind this boundary for runner-side callers and
+  tests, without manifest or CLI selection. Its runner-side request carries the
+  prepared workspace path, case metadata, model output text, the run output
+  directory, measured
   repetition, deterministic task log paths, and validated workspace-relative
   helpers for listing regular files and directories, checking file existence,
   reading or writing UTF-8 text, and deleting files; richer future harnesses
@@ -35,12 +38,11 @@ than changing the adapter boundary:
   harness-owned model calls.
   The harness may inspect and mutate only the prepared workspace and may write
   only the existing task logs under the run output directory; it must preserve
-  pack fixtures, prompts, verifier scripts, and source docs. Harness selection
-  and configuration are not manifest or CLI surfaces yet. A future public
-  manifest selection contract should be explicit, case-local, and keyed by a
-  small `harness = { id = "..." }` table for `repo-task` cases; absence keeps
-  the current fenced `diff`/`patch` executor default rather than inferring an
-  external harness.
+  pack fixtures, prompts, verifier scripts, and source docs. The only public
+  manifest harness id currently implemented is `fenced-patch`; unknown ids and
+  harness declarations on non-`repo-task` cases are rejected. External
+  coding-agent harnesses, task environment, task timeout, retention, richer
+  status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -102,11 +104,12 @@ results/
    loaded pack defaults are not mutated.
 8. Persist raw requests and responses for warmups and measured executions.
 9. For measured `repo-task` executions only, invoke the internal task executor
-   boundary. Current CLI runs use the default executor, which extracts the
-   first fenced `diff` or `patch` block from model output, applies it as a
-   unified diff in the prepared workspace, and writes deterministic task
-   stdout/stderr logs. Missing or unapplicable patches are logged and do not
-   crash the benchmark row. Runner-side code can supply an internal
+   boundary. Current CLI runs use the default executor, or the same executor
+   when the case explicitly declares `harness = { id = "fenced-patch" }`. That
+   executor extracts the first fenced `diff` or `patch` block from model output,
+   applies it as a unified diff in the prepared workspace, and writes
+   deterministic task stdout/stderr logs. Missing or unapplicable patches are
+   logged and do not crash the benchmark row. Runner-side code can supply an internal
    agent-session harness behind this same boundary without changing the adapter
    request shape or public result row shape by default.
 10. Apply implemented deterministic scoring for measured executions when the
@@ -215,18 +218,20 @@ extraction/application phase for current CLI runs, or an internal harness phase
 when runner-side code supplies one. A later full agent harness may replace or
 extend that phase without changing the adapter or reporter boundaries.
 
-Future public harness selection is a manifest-format concern, not an adapter
-concern. The planned design is an explicit `harness = { id = "..." }` table on
-`repo-task` cases. The initial public id should preserve the current
-compatibility behavior, for example `fenced-patch`; external coding-agent ids
-remain later work. Selection must not be inferred from model names, adapters,
-endpoints, fixture shape, verifier choice, or host environment. It must also
-leave raw request/response paths, task log paths, patch capture after the task
-phase, verifier execution after patch capture, and existing measured row shapes
-unchanged unless a later schema slice deliberately changes them. Task
-environment, task timeout, retention, richer task status/reporting, pack-level
-harness defaults, and repo-task warmups remain separate future design and
-implementation slices.
+Public harness selection is a manifest-format concern, not an adapter concern.
+The implemented public shape is an explicit `harness = { id = "fenced-patch" }`
+table on `repo-task` cases. That id preserves the current compatibility
+behavior by routing to the existing fenced `diff`/`patch` executor. When the
+field is absent, the same fenced executor remains the default. Selection is not
+inferred from model names, adapters, endpoints, fixture shape, verifier choice,
+host environment, or pack id. Unknown ids are rejected by the manifest loader
+and again at the task-executor boundary if they somehow reach it. This selection
+leaves adapter request/result schemas, raw request/response paths, task log
+paths, patch capture after the task phase, verifier execution after patch
+capture, and existing measured row shapes unchanged. External coding-agent
+integration, task environment, task timeout, retention, richer task
+status/reporting, pack-level harness defaults, and repo-task warmups remain
+separate future design and implementation slices.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final

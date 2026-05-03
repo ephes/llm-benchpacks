@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
 
-from .packs import Case
+from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
 
 
 class TaskError(ValueError):
@@ -173,6 +173,7 @@ class TaskExecutionRequest:
     repetition: int
     workspace: Path
     model_output_text: str
+    harness_id: str | None = None
     agent_session_harness: AgentSessionHarness | None = None
 
 
@@ -258,12 +259,21 @@ def run_model_patch_task(
 def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
     """Execute the current internal repo-task task phase.
 
-    The default executor is the fenced model-output patch bridge. An internal
-    agent-session harness can be supplied by runner-side tests or future
-    implementation code; executor selection is intentionally not a manifest or
-    CLI surface.
+    The default executor is the fenced model-output patch bridge. Public
+    ``harness_id`` selection currently accepts only ``"fenced-patch"`` and
+    routes to that same executor. An internal agent-session harness can still
+    be supplied by runner-side tests or future implementation code.
     """
 
+    if request.harness_id is not None and request.agent_session_harness is not None:
+        raise TaskError(
+            "public harness_id cannot be combined with internal "
+            "agent_session_harness"
+        )
+    if request.harness_id is not None:
+        if request.harness_id != PUBLIC_HARNESS_FENCED_PATCH:
+            raise TaskError(f"unknown repo-task harness id {request.harness_id!r}")
+        return _run_fenced_model_patch_executor(request)
     if request.agent_session_harness is not None:
         return _run_agent_session_harness_executor(
             request,

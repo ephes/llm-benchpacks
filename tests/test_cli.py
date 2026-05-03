@@ -25,6 +25,7 @@ from benchpack.adapters.openai_chat import (
     OPENAI_STREAM_USAGE_OMIT,
 )
 from benchpack.cli import main
+from benchpack.packs import InvalidHarnessError
 
 
 NO_PATCH_TASK_STDERR = (
@@ -271,6 +272,7 @@ def _write_repo_task_pack(
     fixture_entries: str | None = None,
     fixture_refs: str = '["repo"]',
     case_kind: str = "repo-task",
+    case_extra: str = "",
     scoring: str | None = None,
 ) -> Path:
     pack_dir = tmp_path / "benchpacks" / "smoke-chat"
@@ -313,6 +315,7 @@ id = "edit-repo"
 kind = "{case_kind}"
 prompt = "Change the repository."
 fixture_refs = {fixture_refs}
+{case_extra}
 
 {scoring}
 """
@@ -511,6 +514,81 @@ def test_cli_repo_task_applies_fenced_diff_before_patch_capture(
         "+patched repo\n"
     )
     assert "artifacts" not in record
+
+
+def test_cli_repo_task_explicit_fenced_patch_harness_matches_default_shape(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """Applied change.
+
+```diff
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-source repo
++patched repo
+```
+"""
+    _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra='harness = { id = "fenced-patch" }',
+        scoring='[scoring]\nmode = "none"\n',
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert "verify" not in record
+    assert "repo_task" not in record
+    assert "artifacts" not in record
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+patched repo\n"
+    )
+
+
+def test_cli_invalid_harness_manifest_fails_before_execution(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "unused")
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra='harness = { id = "external-agent" }',
+    )
+    out = tmp_path / "run"
+
+    with pytest.raises(InvalidHarnessError, match="external-agent"):
+        main(_argv(["--out", str(out)]))
+
+    assert calls == []
+    assert not out.exists()
 
 
 def test_cli_repo_task_verify_script_observes_applied_diff(

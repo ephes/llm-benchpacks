@@ -82,9 +82,11 @@ measurement, not model-quality comparison.
 `repo-task` is the case kind for coding-agent-shaped workloads that must change
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
-workspaces for measured executions, runs the task phase through a narrow
-internal executor boundary whose default CLI implementation applies model
-output through a fenced unified-diff contract, captures deterministic patch
+workspaces for measured executions, parses an optional case-local public
+`harness = { id = "fenced-patch" }` selection for `repo-task` cases, runs the
+task phase through a narrow internal executor boundary whose default CLI
+implementation applies model output through a fenced unified-diff contract,
+captures deterministic patch
 artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
 log artifacts for that task phase, and executes `verify-script` scoring against
@@ -151,12 +153,12 @@ that deliberately. Patch capture still happens after task execution, so
 executor/harness phase. Verifier execution still happens after patch capture.
 Runner failures, such as an unreadable workspace or unwritable task log, remain
 distinct from task outcomes, such as a model or harness failing to produce a
-useful change; this docs slice does not add task status fields to express that
-distinction.
+useful change; this narrow implementation does not add task status fields to
+express that distinction.
 
-Public repo-task harness selection is a future manifest contract, not current
-behavior. The planned public shape is an explicit case-local table on
-`repo-task` cases:
+Public repo-task harness selection is implemented only for the compatibility
+executor. The public shape is an explicit case-local table on `repo-task`
+cases:
 
 ```toml
 [[cases]]
@@ -165,20 +167,23 @@ kind = "repo-task"
 harness = { id = "fenced-patch" }
 ```
 
-If implemented later, `harness.id` will name a runner-known harness. Absence of
-the field must not infer an external harness; the compatibility default remains
-the current fenced `diff`/`patch` executor. Public harness selection must not
-change adapter request or adapter result schemas by default, and existing
+`harness.id` names a runner-known public harness. The only implemented public
+id is currently `fenced-patch`, and it routes to the same fenced `diff`/`patch`
+executor used when `harness` is absent. Absence of the field does not infer an
+external harness; the compatibility default remains the current fenced
+executor. The loader rejects `harness` on non-`repo-task` cases, unknown ids,
+missing or non-string `id` values, non-table `harness` values, and unexpected
+extra keys. Public harness selection does not change adapter request or adapter
+result schemas, existing raw request/response paths, existing `run.jsonl` row
+shapes, or existing task log paths. Task logs remain
 `task/<case-id>/rep-NNN.stdout.log` and
-`task/<case-id>/rep-NNN.stderr.log` remain the task-phase artifact paths unless
-a later result-schema slice deliberately changes them. Task environment
-configuration, task timeout configuration, workspace retention, richer
-status/reporting, pack-level harness defaults, and production external
-coding-agent integration remain explicit future slices rather than implicit
-support in the selection field. Repo-task warmups remain rejected. Patch
-capture still reflects the post-task workspace, verifier execution still runs
-after patch capture, and this docs-first contract adds no new `run.jsonl` row
-fields.
+`task/<case-id>/rep-NNN.stderr.log`. Task environment configuration, task
+timeout configuration, workspace retention, richer status/reporting,
+pack-level harness defaults, and production external coding-agent integration
+remain explicit future slices rather than implicit support in the selection
+field. Repo-task warmups remain rejected. Patch capture still reflects the
+post-task workspace, verifier execution still runs after patch capture, and
+this narrow public selection adds no new `run.jsonl` row fields.
 
 Repo-task cases use `kind = "repo"` directory fixtures as immutable source
 repository snapshots:
@@ -227,7 +232,8 @@ Current repo-task artifacts include:
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr
 
-The current default task executor extracts the first fenced code block whose
+The current default task executor, also selected explicitly by
+`harness = { id = "fenced-patch" }`, extracts the first fenced code block whose
 info string is exactly `diff` or `patch` from the adapter output. That block
 content is treated as a unified diff and applied inside the prepared workspace
 after the adapter call and before patch capture. Non-matching fenced blocks are
