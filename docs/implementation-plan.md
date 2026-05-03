@@ -190,7 +190,12 @@ defaults, adapter schemas, and result row shapes unchanged. A narrow internal
 read-helper slice landed 2026-05-03 on the same request shape, giving harnesses
 a validated workspace-relative UTF-8 text read helper alongside the existing
 write helper without adding public harness selection or changing adapter/result
-schemas.
+schemas. Internal workspace discovery helpers landed 2026-05-03: runner-side
+harnesses can list deterministic sorted workspace-relative POSIX file paths and
+check whether candidate regular files exist, still without public harness
+selection, CLI flags, manifest fields, or adapter/result schema changes.
+Symlinks to regular files are treated as file entries only when their targets
+resolve inside the prepared workspace.
 
 Scope:
 
@@ -298,6 +303,13 @@ Scope:
   files through the same path safety boundary used for workspace writes, while
   unsafe or unreadable paths remain runner failures before task logs are
   recorded.
+- Add internal workspace discovery helpers to `AgentSessionHarnessRequest`.
+  **Landed 2026-05-03** without adding manifest or CLI selection:
+  `list_workspace_paths()` returns sorted POSIX regular-file paths under the
+  prepared workspace, including files created earlier in the same harness
+  invocation and in-workspace symlinks to regular files, and
+  `workspace_file_exists(relative_path)` checks candidate files through the same
+  path safety boundary as workspace reads and writes.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

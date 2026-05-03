@@ -16,6 +16,42 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Phase 3 internal harness workspace discovery helpers)
+
+### Changed
+
+- Added `AgentSessionHarnessRequest.list_workspace_paths()` for runner-side
+  internal harnesses.
+- The listing helper returns deterministic sorted POSIX workspace-relative
+  paths for regular files only, excludes directories, and observes files
+  created earlier in the same harness invocation.
+- Symlinks to regular files are listed only when their target resolves inside
+  the prepared workspace.
+- Added `AgentSessionHarnessRequest.workspace_file_exists(relative_path)` for
+  runner-side internal harnesses.
+- The existence helper uses the same validated workspace-relative path boundary
+  as the existing read/write helpers, returns true only for existing regular
+  files including in-workspace symlinks to regular files, and returns false for
+  missing paths and directories.
+- Unsafe existence-check paths raise `TaskError` before task stdout/stderr logs
+  are recorded, matching existing unsafe read/write helper behavior.
+- Focused tests now prove deterministic listing, POSIX nested paths,
+  same-invocation created files, directory exclusion, file-existence checks,
+  unsafe existence rejection, and a list/exists/read/write harness flow.
+- No manifest harness selection, CLI task flags, adapter schema changes, result
+  row fields, raw artifact path changes, task log path changes, task timeout or
+  environment support, repo-task warmups, workspace retention options, source
+  fixture metadata on the harness request, or production external coding-agent
+  integration were added.
+
+### Open Questions
+
+- Future slices still need public harness selection if needed, production
+  external coding-agent integration, richer task status/reporting if needed,
+  repo-task warmup support, cleanup and retention options, task environment
+  support if needed, task timeout support if needed, source fixture metadata if
+  later needed, and larger bundled repo-task conversion.
+
 ## 2026-05-03 (Phase 3 internal harness workspace read helper)
 
 ### Changed

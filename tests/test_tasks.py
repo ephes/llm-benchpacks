@@ -767,6 +767,117 @@ with open(args.output, "w", encoding="utf-8") as fh:
     }
 
 
+def test_run_repo_task_executor_internal_harness_workspace_discovery_flow(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "src").mkdir()
+    (workspace / "docs").mkdir()
+    (workspace / "empty").mkdir()
+    (workspace / "zeta.txt").write_text("zeta\n", encoding="utf-8")
+    (workspace / "src" / "app.py").write_text("print('old')\n", encoding="utf-8")
+    (workspace / "docs" / "guide.md").write_text("guide\n", encoding="utf-8")
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.list_workspace_paths() == (
+            "docs/guide.md",
+            "src/app.py",
+            "zeta.txt",
+        )
+        assert request.workspace_file_exists("src/app.py") is True
+        assert request.workspace_file_exists("src") is False
+        assert request.workspace_file_exists("missing.txt") is False
+        assert request.read_workspace_text("docs/guide.md") == "guide\n"
+
+        request.write_workspace_text("docs/created.txt", "created\n")
+        request.write_workspace_text("a/new.txt", "new\n")
+        if request.workspace_file_exists("a/new.txt"):
+            request.write_workspace_text(
+                "src/app.py",
+                request.read_workspace_text("src/app.py").replace("old", "new"),
+            )
+
+        assert request.list_workspace_paths() == (
+            "a/new.txt",
+            "docs/created.txt",
+            "docs/guide.md",
+            "src/app.py",
+            "zeta.txt",
+        )
+        return AgentSessionHarnessResult(stdout="discovered\n", stderr="")
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (workspace / "src" / "app.py").read_text(encoding="utf-8") == (
+        "print('new')\n"
+    )
+    assert (workspace / "docs" / "created.txt").read_text(encoding="utf-8") == (
+        "created\n"
+    )
+    assert (workspace / "a" / "new.txt").read_text(encoding="utf-8") == "new\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "discovered\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_run_repo_task_executor_internal_harness_workspace_discovery_symlinks(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    (workspace / "target.txt").write_text("target\n", encoding="utf-8")
+    outside.write_text("outside\n", encoding="utf-8")
+    try:
+        (workspace / "inside-link.txt").symlink_to("target.txt")
+        (workspace / "outside-link.txt").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        assert request.list_workspace_paths() == (
+            "inside-link.txt",
+            "target.txt",
+        )
+        assert request.workspace_file_exists("inside-link.txt") is True
+        with pytest.raises(TaskError, match="unsafe harness workspace path"):
+            request.workspace_file_exists("outside-link.txt")
+        return AgentSessionHarnessResult()
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            agent_session_harness=harness,
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+
+
 @pytest.mark.parametrize("relative_path", ["../outside.txt", "/tmp/outside.txt"])
 def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_read(
     tmp_path: Path,
@@ -779,6 +890,34 @@ def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_read(
 
     def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
         request.read_workspace_text(relative_path)
+        return AgentSessionHarnessResult()
+
+    with pytest.raises(TaskError, match="unsafe harness workspace path"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+            )
+        )
+
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
+@pytest.mark.parametrize("relative_path", ["../outside.txt", "/tmp/outside.txt"])
+def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_exists(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        request.workspace_file_exists(relative_path)
         return AgentSessionHarnessResult()
 
     with pytest.raises(TaskError, match="unsafe harness workspace path"):

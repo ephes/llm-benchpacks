@@ -337,10 +337,18 @@ are narrow enough to test.
 Agent-session harness inputs are runner-side concerns, not manifest syntax in
 this slice. The current internal harness path may use the prepared workspace,
 case metadata, model output text, output directory, repetition, and
-deterministic task log paths internally; future harnesses may add pack metadata
-and model/adapter/endpoint/default context. Pack authors should not rely on
-manifest-declared shell commands, task environment, task timeouts, harness
-selection, or workspace retention because none of those fields exist yet.
+deterministic task log paths internally, plus validated helpers to list
+workspace file paths, check workspace file existence, and read or write UTF-8
+workspace text. File listings include regular files only, use sorted POSIX
+workspace-relative paths, and observe files created earlier in the same harness
+invocation. Symlinks to regular files are listed only when their target resolves
+inside the prepared workspace. File existence checks return true only for
+existing regular files, including in-workspace symlinks to regular files, while
+missing paths and directories return false. Future harnesses may add pack
+metadata and model/adapter/endpoint/default context. Pack authors should not
+rely on manifest-declared shell commands, task environment, task timeouts,
+harness selection, or workspace retention because none of those fields exist
+yet.
 
 Directory fixture semantics for repo-task cases:
 
@@ -360,9 +368,10 @@ Directory fixture semantics for repo-task cases:
   fixtures, prompts, verify scripts, and other source artifacts remain
   read-only by contract.
 - The internal agent-session harness path follows the same write boundary: it
-  may mutate the prepared workspace and write the existing task logs under the
-  run output directory, but must not mutate pack-owned fixtures, prompts,
-  verifier scripts, source docs, or public adapter/result schemas by default.
+  may inspect and mutate the prepared workspace through validated runner-owned
+  helpers and write the existing task logs under the run output directory, but
+  must not mutate pack-owned fixtures, prompts, verifier scripts, source docs,
+  or public adapter/result schemas by default.
 - The current CLI mutation source is narrow and model-output-only: after the
   adapter call, the runner invokes the default internal task executor. It
   extracts the first fenced code block whose info string is exactly `diff` or

@@ -68,6 +68,38 @@ class AgentSessionHarnessRequest:
                 f"for repo-task case {self.case.id!r}"
             ) from exc
 
+    def list_workspace_paths(self) -> tuple[str, ...]:
+        """Return sorted POSIX file paths below the prepared workspace."""
+
+        workspace_root = self.workspace.resolve(strict=False)
+        try:
+            if not workspace_root.is_dir():
+                raise OSError(f"workspace is not a directory: {workspace_root}")
+            paths = [
+                child.relative_to(workspace_root).as_posix()
+                for child in workspace_root.rglob("*")
+                if child.is_file()
+                and child.resolve(strict=False).is_relative_to(workspace_root)
+            ]
+        except OSError as exc:
+            raise TaskError(
+                f"could not list harness workspace files for repo-task case "
+                f"{self.case.id!r}"
+            ) from exc
+        return tuple(sorted(paths))
+
+    def workspace_file_exists(self, relative_path: str) -> bool:
+        """Return whether a regular file exists below the prepared workspace."""
+
+        path = self.workspace_path(relative_path)
+        try:
+            return path.is_file()
+        except OSError as exc:
+            raise TaskError(
+                f"could not inspect harness workspace file {relative_path!r} "
+                f"for repo-task case {self.case.id!r}"
+            ) from exc
+
     def write_workspace_text(self, relative_path: str, content: str) -> None:
         """Write UTF-8 text below the prepared workspace only."""
 
