@@ -162,10 +162,15 @@ Scope:
   options, context/cache settings, power mode, thermal state, and background
   load. **Landed 2026-05-03** in the runbook. Treat M4-vs-M5 conclusions as
   invalid when those are not aligned or clearly documented.
-- Audit Apple Silicon hardware/runtime metadata. Confirm `hardware.json`
-  captures enough chip, memory, OS, GPU, and runtime context for M4/M5
-  comparison; add narrow metadata improvements only if the current output is
-  insufficient.
+- Audit Apple Silicon hardware/runtime metadata. **Landed 2026-05-03** as a
+  narrow `hardware.json` host-metadata improvement: Darwin collection now
+  records optional `hardware_model`, `hardware_model_name`, and
+  `hardware_model_identifier` fields when macOS reports them, and uses
+  `SPHardwareDataType` as a fallback for chip, core count, and memory when
+  `sysctl` output is generic or unavailable. The audit confirmed that runtime
+  versions, server command, model checksum, quantization, context size,
+  power/thermal state, and cache settings should remain explicit run-note
+  responsibilities for now rather than broad runtime discovery.
 - Document result interpretation boundaries: `runtime-sweep` is ready for
   performance comparison now; `desktop-django-wrap` is prompt-only;
   `patch-from-failure` is useful as a tiny repo-task smoke benchmark; larger
@@ -179,6 +184,8 @@ Suggested implementation handoffs:
   documentation only.
 - Hardware / runtime metadata audit slice: verify and, if necessary, improve
   Apple Silicon metadata capture for comparable result interpretation.
+  **Landed 2026-05-03** with optional Apple host model metadata in
+  `hardware.json`; runtime parity remains documented through run notes.
 - Benchmark matrix / reporting polish slice: document the recommended matrix,
   compare commands, caveats, and result-reading guidance.
 

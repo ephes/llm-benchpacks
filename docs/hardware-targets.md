@@ -11,11 +11,24 @@ Primary local target:
 Apple Silicon runs should capture:
 
 - chip name
+- hardware model identity, such as `hardware_model`,
+  `hardware_model_identifier`, and `hardware_model_name` when macOS reports
+  them
 - total unified memory
 - macOS version
+- GPU model name
 - runtime versions
 - model format: MLX, GGUF, Ollama tag, or server-specific
 - requested context size
+
+The runner records Apple Silicon host metadata in `hardware.json` on a
+best-effort basis. Current Darwin-specific optional fields include `chip`,
+`hardware_model` from `sysctl hw.model`, and `hardware_model_name` /
+`hardware_model_identifier` from `system_profiler SPHardwareDataType` when that
+tool is available. Runtime versions, model checksums, quantization, context
+size, server command, power mode, thermal state, and cache settings remain run
+note responsibilities until a later narrow runtime-metadata slice defines a
+reliable collector.
 
 ## Hetzner Small GPU
 
@@ -59,6 +72,7 @@ Every run should write a `hardware.json` file with:
 - RAM
 - GPU model(s)
 - GPU VRAM
+- platform-specific host model identifiers when available
 - driver/runtime versions when available
 - storage path for model cache when known
 

@@ -274,6 +274,19 @@ Compare warnings are part of the result interpretation:
 - `prefill_tps med` is rendered only when prompt and cache parity are
   `comparable`.
 
+## Hardware Metadata Check
+
+Before interpreting M4/M5 results, inspect each pulled `hardware.json`. For
+Apple Silicon comparisons it should identify the host through `chip`,
+`hardware_model`, `hardware_model_name`, `hardware_model_identifier`, `ram_mb`,
+`os`, and `gpus` when macOS reports those values.
+
+These fields distinguish host class, for example an M5 Max MacBook Pro from an
+M4 Max Mac Studio. They do not prove runtime parity. Continue recording runtime
+version, server command, model id, quantization, model checksum, context size,
+power mode, thermal state, and cache settings in run notes or curated
+`docs/run-log.md` entries when a result is meant to be interpreted later.
+
 ## Fairness Checklist
 
 Before interpreting M4-vs-M5 numbers, record or align:

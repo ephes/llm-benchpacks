@@ -411,8 +411,10 @@ strict mode.
 
 On macOS:
 
-- `sysctl`
-- `system_profiler`
+- `sysctl`, including CPU, memory, and hardware model identifiers when
+  available
+- `system_profiler SPHardwareDataType` for Apple chip/model fallback metadata
+- `system_profiler SPDisplaysDataType` for GPU model names
 - `powermetrics` only when explicitly enabled
 
 On Linux:

@@ -558,6 +558,13 @@ results/
 `docs/hardware-targets.md`. `summary.md` and `hardware.json` are committable;
 `raw/` is generated and ignored by default.
 
+The common `hardware.json` shape includes `hostname`, `platform`, `os`,
+`kernel`, `cpu_model`, `cpu_count`, `ram_mb`, and `gpus`. Platform-specific
+fields are optional and nullable when unavailable. On Darwin, current optional
+fields include `chip`, `hardware_model`, `hardware_model_name`, and
+`hardware_model_identifier`; these are host metadata only and do not add runtime
+adapter fields or `run.jsonl` row fields.
+
 Raw request/response names preserve the legacy shape when a pack has exactly one
 measured repetition:
 

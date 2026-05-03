@@ -20,6 +20,38 @@ working history and open questions.
 
 ### Changed
 
+- Audited Apple Silicon `hardware.json` metadata for the M4/M5 comparison
+  track and found that chip, unified memory, macOS version, and GPU model were
+  already captured on the local M5 path, but machine class/model identity was
+  not explicit enough for M5 Max versus M4 Max Studio interpretation.
+- Added optional Darwin host-model metadata to `hardware.json`:
+  `hardware_model` from `sysctl hw.model`, plus
+  `hardware_model_name` and `hardware_model_identifier` from
+  `system_profiler SPHardwareDataType` when available.
+- Added `SPHardwareDataType` fallbacks for Apple chip, CPU core count, and
+  memory when `sysctl` output is generic or unavailable.
+- Kept the collector best-effort: missing `sysctl` or `system_profiler` data
+  still degrades to `null` or an empty GPU list and does not block a run.
+- Documented that runtime versions, server commands, model checksums,
+  quantization, context size, power/thermal state, and cache settings remain
+  run-note responsibilities instead of broad runtime discovery.
+- No CLI flags, adapter fields, `run.jsonl` row fields, raw artifact paths,
+  pack semantics, compare behavior, remote SSH orchestration, or live
+  benchmark artifacts were added.
+
+### Open Questions
+
+- Future M4/M5 work still needs benchmark matrix/reporting polish and, later,
+  production external harness execution plus larger repo-task packs before
+  drawing broad coding-agent conclusions.
+- Runtime metadata may need a later narrow collector slice if repeated run-note
+  capture proves too error-prone, but this slice intentionally avoided runtime
+  process discovery or endpoint probing.
+
+## 2026-05-03 (Apple Silicon comparison runbook)
+
+### Changed
+
 - Added `docs/apple-silicon-m4-m5-runbook.md` as the first operational
   runbook for comparing this local M5 Max machine with an M4 Max Studio over
   SSH.

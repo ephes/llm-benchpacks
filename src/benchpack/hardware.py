@@ -54,13 +54,80 @@ def _parse_os_release(text: str) -> dict[str, str]:
     return fields
 
 
+def _parse_memory_mb(value: str) -> int | None:
+    parts = value.strip().split()
+    if len(parts) < 2:
+        return None
+    try:
+        amount = float(parts[0])
+    except ValueError:
+        return None
+    unit = parts[1].lower()
+    if unit.startswith("tb"):
+        return int(amount * 1024 * 1024)
+    if unit.startswith("gb"):
+        return int(amount * 1024)
+    if unit.startswith("mb"):
+        return int(amount)
+    return None
+
+
+def _parse_system_profiler_hardware(text: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "hardware_model_name": None,
+        "hardware_model_identifier": None,
+        "chip": None,
+        "cpu_count": None,
+        "ram_mb": None,
+    }
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if ":" not in stripped:
+            continue
+        key, _, value = stripped.partition(":")
+        value = value.strip()
+        if key == "Model Name":
+            fields["hardware_model_name"] = value or None
+        elif key == "Model Identifier":
+            fields["hardware_model_identifier"] = value or None
+        elif key == "Chip":
+            fields["chip"] = value or None
+        elif key == "Total Number of Cores":
+            first, *_ = value.split()
+            if first.isdigit():
+                fields["cpu_count"] = int(first)
+        elif key == "Memory":
+            fields["ram_mb"] = _parse_memory_mb(value)
+    return fields
+
+
+def _apple_cpu_model_is_unhelpful(value: str | None) -> bool:
+    if not value:
+        return True
+    normalized = value.strip().lower()
+    return normalized in {"apple processor", "apple"}
+
+
 def _collect_macos() -> dict[str, Any]:
     cpu_model = _sysctl("machdep.cpu.brand_string")
     cpu_count_raw = _sysctl("hw.ncpu")
     ram_raw = _sysctl("hw.memsize")
-    chip_raw = _sysctl("machdep.cpu.brand_string")  # already includes Apple chip name
+    hardware_model = _sysctl("hw.model")
+    chip_raw = cpu_model  # usually includes the Apple chip name
     cpu_count = int(cpu_count_raw) if cpu_count_raw and cpu_count_raw.isdigit() else None
     ram_mb = int(ram_raw) // (1024 * 1024) if ram_raw and ram_raw.isdigit() else None
+
+    sp_hardware = _run(["system_profiler", "SPHardwareDataType"], timeout=10.0)
+    sp_fields = _parse_system_profiler_hardware(sp_hardware) if sp_hardware else {}
+    sp_chip = sp_fields.get("chip")
+    if _apple_cpu_model_is_unhelpful(cpu_model) and sp_chip:
+        cpu_model = sp_chip
+    if not chip_raw or _apple_cpu_model_is_unhelpful(chip_raw):
+        chip_raw = sp_chip
+    if cpu_count is None:
+        cpu_count = sp_fields.get("cpu_count")
+    if ram_mb is None:
+        ram_mb = sp_fields.get("ram_mb")
 
     gpus: list[dict[str, Any]] = []
     sp = _run(["system_profiler", "SPDisplaysDataType"], timeout=10.0)
@@ -99,6 +166,9 @@ def _collect_macos() -> dict[str, Any]:
         "cpu_count": cpu_count,
         "ram_mb": ram_mb,
         "chip": chip_raw,
+        "hardware_model": hardware_model,
+        "hardware_model_name": sp_fields.get("hardware_model_name"),
+        "hardware_model_identifier": sp_fields.get("hardware_model_identifier"),
         "gpus": gpus,
     }
 
