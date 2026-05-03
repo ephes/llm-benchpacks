@@ -104,6 +104,31 @@ directory fixture is validated as metadata but is not copied, executed,
 injected into prompts, mutated, turned into a worktree, used for patch
 extraction, or passed to a verifier.
 
+The planned real agent-session harness is an internal task executor behind the
+same repo-task executor boundary. It is not implemented yet. The first
+implementation should be able to run without manifest or CLI selection while
+the public pack and result contracts stay unchanged. Its runner-side input may
+include the prepared workspace path, case metadata, pack metadata needed for
+portable context, model/adapter/endpoint/default context needed for harness
+model calls, the run output directory, measured repetition number, and the
+deterministic task stdout/stderr log paths. Those inputs are internal
+implementation details, not new manifest fields or adapter request fields.
+
+The future harness may mutate only the prepared workspace and may write only
+under the run output directory. It must not mutate pack-owned fixtures, prompts,
+verifier scripts, source docs, or other files under the pack. If it needs model
+calls, those calls are runner/harness concerns and must not change the normal
+adapter request or result schemas by default. Task logs remain
+`task/<case-id>/rep-NNN.stdout.log` and
+`task/<case-id>/rep-NNN.stderr.log` unless a later result-schema slice changes
+that deliberately. Patch capture still happens after task execution, so
+`patch/<case-id>/rep-NNN.diff` represents the workspace after the
+executor/harness phase. Verifier execution still happens after patch capture.
+Runner failures, such as an unreadable workspace or unwritable task log, remain
+distinct from task outcomes, such as a model or harness failing to produce a
+useful change; this docs slice does not add task status fields to express that
+distinction.
+
 Repo-task cases use `kind = "repo"` directory fixtures as immutable source
 repository snapshots:
 
@@ -161,6 +186,15 @@ deterministic message to task stderr, and still records the measured row. On
 success, task stdout records a short deterministic success message and task
 stderr remains empty. This is a small internal model-output executor, not a
 full agent harness or public executor selection system.
+
+Future executor implementations, including the planned agent-session harness,
+must preserve the same surrounding order and boundaries unless a later
+specification slice deliberately changes them: workspace preparation first,
+task execution inside the prepared workspace second, patch capture third,
+verifier execution fourth, and reporter record last. Task environment
+configuration, task timeout configuration, repo-task warmups, workspace
+retention options, richer task status/reporting, and larger bundled repo-task
+conversion remain planned follow-ups rather than current support.
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
 from repo-task workspace and verifier artifacts. Measured repo-task

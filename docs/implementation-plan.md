@@ -176,7 +176,12 @@ bundled measured repo-mutating repo-task pack, `patch-from-failure`, landed
 2026-05-02 as a narrow fixture/prompt/verifier slice over that fenced diff
 contract. An internal repo-task task-executor boundary landed 2026-05-03 around
 the existing fenced model-output patch phase, preserving behavior while keeping
-full agent-session harness integration planned for a later slice.
+full agent-session harness integration planned for a later slice. A docs-first
+internal agent-session harness contract landed 2026-05-03, specifying the
+future harness input shape, write boundaries, task log relationship, patch and
+verifier ordering, and adapter/result boundary constraints without implementing
+the harness or adding public manifest, CLI, adapter, artifact, or result schema
+surface.
 
 Scope:
 
@@ -263,6 +268,14 @@ Scope:
   manifest fields, CLI flags, executor selection, task commands, task
   environment configuration, task timeout configuration, agent harness
   semantics, or result schema changes.
+- Define the docs-first internal agent-session harness contract behind the
+  repo-task executor boundary. **Landed 2026-05-03** as documentation only:
+  future harness input may include the prepared workspace, case and pack
+  metadata, model/adapter/endpoint/default context, output directory,
+  repetition, and deterministic task log paths; writes are limited to the
+  prepared workspace and run output directory; pack-owned fixtures, prompts,
+  verifier scripts, source docs, adapter request/result schemas, existing
+  artifact paths, and row shapes remain unchanged.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -270,7 +283,14 @@ Scope:
   fenced `diff` block, and a stdlib `verify-script` that checks the patched
   workspace.
 - Integrate an agent-session harness after disposable workspace, verifier, and
-  patch artifacts exist. **Planned later.**
+  patch artifacts exist. **Planned later.** The first implementation should be
+  able to start as an internal executor behind the existing boundary without
+  manifest or CLI selection.
+- Add richer task status/reporting only if a real harness proves the existing
+  task logs and runner-failure boundaries are insufficient. **Planned later.**
+- Add repo-task warmup support, workspace cleanup/retention options, task
+  environment support if needed, task timeout support if needed, and larger
+  bundled repo-task conversion. **Planned later.**
 - Add optional full agent-session replay later.
 
 Validation:

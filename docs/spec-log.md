@@ -46,6 +46,37 @@ working history and open questions.
   options, task environment support if needed, and larger bundled repo-task
   conversion.
 
+## 2026-05-03 (Phase 3 docs-first agent-session harness contract)
+
+### Changed
+
+- Defined the planned real agent-session harness as a future internal
+  repo-task executor behind the existing task-executor boundary.
+- Documented likely runner-side harness inputs: prepared workspace path, case
+  metadata, pack metadata as needed, model/adapter/endpoint/default context as
+  needed, run output directory, measured repetition, and deterministic task log
+  paths.
+- Documented the harness write boundary: it may mutate only the prepared
+  workspace and write only under the run output directory, and it must not
+  mutate pack-owned fixtures, prompts, verifier scripts, source docs, or public
+  adapter/result schemas by default.
+- Kept the current implemented behavior explicit: the fenced model-output
+  `diff`/`patch` executor remains the only implemented executor, task logs
+  still live under `task/<case-id>/rep-NNN.*.log`, patch capture remains after
+  task execution, verifier execution remains after patch capture, and result
+  row shapes remain unchanged.
+- No real agent-session harness, manifest task commands, task environment
+  configuration, task timeout configuration, CLI task flags, workspace
+  retention options, repo-task warmups, broad generic artifact object, or new
+  result fields were added.
+
+### Open Questions
+
+- Future slices still need real agent-session harness implementation, richer
+  task status/reporting if needed, repo-task warmup support, cleanup and
+  retention options, task environment support if needed, task timeout support if
+  needed, and larger bundled repo-task conversion.
+
 ## 2026-05-02 (Phase 3 manifest verifier timeout)
 
 ### Changed

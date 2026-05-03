@@ -268,9 +268,11 @@ strings. The runner rejects manifests that violate this at load time.
   `task/<case-id>/rep-NNN.stderr.log`, executes `verify-script` scoring when
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
-  Full agent execution, manifest task commands, retention options, repo-task
-  warmups, task environment configuration, and bundled pack conversion remain
-  planned.
+  A real agent-session harness is not implemented yet. Future harness work is
+  expected to stay behind the internal executor boundary first; this format
+  does not currently add harness selection, manifest task commands, retention
+  options, repo-task warmups, task environment configuration, task timeout
+  configuration, or bundled pack conversion.
 
 `replay`
 : A recorded request sequence.
@@ -323,11 +325,18 @@ Fields:
   controls only the verifier subprocess timeout. `environment` is optional for
   `verify-script` and controls only the verifier subprocess environment.
 
-The contract intentionally does not define broad generic blobs such as
-`workspace` or `commands` yet. Verifier environment support is deliberately
-limited to the effective `verify-script` scoring table. Add explicit fields only
-when a future implementation needs them and the semantics are narrow enough to
-test.
+The manifest contract intentionally does not define broad generic blobs such as
+workspace configuration or `commands` yet. Verifier environment support is
+deliberately limited to the effective `verify-script` scoring table. Add
+explicit fields only when a future implementation needs them and the semantics
+are narrow enough to test.
+
+Future agent-session harness inputs are runner-side concerns, not manifest
+syntax in this slice. A harness may use the prepared workspace, case and pack
+metadata, model/adapter/endpoint/default context, output directory, repetition,
+and deterministic task log paths internally. Pack authors should not rely on
+manifest-declared shell commands, task environment, task timeouts, harness
+selection, or workspace retention because none of those fields exist yet.
 
 Directory fixture semantics for repo-task cases:
 
@@ -346,6 +355,10 @@ Directory fixture semantics for repo-task cases:
 - Future mutation is allowed only inside the disposable workspace. Pack
   fixtures, prompts, verify scripts, and other source artifacts remain
   read-only by contract.
+- A future agent-session harness must follow the same write boundary: it may
+  mutate the prepared workspace and write under the run output directory, but
+  must not mutate pack-owned fixtures, prompts, verifier scripts, source docs,
+  or public adapter/result schemas by default.
 - The current mutation source is narrow and model-output-only: after the
   adapter call, the runner invokes an internal task executor. The only current
   executor extracts the first fenced code block whose info string is exactly

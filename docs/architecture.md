@@ -24,7 +24,14 @@ than changing the adapter boundary:
 - **Task executor or agent harness**: runner-side component that applies model
   or agent actions inside the prepared workspace. The current narrow
   implementation applies only the first fenced `diff` or `patch` block from
-  model output as a unified diff.
+  model output as a unified diff. A future agent-session harness belongs behind
+  this same internal executor boundary. Its runner-side request may carry the
+  prepared workspace path, case and pack metadata, model/adapter/endpoint/default
+  context needed for harness-owned model calls, the run output directory,
+  measured repetition, and deterministic task log paths. The harness may mutate
+  only the prepared workspace and may write only under the run output directory;
+  it must preserve pack fixtures, prompts, verifier scripts, and source docs.
+  Harness selection and configuration are not manifest or CLI surfaces yet.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -90,7 +97,9 @@ results/
    `patch` block from model output, applies it as a unified diff in the
    prepared workspace, and writes deterministic task stdout/stderr logs.
    Missing or unapplicable patches are logged and do not crash the benchmark
-   row.
+   row. A later real agent-session harness may be added behind this boundary
+   without changing the adapter request shape or public result row shape by
+   default.
 10. Apply implemented deterministic scoring for measured executions when the
    pack declares it. For measured `repo-task` executions with
    `scoring.mode = "verify-script"`, the runner executes the verifier after
@@ -129,15 +138,27 @@ and before each measured adapter execution:
    applied from the prepared workspace root. Non-matching fences are ignored.
    Missing blocks and rejected or unapplicable diffs are deterministic task
    stderr outcomes, not runner crashes.
-6. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
+6. A future agent-session harness will occupy the same runner-owned task phase.
+   It may receive the prepared workspace path, case and pack metadata,
+   model/adapter/endpoint/default context as needed, output directory,
+   repetition, and task log paths. It may mutate only the prepared workspace
+   and may write only under the run output directory. It must not mutate
+   pack-owned fixtures, prompts, verifier scripts, source docs, or
+   adapter/result schemas by default. The task log paths in step 7 remain stable
+   for future harnesses unless a later result-schema slice changes them
+   deliberately. Harness failures that prevent the runner from writing required
+   artifacts remain runner failures; ordinary task outcomes should be captured
+   through the existing task logs until a later status-reporting slice proves a
+   new row field is necessary.
+7. The task phase writes `task/<case-id>/rep-NNN.stdout.log` and
    `task/<case-id>/rep-NNN.stderr.log` artifacts. Successful application writes
    a short stdout message and leaves stderr empty; no-patch or failed-apply
    outcomes leave the workspace unchanged and explain the outcome in stderr.
-7. After task executor completion, the runner compares the immutable
+8. After task executor completion, the runner compares the immutable
    source fixture to the prepared workspace with a deterministic directory
    snapshot diff and writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty
    changes still create an empty patch file.
-8. For measured repo-task executions with `scoring.mode = "verify-script"`, the
+9. For measured repo-task executions with `scoring.mode = "verify-script"`, the
    verifier consumes the prepared workspace, case metadata, pack metadata,
    source fixture id, patch artifact path, and requested output path as
    command-line arguments. It returns deterministic status through its process
@@ -150,10 +171,10 @@ and before each measured adapter execution:
    stdout/stderr as explicit artifacts and corrects or creates the structured
    JSON so `exit_code` and `passed` match the process result or timeout
    outcome.
-9. The reporter records normalized workspace metadata, `patch.path`, `task`,
+10. The reporter records normalized workspace metadata, `patch.path`, `task`,
    `verify`, `repo_task`, and top-level `scoring` for measured repo-task
    `verify-script` rows.
-10. Cleanup is still planned. Retaining `workspace/` for debugging should be an
+11. Cleanup is still planned. Retaining `workspace/` for debugging should be an
    explicit option; otherwise large workspaces and logs should stay out of
    curated commits.
 

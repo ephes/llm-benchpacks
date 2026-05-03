@@ -273,3 +273,24 @@ source portable and reviewable, prevents accidental fixture corruption, makes
 cleanup behavior testable, and gives later verifier, patch, and agent-session
 slices a clear artifact contract before implementation hard-codes execution
 semantics.
+
+## D-022: Agent-Session Harness Stays Behind The Executor Boundary First
+
+A future real agent-session harness uses D-021's internal repo-task executor
+boundary and keeps executor choice out of the manifest and CLI. Its runner-side
+input may include the prepared workspace path, case and pack metadata,
+model/adapter/endpoint/default context as needed for harness-owned model calls,
+the run output directory, measured repetition, and deterministic task log paths.
+The harness may mutate only the prepared workspace and may write only under the
+run output directory. It must not mutate pack-owned fixtures, prompts, verifier
+scripts, source docs, or public adapter/result schemas by default. Task logs,
+patch capture after task execution, verifier execution after patch capture, and
+existing workspace, patch, task, verify, repo_task, and scoring row shapes stay
+unchanged until a later implementation proves a narrower schema change is
+necessary.
+
+Reason: the executor boundary now exists, but harness selection, task
+environment, task timeout, retention, and richer status semantics are still
+unsettled. Keeping the first harness internal lets implementation validate the
+runner responsibilities without expanding the public pack format or result
+schema prematurely.
