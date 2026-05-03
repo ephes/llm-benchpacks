@@ -136,8 +136,10 @@ workflow for local M5 runs, SSH-driven M4 Studio runs, result pullback, compare
 commands, fairness checks, interpretation boundaries, and troubleshooting. The
 runner can already execute useful first-pass benchmarks for this goal with
 `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
-`patch-from-failure`. Remaining work is metadata confidence and reporting
-polish, not benchmark semantics.
+`patch-from-failure`. Apple host model metadata and report-ready matrix
+guidance have also landed. Remaining work is live benchmark execution,
+curated run-log entries, production external harness execution, and larger
+repo-task packs, not benchmark semantics.
 
 Scope:
 
@@ -176,6 +178,12 @@ Scope:
   `patch-from-failure` is useful as a tiny repo-task smoke benchmark; larger
   coding-agent conclusions should wait for production external harness support
   and larger repo-task packs. **Landed 2026-05-03** in the runbook.
+- Add benchmark matrix and reporting polish before live M4/M5 runs.
+  **Landed 2026-05-03** in the runbook as a comparison report checklist and
+  compact report skeleton that separates `hardware.json` host identity from
+  manually captured runtime/model/cache/power notes, calls out result
+  directories, records compare warnings and prefill parity statuses, and keeps
+  per-pack interpretation boundaries explicit.
 
 Suggested implementation handoffs:
 
@@ -187,7 +195,8 @@ Suggested implementation handoffs:
   **Landed 2026-05-03** with optional Apple host model metadata in
   `hardware.json`; runtime parity remains documented through run notes.
 - Benchmark matrix / reporting polish slice: document the recommended matrix,
-  compare commands, caveats, and result-reading guidance.
+  compare commands, caveats, and result-reading guidance. **Landed 2026-05-03**
+  as documentation only.
 
 Validation:
 

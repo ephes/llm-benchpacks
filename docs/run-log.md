@@ -30,3 +30,11 @@ and (when small) `run.jsonl` may be committed alongside.
   when nothing was committed, or an external URL for remote-host runs whose
   artifacts live elsewhere.
 - If a run is exploratory and not comparable, say that explicitly.
+- For curated Apple Silicon M4/M5 comparison entries, copy the runbook's
+  report checklist into the notes: identify host fields from `hardware.json`
+  separately from manual runtime/server, model, quantization, checksum,
+  context, cache, power, thermal, and background-load notes.
+- When citing `benchpack compare` for M4/M5 runs, record any warnings and the
+  `prefill parity` status for the relevant cases. Do not turn
+  `desktop-django-wrap` or `patch-from-failure` into broad coding-agent claims;
+  describe their prompt-only or tiny repo-task-smoke scope.

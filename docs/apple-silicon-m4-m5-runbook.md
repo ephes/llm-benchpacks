@@ -71,16 +71,26 @@ usage another way.
 
 Run these packs first:
 
-- `smoke-chat`: endpoint sanity.
-- `runtime-sweep`: TTFT, decode throughput, total throughput, prompt-token,
-  cached-token, and gated prefill-parity comparison.
-- `desktop-django-wrap`: prompt-only coding-agent-shaped behavior.
+- `smoke-chat`: endpoint sanity only. Use it to prove the selected adapter,
+  model id, endpoint shape, and basic scoring path work before spending time on
+  larger packs.
+- `runtime-sweep`: the current performance comparison pack. Use it for TTFT,
+  decode throughput, total throughput, prompt-token, cached-token, and gated
+  prefill-parity comparison.
+- `desktop-django-wrap`: prompt-only coding-agent-shaped behavior. It exercises
+  larger static prompts, fixture-backed prompt assembly, streaming, and regex
+  scoring, but it does not copy, execute, or mutate a repository.
 - `patch-from-failure`: tiny repo-mutating, verifier-backed smoke benchmark
-  using the current fenced unified-diff contract.
+  using the current fenced unified-diff contract. It proves the narrow
+  workspace, patch, task-log, and verifier path, not broad coding-agent
+  quality.
 
 Use result labels that encode the host and pack. The default output directory is
 `results/<YYYY-MM-DD>-<host-label>/`, so labels such as `m5-max-runtime` and
 `m4-max-runtime` produce distinguishable directories.
+
+Broad coding-agent conclusions still require production external harness
+execution, larger repo-task packs, and curated reporting around those runs.
 
 ## Local M5 Run
 
@@ -263,16 +273,45 @@ uv run benchpack compare \
   results/<date>-m4-max-patch
 ```
 
-Compare warnings are part of the result interpretation:
+`benchpack compare` reports both emitted `WARNING:` lines and a table
+`prefill parity` column. Treat both as part of result interpretation, but keep
+their meanings separate.
 
-- `prompt-diff` means the prompt-token medians differ, so cache and prefill
-  conclusions are not comparable for that case.
-- `cache-missing` means at least one side did not report complete
-  `tokens.cached_prompt` metadata.
+`prefill parity` column statuses:
+
+- `missing-case` means at least one compared result directory has no rows for
+  that case.
+- `prompt-missing` means at least one non-empty case/run group lacks complete
+  numeric `tokens.prompt` metadata.
+- `prompt-diff` means complete prompt-token medians differ, so cache and
+  prefill conclusions are not comparable for that case.
+- `cache-missing` means prompt parity holds, but at least one side did not
+  report complete `tokens.cached_prompt` metadata.
 - `cache-diff` means prompt metadata matches, but cached prompt-token medians
   differ.
-- `prefill_tps med` is rendered only when prompt and cache parity are
-  `comparable`.
+- `comparable` means every compared run has rows, complete numeric
+  prompt/cache metadata, matching prompt-token medians, and matching cached
+  prompt-token medians for that case.
+- `prefill_tps med` is rendered only when the case-level `prefill parity`
+  status is `comparable`; all other statuses render `—`.
+
+Emitted `WARNING:` lines:
+
+- Different pack ids or versions mean the inputs are not reliable cross-pack
+  comparisons.
+- Prompt-token median differences mean cache parity is not comparable across
+  different prompts.
+- Incomplete cache metadata means some measured rows lack numeric
+  `tokens.cached_prompt`.
+- Cached prompt-token median differences mean prefill speed should not be
+  compared.
+
+Compare parity statuses and warnings are derived from normalized `run.jsonl`
+fields only. Compare does not infer runtime version, server command,
+quantization, model checksum, context size, GPU layer/batch/cache options,
+power state, thermal state, or background load from raw files, timing fields,
+or endpoint behavior. Keep those details in run notes whenever the comparison
+should be interpretable later.
 
 ## Hardware Metadata Check
 
@@ -286,6 +325,85 @@ M4 Max Mac Studio. They do not prove runtime parity. Continue recording runtime
 version, server command, model id, quantization, model checksum, context size,
 power mode, thermal state, and cache settings in run notes or curated
 `docs/run-log.md` entries when a result is meant to be interpreted later.
+
+## Comparison Report Checklist
+
+Before treating M4/M5 output as comparable, create a short report or run note
+that separates host metadata captured by the runner from runtime details that
+must be captured manually.
+
+Hardware identity from each result directory's `hardware.json`:
+
+- `chip`
+- `hardware_model`
+- `hardware_model_name`
+- `hardware_model_identifier`
+- `ram_mb`
+- `os`
+- `gpus`
+
+Manual runtime and operating notes:
+
+- Runtime/server version and exact server command used on each host.
+- Adapter and endpoint shape, such as `openai-chat` with an OpenAI-compatible
+  `/v1` base URL or `ollama-generate` with the Ollama-native path.
+- Model id, tag, or file path as recorded in private notes, plus quantization
+  and checksum when practical. Use `<model>` in shared docs or handoffs.
+- Context size, GPU layer settings, batch settings, prompt-cache or KV-cache
+  settings, and the `--openai-stream-usage` mode used for streaming
+  OpenAI-compatible packs.
+- Power mode, thermal state before the run, and meaningful background load.
+- Exact result directories compared.
+- `benchpack compare` warnings and `prefill parity` status by pack/case.
+- Per-pack interpretation: endpoint sanity for `smoke-chat`, performance for
+  `runtime-sweep`, prompt-only behavior for `desktop-django-wrap`, and tiny
+  repo-task smoke coverage for `patch-from-failure`.
+
+Compact report skeleton:
+
+```text
+# Apple Silicon M4/M5 comparison report - <date>
+
+Scope:
+- Repo commit on M5: <commit>
+- Repo commit on M4: <commit>
+- Packs compared: smoke-chat, runtime-sweep, desktop-django-wrap, patch-from-failure
+- Result directories:
+  - M5 smoke/runtime/wrap/patch: results/<date>-m5-max-...
+  - M4 smoke/runtime/wrap/patch: results/<date>-m4-max-...
+
+Hardware identity from hardware.json:
+- M5: chip=<value>; hardware_model=<value>; hardware_model_name=<value>;
+  hardware_model_identifier=<value>; ram_mb=<value>; os=<value>; gpus=<value>
+- M4: chip=<value>; hardware_model=<value>; hardware_model_name=<value>;
+  hardware_model_identifier=<value>; ram_mb=<value>; os=<value>; gpus=<value>
+
+Runtime and model notes:
+- M5 runtime/server: <version>; command: <server-command>
+- M4 runtime/server: <version>; command: <server-command>
+- Adapter/endpoint shape: <adapter> against <endpoint-shape>
+- Model: <model>; quantization=<value>; checksum=<checksum-if-practical>
+- Runtime options: context=<value>; gpu_layers=<value>; batch=<value>;
+  cache=<value>; openai_stream_usage=<include-or-omit>
+
+Operating conditions:
+- M5 power/thermal/background load: <notes>
+- M4 power/thermal/background load: <notes>
+
+Compare interpretation:
+- smoke-chat: endpoint sanity result only; do not use for performance claims.
+- runtime-sweep: note wall_s, TTFT, decode/total TPS, cache rows, warnings, and
+  prefill parity status for short/medium/long before making speed claims.
+- desktop-django-wrap: prompt-only coding-agent-shaped behavior and streaming
+  metrics; it does not mutate a repo or prove a wrap task.
+- patch-from-failure: tiny fenced-patch repo-task smoke; verifier pass/fail is
+  useful for this fixture only and is not broad coding-agent quality evidence.
+
+Conclusion:
+- Comparable claims: <claims supported by aligned metadata and compare parity>
+- Exploratory or invalid claims: <claims blocked by missing notes, warnings, or
+  non-comparable prefill parity>
+```
 
 ## Fairness Checklist
 

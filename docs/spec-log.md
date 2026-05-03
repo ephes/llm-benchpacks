@@ -16,7 +16,48 @@ working history and open questions.
 - ...
 ```
 
-## 2026-05-03 (Apple Silicon comparison operational track)
+## 2026-05-03 (Apple Silicon comparison reporting polish)
+
+### Changed
+
+- Added benchmark matrix/reporting polish to the Apple Silicon M4/M5 runbook
+  before live comparison runs.
+- Tightened the recommended four-pack matrix so `smoke-chat` is endpoint
+  sanity, `runtime-sweep` is the current performance pack,
+  `desktop-django-wrap` is prompt-only coding-agent-shaped behavior, and
+  `patch-from-failure` is a tiny verifier-backed repo-task smoke benchmark.
+- Added a comparison report checklist and compact report skeleton that
+  separates host identity read from `hardware.json` (`chip`,
+  `hardware_model`, `hardware_model_name`, `hardware_model_identifier`,
+  `ram_mb`, `os`, and `gpus`) from manual runtime/model/cache/power notes.
+- Documented manual notes for runtime/server version, server command, adapter
+  and endpoint shape, model id/tag/file, quantization, checksum when practical,
+  context size, GPU layer/batch/cache options, `--openai-stream-usage` mode,
+  power mode, thermal state, background load, result directories, compare
+  warnings, and `prefill parity` statuses.
+- Clarified that `benchpack compare` derives prompt/cache warnings and
+  prefill parity from normalized `run.jsonl` fields only and does not infer
+  runtime/cache parity from raw files, timing fields, or endpoint behavior.
+- Updated the implementation plan to mark the benchmark matrix/reporting polish
+  slice as landed.
+- No live benchmark rows, generated result artifacts, CLI flags, adapter
+  fields, result row fields, compare behavior, pack semantics, hardware
+  collector behavior, remote SSH orchestration, or private host/model/path
+  details were added.
+
+### Open Questions
+
+- Live M4/M5 benchmark execution and curated run-log entries remain future
+  operational work.
+- Broad coding-agent conclusions still need production external harness
+  execution, richer task status/reporting if needed, and larger repo-task
+  packs.
+- Runtime metadata automation may be useful later if manual report capture
+  proves too error-prone, but runtime process discovery, checksum discovery,
+  endpoint probing, and power/thermal measurement automation remain out of
+  scope for this slice.
+
+## 2026-05-03 (Apple Silicon comparison hardware metadata)
 
 ### Changed
 
