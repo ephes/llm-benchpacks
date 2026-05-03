@@ -16,6 +16,60 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (Apple Silicon comparison operational track)
+
+### Changed
+
+- Added `docs/apple-silicon-m4-m5-runbook.md` as the first operational
+  runbook for comparing this local M5 Max machine with an M4 Max Studio over
+  SSH.
+- The runbook covers local M5 commands, SSH M4 commands, placeholder endpoint
+  and model usage, host-label and result-directory conventions, result pullback
+  with `rsync` or `scp`, and read-only `benchpack compare` invocation.
+- Kept the slice documentation-only: no helper script, CLI flag, adapter field,
+  result row field, benchmark semantic change, or generated benchmark artifact
+  was added.
+- Linked the runbook from `README.md` and updated the implementation plan to
+  mark the runbook/SSH orchestration slice as landed while keeping hardware
+  metadata audit and reporting polish as future work.
+- Documented troubleshooting for endpoint smoke failures, OpenAI-compatible
+  servers that reject `stream_options.include_usage`, SSH quoting/path issues,
+  missing result directories, and compare prompt/cache/prefill warnings.
+
+### Open Questions
+
+- The hardware metadata audit still needs to confirm whether current
+  `hardware.json` output is sufficient for Apple Silicon M4/M5 comparisons.
+- Future slices still need benchmark matrix/reporting polish and, later,
+  production external harness execution plus larger repo-task packs before
+  drawing broad coding-agent conclusions.
+
+## 2026-05-03 (Apple Silicon comparison operational track planning)
+
+### Changed
+
+- Added an operational implementation-plan track for comparing the local M5 Max
+  machine with the M4 Max Studio over SSH.
+- The planned track separates runbook/SSH orchestration, hardware/runtime
+  metadata audit, and benchmark matrix/reporting polish into focused
+  implementation handoffs.
+- The first recommended matrix is `smoke-chat`, `runtime-sweep`,
+  `desktop-django-wrap`, and `patch-from-failure`, with clear interpretation
+  boundaries for prompt-only and tiny repo-task coverage.
+- Documented fairness constraints for same model, quantization, runtime path,
+  endpoint options, cache/context settings, power/thermal state, and background
+  load.
+- Live M4/M5 benchmark runs remain out of implementation validation unless
+  explicitly requested; curated outcomes belong in `docs/run-log.md`.
+
+### Open Questions
+
+- The first runbook slice should decide whether a manual SSH workflow is enough
+  or whether a narrow helper script is worth adding. Resolved by the
+  2026-05-03 runbook slice: documentation-only is enough for now.
+- The hardware metadata audit still needs to confirm whether current
+  `hardware.json` output is sufficient for Apple Silicon M4/M5 comparisons.
+
 ## 2026-05-03 (Phase 3 external harness contract and task timeout)
 
 ### Changed

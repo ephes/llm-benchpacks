@@ -125,6 +125,72 @@ endpoint when validating that path.
 Do not add a dedicated `mlx-lm` adapter until this server-path validation shows
 that the OpenAI-compatible adapter is insufficient for the measurements we need.
 
+## Operational Track: Apple Silicon M4/M5 Comparison
+
+Make local Apple Silicon comparisons repeatable before adding heavier remote or
+production harness automation.
+
+**Status:** started 2026-05-03. The first runbook/SSH orchestration slice
+landed in `docs/apple-silicon-m4-m5-runbook.md` as a documentation-only
+workflow for local M5 runs, SSH-driven M4 Studio runs, result pullback, compare
+commands, fairness checks, interpretation boundaries, and troubleshooting. The
+runner can already execute useful first-pass benchmarks for this goal with
+`smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+`patch-from-failure`. Remaining work is metadata confidence and reporting
+polish, not benchmark semantics.
+
+Scope:
+
+- Add a local/SSH benchmark runbook for comparing this local M5 Max machine
+  against the M4 Max Studio over SSH. **Landed 2026-05-03** in
+  `docs/apple-silicon-m4-m5-runbook.md`, covering prerequisite checks, repo
+  sync, `uv sync`, runtime/server startup assumptions, benchmark commands,
+  host labels, result directory naming, artifact pullback, and
+  `benchpack compare` invocation.
+- Keep the first workflow manual or script-assisted, not a broad remote
+  orchestration framework. Do not add live benchmark result artifacts or
+  ignored `results/*/raw/` payloads to git.
+- Define a recommended first comparison matrix. **Landed 2026-05-03** in the
+  runbook:
+  - `smoke-chat` for endpoint sanity
+  - `runtime-sweep` for TTFT, throughput, prompt-token, cached-token, and
+    prefill-parity comparison
+  - `desktop-django-wrap` for prompt-only coding-agent-shaped behavior
+  - `patch-from-failure` as the current tiny repo-mutating verifier-backed
+    smoke task
+- Add fairness notes for same model, quantization, runtime path, endpoint
+  options, context/cache settings, power mode, thermal state, and background
+  load. **Landed 2026-05-03** in the runbook. Treat M4-vs-M5 conclusions as
+  invalid when those are not aligned or clearly documented.
+- Audit Apple Silicon hardware/runtime metadata. Confirm `hardware.json`
+  captures enough chip, memory, OS, GPU, and runtime context for M4/M5
+  comparison; add narrow metadata improvements only if the current output is
+  insufficient.
+- Document result interpretation boundaries: `runtime-sweep` is ready for
+  performance comparison now; `desktop-django-wrap` is prompt-only;
+  `patch-from-failure` is useful as a tiny repo-task smoke benchmark; larger
+  coding-agent conclusions should wait for production external harness support
+  and larger repo-task packs. **Landed 2026-05-03** in the runbook.
+
+Suggested implementation handoffs:
+
+- Runbook / SSH orchestration slice: make the local-M5 plus SSH-to-M4 workflow
+  repeatable without changing benchmark semantics. **Landed 2026-05-03** as
+  documentation only.
+- Hardware / runtime metadata audit slice: verify and, if necessary, improve
+  Apple Silicon metadata capture for comparable result interpretation.
+- Benchmark matrix / reporting polish slice: document the recommended matrix,
+  compare commands, caveats, and result-reading guidance.
+
+Validation:
+
+- Documentation-only changes should pass link/path review and
+  `git status --short`.
+- If helper scripts are added, run their dry-run or unit-test path and
+  `uv run pytest`.
+- Do not run live M4/M5 benchmarks as part of implementation validation unless
+  explicitly requested; curated benchmark outcomes belong in `docs/run-log.md`.
+
 ## Phase 3: Desktop Django Workload
 
 Add the first real coding-agent-shaped workload.

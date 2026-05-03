@@ -21,6 +21,8 @@ and whether the final repository changes pass verification.
 - [Implementation Plan](docs/implementation-plan.md): phased path from minimal runner to remote GPU comparisons.
 - [Benchpack Format](docs/benchpack-format.md): initial manifest sketch.
 - [Hardware Targets](docs/hardware-targets.md): initial machines and runtime assumptions.
+- [Apple Silicon M4/M5 Runbook](docs/apple-silicon-m4-m5-runbook.md): local
+  M5 plus SSH-to-M4 run workflow, result pullback, and compare guidance.
 - [Decisions](docs/decisions.md): durable design decisions.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
