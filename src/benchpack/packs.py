@@ -16,6 +16,7 @@ from typing import Any
 # in result records.  Constrain them up-front so the reporter can trust them
 # and so cross-tool comparisons stay sane.
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 KNOWN_SCORING_MODES = frozenset(
@@ -83,6 +84,7 @@ class Scoring:
     schema: str | None = None
     script: str | None = None
     timeout_s: float | None = None
+    environment: dict[str, str] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -129,7 +131,21 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
             f"{sorted(KNOWN_SCORING_MODES)}"
         )
     timeout_s = _scoring_timeout_from_value(data.get("timeout_s"))
-    known = {"mode", "expected", "pattern", "schema", "script", "timeout_s"}
+    environment = _scoring_environment_from_value(data.get("environment"))
+    if environment is not None and mode != "verify-script":
+        raise PackError(
+            "scoring.environment is only supported when "
+            'scoring.mode = "verify-script"'
+        )
+    known = {
+        "mode",
+        "expected",
+        "pattern",
+        "schema",
+        "script",
+        "timeout_s",
+        "environment",
+    }
     extra = {k: v for k, v in data.items() if k not in known}
     return Scoring(
         mode=mode,
@@ -138,6 +154,7 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
         schema=data.get("schema"),
         script=data.get("script"),
         timeout_s=timeout_s,
+        environment=environment,
         extra=extra,
     )
 
@@ -155,6 +172,34 @@ def _scoring_timeout_from_value(value: Any) -> float | None:
             f"scoring.timeout_s must be a positive number; got {value!r}"
         )
     return timeout_s
+
+
+def _scoring_environment_from_value(value: Any) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PackError(
+            f"scoring.environment must be a table of string keys and string values; "
+            f"got {value!r}"
+        )
+
+    environment: dict[str, str] = {}
+    for key, env_value in value.items():
+        if not isinstance(key, str) or not ENV_NAME_PATTERN.match(key):
+            raise PackError(
+                "scoring.environment keys must match "
+                f"{ENV_NAME_PATTERN.pattern}; got {key!r}"
+            )
+        if not isinstance(env_value, str):
+            raise PackError(
+                f"scoring.environment.{key} must be a string; got {env_value!r}"
+            )
+        if "\x00" in env_value:
+            raise PackError(
+                f"scoring.environment.{key} must not contain NUL bytes"
+            )
+        environment[key] = env_value
+    return environment
 
 
 def _validated_int_default(

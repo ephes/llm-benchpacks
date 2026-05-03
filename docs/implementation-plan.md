@@ -151,15 +151,19 @@ workspace metadata landed 2026-05-01. Deterministic patch capture landed
 2026-05-02: each measured repo-task execution writes
 `patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
 include fixture execution, repo mutation by a task harness, agent-session
-replay, prompt templating, workspace retention options, verifier
-environment configuration, or bundled pack conversion. Measured repo-task
+replay, prompt templating, workspace retention options, task environment
+configuration, or broader bundled pack conversion. Measured repo-task
 verifier execution and final verifier status landed 2026-05-02 for
 `verify-script` rows only. A fixed-default runner-owned verifier subprocess
 timeout landed 2026-05-02 so measured verifier hangs become completed failed
 rows instead of runner hangs, and manifest-configurable verifier timeout via
 `scoring.timeout_s` landed 2026-05-02 while preserving the `300.0` second
-default. Deterministic no-op task log artifacts landed 2026-05-02: each
-measured repo-task execution writes empty
+default. Manifest-configurable verifier environment support via
+`scoring.environment` landed 2026-05-02 for measured `repo-task`
+`verify-script` executions, overlaying string entries onto the inherited
+verifier subprocess environment without adding CLI flags or result fields.
+Deterministic no-op task log artifacts landed 2026-05-02: each measured
+repo-task execution writes empty
 `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log` files and records `task.stdout_path` and
 `task.stderr_path`. Fenced model-output patch application landed 2026-05-02:
@@ -227,8 +231,15 @@ Scope:
   `repo_task.verify_exit_code = null`, and marks timeout JSON with
   `timed_out` and `timeout_s`. Manifest-configurable verifier timeout via
   `scoring.timeout_s` also landed 2026-05-02, preserving the `300.0` second
-  default when absent. CLI flags, environment configuration, task timeout
-  configuration, and broader timeout policy remain planned.
+  default when absent. CLI flags, task timeout configuration, and broader
+  timeout policy remain planned.
+- Add manifest-configurable verifier environment support. **Landed 2026-05-02**
+  for measured `repo-task` `verify-script` executions only: optional
+  `scoring.environment` is a validated string-to-string table in the effective
+  scoring table, overlaid onto the inherited verifier subprocess environment
+  when declared, and omitted from `run.jsonl` result rows. CLI environment
+  flags, task environment configuration, shell expansion, templating, and
+  secrets handling remain out of scope.
 - Capture deterministic patch/diff artifacts from workspace changes. **Landed
   2026-05-02** as source-vs-workspace directory snapshot diffs written to
   `patch/<case-id>/rep-NNN.diff`, with `patch.path` recorded in measured

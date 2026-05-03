@@ -723,6 +723,74 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert (out / record["verify"]["stderr_path"]).read_text() == "verified stderr\n"
 
 
+def test_cli_repo_task_verify_script_manifest_environment_reaches_verifier(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        scoring=(
+            'scoring = { mode = "verify-script", script = "verify/check.py", '
+            'environment = { BENCHPACK_TEST_VAR = "from-manifest" } }\n'
+        ),
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+import os
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"manifest_env": os.environ["BENCHPACK_TEST_VAR"]}, fh)
+""",
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["workspace"] == {
+        "path": "workspace/edit-repo/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "exit_code": 0,
+        "manifest_env": "from-manifest",
+        "passed": True,
+    }
+    assert "environment" not in record
+    assert "env" not in record
+    assert "artifacts" not in record
+
+
 def test_cli_repo_task_verify_script_failure_records_completed_row(
     tmp_path: Path,
     monkeypatch,

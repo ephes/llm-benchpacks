@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -160,6 +161,10 @@ def run_repo_task_verifier(
         str(paths.json.resolve()),
     ]
 
+    run_kwargs: dict[str, Any] = {}
+    if scoring.environment is not None:
+        run_kwargs["env"] = {**os.environ, **scoring.environment}
+
     try:
         completed = subprocess.run(
             command,
@@ -167,6 +172,7 @@ def run_repo_task_verifier(
             capture_output=True,
             text=True,
             timeout=timeout_s,
+            **run_kwargs,
         )
         paths.stdout.write_text(completed.stdout, encoding="utf-8")
         paths.stderr.write_text(completed.stderr, encoding="utf-8")

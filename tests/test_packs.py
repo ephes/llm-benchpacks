@@ -1238,6 +1238,208 @@ scoring = { mode = "verify-script", script = "verify/check.py", timeout_s = 2.5 
     assert "timeout_s" not in scoring.extra
 
 
+def test_load_pack_scoring_environment_is_first_class_field(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "envpack"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+environment = { PYTHONPATH = "src", BENCHPACK_CASE = "smoke" }
+custom_key = "kept"
+""",
+    )
+
+    scoring = load_pack(pack_dir).scoring
+
+    assert scoring is not None
+    assert scoring.environment == {
+        "PYTHONPATH": "src",
+        "BENCHPACK_CASE": "smoke",
+    }
+    assert "environment" not in scoring.extra
+    assert scoring.extra == {"custom_key": "kept"}
+
+
+def test_load_pack_scoring_environment_allows_empty_string_value(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "envpack"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+
+[scoring.environment]
+BENCHPACK_EMPTY = ""
+""",
+    )
+
+    scoring = load_pack(pack_dir).scoring
+
+    assert scoring is not None
+    assert scoring.environment == {"BENCHPACK_EMPTY": ""}
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        '"not-a-table"',
+        "123",
+        "true",
+        '["A=B"]',
+    ],
+)
+def test_load_pack_rejects_non_table_scoring_environment(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "badenv"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+environment = {environment}
+""",
+    )
+
+    with pytest.raises(PackError, match="scoring.environment"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        "{ BENCHPACK_VALUE = 123 }",
+        "{ BENCHPACK_VALUE = true }",
+        "{ BENCHPACK_VALUE = [\"x\"] }",
+        "{ BENCHPACK_VALUE = { nested = \"x\" } }",
+        "{ BENCHPACK_VALUE = \"bad\\u0000value\" }",
+    ],
+)
+def test_load_pack_rejects_invalid_scoring_environment_values(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "badenvvalue"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+environment = {environment}
+""",
+    )
+
+    with pytest.raises(PackError, match="scoring.environment"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        '""',
+        '"BAD-NAME"',
+        '"BAD NAME"',
+        '"BAD=NAME"',
+        '"1BAD"',
+    ],
+)
+def test_load_pack_rejects_unsafe_scoring_environment_keys(
+    tmp_path: Path,
+    key: str,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "badenvkey"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "verify-script"
+script = "verify/check.py"
+
+[scoring.environment]
+{key} = "x"
+""",
+    )
+
+    with pytest.raises(PackError, match="scoring.environment"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_scoring_environment_outside_verify_script(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "envcontains"
+version = "0.1.0"
+
+[[cases]]
+id = "c"
+kind = "chat"
+prompt = "x"
+
+[scoring]
+mode = "contains"
+expected = "x"
+environment = { BENCHPACK_VALUE = "x" }
+""",
+    )
+
+    with pytest.raises(PackError, match="scoring.environment"):
+        load_pack(pack_dir)
+
+
 @pytest.mark.parametrize(
     "timeout_s",
     ["0", "0.0", "-1", "true", "false", '"30"'],

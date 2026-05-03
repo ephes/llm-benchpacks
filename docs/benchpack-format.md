@@ -268,8 +268,8 @@ strings. The runner rejects manifests that violate this at load time.
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
   Full agent execution, manifest task commands, retention options, repo-task
-  warmups, configurable verifier environment support, and bundled pack
-  conversion remain planned.
+  warmups, task environment configuration, and bundled pack conversion remain
+  planned.
 
 `replay`
 : A recorded request sequence.
@@ -296,7 +296,12 @@ id = "wrap-repo"
 kind = "repo-task"
 prompt_file = "prompts/wrap-repo.md"
 fixture_refs = ["synthetic-django-repo", "synthetic-django-app"]
-scoring = { mode = "verify-script", script = "verify/wrap-repo.py", timeout_s = 30 }
+scoring = {
+  mode = "verify-script",
+  script = "verify/wrap-repo.py",
+  timeout_s = 30,
+  environment = { PYTHONPATH = "src", BENCHPACK_CASE = "wrap-repo" }
+}
 ```
 
 Fields:
@@ -313,11 +318,14 @@ Fields:
 - `scoring`: should use `mode = "verify-script"` for deterministic repo-task
   correctness. `contains` and `regex` remain prompt-output scoring modes and
   are not sufficient for repository correctness. `timeout_s` is optional and
-  controls only the verifier subprocess timeout.
+  controls only the verifier subprocess timeout. `environment` is optional for
+  `verify-script` and controls only the verifier subprocess environment.
 
 The contract intentionally does not define broad generic blobs such as
-`workspace`, `commands`, or `environment` yet. Add explicit fields only when a
-future implementation needs them and the semantics are narrow enough to test.
+`workspace` or `commands` yet. Verifier environment support is deliberately
+limited to the effective `verify-script` scoring table. Add explicit fields only
+when a future implementation needs them and the semantics are narrow enough to
+test.
 
 Directory fixture semantics for repo-task cases:
 
@@ -466,8 +474,22 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   float; booleans, strings, zero, and negative values are rejected at manifest
   load time. When `timeout_s` is absent, the verifier timeout defaults to
   `300.0` seconds. This is manifest-only verifier timeout configuration: there
-  is no CLI timeout flag, no task timeout configuration, and no verifier
-  environment configuration in this slice.
+  is no CLI timeout flag, no task timeout configuration, and no broader timeout
+  policy.
+
+  `environment` may be declared in the same effective scoring table as
+  `mode = "verify-script"` and `script`. It must be a TOML table whose keys and
+  values are strings. Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`; empty names,
+  names containing `-`, `=`, whitespace, or NUL, and names starting with a digit
+  are rejected. Values must be strings; empty string values are allowed, while
+  values containing NUL, booleans, numbers, arrays, and nested tables are
+  rejected at manifest load time. When `environment` is absent, verifier
+  subprocesses inherit the current runner environment exactly as before. When
+  present, the runner copies the current environment, overlays the manifest
+  entries, and passes that copy only to the verifier subprocess. There is no CLI
+  environment flag, no task environment configuration, no shell expansion, no
+  variable interpolation, no templating, no path resolution, no secrets
+  handling, and no result fields for environment values.
 
   The verifier receives deterministic arguments:
   `--workspace <absolute prepared workspace path>`, `--case <case id>`,
@@ -493,8 +515,7 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   If timeout-time JSON is missing, malformed, or not an object, the runner
   replaces it with that minimal authoritative timeout object. Non-repo-task
   cases that request `verify-script` fail clearly. The verifier must not mutate
-  pack-owned source fixtures. Configurable verifier environment support remains
-  planned.
+  pack-owned source fixtures.
 
 `llm-judge`
 : Reserved; not implemented by the scorer yet. Intended behavior is to send the

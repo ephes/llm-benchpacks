@@ -92,7 +92,8 @@ results/
 10. Apply implemented deterministic scoring for measured executions when the
    pack declares it. For measured `repo-task` executions with
    `scoring.mode = "verify-script"`, the runner executes the verifier after
-   patch capture and before recording the result row.
+   patch capture and before recording the result row, using any verifier-only
+   environment overlay declared in the effective scoring table.
 11. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions. Measured repo-task records also include the prepared workspace
    metadata needed to locate the run-owned copy, the run-relative patch
@@ -139,9 +140,13 @@ and before each measured adapter execution:
    command-line arguments. It returns deterministic status through its process
    exit code and may write structured JSON. The runner enforces the effective
    `verify-script` scoring timeout, defaulting to `300.0` seconds when
-   `scoring.timeout_s` is absent, captures verifier stdout/stderr as explicit
-   artifacts, and corrects or creates the structured JSON so `exit_code` and
-   `passed` match the process result or timeout outcome.
+   `scoring.timeout_s` is absent. If the effective scoring table declares
+   `environment`, the runner overlays those string entries onto a copy of the
+   runner environment for the verifier subprocess; when it is absent, the
+   subprocess inherits the environment as before. The runner captures verifier
+   stdout/stderr as explicit artifacts and corrects or creates the structured
+   JSON so `exit_code` and `passed` match the process result or timeout
+   outcome.
 9. The reporter records normalized workspace metadata, `patch.path`, `task`,
    `verify`, `repo_task`, and top-level `scoring` for measured repo-task
    `verify-script` rows.
@@ -161,7 +166,9 @@ Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final
 repo-task verifier status, and `verify-script` scoring. Repo-task rows using
 prompt-output scoring still omit `verify` and `repo_task`, and current chat
-cases do not use this flow.
+cases do not use this flow. Verifier environment configuration stays on the
+execution side of the boundary: it is not added to adapter requests, normalized
+result rows, or reporter-owned repo-task objects.
 
 ## Result Record Envelope
 

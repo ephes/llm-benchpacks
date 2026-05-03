@@ -255,9 +255,14 @@ verifier process exit code. Verifier subprocesses use the timeout from the
 effective `verify-script` scoring table, defaulting to `300.0` seconds when
 `scoring.timeout_s` is absent; timeouts keep the same artifact paths, record
 `repo_task.status = "failed"`, record `repo_task.verify_exit_code = null`, and
-write authoritative timeout metadata into the verifier JSON. Configurable
-verifier environment support and real task execution through a full
-agent-session harness remain planned.
+write authoritative timeout metadata into the verifier JSON. Verifier
+subprocesses may also receive a manifest-configurable environment overlay from
+the effective `verify-script` scoring table's optional `environment` field. The
+runner preserves inherited environment behavior when it is absent; when present,
+it copies the current runner environment, overlays the manifest string keys and
+values, and passes that copy only to the verifier subprocess without adding
+environment values to result rows. Real task execution through a full
+agent-session harness remains planned.
 
 Reason: repo mutation needs a stronger safety boundary than prompt-only chat
 cases. Copying pack-owned fixtures into run-owned workspaces keeps benchmark

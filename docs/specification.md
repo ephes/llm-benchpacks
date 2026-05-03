@@ -87,12 +87,15 @@ fenced unified-diff contract, captures deterministic patch artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
 log artifacts for that patch application phase, and executes `verify-script`
 scoring against the prepared workspace with a manifest-configurable verifier
-timeout and a fixed `300.0` second default when no timeout is declared. It
-does not yet run an agent harness, support manifest task commands, support
-repo-task warmups, expose workspace cleanup/retention options, or configure
-verifier environments. Measured repo-task records include prepared workspace
-metadata, patch artifact paths, task log artifact paths, verifier artifact
-paths, final repo-task verifier status, and top-level `verify-script` scoring.
+timeout and a fixed `300.0` second default when no timeout is declared. The
+effective `verify-script` scoring table may also declare a verifier-only
+string-to-string `environment` table, which is overlaid onto a copy of the
+runner environment for the verifier subprocess. It does not yet run an agent
+harness, support manifest task commands, support repo-task warmups, expose
+workspace cleanup/retention options, or configure task environments. Measured
+repo-task records include prepared workspace metadata, patch artifact paths,
+task log artifact paths, verifier artifact paths, final repo-task verifier
+status, and top-level `verify-script` scoring.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -196,9 +199,15 @@ partial output is preserved when Python exposes it, and the structured verifier
 JSON is created or corrected with `exit_code: null`, `passed: false`,
 `timed_out: true`, and the actual configured `timeout_s` value. If
 `scoring.timeout_s` is absent from the effective `verify-script` scoring table,
-the verifier timeout remains `300.0` seconds. This timeout is not repeated as a
-normal top-level `run.jsonl` field. Non-repo-task cases that request
-`verify-script` fail clearly instead of falling back to prompt-output scoring.
+the verifier timeout remains `300.0` seconds. If `scoring.environment` is absent
+from the effective `verify-script` scoring table, verifier subprocesses inherit
+the current runner environment. If it is present, its string keys and string
+values are overlaid onto a copy of that environment for the verifier only.
+Timeout and environment configuration are not repeated as normal top-level
+`run.jsonl` fields, and environment values are not written to `run.jsonl` unless
+the verifier script itself emits them in its own JSON or logs. Non-repo-task
+cases that request `verify-script` fail clearly instead of falling back to
+prompt-output scoring.
 
 ## Runtime Adapters
 

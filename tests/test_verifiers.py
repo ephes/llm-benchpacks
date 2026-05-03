@@ -266,6 +266,82 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert result.scoring == {"mode": "verify-script", "passed": True}
 
 
+def test_run_verifier_overlays_manifest_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    write_script(pack_dir, "")
+    scoring = Scoring(
+        mode="verify-script",
+        script="verify/check.py",
+        environment={"BENCHPACK_MANIFEST_VAR": "from-manifest"},
+    )
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    patch = tmp_path / "run" / "patch" / "edit-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("", encoding="utf-8")
+    monkeypatch.setenv("BENCHPACK_HOST_VAR", "from-host")
+    run_kwargs: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        run_kwargs.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", fake_run)
+
+    run_repo_task_verifier(
+        pack=pack,
+        case=pack.cases[0],
+        scoring=scoring,
+        prepared_workspace=prepared,
+        patch_path=patch,
+        output_dir=tmp_path / "run",
+        repetition=1,
+    )
+
+    env = run_kwargs["env"]
+    assert isinstance(env, dict)
+    assert env["BENCHPACK_MANIFEST_VAR"] == "from-manifest"
+    assert env["BENCHPACK_HOST_VAR"] == "from-host"
+    assert env != {"BENCHPACK_MANIFEST_VAR": "from-manifest"}
+
+
+def test_run_verifier_omits_subprocess_env_when_manifest_environment_absent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    write_script(pack_dir, "")
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    patch = tmp_path / "run" / "patch" / "edit-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("", encoding="utf-8")
+    run_kwargs: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        run_kwargs.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("benchpack.verifiers.subprocess.run", fake_run)
+
+    run_repo_task_verifier(
+        pack=pack,
+        case=pack.cases[0],
+        scoring=pack.cases[0].scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=patch,
+        output_dir=tmp_path / "run",
+        repetition=1,
+    )
+
+    assert "env" not in run_kwargs
+
+
 def test_run_verifier_timeout_writes_captured_logs_and_failed_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -41,8 +41,38 @@ working history and open questions.
 
 - Future slices still need full agent-session harness integration, richer task
   status/reporting if needed, repo-task warmup support, cleanup and retention
-  options, configurable verifier environment support, and larger bundled
-  repo-task conversion.
+  options, task environment support if needed, and larger bundled repo-task
+  conversion.
+
+## 2026-05-02 (Phase 3 manifest verifier environment)
+
+### Changed
+
+- Added manifest-configurable verifier environment support for measured
+  `repo-task` `verify-script` scoring through optional `scoring.environment`.
+- `environment` is a first-class scoring field, not an opaque extra key, and is
+  validated as a TOML table of string keys to string values. Empty string values
+  are allowed. Non-table values, non-string values, nested tables, arrays, empty
+  names, names with unsafe characters, names starting with a digit, and values
+  containing NUL fail manifest loading.
+- Verifier execution now uses the effective scoring table's environment, so
+  case-local scoring overrides pack-level scoring as a whole instead of
+  field-merging environment entries.
+- When `environment` is absent, verifier subprocesses keep the previous inherited
+  environment behavior. When present, the runner copies the current environment,
+  overlays the manifest entries, and passes that copy only to the verifier.
+- Adapter request shape, raw request/response paths, workspace, patch, task,
+  verify, repo_task, and scoring row shapes, timeout behavior and timeout JSON,
+  repo-task warmup rejection, prompt-output scoring, non-repo-task
+  `verify-script` rejection, task environment handling, task timeout handling,
+  and workspace retention behavior remain unchanged.
+
+### Open Questions
+
+- Future slices still need full agent-session harness integration, richer task
+  status/reporting if needed, repo-task warmup support, cleanup and retention
+  options, task environment support if needed, and larger bundled repo-task
+  conversion.
 
 ## 2026-05-02 (Phase 3 bundled repo-task patch pack)
 
