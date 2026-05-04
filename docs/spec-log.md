@@ -16,6 +16,22 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-04 (generated result ignore policy)
+
+### Changed
+
+- Updated `.gitignore` so generated `results/*` directories are ignored by
+  default while preserving the tracked `results/.gitkeep`.
+- Curated result artifacts can still be committed intentionally with
+  `git add -f` when a `docs/run-log.md` entry calls for them.
+- Updated specification, architecture, and run-log guidance to reflect that
+  force-add workflow.
+
+### Open Questions
+
+- Existing tracked curated result artifacts remain tracked. Future curation
+  should stay explicit and small.
+
 ## 2026-05-03 (structured runtime metadata artifact)
 
 ### Changed

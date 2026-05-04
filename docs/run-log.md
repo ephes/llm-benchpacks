@@ -1,8 +1,9 @@
 # Run Log
 
-Curated benchmark runs should be recorded here. Raw artifacts under
-`results/*/raw/` are ignored by default; a curated `summary.md`, `hardware.json`,
-and (when small) `run.jsonl` may be committed alongside.
+Curated benchmark runs should be recorded here. Generated result directories
+under `results/*` are ignored by default; a curated `summary.md`,
+`hardware.json`, `run-metadata.json`, and small `run.jsonl` may be committed
+alongside only when intentionally force-added.
 
 | Date | Host | Runtime | Model | Pack | Result | Artifacts | Notes |
 |------|------|---------|-------|------|--------|-----------|-------|
@@ -33,6 +34,8 @@ and (when small) `run.jsonl` may be committed alongside.
   `summary.md` (e.g. `results/2026-04-26-m5-mbp-64gb/summary.md`). Use `local`
   when nothing was committed, or an external URL for remote-host runs whose
   artifacts live elsewhere.
+- Because `results/*` is ignored by default, use `git add -f` for any curated
+  result artifact that the run-log entry intentionally commits.
 - If a run is exploratory and not comparable, say that explicitly.
 - For curated Apple Silicon M4/M5 comparison entries, copy the runbook's
   report checklist into the notes: identify host fields from `hardware.json`

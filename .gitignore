@@ -6,9 +6,10 @@ __pycache__/
 # Node
 node_modules/
 
-# Generated benchmark output
-# Raw responses stay local; curated summaries under results/ may be committed.
-results/*/raw/
+# Generated benchmark output stays local by default.
+# Force-add curated result artifacts only when docs/run-log.md calls for them.
+results/*
+!results/.gitkeep
 
 # Local environment
 .env

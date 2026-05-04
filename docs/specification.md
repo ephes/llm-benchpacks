@@ -681,8 +681,9 @@ cell is displayed as `<case>#<repetition>` so rows remain distinguishable withou
 changing the summary table columns. Single-repetition summaries keep the legacy
 case label.
 
-Large generated artifacts should stay out of git by default. Curated
-`summary.md`, `hardware.json`, and small `run.jsonl` files may be committed.
+Generated result directories are ignored by default. Curated `summary.md`,
+`hardware.json`, `run-metadata.json`, and small `run.jsonl` files may be
+committed only when intentionally force-added for a run-log entry.
 
 ## MVP
 

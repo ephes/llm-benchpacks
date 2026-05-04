@@ -504,9 +504,10 @@ project-management system:
 - `docs/decisions.md` records durable architectural decisions.
 - `docs/spec-log.md` records dated spec changes and open questions.
 - `docs/run-log.md` records curated benchmark runs with links to result folders.
-- `results/*/raw/` is generated and ignored by default; curated `summary.md`,
-  `hardware.json`, small `run-metadata.json`, and small `run.jsonl` files under
-  `results/` may be committed when a run-log entry intentionally needs them.
+- `results/*` is generated and ignored by default, except for the tracked
+  `results/.gitkeep`. Curated `summary.md`, `hardware.json`, small
+  `run-metadata.json`, and small `run.jsonl` files under `results/` may be
+  committed only when intentionally force-added for a run-log entry.
 
 This keeps the spec close to the code while avoiding generated-result churn in
 normal commits.
