@@ -28,6 +28,7 @@ from .packs import (
 from .patches import PatchError, capture_workspace_patch
 from .report import ReportError, load_report_runs, render_report
 from .results import RunReporter
+from .run_metadata import RunMetadataError, load_run_metadata
 from .tasks import TaskError, TaskExecutionRequest, run_repo_task_executor
 from .verifiers import (
     DEFAULT_VERIFY_TIMEOUT_S,
@@ -125,6 +126,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
 
     adapter = get_adapter(args.adapter)
+    run_metadata = None
+    if args.run_metadata is not None:
+        try:
+            run_metadata = load_run_metadata(args.run_metadata)
+        except RunMetadataError as exc:
+            raise SystemExit(str(exc)) from exc
 
     hardware = collect_hardware()
     host_label = args.host_label or _derive_host_label(hardware)
@@ -143,6 +150,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     reporter = RunReporter(out_dir, pack)
+    if run_metadata is not None:
+        reporter.write_run_metadata(run_metadata)
 
     for case in pack.cases:
         for warmup_index in range(1, warmup + 1):
@@ -264,7 +273,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
 
     reporter.write_hardware(hardware)
-    reporter.write_summary(hardware)
+    reporter.write_summary(hardware, run_metadata=run_metadata)
 
     print(str(out_dir))
     return 0
@@ -284,9 +293,10 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 def _cmd_report(args: argparse.Namespace) -> int:
     try:
         runs = load_report_runs(args.result_dirs)
+        output = render_report(runs)
     except ReportError as exc:
         raise SystemExit(str(exc)) from exc
-    print(render_report(runs))
+    print(output)
     return 0
 
 
@@ -301,6 +311,11 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--endpoint", default=None, help="Endpoint URL (adapter-specific default if omitted)")
     run.add_argument("--out", default=None, help="Output directory (default: results/<date>-<host-label>/)")
     run.add_argument("--host-label", default=None, help="Host label override for the default --out path")
+    run.add_argument(
+        "--run-metadata",
+        default=None,
+        help="Path to a JSON object persisted as run-metadata.json",
+    )
     run.add_argument(
         "--openai-stream-usage",
         choices=(OPENAI_STREAM_USAGE_INCLUDE, OPENAI_STREAM_USAGE_OMIT),

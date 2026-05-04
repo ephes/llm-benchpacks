@@ -404,6 +404,7 @@ benchpack run <pack> --adapter <adapter> --model <model>
                      [--endpoint <url>]
                      [--out <dir>]
                      [--host-label <label>]
+                     [--run-metadata <json-file>]
                      [--openai-stream-usage {include,omit}]
                      [--force]
 ```
@@ -424,6 +425,46 @@ benchpack run <pack> --adapter <adapter> --model <model>
   `results/<YYYY-MM-DD>-<host-label>/`.
 - `--host-label` overrides the auto-derived host label used in the default
   `--out` path.
+- `--run-metadata` points at a user-supplied JSON object. When supplied, the
+  runner validates it before creating or replacing the output directory and
+  writes the normalized object to `run-metadata.json` beside the result.
+  Intended fields are structured runtime, model, and operating-condition notes,
+  not autodiscovered facts.
+
+The recommended `--run-metadata` shape is permissive and optional by field:
+
+```json
+{
+  "runtime": {
+    "name": "llama-server",
+    "version": "9010",
+    "command": "llama-server --model ...",
+    "options": {
+      "ctx_size": 4096,
+      "gpu_layers": "auto"
+    }
+  },
+  "model": {
+    "id": "qwen2.5-0.5b-instruct-q4_k_m",
+    "source": "local-gguf",
+    "quantization": "Q4_K_M",
+    "sha256": "..."
+  },
+  "operating_conditions": {
+    "power": "not captured",
+    "thermal": "not captured",
+    "background_load": "no intentional throttling setup"
+  },
+  "notes": "optional short note"
+}
+```
+
+Validation is deliberately small: the metadata file must exist, parse as JSON,
+and have a JSON object at the root. If present, `runtime`, `model`, and
+`operating_conditions` must be JSON objects, and `notes` must be a string.
+Missing fields are allowed. The runner does not infer runtime version, server
+command, model checksum, quantization, context size, cache settings, power
+state, thermal state, or background load.
 
 ### Pack-driven repetitions and warmup
 
@@ -550,7 +591,11 @@ stdout. Each input must be a directory containing `run.jsonl`; when
 `hardware.json` is present beside it, the report includes host identity fields
 such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware_model_identifier`, `ram_mb`, `os`, and `gpus`. Missing
-`hardware.json` is tolerated and reported explicitly.
+`hardware.json` is tolerated and reported explicitly. When
+`run-metadata.json` is present, the report includes a concise table for the
+user-supplied runtime, model, operating-condition, and notes fields. Missing
+`run-metadata.json` is tolerated and reported explicitly; malformed metadata
+fails with a clear error.
 
 The report is meant to be pasted into run notes or used as a comparison-report
 skeleton. It summarizes:
@@ -558,6 +603,8 @@ skeleton. It summarizes:
 - input result directories and row counts
 - pack id/version values
 - adapter, model, and endpoint values from normalized rows
+- user-supplied runtime/model/operating metadata when `run-metadata.json`
+  exists
 - row and `ok` counts by run/case
 - scoring pass, fail, and unscored counts by run/case
 - the same median wall time, TTFT, prefill TPS, decode TPS, total TPS, output
@@ -566,9 +613,11 @@ skeleton. It summarizes:
 
 The report command is read-only: it does not execute packs, collect hardware,
 load adapters, read `raw/`, write result artifacts, mutate result directories,
-or change `benchpack compare` behavior. Its comparison section reuses the
-compare summarization and parity helpers so report medians and statuses do not
-silently diverge from `benchpack compare`.
+or change `benchpack compare` behavior. It may parse optional
+`run-metadata.json` for display, but compare remains independent of that
+artifact. Its comparison section reuses the compare summarization and parity
+helpers so report medians and statuses do not silently diverge from
+`benchpack compare`.
 
 ## Result Artifacts
 
@@ -580,14 +629,20 @@ results/
     run.jsonl
     summary.md
     hardware.json
+    run-metadata.json
     raw/
       case-001.request.json
       case-001.response.json
 ```
 
 `hardware.json` is the per-run host metadata file described in
-`docs/hardware-targets.md`. `summary.md` and `hardware.json` are committable;
-`raw/` is generated and ignored by default.
+`docs/hardware-targets.md`. `run-metadata.json` is present only when
+`benchpack run --run-metadata <json-file>` was supplied. It is a small,
+human-readable, user-supplied metadata artifact for runtime/server, model, and
+operating-condition notes that the runner does not autodiscover. `summary.md`
+includes a compact runtime metadata section when the artifact is supplied.
+`summary.md`, `hardware.json`, and intentional small `run-metadata.json` files
+are committable; `raw/` is generated and ignored by default.
 
 The common `hardware.json` shape includes `hostname`, `platform`, `os`,
 `kernel`, `cpu_model`, `cpu_count`, `ram_mb`, and `gpus`. Platform-specific

@@ -446,6 +446,22 @@ def test_write_hardware_writes_json(tmp_path: Path) -> None:
     assert data["hostname"] == "h"
 
 
+def test_write_run_metadata_writes_json(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    reporter.write_run_metadata(
+        {
+            "runtime": {"name": "llama-server", "version": "9010"},
+            "model": {"id": "qwen", "quantization": "Q4_K_M"},
+        }
+    )
+
+    data = json.loads((out / "run-metadata.json").read_text())
+    assert data["runtime"] == {"name": "llama-server", "version": "9010"}
+    assert data["model"]["quantization"] == "Q4_K_M"
+
+
 def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
@@ -460,6 +476,39 @@ def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
     assert "smoke-chat" in text
     assert "capital" in text
     assert "ollama-generate" in text
+
+
+def test_write_summary_includes_runtime_metadata_when_supplied(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    reporter.write_summary(
+        {"hostname": "h", "platform": "darwin"},
+        run_metadata={
+            "runtime": {
+                "name": "llama-server",
+                "version": "9010",
+                "options": {"ctx_size": 4096},
+            },
+            "model": {"id": "qwen", "quantization": "Q4_K_M"},
+            "operating_conditions": {"thermal": "not captured"},
+            "notes": "no intentional throttling setup",
+        },
+    )
+    text = (out / "summary.md").read_text()
+
+    assert "## Runtime Metadata" in text
+    assert "Runtime: name=llama-server" in text
+    assert "quantization=Q4_K_M" in text
+    assert "Operating conditions: thermal=not captured" in text
+    assert "Notes: no intentional throttling setup" in text
 
 
 def test_write_summary_distinguishes_repetitions(tmp_path: Path) -> None:

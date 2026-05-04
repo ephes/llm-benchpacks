@@ -140,9 +140,11 @@ runner can already execute useful first-pass benchmarks for this goal with
 guidance have also landed. A read-only Markdown report generator also landed to
 assemble run-log and comparison-note skeletons from existing result
 directories while reusing compare median, warning, cache-row, and
-`prefill parity` semantics. Remaining work is deeper live benchmark
-interpretation, production external harness execution, and larger repo-task
-packs, not benchmark semantics.
+`prefill parity` semantics. A narrow user-supplied runtime metadata slice also
+landed: `benchpack run --run-metadata <json-file>` persists a small
+`run-metadata.json` artifact and `benchpack report` includes it when present.
+Remaining work is deeper live benchmark interpretation, production external
+harness execution, and larger repo-task packs, not benchmark semantics.
 
 Scope:
 
@@ -193,6 +195,14 @@ Scope:
   identity, summarizes adapter/model/endpoint and scoring pass/fail counts, and
   reuses compare helpers for medians, warnings, cache rows, and
   `prefill parity`.
+- Add structured user-supplied runtime/run metadata capture for benchmark
+  result directories. **Landed 2026-05-03** as
+  `benchpack run --run-metadata <json-file>`, which validates a permissive JSON
+  object, writes `run-metadata.json` beside `hardware.json`, includes compact
+  metadata in `summary.md`, and teaches `benchpack report` to render runtime,
+  model, operating-condition, and notes fields when present. This remains
+  explicit user input rather than runtime autodiscovery, and it does not change
+  adapter schemas, result row fields, compare behavior, or pack semantics.
 
 Suggested implementation handoffs:
 
@@ -209,6 +219,10 @@ Suggested implementation handoffs:
 - Reporting generator slice: produce pasteable Markdown from existing result
   directories without writing artifacts or changing benchmark semantics.
   **Landed 2026-05-03** as `benchpack report`.
+- Runtime metadata capture/reporting slice: persist explicit user-supplied
+  runtime, model, and operating-condition metadata as a small result artifact
+  and include it in reports without probing servers or changing compare.
+  **Landed 2026-05-03** as `run-metadata.json`.
 
 Validation:
 

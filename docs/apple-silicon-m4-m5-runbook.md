@@ -140,6 +140,43 @@ If the OpenAI-compatible server rejects streaming usage options, add
 `--openai-stream-usage omit` to the streaming packs that need it, especially
 `runtime-sweep` and `desktop-django-wrap`.
 
+Before running packs that should be interpretable later, write a small metadata
+JSON file on each host and pass it with `--run-metadata`. Use placeholders in
+shared docs or handoffs when model paths or host details are private:
+
+```json
+{
+  "runtime": {
+    "name": "llama-server",
+    "version": "9010",
+    "command": "llama-server --model <model> --host 127.0.0.1 --port 8081 --ctx-size 4096 --gpu-layers auto",
+    "options": {
+      "ctx_size": 4096,
+      "gpu_layers": "auto",
+      "openai_stream_usage": "include"
+    }
+  },
+  "model": {
+    "id": "<model>",
+    "source": "local-gguf",
+    "quantization": "Q4_K_M",
+    "sha256": "<checksum-if-captured>"
+  },
+  "operating_conditions": {
+    "power": "not captured",
+    "thermal": "not captured",
+    "background_load": "no intentional throttling setup"
+  },
+  "notes": "optional short run note"
+}
+```
+
+Then add the flag to each matching run:
+
+```sh
+--run-metadata metadata/<host-runtime>.json
+```
+
 ## SSH M4 Run
 
 Run the same commands on the M4 Studio through SSH. Keep the remote repo path as
@@ -200,8 +237,8 @@ uv run benchpack run runtime-sweep \
 
 After the remote run, pull back only the result directories needed for the
 comparison. For compare-only work, `run.jsonl` is the required file; pulling
-`summary.md` and `hardware.json` alongside it keeps the directory inspectable
-without copying large generated payloads.
+`summary.md`, `hardware.json`, and `run-metadata.json` alongside it keeps the
+directory inspectable without copying large generated payloads.
 
 ```sh
 mkdir -p results/<date>-m4-max-smoke
@@ -212,6 +249,7 @@ rsync -a \
   --include '/run.jsonl' \
   --include '/summary.md' \
   --include '/hardware.json' \
+  --include '/run-metadata.json' \
   --exclude '*' \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-smoke/ \
   results/<date>-m4-max-smoke/
@@ -220,6 +258,7 @@ rsync -a \
   --include '/run.jsonl' \
   --include '/summary.md' \
   --include '/hardware.json' \
+  --include '/run-metadata.json' \
   --exclude '*' \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-runtime/ \
   results/<date>-m4-max-runtime/
@@ -228,12 +267,15 @@ rsync -a \
   --include '/run.jsonl' \
   --include '/summary.md' \
   --include '/hardware.json' \
+  --include '/run-metadata.json' \
   --exclude '*' \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-wrap/ \
   results/<date>-m4-max-wrap/
 ```
 
-`scp` is also acceptable for the small compare files:
+`scp` is also acceptable for the small compare files. Omit
+`run-metadata.json` from the command when that optional artifact was not
+captured:
 
 ```sh
 mkdir -p results/<date>-m4-max-patch
@@ -242,6 +284,7 @@ scp \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-patch/run.jsonl \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-patch/summary.md \
   <m4-studio-host>:<remote-repo>/results/<date>-m4-max-patch/hardware.json \
+  <m4-studio-host>:<remote-repo>/results/<date>-m4-max-patch/run-metadata.json \
   results/<date>-m4-max-patch/
 ```
 
@@ -275,7 +318,8 @@ uv run benchpack compare \
 
 After checking individual comparisons, use `benchpack report` as the preferred
 way to assemble pasteable comparison notes. It reads the same `run.jsonl` rows
-as compare, includes optional `hardware.json` host identity, counts scoring
+as compare, includes optional `hardware.json` host identity, includes optional
+`run-metadata.json` runtime/model/operating details, counts scoring
 passes/failures, and reuses compare's median, warning, cache-row, and
 `prefill parity` logic:
 
@@ -332,8 +376,8 @@ Compare parity statuses and warnings are derived from normalized `run.jsonl`
 fields only. Compare does not infer runtime version, server command,
 quantization, model checksum, context size, GPU layer/batch/cache options,
 power state, thermal state, or background load from raw files, timing fields,
-or endpoint behavior. Keep those details in run notes whenever the comparison
-should be interpretable later.
+or endpoint behavior. Capture those details with `benchpack run --run-metadata`
+whenever the comparison should be interpretable later.
 
 ## Hardware Metadata Check
 
@@ -343,22 +387,23 @@ Apple Silicon comparisons it should identify the host through `chip`,
 `os`, and `gpus` when macOS reports those values.
 
 These fields distinguish host class, for example an M5 Max MacBook Pro from an
-M4 Max Mac Studio. They do not prove runtime parity. Continue recording runtime
-version, server command, model id, quantization, model checksum, context size,
-power mode, thermal state, and cache settings in run notes or curated
-`docs/run-log.md` entries when a result is meant to be interpreted later.
+M4 Max Mac Studio. They do not prove runtime parity. Use `--run-metadata` for
+runtime version, server command, model id, quantization, model checksum,
+context size, power mode, thermal state, and cache settings when a result is
+meant to be interpreted later.
 
 ## Comparison Report Checklist
 
 Before treating M4/M5 output as comparable, create a short report or run note
-that separates host metadata captured by the runner from runtime details that
-must be captured manually.
+that separates host metadata from `hardware.json`, user-supplied runtime
+metadata from `run-metadata.json`, and interpretation notes.
 
-Start with `benchpack report` output for the relevant result directories, then
-add the manual runtime, model, operating-condition, and interpretation notes
-below. The report output should replace manual copying of medians from multiple
-`benchpack compare` invocations, but it does not infer runtime versions, server
-commands, checksums, power state, thermal state, or background load.
+Start with `benchpack report` output for the relevant result directories. The
+report output should replace manual copying of medians from multiple
+`benchpack compare` invocations and will include `run-metadata.json` when it is
+present. It still does not infer runtime versions, server commands, checksums,
+power state, thermal state, or background load; missing metadata must be called
+out as a comparability gap.
 
 Hardware identity from each result directory's `hardware.json`:
 
@@ -370,7 +415,7 @@ Hardware identity from each result directory's `hardware.json`:
 - `os`
 - `gpus`
 
-Manual runtime and operating notes:
+Runtime and operating metadata from `run-metadata.json`:
 
 - Runtime/server version and exact server command used on each host.
 - Adapter and endpoint shape, such as `openai-chat` with an OpenAI-compatible

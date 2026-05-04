@@ -11,9 +11,11 @@
   referenced file fixtures have been appended.
 - **Adapter**: runtime-specific request/response bridge.
 - **Collector**: hardware, timing, and process/GPU metrics.
-- **Reporter**: JSONL artifacts plus human-readable summaries.
+- **Reporter**: JSONL artifacts plus human-readable summaries and small
+  runner-owned sibling artifacts.
 - **Compare/report utilities**: read-only reporting over existing `run.jsonl`
-  result directories and optional per-run `hardware.json` files.
+  result directories plus optional per-run `hardware.json` and
+  `run-metadata.json` files.
 
 Repo-task execution adds responsibilities around the existing concepts rather
 than changing the adapter boundary:
@@ -67,6 +69,7 @@ src/
       openai_chat.py
     packs.py
     results.py
+    run_metadata.py
     compare.py
     report.py
     hardware.py
@@ -93,20 +96,23 @@ results/
    including static repo snapshots used by chat cases, remain metadata-only and
    are not copied, executed, injected, mutated, or attached to adapter requests.
 3. Load runtime adapter configuration.
-4. Capture host metadata.
-5. For each non-repo-task case, run pack-requested warmup executions first.
+4. Optionally load and validate a user-supplied runtime metadata JSON object
+   when `--run-metadata` is provided. This is explicit user input, not runtime
+   autodiscovery.
+5. Capture host metadata.
+6. For each non-repo-task case, run pack-requested warmup executions first.
    Packs with `repo-task` cases and `defaults.warmup > 0` are rejected before
    execution in this slice.
-6. For `repo-task` measured executions only, validate that the case references
+7. For `repo-task` measured executions only, validate that the case references
    exactly one `kind = "repo"` directory fixture, copy it to
    `workspace/<case-id>/rep-NNN/` under the run output directory. Repo-task
    warmups are rejected for now.
-7. Execute the pack-requested measured repetitions, streaming when supported.
+8. Execute the pack-requested measured repetitions, streaming when supported.
    Runner-level adapter compatibility options, such as the `openai-chat`
    streaming usage mode, are merged into a per-request defaults copy so the
    loaded pack defaults are not mutated.
-8. Persist raw requests and responses for warmups and measured executions.
-9. For measured `repo-task` executions only, invoke the internal task executor
+9. Persist raw requests and responses for warmups and measured executions.
+10. For measured `repo-task` executions only, invoke the internal task executor
    boundary. Current CLI runs use the default executor, or the same executor
    when the case explicitly declares `harness = { id = "fenced-patch" }`. That
    executor extracts the first fenced `diff` or `patch` block from model output,
@@ -121,20 +127,24 @@ results/
    same boundary without changing the adapter request shape or public result
    row shape by default, but direct internal harness callables reject
    `task_timeout_s`.
-10. Apply implemented deterministic scoring for measured executions when the
+11. Apply implemented deterministic scoring for measured executions when the
    pack declares it. For measured `repo-task` executions with
    `scoring.mode = "verify-script"`, the runner executes the verifier after
    patch capture and before recording the result row, using any verifier-only
    environment overlay declared in the effective scoring table.
-11. Normalize metrics, resources, and scoring into `run.jsonl` for measured
+12. Normalize metrics, resources, and scoring into `run.jsonl` for measured
    executions. Measured repo-task records also include the prepared workspace
    metadata needed to locate the run-owned copy, the run-relative patch
    artifact path, task log artifact paths, verifier artifact paths, and final
    verifier status when `verify-script` is used.
-12. Write `summary.md`.
+13. Write `hardware.json`, optional `run-metadata.json`, and `summary.md`.
+    `run-metadata.json` is intentionally a sibling artifact rather than a
+    repeated per-row field so compare medians and row contracts remain focused
+    on measured execution data.
 
 Adapters still receive a loaded prompt and return the existing result envelope.
-Workspace and patch paths are not passed to adapters.
+Workspace, patch paths, and user-supplied runtime metadata are not passed to
+adapters.
 
 ## Repo-Task Flow
 
@@ -337,6 +347,13 @@ Warmup executions are runner/reporter concerns. They call the same adapter and
 write raw artifacts under `raw/`, but they do not produce result records and are
 not scored.
 
+User-supplied run metadata is a sibling artifact, not a record contribution.
+When provided, the runner writes `run-metadata.json` beside `hardware.json`.
+The object may describe runtime/server name and version, server command,
+runtime options, model id/source/quantization/checksum, and operating
+conditions such as power, thermal, and background load. It is not passed to
+adapters and is not duplicated into measured rows.
+
 The repo-task `workspace` object is deliberately narrow:
 `workspace.path` is relative to the run output directory and uses
 `workspace/<case-id>/rep-NNN`; `workspace.source_fixture_id` is the referenced
@@ -461,19 +478,22 @@ shape.
 
 `benchpack report` is also outside the execution flow. It reads existing result
 directories, loads `run.jsonl` through the same loader as compare, optionally
-reads sibling `hardware.json`, and writes Markdown to stdout only. Missing
-`hardware.json` is tolerated because older or pulled-back compare inputs may
-contain only `run.jsonl`.
+reads sibling `hardware.json` and `run-metadata.json`, and writes Markdown to
+stdout only. Missing `hardware.json` or `run-metadata.json` is tolerated because
+older or pulled-back compare inputs may contain only `run.jsonl`.
 
 The report renderer is intended for run-log and comparison-note assembly. It
 summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
-identity when available, row and `ok` counts, and scoring pass/fail/unscored
-counts. Its compare-median section reuses the compare summarization,
+identity when available, user-supplied runtime/model/operating metadata when
+available, row and `ok` counts, and scoring pass/fail/unscored counts.
+Malformed `run-metadata.json` fails clearly because the report is being asked to
+interpret that artifact. Its compare-median section reuses the compare
+summarization,
 prompt/cache warning, and prefill-parity helpers so the report cannot silently
 disagree with `benchpack compare` on median values, cache rows, warnings, or
 `prefill parity` status. It does not load adapters, collect hardware, execute
 packs, read `raw/`, write result artifacts, mutate result directories, or alter
-the result schema.
+the result schema. Compare remains independent of `run-metadata.json`.
 
 ## Spec And Log Management
 
@@ -485,8 +505,8 @@ project-management system:
 - `docs/spec-log.md` records dated spec changes and open questions.
 - `docs/run-log.md` records curated benchmark runs with links to result folders.
 - `results/*/raw/` is generated and ignored by default; curated `summary.md`,
-  `hardware.json`, and small `run.jsonl` files under `results/` may be
-  committed.
+  `hardware.json`, small `run-metadata.json`, and small `run.jsonl` files under
+  `results/` may be committed when a run-log entry intentionally needs them.
 
 This keeps the spec close to the code while avoiding generated-result churn in
 normal commits.

@@ -26,9 +26,9 @@ best-effort basis. Current Darwin-specific optional fields include `chip`,
 `hardware_model` from `sysctl hw.model`, and `hardware_model_name` /
 `hardware_model_identifier` from `system_profiler SPHardwareDataType` when that
 tool is available. Runtime versions, model checksums, quantization, context
-size, server command, power mode, thermal state, and cache settings remain run
-note responsibilities until a later narrow runtime-metadata slice defines a
-reliable collector.
+size, server command, power mode, thermal state, and cache settings are not
+autodiscovered; capture them explicitly with `benchpack run --run-metadata`
+when a result should be interpretable later.
 
 ## Hetzner Small GPU
 

@@ -16,6 +16,7 @@ def _write_run(
     pack_id: str = "runtime-sweep",
     version: str = "0.1.0",
     hardware: dict | None = None,
+    metadata: dict | None = None,
     rows: list[dict] | None = None,
 ) -> None:
     path.mkdir(parents=True)
@@ -27,6 +28,11 @@ def _write_run(
     if hardware is not None:
         (path / "hardware.json").write_text(
             json.dumps(hardware) + "\n",
+            encoding="utf-8",
+        )
+    if metadata is not None:
+        (path / "run-metadata.json").write_text(
+            json.dumps(metadata) + "\n",
             encoding="utf-8",
         )
 
@@ -140,6 +146,59 @@ def test_report_tolerates_missing_hardware_json(tmp_path: Path) -> None:
 
     assert "| run-a | runtime-sweep 0.1.0 | openai-chat | model |" in output
     assert "hardware.json missing" in output
+
+
+def test_report_renders_user_supplied_runtime_metadata(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(
+        run_a,
+        metadata={
+            "runtime": {
+                "name": "llama-server",
+                "version": "9010",
+                "command": "llama-server --model <model>",
+                "options": {"ctx_size": 4096},
+            },
+            "model": {
+                "id": "qwen2.5-0.5b-instruct-q4_k_m",
+                "quantization": "Q4_K_M",
+                "sha256": "abc123",
+            },
+            "operating_conditions": {
+                "power": "not captured",
+                "thermal": "not captured",
+                "background_load": "no intentional throttling setup",
+            },
+            "notes": "unit report note",
+        },
+    )
+
+    output = render_report(load_report_runs([run_a]))
+
+    assert "## User-Supplied Runtime Metadata" in output
+    assert "name=llama-server" in output
+    assert "ctx_size" in output
+    assert "quantization=Q4_K_M" in output
+    assert "thermal=not captured" in output
+    assert "unit report note" in output
+
+
+def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(run_a)
+
+    output = render_report(load_report_runs([run_a]))
+
+    assert "| run-a | run-metadata.json missing | — | — | — |" in output
+
+
+def test_report_rejects_malformed_run_metadata_json(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(run_a)
+    (run_a / "run-metadata.json").write_text("{bad json}\n", encoding="utf-8")
+
+    with pytest.raises(ReportError, match="could not parse run metadata"):
+        render_report(load_report_runs([run_a]))
 
 
 def test_report_counts_scoring_pass_fail_and_unscored(tmp_path: Path) -> None:

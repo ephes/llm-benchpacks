@@ -24,7 +24,8 @@ and (when small) `run.jsonl` may be committed alongside.
   Validation slices may use workload-shaped labels when the plan prescribes
   them, but the host column and `hardware.json` should still identify the
   actual machine.
-- Include runtime version in the artifact summary.
+- Include runtime version in the artifact summary, preferably through a small
+  `run-metadata.json` captured with `benchpack run --run-metadata`.
 - Record whether the model was cold or warm.
 - Link to committed summaries (and `run.jsonl` when it accompanies a curated
   run), not large raw responses.
@@ -35,8 +36,9 @@ and (when small) `run.jsonl` may be committed alongside.
 - If a run is exploratory and not comparable, say that explicitly.
 - For curated Apple Silicon M4/M5 comparison entries, copy the runbook's
   report checklist into the notes: identify host fields from `hardware.json`
-  separately from manual runtime/server, model, quantization, checksum,
-  context, cache, power, thermal, and background-load notes.
+  separately from runtime/server, model, quantization, checksum, context,
+  cache, power, thermal, and background-load notes captured in
+  `run-metadata.json` when available.
 - When citing `benchpack compare` for M4/M5 runs, record any warnings and the
   `prefill parity` status for the relevant cases. Do not turn
   `desktop-django-wrap` or `patch-from-failure` into broad coding-agent claims;

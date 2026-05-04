@@ -19,6 +19,7 @@ from .compare import (
     prefill_parity_statuses,
     summarize_runs,
 )
+from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
 class ReportError(ValueError):
@@ -48,6 +49,8 @@ def render_report(runs: list[ResultRun]) -> str:
     lines.extend(_render_inputs(runs))
     lines.append("")
     lines.extend(_render_run_metadata(runs))
+    lines.append("")
+    lines.extend(_render_runtime_metadata(runs))
     lines.append("")
     lines.extend(_render_case_outcomes(runs))
     lines.append("")
@@ -82,6 +85,35 @@ def _render_run_metadata(runs: list[ResultRun]) -> list[str]:
                     _unique_record_values(run.records, ("endpoint",))
                 ),
                 hardware=_markdown_cell(_hardware_cell(run.path)),
+            )
+        )
+    return lines
+
+
+def _render_runtime_metadata(runs: list[ResultRun]) -> list[str]:
+    lines = [
+        "## User-Supplied Runtime Metadata",
+        "",
+        "| run | runtime | model metadata | operating conditions | notes |",
+        "|-----|---------|----------------|----------------------|-------|",
+    ]
+    for run in runs:
+        metadata = _runtime_metadata(run.path)
+        if metadata is None:
+            lines.append(
+                "| {run} | run-metadata.json missing | {missing} | {missing} | "
+                "{missing} |".format(run=run.label, missing=MISSING)
+            )
+            continue
+        lines.append(
+            "| {run} | {runtime} | {model} | {conditions} | {notes} |".format(
+                run=run.label,
+                runtime=_markdown_cell(_metadata_section_cell(metadata, "runtime")),
+                model=_markdown_cell(_metadata_section_cell(metadata, "model")),
+                conditions=_markdown_cell(
+                    _metadata_section_cell(metadata, "operating_conditions")
+                ),
+                notes=_markdown_cell(_metadata_notes_cell(metadata)),
             )
         )
     return lines
@@ -170,6 +202,27 @@ def _render_compare_medians(
     return lines
 
 
+def _runtime_metadata(result_dir: Path) -> dict[str, Any] | None:
+    try:
+        return load_optional_run_metadata(result_dir)
+    except RunMetadataError as exc:
+        raise ReportError(str(exc)) from exc
+
+
+def _metadata_section_cell(metadata: dict[str, Any], section: str) -> str:
+    value = metadata.get(section)
+    if not isinstance(value, dict):
+        return MISSING
+    return _compact_mapping(value)
+
+
+def _metadata_notes_cell(metadata: dict[str, Any]) -> str:
+    notes = metadata.get("notes")
+    if not isinstance(notes, str) or not notes:
+        return MISSING
+    return notes
+
+
 def _pack_cell(run: ResultRun) -> str:
     versions = pack_versions([run])
     if len(versions) == 1:
@@ -244,6 +297,17 @@ def _compact_value(value: Any) -> str:
     if isinstance(value, dict):
         return json.dumps(value, sort_keys=True)
     return str(value)
+
+
+def _compact_mapping(values: dict[str, Any]) -> str:
+    if not values:
+        return MISSING
+    parts = [
+        f"{key}={_compact_value(value)}"
+        for key, value in sorted(values.items())
+        if value not in (None, "", [])
+    ]
+    return "; ".join(parts) if parts else MISSING
 
 
 def _case_order(records: list[dict[str, Any]]) -> list[str]:

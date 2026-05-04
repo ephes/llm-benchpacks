@@ -394,6 +394,112 @@ def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> Non
     assert "repetition" not in record
 
 
+def test_cli_run_metadata_writes_small_result_artifact(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "runtime": {
+                    "name": "llama-server",
+                    "version": "9010",
+                    "command": "llama-server --model <model>",
+                    "options": {"ctx_size": 4096},
+                },
+                "model": {
+                    "id": "qwen2.5-0.5b-instruct-q4_k_m",
+                    "quantization": "Q4_K_M",
+                },
+                "operating_conditions": {
+                    "power": "not captured",
+                    "thermal": "not captured",
+                    "background_load": "no intentional throttling setup",
+                },
+                "notes": "unit metadata",
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out), "--run-metadata", str(metadata_path)])) == 0
+
+    persisted = json.loads((out / "run-metadata.json").read_text(encoding="utf-8"))
+    assert persisted["runtime"]["name"] == "llama-server"
+    assert persisted["runtime"]["options"] == {"ctx_size": 4096}
+    assert persisted["model"]["quantization"] == "Q4_K_M"
+    assert persisted["operating_conditions"]["power"] == "not captured"
+    assert json.loads((out / "run.jsonl").read_text())["case"] == "capital"
+
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert "## Runtime Metadata" in summary
+    assert "name=llama-server" in summary
+    assert "quantization=Q4_K_M" in summary
+
+
+def test_cli_run_metadata_missing_file_fails_before_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="could not read run metadata"):
+        main(
+            _argv(
+                [
+                    "--out",
+                    str(out),
+                    "--run-metadata",
+                    str(tmp_path / "missing.json"),
+                ]
+            )
+        )
+
+    assert not out.exists()
+
+
+def test_cli_run_metadata_malformed_json_fails_before_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text("{bad json}\n", encoding="utf-8")
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="could not parse run metadata"):
+        main(_argv(["--out", str(out), "--run-metadata", str(metadata_path)]))
+
+    assert not out.exists()
+
+
+def test_cli_run_metadata_non_object_root_fails_before_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text("[]\n", encoding="utf-8")
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="expected JSON object"):
+        main(_argv(["--out", str(out), "--run-metadata", str(metadata_path)]))
+
+    assert not out.exists()
+
+
 def test_cli_repetitions_write_distinct_measured_records(
     tmp_path: Path,
     monkeypatch,
@@ -1917,3 +2023,25 @@ def test_cli_report_rejects_missing_run_jsonl(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="missing run.jsonl"):
         main(["report", str(run_a), str(run_b)])
+
+
+def test_cli_report_rejects_malformed_run_metadata_without_traceback(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    (run_a / "run-metadata.json").write_text("{bad json}\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="could not parse run metadata"):
+        main(["report", str(run_a)])
+
+
+def test_cli_report_rejects_malformed_hardware_without_traceback(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    (run_a / "hardware.json").write_text("{bad json}\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="could not parse"):
+        main(["report", str(run_a)])

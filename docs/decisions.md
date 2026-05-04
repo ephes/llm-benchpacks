@@ -378,3 +378,22 @@ it is safe to run, but the external harness process, model-call, environment,
 retention, and status-reporting policies are still future work. Keeping timeout
 case-local and tied to the selected harness avoids broad task configuration
 while preserving existing artifacts and result compatibility.
+
+## D-025: Runtime Metadata Is User-Supplied Sibling Artifact
+
+Runtime, model, and operating-condition metadata for a benchmark run is captured
+through explicit user input, `benchpack run --run-metadata <json-file>`, and
+persisted as `run-metadata.json` beside `hardware.json`. The file is a
+permissive JSON object: known optional sections such as `runtime`, `model`, and
+`operating_conditions` are objects when present, and `notes` is a string when
+present. The reporter may include the artifact in `summary.md` and
+`benchpack report`, but the metadata is not duplicated into each `run.jsonl`
+row. `benchpack compare` remains independent of this artifact.
+
+Reason: server command, runtime version, model checksum, quantization, context
+and cache options, power state, thermal state, and background load are
+environment-specific across Ollama, MLX, llama.cpp, OpenAI-compatible local
+servers, and CUDA hosts. Capturing them as user-supplied metadata reduces
+manual run-log prose without introducing unreliable runtime autodiscovery,
+adapter schema changes, benchmark semantic changes, or median/parity behavior
+changes.

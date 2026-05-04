@@ -36,6 +36,7 @@ uv sync
 uv run benchpack run smoke-chat --adapter ollama-generate --model qwen3-coder:latest
 uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
+uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --run-metadata metadata/runtime.json --force
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
@@ -44,7 +45,12 @@ uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-lla
 ```
 
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
-`run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. See
+`run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
+`--run-metadata <json-file>` is supplied, the runner also validates that JSON
+object and writes it beside the result as `run-metadata.json` for runtime,
+model, and operating-condition notes such as server command, runtime version,
+quantization, checksum, context/cache options, power, thermal, and background
+load. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
 collision rules, and `uv run pytest` for the test suite.
 
@@ -73,8 +79,9 @@ coverage column. Old rows may lack `tokens.prompt`, `tokens.cached_prompt`, or
 speed.
 
 `benchpack report` is also read-only and emits a pasteable Markdown report from
-existing result directories. It reads `run.jsonl` and optional `hardware.json`,
-then summarizes inputs, pack id/version, host identity when available,
+existing result directories. It reads `run.jsonl`, optional `hardware.json`, and
+optional `run-metadata.json`, then summarizes inputs, pack id/version, host
+identity when available, user-supplied runtime/model/operating metadata,
 adapter/model/endpoint, row and `ok` counts, scoring pass/fail/unscored counts,
 and the same compare medians, cache rows, warnings, and `prefill parity`
 statuses used by `benchpack compare`. It is intended for assembling run notes

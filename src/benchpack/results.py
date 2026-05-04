@@ -14,6 +14,7 @@ from typing import Any
 
 from .adapters import AdapterResult
 from .packs import Case, Pack
+from .run_metadata import write_run_metadata
 from .scoring import evaluate
 
 
@@ -163,7 +164,14 @@ class RunReporter:
             json.dumps(hardware, indent=2) + "\n"
         )
 
-    def write_summary(self, hardware: dict[str, Any]) -> None:
+    def write_run_metadata(self, metadata: dict[str, Any]) -> None:
+        write_run_metadata(self.output_dir, metadata)
+
+    def write_summary(
+        self,
+        hardware: dict[str, Any],
+        run_metadata: dict[str, Any] | None = None,
+    ) -> None:
         lines: list[str] = []
         lines.append(f"# {self.pack.id} ({self.pack.version})")
         lines.append("")
@@ -186,6 +194,21 @@ class RunReporter:
                 vram = g.get("vram_mb")
                 parts.append(f"{model} ({vram} MB)" if vram else model)
             lines.append("GPU: " + ", ".join(parts))
+        if run_metadata is not None:
+            lines.append("")
+            lines.append("## Runtime Metadata")
+            lines.append("")
+            for label, section in (
+                ("Runtime", "runtime"),
+                ("Model", "model"),
+                ("Operating conditions", "operating_conditions"),
+            ):
+                value = run_metadata.get(section)
+                if isinstance(value, dict):
+                    lines.append(f"{label}: {_compact_summary_mapping(value)}")
+            notes = run_metadata.get("notes")
+            if isinstance(notes, str) and notes:
+                lines.append(f"Notes: {notes}")
         lines.append("")
         lines.append("| case | adapter | model | ok | wall_s | total_tps | scoring |")
         lines.append("|------|---------|-------|----|--------|-----------|---------|")
@@ -216,3 +239,21 @@ class RunReporter:
             )
         lines.append("")
         (self.output_dir / "summary.md").write_text("\n".join(lines))
+
+
+def _compact_summary_mapping(values: dict[str, Any]) -> str:
+    if not values:
+        return "—"
+    return "; ".join(
+        f"{key}={_compact_summary_value(value)}"
+        for key, value in sorted(values.items())
+        if value not in (None, "", [])
+    ) or "—"
+
+
+def _compact_summary_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    if isinstance(value, list):
+        return json.dumps(value)
+    return str(value)

@@ -16,6 +16,38 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-03 (structured runtime metadata artifact)
+
+### Changed
+
+- Added `benchpack run --run-metadata <json-file>` for explicit,
+  user-supplied runtime/run metadata capture.
+- The metadata file must be JSON with an object root. Known optional sections
+  `runtime`, `model`, and `operating_conditions` must be objects when present,
+  and `notes` must be a string when present.
+- Supplied metadata is written as a small sibling artifact,
+  `run-metadata.json`, beside `hardware.json` and is summarized in
+  `summary.md`.
+- `benchpack report` now reads optional `run-metadata.json` and renders a
+  concise runtime/model/operating-condition metadata table. Missing metadata is
+  tolerated and reported explicitly; malformed metadata fails clearly.
+- Kept metadata capture user-driven and runner/reporting-side only: no runtime
+  autodiscovery, server probing, checksum scanning, power/thermal capture,
+  adapter schema changes, benchmark semantics changes, `run.jsonl` row field
+  additions, or compare median/cache/parity behavior changes were added.
+- Updated README, specification, architecture, Apple Silicon runbook,
+  hardware-target notes, decisions, run-log guidance, and implementation plan
+  for the new metadata workflow.
+
+### Open Questions
+
+- Future metadata may need richer conventions for runtime options or curated
+  result subsets, but auto-capture remains intentionally out of scope until a
+  runtime-specific design is justified.
+- Existing local 2026-05-03 generated result artifacts still remain local
+  evidence and should not be committed unless a later curated run-log entry
+  calls for a small subset.
+
 ## 2026-05-03 (Apple Silicon comparison report generator)
 
 ### Changed
