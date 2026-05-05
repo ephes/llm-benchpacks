@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from benchpack.patches import capture_workspace_patch
 from benchpack.tasks import (
     AgentSessionHarnessRequest,
     AgentSessionHarnessResult,
+    ExternalProcessHarness,
     TaskArtifactPaths,
     TaskError,
     TaskExecutionRequest,
@@ -59,6 +61,12 @@ def make_harness_request(tmp_path: Path, workspace: Path) -> AgentSessionHarness
         model_output_text="",
         task_paths=task_artifact_paths(out, case, 1),
     )
+
+
+def write_fake_external_harness(tmp_path: Path, body: str) -> Path:
+    script = tmp_path / "fake_external_harness.py"
+    script.write_text(body, encoding="utf-8")
+    return script
 
 
 def test_task_artifact_paths_use_run_relative_layout(tmp_path: Path) -> None:
@@ -633,6 +641,411 @@ def test_run_repo_task_executor_rejects_internal_harness_timeout_before_logs(
         )
 
     assert called is False
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_external_process_mutation_reaches_patch_and_verifier(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack_dir = tmp_path / "pack"
+    source = pack_dir / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("source repo\n", encoding="utf-8")
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    case = Case(
+        id="edit-repo",
+        kind="repo-task",
+        prompt="Change the repository.",
+        scoring=Scoring(mode="verify-script", script="verify/check.py"),
+        raw={},
+        fixture_refs=["repo"],
+    )
+    script = write_fake_external_harness(
+        tmp_path,
+        """
+import argparse
+import sys
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+workspace = Path(args.workspace)
+if args.case != "edit-repo" or args.repetition != "1":
+    raise SystemExit(2)
+if Path.cwd().resolve() != workspace.resolve():
+    raise SystemExit(3)
+if Path(args.output_dir).resolve() != Path(__file__).parent.joinpath("run").resolve():
+    raise SystemExit(4)
+(workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
+(workspace / "nested").mkdir()
+(workspace / "nested" / "created.txt").write_text("created\\n", encoding="utf-8")
+print(f"external stdout case={args.case} rep={args.repetition}")
+print("external stderr trace", file=sys.stderr)
+""",
+    )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=case,
+            repetition=1,
+            workspace=workspace,
+            model_output_text="adapter output remains available",
+            external_process_harness=ExternalProcessHarness(
+                argv=(sys.executable, str(script)),
+            ),
+        )
+    )
+
+    assert record == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "external stdout case=edit-repo rep=1\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "external stderr trace\n"
+    )
+    assert (source / "README.md").read_text(encoding="utf-8") == "source repo\n"
+    assert outside.read_text(encoding="utf-8") == "outside\n"
+    assert (workspace / "README.md").read_text(encoding="utf-8") == (
+        "external repo\n"
+    )
+    assert (workspace / "nested" / "created.txt").read_text(
+        encoding="utf-8"
+    ) == "created\n"
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, case, 1)
+    assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
+    assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+external repo\n"
+        "--- /dev/null\n"
+        "+++ b/nested/created.txt\n"
+        "@@ -0,0 +1 @@\n"
+        "+created\n"
+    )
+
+    verify_script = pack_dir / "verify" / "check.py"
+    verify_script.parent.mkdir(parents=True)
+    verify_script.write_text(
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+workspace = Path(args.workspace)
+if (workspace / "README.md").read_text(encoding="utf-8") != "external repo\\n":
+    raise SystemExit(2)
+if not (workspace / "nested" / "created.txt").is_file():
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"patch_exists": Path(args.patch).exists()}, fh)
+""",
+        encoding="utf-8",
+    )
+    pack = Pack(
+        id="repo-pack",
+        version="0.1.0",
+        description="",
+        defaults={},
+        cases=[case],
+        scoring=None,
+        path=pack_dir,
+        fixtures=[fixture],
+    )
+
+    verifier_result = run_repo_task_verifier(
+        pack=pack,
+        case=case,
+        scoring=case.scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared,
+        patch_path=out / patch_metadata["path"],
+        output_dir=out,
+        repetition=1,
+        timeout_s=5.0,
+    )
+
+    assert verifier_result.repo_task == {"status": "passed", "verify_exit_code": 0}
+    assert verifier_result.scoring == {"mode": "verify-script", "passed": True}
+    assert json.loads((out / verifier_result.verify["path"]).read_text()) == {
+        "exit_code": 0,
+        "passed": True,
+        "patch_exists": True,
+    }
+
+
+def test_run_repo_task_executor_external_process_nonzero_exit_is_task_outcome(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    script = write_fake_external_harness(
+        tmp_path,
+        """
+import argparse
+import sys
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+Path(args.workspace, "failed.txt").write_text("changed before exit\\n", encoding="utf-8")
+print("stdout before nonzero exit")
+print("stderr before nonzero exit", file=sys.stderr)
+raise SystemExit(7)
+""",
+    )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            external_process_harness=ExternalProcessHarness(
+                argv=(sys.executable, str(script)),
+            ),
+        )
+    )
+
+    assert (workspace / "failed.txt").read_text(encoding="utf-8") == (
+        "changed before exit\n"
+    )
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "stdout before nonzero exit\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "stderr before nonzero exit\n"
+    )
+
+
+def test_run_repo_task_executor_external_process_timeout_writes_task_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    source = tmp_path / "pack" / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("source repo\n", encoding="utf-8")
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
+    script = write_fake_external_harness(
+        tmp_path,
+        """
+import argparse
+import sys
+import time
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+Path(args.workspace, "README.md").write_text("started before timeout\\n", encoding="utf-8")
+print("stdout before timeout", flush=True)
+print("stderr before timeout", file=sys.stderr, flush=True)
+time.sleep(5)
+Path(args.workspace, "done.txt").write_text("should not exist\\n", encoding="utf-8")
+""",
+    )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            task_timeout_s=0.25,
+            external_process_harness=ExternalProcessHarness(
+                argv=(sys.executable, str(script)),
+            ),
+        )
+    )
+
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "stdout before timeout\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "stderr before timeout\n"
+        "External subprocess harness timed out after 0.25 seconds; "
+        "process stopped.\n"
+    )
+    assert (workspace / "README.md").read_text(encoding="utf-8") == (
+        "started before timeout\n"
+    )
+    assert not (workspace / "done.txt").exists()
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, make_case(), 1)
+    assert "started before timeout" in (
+        out / patch_metadata["path"]
+    ).read_text(encoding="utf-8")
+
+
+def test_run_repo_task_executor_rejects_public_and_external_harness_combination(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(TaskError, match="cannot be combined"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                harness_id="fenced-patch",
+                external_process_harness=ExternalProcessHarness(
+                    argv=(sys.executable, "-c", ""),
+                ),
+            )
+        )
+
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_rejects_internal_and_external_harness_combination(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    called = False
+
+    def harness(request: AgentSessionHarnessRequest) -> AgentSessionHarnessResult:
+        nonlocal called
+        called = True
+        return AgentSessionHarnessResult(stdout="unexpected\n")
+
+    with pytest.raises(TaskError, match="cannot be combined"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                agent_session_harness=harness,
+                external_process_harness=ExternalProcessHarness(
+                    argv=(sys.executable, "-c", ""),
+                ),
+            )
+        )
+
+    assert called is False
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_rejects_external_process_empty_argv_before_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(TaskError, match="argv must not be empty"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                external_process_harness=ExternalProcessHarness(argv=()),
+            )
+        )
+
+    assert not (out / "task").exists()
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        ("python -c ''", "argv must be a sequence"),
+        ((sys.executable, 123), "argv entries must be non-empty strings"),
+        ((sys.executable, "bad\x00arg"), "argv entries must be non-empty strings"),
+    ],
+)
+def test_run_repo_task_executor_rejects_unsafe_external_process_argv_before_logs(
+    tmp_path: Path,
+    argv: object,
+    message: str,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(TaskError, match=message):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                external_process_harness=ExternalProcessHarness(
+                    argv=argv,  # type: ignore[arg-type]
+                ),
+            )
+        )
+
+    assert not (out / "task").exists()
+
+
+def test_run_repo_task_executor_external_process_missing_executable_is_runner_failure(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(TaskError, match="could not run external subprocess harness"):
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                external_process_harness=ExternalProcessHarness(
+                    argv=("definitely-missing-benchpack-harness",),
+                ),
+            )
+        )
+
     assert not (out / "task").exists()
 
 

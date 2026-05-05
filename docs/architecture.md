@@ -287,6 +287,18 @@ and compatibility options as harness context. Those calls do not become normal
 adapter calls, do not change adapter envelopes, and do not write normal `raw/`
 artifacts unless a later schema slice defines that mapping.
 
+The first executable external-process slice is internal to the repo-task
+executor boundary. Runner-side callers can pass an explicit argv sequence to
+`run_repo_task_executor`; the executor validates the argv shape, appends
+runner-owned context arguments, runs it without a shell in the prepared
+workspace, captures stdout/stderr, and writes the existing task log artifacts.
+It is mutually exclusive with public `harness_id` selection and the internal
+in-process agent-session harness. This skeleton proves process lifecycle,
+timeout cleanup for the direct subprocess, task log capture, and post-task
+workspace observation without making `external-agent` a valid manifest id,
+adding CLI flags, or changing adapter, raw artifact, result, compare, or report
+boundaries.
+
 External harness process failures divide the same way as current task execution.
 Unsafe paths, unwritable required logs, inability to stop a subprocess, or
 failure to preserve the workspace/output boundary are runner failures. A harness

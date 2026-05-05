@@ -366,7 +366,14 @@ repo-task pack: it keeps the loader unchanged, treats `external-agent` as a
 provisional documentation name only, enumerates future runner-owned harness
 inputs, preserves existing adapter/raw/result/report boundaries, and defines the
 external harness mutation, artifact, timeout, and failure boundaries for the
-next implementation slice.
+next implementation slice. The first narrow subprocess-backed external harness
+skeleton landed 2026-05-05 behind the same repo-task executor boundary:
+runner-side callers can provide explicit argv, the runner appends context
+arguments, runs the subprocess without a shell in the prepared workspace,
+captures existing task stdout/stderr logs, treats completed nonzero exits and
+cleanly stopped timeouts as task outcomes, and leaves patch capture, verifier
+execution, manifest parsing, CLI behavior, adapter schemas, raw paths, result
+rows, compare/report behavior, and the default matrix unchanged.
 
 Scope:
 
@@ -542,6 +549,15 @@ Scope:
   result row shapes, compare/report behavior, patch capture after the task
   phase, verifier execution after patch capture, repo-task warmup rejection, and
   the default M4/M5 matrix remain unchanged.
+- Add the first narrow subprocess-backed external harness runner skeleton.
+  **Landed 2026-05-05** behind `run_repo_task_executor` without public manifest
+  or CLI selection: runner-side callers can supply an explicit argv sequence,
+  the runner appends prepared workspace, case, output directory, and repetition
+  arguments, runs without `shell=True`, captures stdout/stderr to the existing
+  task log paths, and keeps nonzero exits and cleanly stopped timeouts inside
+  the existing task/verifier flow. Invalid harness combinations, unsafe argv,
+  missing executables, invalid workspaces, and unwritable logs remain runner
+  failures. `external-agent` remains loader-rejected.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -555,10 +571,12 @@ Scope:
   verifier, patch artifacts, public compatibility selection, and the
   docs-first production external harness contract exist. **Partially landed**
   as an internal executor path for runner-side callers only, public
-  `fenced-patch` selection for the existing compatibility executor, and the
-  2026-05-05 production external contract refinement. Actual external
-  coding-agent execution, parser support for a concrete external id, and richer
-  harness configuration remain planned later.
+  `fenced-patch` selection for the existing compatibility executor, the
+  2026-05-05 production external contract refinement, and a runner-side
+  subprocess skeleton for deterministic external harness boundary tests. Actual
+  external coding-agent execution, parser support for a concrete external id,
+  harness-owned model-call context, and richer harness configuration remain
+  planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

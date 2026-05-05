@@ -341,7 +341,20 @@ a possibly partial workspace as a task outcome. On success, task stdout records
 a short deterministic success message and task stderr remains empty. This
 remains the behavior for current CLI repo-task runs.
 The separate internal harness path is not a public executor selection system
-and does not add new row fields.
+and does not add new row fields. Runner-side callers and tests may also supply
+an internal external-process harness request through `run_repo_task_executor`.
+That path accepts an explicit argv sequence from runner-owned code, appends
+bounded context arguments for the prepared workspace, case id, output
+directory, and repetition, runs without a shell in the prepared workspace,
+captures stdout/stderr to the existing task log paths, and preserves patch
+capture and verifier ordering. A clean nonzero subprocess exit and a timeout
+where the runner stops the direct subprocess and closes logs are task outcomes
+represented through the existing logs and downstream verifier result. Unsafe
+argv shape, missing executable, invalid workspace/output paths, incompatible
+harness combinations, or unwritable required logs remain runner failures. This
+internal subprocess skeleton does not make `external-agent` manifest-runnable
+and does not add CLI flags, manifest commands, adapter fields, raw artifacts,
+or `run.jsonl` fields.
 
 Future executor implementations, including production external harnesses and
 richer agent-session harnesses,

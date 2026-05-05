@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -165,6 +165,18 @@ AgentSessionHarness = Callable[[AgentSessionHarnessRequest], AgentSessionHarness
 
 
 @dataclass(frozen=True)
+class ExternalProcessHarness:
+    """Runner-owned subprocess harness invocation for one repo-task phase.
+
+    ``argv`` is supplied by runner-side code or tests, not by pack manifests.
+    The executor runs it without a shell and appends explicit context arguments
+    for the prepared workspace, case id, output directory, and repetition.
+    """
+
+    argv: Sequence[str]
+
+
+@dataclass(frozen=True)
 class TaskExecutionRequest:
     """Runner-side request for executing one measured repo-task phase."""
 
@@ -176,6 +188,7 @@ class TaskExecutionRequest:
     harness_id: str | None = None
     task_timeout_s: float | None = None
     agent_session_harness: AgentSessionHarness | None = None
+    external_process_harness: ExternalProcessHarness | None = None
 
 
 class _PatchContractError(ValueError):
@@ -262,14 +275,34 @@ def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
 
     The default executor is the fenced model-output patch bridge. Public
     ``harness_id`` selection currently accepts only ``"fenced-patch"`` and
-    routes to that same executor. An internal agent-session harness can still
-    be supplied by runner-side tests or future implementation code.
+    routes to that same executor. Internal in-process agent-session and
+    external-process harnesses can still be supplied by runner-side tests or
+    future implementation code.
     """
 
-    if request.harness_id is not None and request.agent_session_harness is not None:
+    if (
+        request.harness_id is not None
+        and request.agent_session_harness is not None
+    ):
         raise TaskError(
             "public harness_id cannot be combined with internal "
             "agent_session_harness"
+        )
+    if (
+        request.harness_id is not None
+        and request.external_process_harness is not None
+    ):
+        raise TaskError(
+            "public harness_id cannot be combined with internal "
+            "external_process_harness"
+        )
+    if (
+        request.agent_session_harness is not None
+        and request.external_process_harness is not None
+    ):
+        raise TaskError(
+            "internal agent_session_harness cannot be combined with internal "
+            "external_process_harness"
         )
     if (
         request.task_timeout_s is not None
@@ -286,6 +319,11 @@ def run_repo_task_executor(request: TaskExecutionRequest) -> dict[str, str]:
         return _run_agent_session_harness_executor(
             request,
             request.agent_session_harness,
+        )
+    if request.external_process_harness is not None:
+        return _run_external_process_harness_executor(
+            request,
+            request.external_process_harness,
         )
     return _run_fenced_model_patch_executor(request)
 
@@ -343,6 +381,92 @@ def _run_agent_session_harness_executor(
     return _write_task_logs(request, stdout=result.stdout, stderr=result.stderr)
 
 
+def _run_external_process_harness_executor(
+    request: TaskExecutionRequest,
+    harness: ExternalProcessHarness,
+) -> dict[str, str]:
+    """Run a runner-owned subprocess harness and record existing task logs."""
+
+    command, workspace = _external_process_command(request, harness)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=workspace,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=request.task_timeout_s,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = _timeout_stream_to_text(exc.stdout)
+        stderr = _timeout_stream_to_text(exc.stderr)
+        stderr += (
+            f"External subprocess harness timed out after "
+            f"{request.task_timeout_s:g} seconds; process stopped.\n"
+        )
+        return _write_task_logs(request, stdout=stdout, stderr=stderr)
+    except OSError as exc:
+        raise TaskError(
+            f"could not run external subprocess harness for repo-task case "
+            f"{request.case.id!r}"
+        ) from exc
+
+    return _write_task_logs(
+        request,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def _external_process_command(
+    request: TaskExecutionRequest,
+    harness: ExternalProcessHarness,
+) -> tuple[list[str], Path]:
+    """Return validated subprocess argv plus runner-owned context arguments."""
+
+    argv = harness.argv
+    if isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence):
+        raise TaskError("external subprocess harness argv must be a sequence")
+    command = list(argv)
+    if not command:
+        raise TaskError("external subprocess harness argv must not be empty")
+    for argument in command:
+        if not isinstance(argument, str) or argument == "" or "\x00" in argument:
+            raise TaskError(
+                "external subprocess harness argv entries must be non-empty "
+                "strings without NUL bytes"
+            )
+
+    try:
+        workspace = request.workspace.resolve(strict=True)
+        output_dir = request.output_dir.resolve(strict=False)
+    except OSError as exc:
+        raise TaskError(
+            f"could not resolve external subprocess harness paths for "
+            f"repo-task case {request.case.id!r}"
+        ) from exc
+    if not workspace.is_dir():
+        raise TaskError(
+            f"external subprocess harness workspace is not a directory for "
+            f"repo-task case {request.case.id!r}"
+        )
+
+    return (
+        [
+            *command,
+            "--workspace",
+            str(workspace),
+            "--case",
+            request.case.id,
+            "--output-dir",
+            str(output_dir),
+            "--repetition",
+            str(request.repetition),
+        ],
+        workspace,
+    )
+
+
 def _write_task_logs(
     request: TaskExecutionRequest,
     *,
@@ -361,6 +485,16 @@ def _write_task_logs(
             f"could not write task logs for repo-task case {request.case.id!r}"
         ) from exc
     return task_record(paths, request.output_dir)
+
+
+def _timeout_stream_to_text(value: str | bytes | None) -> str:
+    """Normalize captured TimeoutExpired output to text for task logs."""
+
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
 
 
 def extract_fenced_patch(output_text: str) -> str | None:

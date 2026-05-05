@@ -60,8 +60,41 @@ working history and open questions.
 - A real external harness may prove that richer task status/reporting or named
   harness artifacts are necessary, but this contract keeps existing task logs
   and verifier status as the default boundary.
-- The first concrete external harness runner still needs process lifecycle,
-  model-call logging, timeout cleanup, and run-metadata handoff tests.
+- Production external harness integration still needs model-call logging,
+  process-tree cleanup policy, run-metadata handoff, and a public parser/
+  executor policy.
+
+## 2026-05-05 (external subprocess harness skeleton)
+
+### Changed
+
+- Added the first narrow subprocess-backed external repo-task harness path
+  behind `run_repo_task_executor` for runner-side callers and deterministic
+  tests only.
+- The new internal harness accepts explicit runner-owned argv, appends prepared
+  workspace, case id, output directory, and repetition arguments, runs without a
+  shell in the prepared workspace, and captures stdout/stderr into the existing
+  `task/<case-id>/rep-NNN.*.log` artifacts.
+- Completed nonzero subprocess exits are task outcomes rather than runner
+  crashes. Timeouts are task outcomes when the direct subprocess is stopped and
+  task logs can be written, using deterministic stderr text before patch
+  capture and verifier execution continue.
+- Invalid public/internal harness combinations, unsafe argv shape, missing
+  executables, invalid workspaces, and unwritable required task logs remain
+  runner failures before completed task records are assumed.
+- Preserved existing fenced-patch defaults, explicit `harness = { id =
+  "fenced-patch" }` behavior, internal in-process agent-session behavior,
+  adapter schemas, raw paths, result row shapes, compare/report behavior, and
+  default M4/M5 matrix. The manifest loader still rejects `external-agent`.
+
+### Open Questions
+
+- Whether the next production slice should keep `external-agent` loader-rejected
+  until the real integration is ready, or add a parser-accepted reserved id that
+  fails at execution with a clear not-implemented error.
+- Whether production external harnesses need process-tree cleanup, richer task
+  status/reporting, named harness artifacts, run-metadata handoff, or
+  harness-owned model-call logging beyond the existing task logs.
 
 ## 2026-05-05 (python-regression-fix bundled repo-task)
 
