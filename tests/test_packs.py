@@ -2148,3 +2148,75 @@ def test_bundled_patch_from_failure_pack_contract() -> None:
         == 'def greet(name: str) -> str:\n    return f"Hello {name}."\n'
     )
     assert pack_dir.joinpath("verify/check.py").is_file()
+
+
+def test_bundled_python_regression_fix_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "python-regression-fix")
+    pack_dir = repo_root / "benchpacks" / "python-regression-fix"
+
+    assert pack.id == "python-regression-fix"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 768
+    assert pack.defaults["stream"] is False
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert pack.scoring is None
+
+    assert [fixture.id for fixture in pack.fixtures] == ["repo"]
+    fixture = pack.fixtures[0]
+    assert fixture.kind == "repo"
+    assert fixture.raw["path"] == "fixtures/repo"
+    assert fixture.path.is_relative_to(pack_dir.resolve())
+    assert fixture.path.is_dir()
+
+    assert len(pack.cases) == 1
+    case = pack.cases[0]
+    assert case.id == "fix-task-summary"
+    assert case.kind == "repo-task"
+    assert case.fixture_refs == ["repo"]
+    assert case.raw["prompt_file"] == "prompts/fix-task-summary.md"
+    assert "prompt" not in case.raw
+    assert case.prompt is not None
+    assert "```diff" in case.prompt
+    assert "info string exactly `diff`" in case.prompt
+    assert "`task_summary.py`" in case.prompt
+    assert "summarize_tasks(tasks)" in case.prompt
+    assert "overdue_titles(tasks, today)" in case.prompt
+    assert "must not mutate the input task dictionaries" in case.prompt
+    assert "Do not include shell commands" in case.prompt
+
+    assert case.scoring is not None
+    assert case.scoring.mode == "verify-script"
+    assert case.scoring.script == "verify/check.py"
+    assert validate_repo_task_case(pack, case).id == "repo"
+
+    fixture_files = {
+        path.relative_to(fixture.path).as_posix()
+        for path in fixture.path.rglob("*")
+        if path.is_file()
+    }
+    assert fixture_files == {"task_summary.py", "tests/test_task_summary.py"}
+    task_summary = fixture.path.joinpath("task_summary.py").read_text(encoding="utf-8")
+    assert "def summarize_tasks" in task_summary
+    assert "def overdue_titles" in task_summary
+    assert 'task.setdefault("owner", "unassigned")' in task_summary
+    assert 'if status != "done"' in task_summary
+    assert "return sorted(overdue)" in task_summary
+    assert pack_dir.joinpath("verify/check.py").is_file()
+
+    forbidden_path_fragments = ("/Users/", "~/", "C:\\")
+    for source_file in [
+        pack_dir / "README.md",
+        pack_dir / "benchpack.toml",
+        pack_dir / "prompts" / "fix-task-summary.md",
+        pack_dir / "verify" / "check.py",
+        *fixture.path.rglob("*"),
+    ]:
+        resolved_source_file = source_file.resolve()
+        assert resolved_source_file.is_relative_to(pack_dir.resolve())
+        if source_file.is_file():
+            contents = source_file.read_text(encoding="utf-8")
+            for fragment in forbidden_path_fragments:
+                assert fragment not in contents

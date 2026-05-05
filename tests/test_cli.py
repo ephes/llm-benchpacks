@@ -362,6 +362,22 @@ def _patch_from_failure_argv(extra: list[str] | None = None) -> list[str]:
     ]
 
 
+def _python_regression_fix_argv(extra: list[str] | None = None) -> list[str]:
+    return [
+        "run",
+        "python-regression-fix",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "test-model",
+        "--endpoint",
+        "http://example.test/v1",
+        "--host-label",
+        "unit-test",
+        *(extra or []),
+    ]
+
+
 def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> None:
     _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -956,6 +972,150 @@ def test_cli_bundled_patch_from_failure_runs_repo_task_flow(
     assert verify_json["patch_bytes"] > 0
     assert verify_json["exit_code"] == 0
     assert verify_json["passed"] is True
+
+
+def test_cli_bundled_python_regression_fix_runs_repo_task_flow(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = "\n".join(
+        [
+            "```diff",
+            "--- a/task_summary.py",
+            "+++ b/task_summary.py",
+            (
+                "@@ -12,27 +12,29 @@ def summarize_tasks(tasks: "
+                "list[dict[str, Any]]) -> dict[str, dict[str, int]]:"
+            ),
+            " ",
+            "     for task in tasks:",
+            '         status = task.get("status", "todo")',
+            '-        owner = task.setdefault("owner", "unassigned")',
+            '+        owner = task.get("owner") or "unassigned"',
+            "         by_status[status] += 1",
+            '-        if status != "done":',
+            "-            by_owner[owner] += 1",
+            "+        by_owner[owner] += 1",
+            " ",
+            "     return {",
+            '         "by_status": dict(by_status),',
+            '         "by_owner": dict(by_owner),',
+            "     }",
+            " ",
+            " ",
+            " def overdue_titles(tasks: list[dict[str, Any]], today: date | str) -> list[str]:",
+            "     if isinstance(today, date):",
+            "-        today_text = today.isoformat()",
+            "+        today_value = today",
+            "     else:",
+            "-        today_text = today",
+            "+        today_value = date.fromisoformat(today)",
+            " ",
+            "-    overdue: list[str] = []",
+            "+    overdue: list[tuple[date, str]] = []",
+            "     for task in tasks:",
+            '         due = task.get("due")',
+            "-        if due and due < today_text:",
+            '-            overdue.append(str(task.get("title", "")))',
+            '+        if not due or task.get("status") == "done":',
+            "+            continue",
+            "+        due_date = date.fromisoformat(str(due))",
+            "+        if due_date < today_value:",
+            '+            overdue.append((due_date, str(task.get("title", ""))))',
+            " ",
+            "-    return sorted(overdue)",
+            "+    return [title for _, title in sorted(overdue)]",
+            "```",
+            "",
+        ]
+    )
+    calls = _install_output_adapter(monkeypatch, output)
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    out = tmp_path / "run"
+
+    source_file = (
+        repo_root
+        / "benchpacks"
+        / "python-regression-fix"
+        / "fixtures"
+        / "repo"
+        / "task_summary.py"
+    )
+    source_before = source_file.read_text(encoding="utf-8")
+
+    assert main(_python_regression_fix_argv(["--out", str(out)])) == 0
+
+    workspace_file = (
+        out / "workspace" / "fix-task-summary" / "rep-001" / "task_summary.py"
+    )
+    workspace_text = workspace_file.read_text(encoding="utf-8")
+    assert 'owner = task.get("owner") or "unassigned"' in workspace_text
+    assert "task.setdefault" not in workspace_text
+    assert "if status != \"done\"" not in workspace_text
+    assert "return [title for _, title in sorted(overdue)]" in workspace_text
+    assert source_file.read_text(encoding="utf-8") == source_before
+
+    assert len(calls) == 1
+    assert calls[0]["request_path"] == "fix-task-summary.request.json"
+    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "`task_summary.py`" in calls[0]["prompt"]
+    assert "must not mutate the input task dictionaries" in calls[0]["prompt"]
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {"id": "python-regression-fix", "version": "0.1.0"}
+    assert record["case"] == "fix-task-summary"
+    assert record["adapter"] == "openai-chat"
+    assert record["raw"] == {
+        "request_path": "raw/fix-task-summary.request.json",
+        "response_path": "raw/fix-task-summary.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/fix-task-summary/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {"path": "patch/fix-task-summary/rep-001.diff"}
+    assert record["task"] == {
+        "stdout_path": "task/fix-task-summary/rep-001.stdout.log",
+        "stderr_path": "task/fix-task-summary/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/fix-task-summary/rep-001.json",
+        "stdout_path": "verify/fix-task-summary/rep-001.stdout.log",
+        "stderr_path": "verify/fix-task-summary/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert patch
+    assert "--- a/task_summary.py" in patch
+    assert 'owner = task.get("owner") or "unassigned"' in patch
+    assert "return [title for _, title in sorted(overdue)]" in patch
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["case"] == "fix-task-summary"
+    assert verify_json["pack_id"] == "python-regression-fix"
+    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["source_fixture_id"] == "repo"
+    assert verify_json["patch_exists"] is True
+    assert verify_json["patch_bytes"] > 0
+    assert verify_json["exit_code"] == 0
+    assert verify_json["passed"] is True
+    assert {check["name"] for check in verify_json["checks"]} == {
+        "summarize_tasks_counts_and_no_mutation",
+        "overdue_titles_date_input",
+        "overdue_titles_string_input",
+    }
+    assert all(check["passed"] for check in verify_json["checks"])
 
 
 def test_cli_repo_task_verify_script_success_records_artifacts(

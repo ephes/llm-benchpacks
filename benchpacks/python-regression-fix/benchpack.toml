@@ -1,0 +1,24 @@
+[pack]
+id = "python-regression-fix"
+version = "0.1.0"
+description = "Small repo-task pack that fixes a stdlib Python task summary regression"
+
+[defaults]
+temperature = 0
+max_tokens = 768
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Small Python task-summary repo with intentional regressions"
+
+[[cases]]
+id = "fix-task-summary"
+kind = "repo-task"
+prompt_file = "prompts/fix-task-summary.md"
+fixture_refs = ["repo"]
+scoring = { mode = "verify-script", script = "verify/check.py" }

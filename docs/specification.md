@@ -69,6 +69,18 @@ Initial packs:
   `Hello, Ada!`. The pack sets `defaults.warmup = 0`,
   `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
+- `python-regression-fix`: second bundled measured repo-mutating `repo-task`
+  pack. Version `0.1.0` has one small stdlib-only Python repo fixture and one
+  `fix-task-summary` measured case. The prompt asks the model to return only a
+  fenced `diff` unified diff that fixes `task_summary.py`; the runner copies
+  the repo fixture into `workspace/fix-task-summary/rep-001/`, applies the
+  model patch inside that workspace, captures
+  `patch/fix-task-summary/rep-001.diff`, and runs a stdlib `verify-script`
+  that checks task summary counts, missing-owner handling, input immutability,
+  and overdue-title filtering and ordering. The pack sets
+  `defaults.warmup = 0`, `defaults.repetitions = 1`,
+  `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains
@@ -279,8 +291,8 @@ specification slice deliberately changes them: workspace preparation first,
 task execution inside the prepared workspace second, patch capture third,
 verifier execution fourth, and reporter record last. Task environment
 configuration, repo-task warmups, workspace retention options, richer task
-status/reporting, pack-level harness defaults, and larger bundled repo-task
-conversion remain planned follow-ups rather than current support.
+status/reporting, pack-level harness defaults, and production external
+coding-agent integration remain planned follow-ups rather than current support.
 
 Raw model request/response artifacts under `raw/` stay conceptually separate
 from repo-task workspace and verifier artifacts. Measured repo-task

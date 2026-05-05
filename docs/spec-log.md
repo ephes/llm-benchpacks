@@ -16,6 +16,39 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (python-regression-fix bundled repo-task)
+
+### Changed
+
+- Added `python-regression-fix` as a second bundled measured `repo-task` pack
+  over the existing fenced unified-diff executor.
+- The pack contains one stdlib-only Python repo fixture, one
+  `fix-task-summary` measured case, `defaults.stream = false`,
+  `defaults.warmup = 0`, `defaults.repetitions = 1`, and case-local
+  `scoring.mode = "verify-script"`.
+- The fixture exercises task summary counts, missing-owner handling,
+  input-immutability, incomplete-overdue filtering, and due-date/title
+  ordering without external dependencies or live benchmark requirements.
+- The verifier imports the prepared workspace module directly, requires a
+  non-empty captured patch artifact, writes structured JSON, and exits `0`
+  only when all deterministic checks pass.
+- Added bundled pack contract coverage and a mocked-adapter CLI flow that
+  applies a known fenced diff, verifies the run-owned workspace changed, and
+  confirms the pack-owned source fixture remains unchanged.
+- Updated README, specification, architecture, benchpack format notes,
+  implementation plan, and Apple Silicon runbook interpretation boundaries.
+- Kept the default M4/M5 tmux/four-pack matrix unchanged; the new pack is an
+  optional deeper fenced-patch repo-task signal, not production external
+  agent-harness integration.
+
+### Open Questions
+
+- The new fixture is still intentionally small. A later pack may need a larger
+  repository or production external harness once the runner has an explicit
+  harness contract for that scope.
+- Adding `python-regression-fix` to the default M4/M5 matrix should remain a
+  separate operational decision after runtime cost and report shape are clear.
+
 ## 2026-05-05 (report-set manifest)
 
 ### Changed

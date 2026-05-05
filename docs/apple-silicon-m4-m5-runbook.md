@@ -660,6 +660,10 @@ prove a real wrap task.
 current fenced patch, workspace, patch artifact, task log, and verifier path,
 but it is not enough for broad coding-agent conclusions.
 
+`python-regression-fix` is an optional next repo-task pack for the same fenced
+patch path. It is more realistic than `patch-from-failure`, but it is not part
+of the default four-pack M4/M5 matrix in this runbook.
+
 Larger coding-agent claims should wait for production external harness support,
 larger repo-task packs, and curated reporting around those runs.
 

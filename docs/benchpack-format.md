@@ -278,7 +278,8 @@ strings. The runner rejects manifests that violate this at load time.
   does not currently add
   external coding-agent integration, manifest task commands, retention options,
   repo-task warmups, task environment configuration, pack-level harness
-  defaults, or bundled pack conversion.
+  defaults, or production external agent-harness behavior. Bundled repo-task
+  examples currently include `patch-from-failure` and `python-regression-fix`.
 
 `replay`
 : A recorded request sequence.

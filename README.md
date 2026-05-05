@@ -42,6 +42,7 @@ uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:lat
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
+uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
@@ -147,6 +148,12 @@ Bundled packs:
   `diff` block, applies that unified diff inside a run-owned workspace, captures
   `patch/fix-greeting/rep-001.diff`, and uses a stdlib `verify-script` to check
   that `greet("Ada")` returns exactly `Hello, Ada!`.
+- `python-regression-fix`: non-streaming single-case `repo-task` pack with a
+  small stdlib Python task-summary repo fixture. The case asks for a fenced
+  unified diff to fix owner/status summary behavior, overdue-title filtering
+  and ordering, and input immutability; verification remains deterministic and
+  stdlib-only. This is a narrow fenced-patch repo-task signal, not production
+  external agent-harness coverage.
 
 ## Initial Shape
 
@@ -156,11 +163,11 @@ The first implementation stays small:
 2. An OpenAI-compatible adapter for `mlx_lm.server`, `llama-server`, vLLM, LM Studio, and similar servers.
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
 4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
-   the prompt-only `desktop-django-wrap` starter pack and the first measured
-   repo-mutating `patch-from-failure` pack using the fenced unified-diff
-   contract. `desktop-django-wrap` still treats directory fixtures as
-   metadata-only; `patch-from-failure` copies its repo fixture into a run-owned
-   workspace, applies the model diff there, and verifies the result.
+   the prompt-only `desktop-django-wrap` starter pack and measured
+   repo-mutating fenced unified-diff packs such as `patch-from-failure` and
+   `python-regression-fix`. `desktop-django-wrap` still treats directory
+   fixtures as metadata-only; repo-task packs copy their repo fixtures into
+   run-owned workspaces, apply the model diff there, and verify the result.
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

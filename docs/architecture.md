@@ -61,6 +61,7 @@ benchpacks/
   runtime-sweep/
   desktop-django-wrap/
   patch-from-failure/
+  python-regression-fix/
 src/
   benchpack/
     cli.py
