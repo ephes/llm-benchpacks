@@ -16,6 +16,53 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (production external harness contract refinement)
+
+### Changed
+
+- Refined the future production external repo-task harness contract after the
+  second bundled fenced-patch pack established enough coverage for the current
+  model-output unified-diff path.
+- Kept code behavior unchanged: the only implemented public harness id remains
+  `fenced-patch`, and `external-agent` is documented only as a provisional
+  future id that the current loader must still reject.
+- Documented the planned external harness manifest shape as an explicit
+  case-local `harness = { id = "external-agent", timeout_s = ... }` table, with
+  no task commands, task environment table, shell expansion, secrets handling,
+  workspace retention flag, pack-level default, or CLI flag added now.
+- Defined future runner-owned harness inputs: prepared workspace, case and pack
+  metadata, loaded prompt text, fixture/source-repo metadata, output directory,
+  repetition, task log paths, selected harness options, optional run metadata,
+  and model/adapter/endpoint/defaults context when the harness owns model calls.
+- Preserved adapter and result boundaries: harness-owned model calls are
+  runner/harness concerns, not normal adapter request fields, and they do not
+  write normal `raw/` artifacts or add `run.jsonl` fields without a later schema
+  slice.
+- Clarified mutation and artifact boundaries: future external harnesses may
+  mutate only the prepared workspace and write only existing task logs until a
+  later schema explicitly names more run-output artifacts.
+- Clarified timeout and failure semantics for future external subprocess
+  harnesses: `harness.timeout_s` remains a task-phase timeout distinct from
+  verifier timeout; timeouts are task outcomes only when the runner can stop the
+  process tree, close logs, and continue with bounded workspace state, otherwise
+  they are runner failures.
+- Reaffirmed ordering: workspace preparation, task harness execution, patch
+  capture, verifier execution, then result recording. No compare/report behavior,
+  default M4/M5 matrix, repo-task warmup support, workspace retention option, or
+  live benchmark artifact was added.
+
+### Open Questions
+
+- The next implementation slice should decide between adding a parser-accepted
+  reserved id that fails at execution with a clear not-implemented error, or
+  keeping the loader as the single rejection point until the external runner
+  exists.
+- A real external harness may prove that richer task status/reporting or named
+  harness artifacts are necessary, but this contract keeps existing task logs
+  and verifier status as the default boundary.
+- The first concrete external harness runner still needs process lifecycle,
+  model-call logging, timeout cleanup, and run-metadata handoff tests.
+
 ## 2026-05-05 (python-regression-fix bundled repo-task)
 
 ### Changed

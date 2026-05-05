@@ -360,7 +360,13 @@ support landed 2026-05-03: future external harnesses must be explicit
 case-local public `harness.id` values, adapter schemas and result rows stay
 unchanged by default, and optional `harness.timeout_s` now bounds the
 subprocess-backed fenced task executor without adding CLI flags or production
-external coding-agent integration.
+external coding-agent integration. A follow-on docs-first production external
+harness contract refinement landed 2026-05-05 after the second fenced-patch
+repo-task pack: it keeps the loader unchanged, treats `external-agent` as a
+provisional documentation name only, enumerates future runner-owned harness
+inputs, preserves existing adapter/raw/result/report boundaries, and defines the
+external harness mutation, artifact, timeout, and failure boundaries for the
+next implementation slice.
 
 Scope:
 
@@ -523,6 +529,19 @@ Scope:
   unchanged workspace; apply timeout after preflight is a runner failure because
   partial mutation cannot be ruled out. Internal in-process harness callables
   reject task timeout.
+- Refine the next production external harness contract after bundled
+  fenced-patch coverage exists. **Landed 2026-05-05** as documentation only:
+  no parser or executor behavior changed; `external-agent` is documented only as
+  a provisional future id and remains rejected by the loader; future production
+  harness inputs are runner-owned context such as prepared workspace, case and
+  pack metadata, prompt text, output directory, repetition, task log paths,
+  selected harness options, optional run metadata, and model/adapter/endpoint/
+  defaults context when the harness owns model calls. External harnesses may
+  mutate only the prepared workspace and write only existing task logs until a
+  later artifact schema names more outputs. Existing adapter schemas, raw paths,
+  result row shapes, compare/report behavior, patch capture after the task
+  phase, verifier execution after patch capture, repo-task warmup rejection, and
+  the default M4/M5 matrix remain unchanged.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -533,11 +552,13 @@ Scope:
   task-summary fixture, multiple edge cases, and deterministic
   `verify-script` scoring.
 - Integrate a production agent-session harness after disposable workspace,
-  verifier, and patch artifacts exist. **Partially landed 2026-05-03** as an
-  internal executor path for runner-side callers only plus public
-  `fenced-patch` selection for the existing compatibility executor. External
-  coding-agent integration and richer harness configuration remain planned
-  later.
+  verifier, patch artifacts, public compatibility selection, and the
+  docs-first production external harness contract exist. **Partially landed**
+  as an internal executor path for runner-side callers only, public
+  `fenced-patch` selection for the existing compatibility executor, and the
+  2026-05-05 production external contract refinement. Actual external
+  coding-agent execution, parser support for a concrete external id, and richer
+  harness configuration remain planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

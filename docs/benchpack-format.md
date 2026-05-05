@@ -387,6 +387,12 @@ Rules:
   must be selected by explicit case-local `harness.id` values. Selection must
   not be inferred from model names, adapters, endpoints, fixture shape,
   verifier choice, host environment, or pack id.
+- No production external harness id is accepted by the loader today.
+  `external-agent` is a provisional documentation name for a likely future
+  public harness shape, not a runnable or reserved id in the current manifest
+  parser. A manifest that declares `harness = { id = "external-agent" }` should
+  keep failing as an unknown harness id until a later implementation slice adds
+  parser and executor tests for that id.
 - When `harness` is absent, the default/current behavior remains the fenced
   `diff`/`patch` executor for compatibility.
 - `harness` is accepted only on `repo-task` cases. The loader rejects
@@ -424,6 +430,44 @@ Rules:
   not implicit support in `harness`.
 - This narrow selection adds no CLI flags, `run.jsonl` fields, adapter schema
   changes, raw artifact path changes, or task log path changes.
+
+The planned production external harness manifest shape should stay as small as
+the current public table:
+
+```toml
+[[cases]]
+id = "fix-repo"
+kind = "repo-task"
+prompt_file = "prompts/fix-repo.md"
+fixture_refs = ["repo"]
+harness = { id = "external-agent", timeout_s = 120 }
+scoring = { mode = "verify-script", script = "verify/fix-repo.py" }
+```
+
+That example is not valid for the current loader. It documents the intended
+shape for a later slice: explicit case-local selection, optional task-phase
+timeout, no task command list, no task environment table, no shell expansion, no
+secrets handling, no workspace retention flag, and no pack-level harness
+default.
+
+Future production external harness inputs are runner-side invocation context,
+not additional manifest syntax. The runner may pass the prepared workspace path,
+case metadata, pack metadata, loaded prompt text, fixture refs and source repo
+metadata, run output directory, measured repetition number, task log paths,
+selected harness options, and optional run metadata. If the harness owns model
+calls, the runner may also pass model, adapter id, endpoint, request defaults,
+and compatibility options as harness context. Those values do not alter normal
+adapter request/result schemas and do not create new `run.jsonl` fields by
+default.
+
+Future production external harnesses may mutate only the prepared workspace.
+They may write the existing task stdout/stderr logs and, only after a later
+schema slice names them, additional explicit harness artifacts under the run
+output directory. They must not write pack-owned fixtures, prompts, verifier
+scripts, source docs, normal adapter `raw/` artifacts, `hardware.json`,
+`run-metadata.json`, or paths outside the prepared workspace and allowed
+run-output artifacts. Patch capture still compares the source fixture to the
+post-task workspace, and verifier execution still follows patch capture.
 
 Directory fixture semantics for repo-task cases:
 

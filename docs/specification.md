@@ -221,6 +221,65 @@ integration remain explicit future slices. Patch capture still reflects the
 post-task workspace, verifier execution still runs after patch capture, and
 this narrow public selection adds no new `run.jsonl` row fields.
 
+The next planned external harness is a public repo-task harness, but no such id
+is accepted by the loader yet. `external-agent` is a provisional documentation
+name for that future shape, not a runnable or reserved manifest id in the
+current code. A future implementation slice may make the shape concrete as:
+
+```toml
+[[cases]]
+id = "fix-repo"
+kind = "repo-task"
+harness = { id = "external-agent", timeout_s = 120 }
+```
+
+Until that slice changes and tests the loader and executor routing, manifests
+that declare `harness = { id = "external-agent" }` must continue to fail as an
+unknown public harness id.
+
+A production external harness should receive runner-owned inputs, not broad
+manifest command blobs: the prepared workspace path, case metadata, pack
+metadata, the prompt text loaded from `prompt` or `prompt_file`, fixture refs and
+the source repo fixture metadata, the run output directory, measured repetition
+number, deterministic task stdout/stderr log paths, the selected harness table,
+and user-supplied run metadata as either the `run-metadata.json` path or a
+validated normalized object when available. If the harness owns model calls, the
+runner may also provide the selected model, adapter id, endpoint, request
+defaults, and runner compatibility options as harness context. That context is
+not a change to normal adapter request fields, and harness-owned model calls do
+not write normal adapter `raw/` request/response artifacts unless a later result
+schema slice explicitly defines how they are represented.
+
+A production external harness may inspect and mutate only the prepared
+workspace. It may write the existing task stdout/stderr logs under
+`task/<case-id>/rep-NNN.*.log`; any richer harness artifacts must be explicitly
+named by a later artifact/schema slice before they are allowed. It must not
+mutate pack-owned fixtures, prompts, verifier scripts, source docs,
+`run-metadata.json`, `hardware.json`, raw adapter artifacts, or any path outside
+the prepared workspace and permitted run-output artifacts. The current contract
+does not provide manifest task environment configuration, shell expansion,
+secret injection, arbitrary shell commands, workspace retention, or cleanup
+controls.
+
+For a future external subprocess harness, `harness.timeout_s` remains the
+case-local task-phase timeout. It is separate from adapter request timeouts,
+verifier `scoring.timeout_s`, and any future whole-run timeout. An external
+harness timeout may be recorded as a task outcome only when the runner can stop
+the harness process tree, close task logs, and continue with a bounded prepared
+workspace for patch capture and verification. If the runner cannot guarantee
+that the harness is stopped or cannot write required artifacts, the timeout is a
+runner failure. This keeps runner failures, such as unsafe paths or unwritable
+logs, distinct from task outcomes, such as the external harness timing out,
+making no useful change, or leaving verifier failures for deterministic scoring.
+
+The surrounding ordering is fixed for the future external harness unless a later
+specification slice deliberately changes it: prepare the workspace, execute the
+selected task harness, capture `patch/<case-id>/rep-NNN.diff` from source
+fixture versus post-task workspace, run any `verify-script`, then write the
+result record. The existing task logs and verifier status are sufficient for the
+next implementation slice; no new row fields are required until a real external
+harness proves that richer status or reporting is necessary.
+
 Repo-task cases use `kind = "repo"` directory fixtures as immutable source
 repository snapshots:
 

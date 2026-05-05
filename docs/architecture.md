@@ -44,9 +44,14 @@ than changing the adapter boundary:
   only the existing task logs under the run output directory; it must preserve
   pack fixtures, prompts, verifier scripts, and source docs. The only public
   manifest harness id currently implemented is `fenced-patch`; unknown ids and
-  harness declarations on non-`repo-task` cases are rejected. External
-  coding-agent harness production integration, task environment, retention,
-  richer status/reporting, and pack-level harness defaults remain future work.
+  harness declarations on non-`repo-task` cases are rejected. The planned
+  production external harness shape stays behind this same boundary: it may add
+  runner-owned context such as pack metadata, prompt text, run metadata, and
+  model/adapter/endpoint/defaults only as harness input, not as adapter schema
+  fields. `external-agent` is only a provisional documentation name until a
+  later parser/executor slice accepts it. External coding-agent harness
+  production integration, task environment, retention, richer
+  status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -256,6 +261,10 @@ model names, adapters, endpoints, fixture shape, verifier choice, host
 environment, or pack id. Unknown ids are rejected by the manifest loader and
 again at the task-executor boundary if they somehow reach it.
 
+A provisional future shape may use
+`harness = { id = "external-agent", timeout_s = 120 }`, but that id is
+documentation-only today and is not accepted by the loader.
+
 This selection leaves adapter request/result schemas, raw request/response
 paths, task log paths, patch capture after the task phase, verifier execution
 after patch capture, and existing measured row shapes unchanged. Normal adapter
@@ -267,6 +276,25 @@ docs, and raw model artifacts remain immutable or runner-owned. Task
 environment, retention, richer task status/reporting, pack-level harness
 defaults, production external coding-agent integration, and repo-task warmups
 remain separate future design and implementation slices.
+
+The planned production external harness invocation is still a runner-side task
+phase, not a manifest command runner. The runner should provide only explicit
+context: prepared workspace, case metadata, pack metadata, loaded prompt text,
+fixture/source-repo metadata, output directory, repetition, task log paths,
+selected harness options, and optional run metadata. If the harness owns model
+calls, it may also receive the selected model, adapter id, endpoint, defaults,
+and compatibility options as harness context. Those calls do not become normal
+adapter calls, do not change adapter envelopes, and do not write normal `raw/`
+artifacts unless a later schema slice defines that mapping.
+
+External harness process failures divide the same way as current task execution.
+Unsafe paths, unwritable required logs, inability to stop a subprocess, or
+failure to preserve the workspace/output boundary are runner failures. A harness
+that exits nonzero, times out after the runner has stopped it and closed logs, or
+leaves a workspace that fails verification is a task outcome represented by the
+existing task logs, patch artifact, verifier artifacts, `repo_task` verifier
+status, and top-level scoring. `harness.timeout_s` remains a task-phase timeout,
+not a verifier timeout and not an adapter request timeout.
 
 Measured repo-task `verify-script` result rows contain workspace metadata,
 patch artifact metadata, task log metadata, verifier artifact metadata, final
