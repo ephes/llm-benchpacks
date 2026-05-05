@@ -16,6 +16,81 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (Qwen3.6 M4/M5 benchmark summary)
+
+### Changed
+
+- Added `docs/qwen36-m4-m5-benchmark-summary.md` as the compact durable summary
+  for the completed Qwen3.6 M4/M5 MLX-vs-llama.cpp-vs-Ollama sweep.
+- Linked the summary from the README documentation index so readers do not need
+  to parse the full `docs/run-log.md` table row for the headline throughput,
+  scoring, interpretation notes, and ignored result-directory patterns.
+- Kept generated `results/*` artifacts ignored and added a `.gitignore` rule
+  for local `metadata/*.json` files so machine-local metadata stays out of
+  normal commits.
+
+### Open Questions
+
+- A future report-set manifest could name paired result directories for
+  `benchpack report`, but it should be a narrow read-only CLI shape with tests
+  and docs rather than part of this cleanup slice.
+
+## 2026-05-05 (tmux metadata matrix helper)
+
+### Changed
+
+- Added `scripts/benchpack-tmux-matrix` as a narrow operational helper for the
+  metadata-backed benchmark matrix.
+- The helper requires explicit `--adapter`, `--model`, `--host-label-prefix`,
+  and `--run-metadata`, and passes the metadata file to every generated
+  `benchpack run` command.
+- The default matrix is `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`,
+  and `patch-from-failure`, with stable host-label suffixes `smoke`,
+  `runtime`, `wrap`, and `patch`.
+- Added a dry-run path that prints the assembled `benchpack run` and tmux
+  commands without starting tmux, contacting an endpoint, or running live M4/M5
+  benchmarks.
+- Tmux windows are created deterministically but benchmark commands are gated
+  to run sequentially so the packs do not contend for the same runtime.
+- Failed pack windows now set a tmux session failure marker and signal the next
+  gate so downstream windows wake up, report that they were skipped, and stay
+  inspectable rather than blocking indefinitely.
+- Launch mode now checks that the supplied metadata file exists before creating
+  tmux windows; dry-run mode still accepts placeholder paths.
+- Kept `--force` opt-in, allowed optional `--endpoint`, and allowed optional
+  `--openai-stream-usage include|omit` while preserving the underlying
+  `benchpack run` default when omitted.
+- Updated README, architecture, Apple Silicon runbook, and implementation plan
+  to document the helper as an operational wrapper, not a new core CLI command
+  or benchmark semantic change.
+
+### Open Questions
+
+- A future manifest or report-set format may still be useful for naming paired
+  local/remote result directories and report inputs, but this slice deliberately
+  leaves live M4/M5 execution and report assembly manual.
+
+## 2026-05-05 (Qwen3.6 operational benchmark defaults)
+
+### Changed
+
+- Documented the default no-more-guessing model targets for M4/M5
+  MLX-vs-llama.cpp-vs-Ollama benchmark requests: `Qwen/Qwen3.6-35B-A3B` for
+  the 30B-class MoE target and `Qwen/Qwen3.6-27B` for the dense target.
+- Added preferred GGUF artifacts for llama.cpp/Ollama and preferred MLX
+  conversions for the MLX path to `AGENTS.md` and the Apple Silicon runbook.
+- Clarified that llama.cpp and Ollama should share the same GGUF artifact when
+  possible, while MLX comparisons should be labeled as runtime-and-format
+  comparisons unless artifact parity is otherwise established.
+- Clarified that already-installed Qwen2.5, Qwen3-Coder, or other models should
+  not be silently substituted when the user asks for Qwen3.6 benchmarks.
+
+### Open Questions
+
+- Qwen3.6 MLX serving support may vary by conversion and server package. If the
+  selected MLX OpenAI-compatible server cannot load a target, record that
+  runtime/model pair as blocked instead of changing the benchmark target.
+
 ## 2026-05-04 (generated result ignore policy)
 
 ### Changed

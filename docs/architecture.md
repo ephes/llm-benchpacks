@@ -495,6 +495,27 @@ disagree with `benchpack compare` on median values, cache rows, warnings, or
 packs, read `raw/`, write result artifacts, mutate result directories, or alter
 the result schema. Compare remains independent of `run-metadata.json`.
 
+## Operational Helper Flow
+
+`scripts/benchpack-tmux-matrix` is an operator convenience wrapper, not a new
+runner component. It assembles existing `uv run benchpack run ...` invocations
+for a pack matrix, injects the same user-supplied `--run-metadata` file into
+each command, and optionally starts one tmux session with deterministic pack
+windows. The tmux windows are gated so the benchmark commands run sequentially
+instead of contending for one local runtime. Failures are propagated through a
+tmux session environment marker so already-created downstream windows wake up
+and report that they were skipped rather than waiting indefinitely. Its dry-run
+path prints the assembled `benchpack run` and tmux commands without launching
+tmux or contacting an endpoint.
+
+The helper preserves the existing execution boundary: `benchpack run` still
+loads packs, adapters, hardware metadata, run metadata, and result writers.
+The helper does not probe runtimes, discover model paths, inspect servers,
+write results directly, read generated payloads, run compare/report, or change
+adapter, result, pack, compare, or report semantics. It also does not pass
+`--force` unless the operator explicitly requests that flag. In launch mode it
+checks that the supplied metadata file exists before creating tmux windows.
+
 ## Spec And Log Management
 
 The repository should use lightweight, reviewable text files rather than a heavy

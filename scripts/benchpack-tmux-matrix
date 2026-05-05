@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""Launch the metadata-backed benchmark matrix in a tmux session."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+
+DEFAULT_PACKS = (
+    "smoke-chat",
+    "runtime-sweep",
+    "desktop-django-wrap",
+    "patch-from-failure",
+)
+
+PACK_LABEL_SUFFIXES = {
+    "smoke-chat": "smoke",
+    "runtime-sweep": "runtime",
+    "desktop-django-wrap": "wrap",
+    "patch-from-failure": "patch",
+}
+TMUX_FAILURE_ENV = "BENCHPACK_MATRIX_FAILED"
+
+
+@dataclass(frozen=True)
+class MatrixCommand:
+    pack: str
+    window_name: str
+    host_label: str
+    benchpack_command: list[str]
+    tmux_command: list[str]
+
+
+def _pack_suffix(pack: str) -> str:
+    suffix = PACK_LABEL_SUFFIXES.get(pack)
+    if suffix is not None:
+        return suffix
+    label = re.sub(r"[^A-Za-z0-9_-]+", "-", pack).strip("-")
+    return label or "pack"
+
+
+def _signal_prefix(session_name: str) -> str:
+    prefix = re.sub(r"[^A-Za-z0-9_-]+", "-", session_name).strip("-")
+    return prefix or "benchpack-matrix"
+
+
+def _benchpack_command(args: argparse.Namespace, pack: str) -> list[str]:
+    suffix = _pack_suffix(pack)
+    command = [
+        "uv",
+        "run",
+        "benchpack",
+        "run",
+        pack,
+        "--adapter",
+        args.adapter,
+        "--model",
+        args.model,
+    ]
+    if args.endpoint:
+        command.extend(["--endpoint", args.endpoint])
+    command.extend(
+        [
+            "--host-label",
+            f"{args.host_label_prefix}-{suffix}",
+            "--run-metadata",
+            args.run_metadata,
+        ]
+    )
+    if args.openai_stream_usage:
+        command.extend(["--openai-stream-usage", args.openai_stream_usage])
+    if args.force:
+        command.append("--force")
+    return command
+
+
+def _tmux_shell_command(
+    pack: str,
+    benchpack_command: list[str],
+    *,
+    session_name: str,
+    wait_signal: str | None = None,
+    next_signal: str | None = None,
+) -> str:
+    parts = []
+    if wait_signal is not None:
+        parts.append(shlex.join(["tmux", "wait-for", wait_signal]))
+        show_failure = shlex.join(
+            [
+                "tmux",
+                "show-environment",
+                "-t",
+                session_name,
+                TMUX_FAILURE_ENV,
+            ]
+        )
+        parts.extend(
+            [
+                (
+                    f"matrix_failure=$({show_failure} 2>/dev/null "
+                    f"| sed -n 's/^{TMUX_FAILURE_ENV}=\\(.*\\)$/\\1/p' || true)"
+                ),
+                (
+                    "if [ -n \"$matrix_failure\" ]; then "
+                    "printf '\\nbenchpack run skipped for %s because "
+                    "earlier window failed: %s\\n' "
+                    f"{shlex.quote(pack)} \"$matrix_failure\"; "
+                    "status=1; "
+                    + (
+                        f"{shlex.join(['tmux', 'wait-for', '-S', next_signal])}; "
+                        if next_signal is not None
+                        else ""
+                    )
+                    + "exec \"${SHELL:-/bin/sh}\" -l; "
+                    "fi"
+                ),
+            ]
+        )
+    parts.extend(
+        [
+            shlex.join(benchpack_command),
+            "status=$?",
+            (
+                "printf '\\nbenchpack run finished for %s "
+                f"with exit status %s\\n' {shlex.quote(pack)} \"$status\""
+            ),
+        ]
+    )
+    parts.append(
+        "if [ \"$status\" -ne 0 ]; then "
+        f"{shlex.join(['tmux', 'set-environment', '-t', session_name, TMUX_FAILURE_ENV, pack])}; "
+        "fi"
+    )
+    if next_signal is not None:
+        parts.extend(
+            [
+                (
+                    "if [ \"$status\" -eq 0 ]; then "
+                    f"{shlex.join(['tmux', 'wait-for', '-S', next_signal])}; "
+                    "else "
+                    "printf 'signaling later benchmark windows to skip after failure\\n'; "
+                    f"{shlex.join(['tmux', 'wait-for', '-S', next_signal])}; "
+                    "fi"
+                ),
+            ]
+        )
+    parts.append('exec "${SHELL:-/bin/sh}" -l')
+    return "; ".join(parts)
+
+
+def _tmux_command_shell(shell_command: str) -> str:
+    return f"/bin/sh -c {shlex.quote(shell_command)}"
+
+
+def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
+    commands: list[MatrixCommand] = []
+    signal_prefix = _signal_prefix(args.session_name)
+    signals = [f"{signal_prefix}-{index:03d}" for index in range(1, len(args.packs))]
+    for index, pack in enumerate(args.packs):
+        suffix = _pack_suffix(pack)
+        benchpack_command = _benchpack_command(args, pack)
+        wait_signal = signals[index - 1] if index > 0 else None
+        next_signal = signals[index] if index < len(args.packs) - 1 else None
+        shell_command = _tmux_shell_command(
+            pack,
+            benchpack_command,
+            session_name=args.session_name,
+            wait_signal=wait_signal,
+            next_signal=next_signal,
+        )
+        tmux_shell_command = _tmux_command_shell(shell_command)
+        if index == 0:
+            tmux_command = [
+                "tmux",
+                "new-session",
+                "-d",
+                "-s",
+                args.session_name,
+                "-n",
+                suffix,
+                tmux_shell_command,
+            ]
+        else:
+            tmux_command = [
+                "tmux",
+                "new-window",
+                "-t",
+                args.session_name,
+                "-n",
+                suffix,
+                tmux_shell_command,
+            ]
+        commands.append(
+            MatrixCommand(
+                pack=pack,
+                window_name=suffix,
+                host_label=f"{args.host_label_prefix}-{suffix}",
+                benchpack_command=benchpack_command,
+                tmux_command=tmux_command,
+            )
+        )
+    return commands
+
+
+def _print_dry_run(args: argparse.Namespace, commands: list[MatrixCommand]) -> None:
+    print("# benchpack-tmux-matrix dry run")
+    print(f"# session: {args.session_name}")
+    for command in commands:
+        print(f"# pack: {command.pack}")
+        print(f"# host-label: {command.host_label}")
+        print(f"benchpack: {shlex.join(command.benchpack_command)}")
+        print(f"tmux: {shlex.join(command.tmux_command)}")
+    print(f"attach: {shlex.join(['tmux', 'attach-session', '-t', args.session_name])}")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Launch a metadata-backed benchpack matrix in deterministic tmux "
+            "windows, or print the commands with --dry-run."
+        )
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print benchpack and tmux commands without executing tmux.",
+    )
+    parser.add_argument(
+        "--session-name",
+        default="benchpack-matrix",
+        help="tmux session name to create (default: benchpack-matrix).",
+    )
+    parser.add_argument(
+        "--adapter",
+        required=True,
+        help="Adapter passed to benchpack run.",
+    )
+    parser.add_argument(
+        "--model",
+        required=True,
+        help="Model identifier passed to the adapter.",
+    )
+    parser.add_argument(
+        "--endpoint",
+        default=None,
+        help="Optional endpoint URL; omitted for adapters with defaults.",
+    )
+    parser.add_argument(
+        "--host-label-prefix",
+        required=True,
+        help="Prefix for per-pack host labels, such as m5-max-llama-<stamp>.",
+    )
+    parser.add_argument(
+        "--run-metadata",
+        required=True,
+        help="User-supplied JSON file passed to every benchpack run.",
+    )
+    parser.add_argument(
+        "--openai-stream-usage",
+        choices=("include", "omit"),
+        default=None,
+        help=(
+            "Optional benchpack run streaming usage mode. When omitted, "
+            "benchpack run keeps its current default."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Pass --force to every benchpack run. Omitted by default.",
+    )
+    parser.add_argument(
+        "packs",
+        nargs="*",
+        default=list(DEFAULT_PACKS),
+        help=(
+            "Packs to run. Defaults to: "
+            + " ".join(DEFAULT_PACKS)
+        ),
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    commands = build_matrix_commands(args)
+
+    if args.dry_run:
+        _print_dry_run(args, commands)
+        return 0
+
+    if not Path(args.run_metadata).is_file():
+        raise SystemExit(f"run metadata file not found: {args.run_metadata}")
+
+    if shutil.which("tmux") is None:
+        raise SystemExit(
+            "tmux not found on PATH; rerun with --dry-run to inspect commands"
+        )
+
+    for command in commands:
+        try:
+            subprocess.run(command.tmux_command, check=True)
+        except subprocess.CalledProcessError as exc:
+            raise SystemExit(
+                "could not create tmux window for "
+                f"{command.pack!r}; if the session already exists, pass a "
+                "different --session-name or kill the old session"
+            ) from exc
+        print(f"started {command.pack} in tmux window {command.window_name!r}")
+    print(
+        "attach with: "
+        f"{shlex.join(['tmux', 'attach-session', '-t', args.session_name])}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -35,7 +35,8 @@ ssh <m4-studio-host> 'uname -a'
 ```
 
 Use placeholders for private details in notes and handoffs:
-`<m4-studio-host>`, `<remote-repo>`, `<model>`, and `<endpoint>`.
+`<m4-studio-host>`, `<remote-repo>`, `<model>`, `<endpoint>`, and
+`<metadata-file>`.
 
 ## Runtime Setup
 
@@ -92,7 +93,125 @@ Use result labels that encode the host and pack. The default output directory is
 Broad coding-agent conclusions still require production external harness
 execution, larger repo-task packs, and curated reporting around those runs.
 
+## Default Qwen3.6 Targets
+
+When the goal is the current 30B-class Qwen comparison, run two model targets
+unless the run note says otherwise:
+
+- MoE: `Qwen/Qwen3.6-35B-A3B`.
+- Dense: `Qwen/Qwen3.6-27B`.
+
+For llama.cpp and Ollama, prefer one shared GGUF artifact per target so those
+two runtime paths use the same model file:
+
+- MoE GGUF: `unsloth/Qwen3.6-35B-A3B-GGUF`,
+  `Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`.
+- Dense GGUF: `unsloth/Qwen3.6-27B-GGUF`, `Qwen3.6-27B-Q4_K_M.gguf`.
+
+For the MLX path, use Apple-Silicon-native MLX conversions and document that
+the comparison is runtime-and-format, not bit-identical artifact parity:
+
+- MoE MLX: `majentik/Qwen3.6-35B-A3B-MLX-MXFP4`.
+- Dense MLX: `mlx-community/Qwen3.6-27B-4bit`.
+
+If a Qwen3.6 MLX conversion does not load through the selected MLX
+OpenAI-compatible server, record that runtime/model target as blocked. Do not
+silently substitute Qwen2.5, Qwen3-Coder, or another already-installed model
+when the run is meant to answer the Qwen3.6 question.
+
+## Tmux Matrix Helper
+
+For metadata-backed matrix runs, prefer the narrow tmux helper over hand-typing
+four separate pack commands. The helper is only an operational wrapper around
+`benchpack run`: it does not discover runtimes, probe endpoints, change adapter
+requests, change result rows, alter pack semantics, run compare, or write
+reports. It keeps one tmux session open with deterministic windows so each
+pack's terminal output remains visible after the command finishes. Pack
+commands are gated to run sequentially, which avoids making the packs contend
+for the same local inference server. If one pack fails, later windows wake up,
+print that they were skipped because an earlier pack failed, and remain open
+for inspection.
+
+Create the metadata JSON first:
+
+```sh
+mkdir -p metadata
+$EDITOR metadata/m5-llama-server.json
+```
+
+Then dry-run the local M5 commands. Keep placeholder values quoted until they
+are replaced, because shells treat angle brackets as redirection syntax:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --session-name 'bench-m5-llama-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-llama-<stamp>' \
+  --run-metadata metadata/m5-llama-server.json
+```
+
+The default matrix is `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+`patch-from-failure`. The helper maps those packs to host labels
+`<prefix>-smoke`, `<prefix>-runtime`, `<prefix>-wrap`, and `<prefix>-patch`.
+`--endpoint` may be omitted for adapters with useful defaults, such as a local
+Ollama-native run. `--openai-stream-usage include|omit` is optional; when it is
+omitted, the underlying `benchpack run` command keeps its current default.
+
+After inspecting the dry run, launch the tmux session:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --session-name 'bench-m5-llama-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-llama-<stamp>' \
+  --run-metadata metadata/m5-llama-server.json
+```
+
+The helper is conservative about result-directory collisions: it does not pass
+`--force` unless the command includes `--force`. Use `--force` only when the
+existing result directories are intentionally disposable. Launch mode also
+checks that the metadata file exists before it creates tmux windows; dry-run
+mode does not require the placeholder file to exist.
+
+Run the same helper on the remote M4 host through SSH after creating a remote
+metadata file in the remote repo:
+
+```sh
+ssh <m4-studio-host> '
+  set -eu
+  cd <remote-repo>
+  uv sync
+  mkdir -p metadata
+  # Create metadata/m4-llama-server.json before launching the run.
+
+  scripts/benchpack-tmux-matrix \
+    --dry-run \
+    --session-name "bench-m4-llama-<stamp>" \
+    --adapter openai-chat \
+    --model "<model>" \
+    --endpoint "<endpoint>" \
+    --host-label-prefix "m4-max-llama-<stamp>" \
+    --run-metadata metadata/m4-llama-server.json
+'
+```
+
+Then run the same SSH block without `--dry-run`. If the remote endpoint is
+bound to loopback, `<endpoint>` should be a loopback URL from the M4 Studio's
+point of view, for example `http://127.0.0.1:8080/v1`.
+
+After the local and remote tmux sessions finish, use the result pullback section
+below and generate comparison notes with `benchpack report` from the resulting
+directories.
+
 ## Local M5 Run
+
+The manual commands below are equivalent to the helper's default matrix and are
+useful when tmux is unavailable or when a single pack needs to be rerun.
 
 From the repo on the local M5 machine:
 

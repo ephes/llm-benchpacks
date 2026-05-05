@@ -203,6 +203,21 @@ Scope:
   model, operating-condition, and notes fields when present. This remains
   explicit user input rather than runtime autodiscovery, and it does not change
   adapter schemas, result row fields, compare behavior, or pack semantics.
+- Add a tmux-assisted matrix helper for the metadata-backed run workflow.
+  **Landed 2026-05-05** as `scripts/benchpack-tmux-matrix`, a narrow dry-run
+  and launch wrapper that assembles existing `benchpack run` commands for the
+  default M4/M5 matrix, requires `--run-metadata`, maps pack names to stable
+  host-label suffixes, and keeps `--force` opt-in. It is not a remote
+  orchestration framework and does not change benchmark semantics.
+- Add a compact durable summary for the completed Qwen3.6 M4/M5 benchmark
+  sweep. **Landed 2026-05-05** as
+  `docs/qwen36-m4-m5-benchmark-summary.md`, which summarizes the host/runtime/
+  model matrix, runtime-sweep median total TPS, scoring outcome, interpretation
+  caveats, and ignored result-directory patterns without committing generated
+  result artifacts.
+- Consider a narrow report-set manifest for future report assembly. This remains
+  a follow-up: it should be source-only, read-only, covered by tests and docs,
+  and should not run benchmarks or mutate result directories.
 
 Suggested implementation handoffs:
 
@@ -223,6 +238,10 @@ Suggested implementation handoffs:
   runtime, model, and operating-condition metadata as a small result artifact
   and include it in reports without probing servers or changing compare.
   **Landed 2026-05-03** as `run-metadata.json`.
+- Tmux metadata matrix helper slice: make the next metadata-backed local or
+  SSH-launched benchmark matrix easier to dry-run and start in tmux while
+  leaving result generation and reporting in the existing CLI. **Landed
+  2026-05-05** as `scripts/benchpack-tmux-matrix`.
 
 Validation:
 

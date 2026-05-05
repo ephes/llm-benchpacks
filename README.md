@@ -23,6 +23,8 @@ and whether the final repository changes pass verification.
 - [Hardware Targets](docs/hardware-targets.md): initial machines and runtime assumptions.
 - [Apple Silicon M4/M5 Runbook](docs/apple-silicon-m4-m5-runbook.md): local
   M5 plus SSH-to-M4 run workflow, result pullback, and compare guidance.
+- [Qwen3.6 M4/M5 Benchmark Summary](docs/qwen36-m4-m5-benchmark-summary.md):
+  compact 2026-05-05 MLX-vs-llama.cpp-vs-Ollama result summary.
 - [Decisions](docs/decisions.md): durable design decisions.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
@@ -43,6 +45,29 @@ uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-code
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
+
+For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
+existing `benchpack run` command in one tmux session with deterministic pack
+windows. Pack commands run sequentially inside tmux so they do not contend for
+the same local runtime; if one pack fails, later windows wake up and report
+that they were skipped. Inspect the dry run before launching real benchmarks:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --session-name 'bench-m5-llama-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-llama-<stamp>' \
+  --run-metadata metadata/m5-llama-server.json
+```
+
+The helper defaults to `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`,
+and `patch-from-failure`, passes `--run-metadata` to every pack run, and omits
+`--force` unless explicitly requested. Launch mode checks that the metadata
+file exists before creating tmux windows. It does not change benchmark
+semantics; after runs finish, use `benchpack report` on the result directories.
 
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
