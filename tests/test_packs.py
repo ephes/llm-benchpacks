@@ -17,6 +17,9 @@ from benchpack.packs import (
     InvalidHarnessError,
     InvalidIdError,
     InvalidPromptSourceError,
+    KNOWN_PUBLIC_HARNESS_IDS,
+    PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
+    PUBLIC_HARNESS_FENCED_PATCH,
     PackError,
     load_pack,
     repetitions_from_defaults,
@@ -461,10 +464,16 @@ harness = {{ id = "fenced-patch", timeout_s = {timeout_s} }}
         load_pack(pack_dir)
 
 
+def test_known_public_harness_ids_excludes_provisional_external_agent() -> None:
+    assert PUBLIC_HARNESS_FENCED_PATCH in KNOWN_PUBLIC_HARNESS_IDS
+    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID not in KNOWN_PUBLIC_HARNESS_IDS
+    assert KNOWN_PUBLIC_HARNESS_IDS == frozenset({PUBLIC_HARNESS_FENCED_PATCH})
+
+
 def test_load_pack_rejects_unknown_harness_id(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,
-        """
+        f"""
 [pack]
 id = "unknownharness"
 version = "0.1.0"
@@ -473,12 +482,17 @@ version = "0.1.0"
 id = "edit-repo"
 kind = "repo-task"
 prompt = "Change the repository."
-harness = { id = "external-agent" }
+harness = {{ id = "{PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID}" }}
 """,
     )
 
-    with pytest.raises(InvalidHarnessError, match="unknown harness id"):
+    with pytest.raises(InvalidHarnessError) as excinfo:
         load_pack(pack_dir)
+
+    message = str(excinfo.value)
+    assert "unknown harness id" in message
+    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID in message
+    assert PUBLIC_HARNESS_FENCED_PATCH in message
 
 
 def test_load_pack_rejects_harness_missing_id(tmp_path: Path) -> None:

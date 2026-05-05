@@ -25,7 +25,11 @@ from benchpack.adapters.openai_chat import (
     OPENAI_STREAM_USAGE_OMIT,
 )
 from benchpack.cli import main
-from benchpack.packs import InvalidHarnessError
+from benchpack.packs import (
+    InvalidHarnessError,
+    PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
+    PUBLIC_HARNESS_FENCED_PATCH,
+)
 
 
 NO_PATCH_TASK_STDERR = (
@@ -702,13 +706,18 @@ def test_cli_invalid_harness_manifest_fails_before_execution(
     monkeypatch.chdir(tmp_path)
     _write_repo_task_pack(
         tmp_path,
-        case_extra='harness = { id = "external-agent" }',
+        case_extra=(
+            f'harness = {{ id = "{PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID}" }}'
+        ),
     )
     out = tmp_path / "run"
 
-    with pytest.raises(InvalidHarnessError, match="external-agent"):
+    with pytest.raises(InvalidHarnessError) as excinfo:
         main(_argv(["--out", str(out)]))
 
+    message = str(excinfo.value)
+    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID in message
+    assert PUBLIC_HARNESS_FENCED_PATCH in message
     assert calls == []
     assert not out.exists()
 

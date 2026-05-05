@@ -390,9 +390,14 @@ Rules:
 - No production external harness id is accepted by the loader today.
   `external-agent` is a provisional documentation name for a likely future
   public harness shape, not a runnable or reserved id in the current manifest
-  parser. A manifest that declares `harness = { id = "external-agent" }` should
-  keep failing as an unknown harness id until a later implementation slice adds
-  parser and executor tests for that id.
+  parser. The loader rejects `harness = { id = "external-agent" }` as an unknown
+  harness id. The id is intentionally kept out of `KNOWN_PUBLIC_HARNESS_IDS`,
+  and parser, CLI, and executor tests reference the provisional id constant
+  directly to lock that exclusion against future regressions. The repo-task executor boundary
+  also rejects the id with `TaskError` if it ever reaches
+  `run_repo_task_executor`, so neither manifest load nor executor dispatch can
+  silently accept it. A later implementation slice will add parser, CLI, and
+  executor tests for the accepted-id behavior.
 - When `harness` is absent, the default/current behavior remains the fenced
   `diff`/`patch` executor for compatibility.
 - `harness` is accepted only on `repo-task` cases. The loader rejects

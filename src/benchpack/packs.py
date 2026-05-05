@@ -33,6 +33,14 @@ KNOWN_SCORING_MODES = frozenset(
 PUBLIC_HARNESS_FENCED_PATCH = "fenced-patch"
 KNOWN_PUBLIC_HARNESS_IDS = frozenset({PUBLIC_HARNESS_FENCED_PATCH})
 
+# Provisional documentation-only public harness id reserved for a future
+# external coding-agent harness. It is intentionally not included in
+# ``KNOWN_PUBLIC_HARNESS_IDS`` so the loader rejects manifests that declare
+# ``harness = { id = "external-agent" }``. Parser, CLI, and executor tests
+# lock that exclusion until a later implementation slice adds accepted-id
+# behavior.
+PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID = "external-agent"
+
 
 class PackError(Exception):
     """Base error for manifest problems."""

@@ -373,7 +373,12 @@ arguments, runs the subprocess without a shell in the prepared workspace,
 captures existing task stdout/stderr logs, treats completed nonzero exits and
 cleanly stopped timeouts as task outcomes, and leaves patch capture, verifier
 execution, manifest parsing, CLI behavior, adapter schemas, raw paths, result
-rows, compare/report behavior, and the default matrix unchanged.
+rows, compare/report behavior, and the default matrix unchanged. The public
+`external-agent` parser-policy lock landed 2026-05-05: a named
+`PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant is intentionally excluded from
+`KNOWN_PUBLIC_HARNESS_IDS`, parser/CLI/executor tests reference that constant
+directly, and the provisional id remains rejected at all three layers without
+adding production external coding-agent execution.
 
 Scope:
 
@@ -558,6 +563,19 @@ Scope:
   the existing task/verifier flow. Invalid harness combinations, unsafe argv,
   missing executables, invalid workspaces, and unwritable logs remain runner
   failures. `external-agent` remains loader-rejected.
+- Lock the public `external-agent` parser policy as loader-rejected.
+  **Landed 2026-05-05** without changing executor or CLI behavior: a named
+  `PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant lives alongside
+  `PUBLIC_HARNESS_FENCED_PATCH` and is intentionally excluded from
+  `KNOWN_PUBLIC_HARNESS_IDS`. Parser, CLI, and executor tests reference the
+  constant directly: the parser error mentions both the provisional id and the
+  implemented `fenced-patch` id; the CLI test proves manifest load fails before
+  any adapter call or run-output directory is created; the executor test proves
+  a stray `harness_id="external-agent"` raises `TaskError` without writing task
+  logs and without mutating the prepared workspace. Existing fenced-patch
+  defaults, internal in-process and runner-side subprocess harness paths,
+  adapter schemas, raw paths, row shapes, patch/verifier ordering,
+  compare/report behavior, and the default M4/M5 matrix remain unchanged.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

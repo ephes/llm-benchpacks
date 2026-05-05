@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from benchpack.packs import Case, Fixture, Pack, Scoring
+from benchpack.packs import (
+    Case,
+    Fixture,
+    Pack,
+    PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
+    Scoring,
+)
 from benchpack.patches import capture_workspace_patch
 from benchpack.tasks import (
     AgentSessionHarnessRequest,
@@ -568,8 +574,9 @@ def test_run_repo_task_executor_rejects_unknown_harness_before_logs(
     out = tmp_path / "run"
     workspace = out / "workspace" / "edit-repo" / "rep-001"
     workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
 
-    with pytest.raises(TaskError, match="unknown repo-task harness id"):
+    with pytest.raises(TaskError) as excinfo:
         run_repo_task_executor(
             TaskExecutionRequest(
                 output_dir=out,
@@ -577,11 +584,15 @@ def test_run_repo_task_executor_rejects_unknown_harness_before_logs(
                 repetition=1,
                 workspace=workspace,
                 model_output_text="",
-                harness_id="external-agent",
+                harness_id=PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
             )
         )
 
+    message = str(excinfo.value)
+    assert "unknown repo-task harness id" in message
+    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID in message
     assert not (out / "task").exists()
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "source repo\n"
 
 
 def test_run_repo_task_executor_rejects_public_and_internal_harness_combination(

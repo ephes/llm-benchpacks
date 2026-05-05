@@ -16,6 +16,46 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (external-agent loader-rejection policy lock)
+
+### Changed
+
+- Locked the public parser policy for the provisional `external-agent` harness
+  id without adding production external coding-agent execution. The id remains
+  documentation-only and is rejected by the manifest loader, the CLI, and the
+  repo-task executor boundary.
+- Added a named `PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant in
+  `benchpack.packs` alongside the existing `PUBLIC_HARNESS_FENCED_PATCH`
+  constant and `KNOWN_PUBLIC_HARNESS_IDS` set. The constant is intentionally
+  excluded from the public set; parser, CLI, and executor tests lock the
+  exclusion so a future regression that added the provisional id to the
+  public set would fail tests rather than silently accept the manifest.
+- Sharpened parser, CLI, and executor tests so each layer references the
+  provisional constant directly: the parser error mentions both the rejected
+  provisional id and the implemented `fenced-patch` public id; the CLI test
+  proves the manifest fails before any adapter call or run-output directory is
+  created; the executor test proves a stray `harness_id="external-agent"`
+  raises `TaskError` without writing task logs and without mutating the
+  prepared workspace.
+- Preserved every existing behavior: absent `harness` still defaults to the
+  fenced-patch executor; `harness = { id = "fenced-patch" }` and
+  `harness.timeout_s` semantics are unchanged; the internal in-process
+  agent-session harness and runner-side `ExternalProcessHarness` paths remain
+  runner-only with unchanged contracts; adapter request/result schemas, raw
+  paths, `run.jsonl` row shapes, patch capture, verifier execution ordering,
+  compare/report behavior, the default M4/M5 matrix, repo-task warmup
+  rejection, and source-fixture immutability remain unchanged.
+
+### Open Questions
+
+- Whether the next slice should accept `external-agent` as a parser-reserved
+  not-runnable id with a clear executor/CLI not-implemented error, or keep the
+  loader as the single rejection point until the production external harness
+  integration is ready.
+- How a real production external harness will represent process-tree cleanup,
+  model-call context, harness-owned artifacts, run-metadata handoff, and
+  richer task status/reporting beyond the existing task logs.
+
 ## 2026-05-05 (production external harness contract refinement)
 
 ### Changed
