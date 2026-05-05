@@ -26,7 +26,12 @@ from .packs import (
     warmup_from_defaults,
 )
 from .patches import PatchError, capture_workspace_patch
-from .report import ReportError, load_report_runs, render_report
+from .report import (
+    ReportError,
+    load_report_runs,
+    load_report_set,
+    render_report,
+)
 from .results import RunReporter
 from .run_metadata import RunMetadataError, load_run_metadata
 from .tasks import TaskError, TaskExecutionRequest, run_repo_task_executor
@@ -292,7 +297,20 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 
 def _cmd_report(args: argparse.Namespace) -> int:
     try:
-        runs = load_report_runs(args.result_dirs)
+        if args.report_set is not None and args.result_dirs:
+            raise ReportError(
+                "benchpack report accepts either --set or result directories, not both"
+            )
+        if args.report_set is None and not args.result_dirs:
+            raise ReportError(
+                "benchpack report requires at least one result directory or --set"
+            )
+        result_dirs = (
+            load_report_set(args.report_set)
+            if args.report_set is not None
+            else args.result_dirs
+        )
+        runs = load_report_runs(result_dirs)
         output = render_report(runs)
     except ReportError as exc:
         raise SystemExit(str(exc)) from exc
@@ -345,8 +363,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     report.add_argument(
         "result_dirs",
-        nargs="+",
+        nargs="*",
         help="Result directories containing run.jsonl",
+    )
+    report.add_argument(
+        "--set",
+        dest="report_set",
+        default=None,
+        help="TOML report-set manifest with result_dirs entries",
     )
     return parser
 

@@ -111,7 +111,21 @@ adapter/model/endpoint, row and `ok` counts, scoring pass/fail/unscored counts,
 and the same compare medians, cache rows, warnings, and `prefill parity`
 statuses used by `benchpack compare`. It is intended for assembling run notes
 and M4/M5 comparison reports without copying medians from several compare
-outputs by hand.
+outputs by hand. For repeated report assembly, `benchpack report --set
+<manifest.toml>` accepts a tiny TOML report-set manifest and expands it to the
+same existing result-directory inputs:
+
+```toml
+version = 1
+result_dirs = [
+  "results/<date>-m5-max-runtime",
+  "results/<date>-m4-max-runtime",
+]
+```
+
+Relative `result_dirs` entries resolve relative to the manifest file. The
+manifest is source-only and read-only: it does not schedule runs, start
+servers, copy artifacts, or write report files.
 
 Bundled packs:
 

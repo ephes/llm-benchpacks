@@ -143,8 +143,11 @@ directories while reusing compare median, warning, cache-row, and
 `prefill parity` semantics. A narrow user-supplied runtime metadata slice also
 landed: `benchpack run --run-metadata <json-file>` persists a small
 `run-metadata.json` artifact and `benchpack report` includes it when present.
-Remaining work is deeper live benchmark interpretation, production external
-harness execution, and larger repo-task packs, not benchmark semantics.
+The narrow report-set manifest follow-up also landed: `benchpack report --set
+<manifest.toml>` expands a source-only TOML list of existing result directories
+into the same read-only report pipeline. Remaining work is deeper live
+benchmark interpretation, production external harness execution, and larger
+repo-task packs, not benchmark semantics.
 
 Scope:
 
@@ -215,9 +218,12 @@ Scope:
   model matrix, runtime-sweep median total TPS, scoring outcome, interpretation
   caveats, and ignored result-directory patterns without committing generated
   result artifacts.
-- Consider a narrow report-set manifest for future report assembly. This remains
-  a follow-up: it should be source-only, read-only, covered by tests and docs,
-  and should not run benchmarks or mutate result directories.
+- Add a narrow report-set manifest for repeated report assembly. **Landed
+  2026-05-05** as `benchpack report --set <manifest.toml>`, which loads a
+  source-only TOML manifest with `version = 1` and `result_dirs = [...]`,
+  resolves relative entries against the manifest location, and feeds the
+  existing read-only report renderer without running benchmarks or mutating
+  result directories.
 
 Suggested implementation handoffs:
 
@@ -242,6 +248,10 @@ Suggested implementation handoffs:
   SSH-launched benchmark matrix easier to dry-run and start in tmux while
   leaving result generation and reporting in the existing CLI. **Landed
   2026-05-05** as `scripts/benchpack-tmux-matrix`.
+- Report-set manifest slice: let repeated comparison reports name their
+  existing result directories once without changing report output or writing
+  generated report artifacts. **Landed 2026-05-05** as `benchpack report
+  --set`.
 
 Validation:
 

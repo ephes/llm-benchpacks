@@ -584,6 +584,7 @@ parity is established separately.
 
 ```text
 benchpack report <result-dir> [<result-dir> ...]
+benchpack report --set <manifest.toml>
 ```
 
 `benchpack report` reads existing result directories and writes only Markdown to
@@ -596,6 +597,29 @@ such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly; malformed metadata
 fails with a clear error.
+
+The optional `--set <manifest.toml>` mode loads a source TOML report-set
+manifest and expands it to the same existing result-directory inputs before the
+normal report loader runs. `--set` and positional result directories are
+mutually exclusive, and the command requires exactly one input source: either
+one or more positional result directories or one report-set manifest. The
+manifest shape is intentionally narrow:
+
+```toml
+version = 1
+result_dirs = [
+  "results/<date>-m5-max-runtime",
+  "results/<date>-m4-max-runtime",
+]
+```
+
+`version` is optional; when present it must be integer `1`. `result_dirs` is
+required and must be a non-empty list of non-empty strings. Relative
+`result_dirs` entries resolve relative to the manifest file's parent directory;
+absolute paths are accepted only as normal result-directory inputs and remain
+the user's responsibility. Malformed TOML or invalid schema fails with a clear
+report error and no traceback. Missing `run.jsonl` in an expanded directory
+continues to fail through the existing result loader.
 
 The report is meant to be pasted into run notes or used as a comparison-report
 skeleton. It summarizes:
@@ -613,11 +637,12 @@ skeleton. It summarizes:
 
 The report command is read-only: it does not execute packs, collect hardware,
 load adapters, read `raw/`, write result artifacts, mutate result directories,
-or change `benchpack compare` behavior. It may parse optional
-`run-metadata.json` for display, but compare remains independent of that
-artifact. Its comparison section reuses the compare summarization and parity
-helpers so report medians and statuses do not silently diverge from
-`benchpack compare`.
+copy result files, schedule tmux sessions, perform SSH, manage remote hosts, or
+change `benchpack compare` behavior. Report-set manifests are only an input
+expansion step. The command may parse optional `run-metadata.json` for display,
+but compare remains independent of that artifact. Its comparison section reuses
+the compare summarization and parity helpers so report medians and statuses do
+not silently diverge from `benchpack compare`.
 
 ## Result Artifacts
 

@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from benchpack.report import ReportError, load_report_runs, render_report
+from benchpack.report import (
+    ReportError,
+    load_report_runs,
+    load_report_set,
+    render_report,
+)
 
 
 def _write_run(
@@ -235,3 +240,68 @@ def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
 
     with pytest.raises(ReportError, match="could not parse"):
         render_report(load_report_runs([run_a]))
+
+
+def test_load_report_set_expands_relative_paths_from_manifest_dir(
+    tmp_path: Path,
+) -> None:
+    manifest_dir = tmp_path / "manifests"
+    manifest_dir.mkdir()
+    manifest = manifest_dir / "qwen.toml"
+    manifest.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                "result_dirs = [",
+                '  "../results/run-a",',
+                '  "/tmp/absolute-run",',
+                "]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_report_set(manifest) == [
+        manifest_dir / "../results/run-a",
+        Path("/tmp/absolute-run"),
+    ]
+
+
+def test_load_report_set_allows_omitted_version(tmp_path: Path) -> None:
+    manifest = tmp_path / "qwen.toml"
+    manifest.write_text('result_dirs = ["results/run-a"]\n', encoding="utf-8")
+
+    assert load_report_set(manifest) == [tmp_path / "results/run-a"]
+
+
+def test_load_report_set_rejects_malformed_toml(tmp_path: Path) -> None:
+    manifest = tmp_path / "bad.toml"
+    manifest.write_text("version = [\n", encoding="utf-8")
+
+    with pytest.raises(ReportError, match="could not parse report set manifest"):
+        load_report_set(manifest)
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("version = 1\n", "requires result_dirs"),
+        ('version = 1\nresult_dirs = "results/run-a"\n', "non-empty list"),
+        ("version = 1\nresult_dirs = []\n", "must not be empty"),
+        ("version = 1\nresult_dirs = [1]\n", "entries must be strings"),
+        ('version = 1\nresult_dirs = [""]\n', "entries must not be empty"),
+        ('version = "1"\nresult_dirs = ["results/run-a"]\n', "version must be"),
+        ("version = 2\nresult_dirs = [\"results/run-a\"]\n", "version must be 1"),
+    ],
+)
+def test_load_report_set_rejects_invalid_schema(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    manifest = tmp_path / "bad.toml"
+    manifest.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ReportError, match=message):
+        load_report_set(manifest)

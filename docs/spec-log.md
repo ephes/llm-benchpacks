@@ -16,6 +16,31 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (report-set manifest)
+
+### Changed
+
+- Added `benchpack report --set <manifest.toml>` as a narrow source-only
+  report-set manifest mode for existing result directories.
+- The TOML shape is `version = 1` plus non-empty `result_dirs = [...]`;
+  `version` is optional but must be integer `1` when present.
+- Relative `result_dirs` entries resolve relative to the manifest file's parent
+  directory before the existing report loader reads `run.jsonl`.
+- Kept report-set manifests read-only and reporting-only: no benchmark
+  execution, runtime startup, tmux orchestration, SSH, result copying, report
+  artifact writing, result-directory mutation, compare behavior changes, or
+  result row schema changes.
+- Updated README, specification, architecture, Apple Silicon runbook,
+  implementation plan, and Qwen3.6 summary notes for the new CLI shape.
+
+### Open Questions
+
+- Curated source report-set manifests may be useful for durable benchmark
+  narratives later, but this slice intentionally adds no checked-in manifests
+  that point at local generated `results/*` directories.
+- Report output may eventually display the report-set name or manifest path, but
+  this first slice preserves the existing Markdown renderer output.
+
 ## 2026-05-05 (Qwen3.6 M4/M5 benchmark summary)
 
 ### Changed
@@ -31,9 +56,9 @@ working history and open questions.
 
 ### Open Questions
 
-- A future report-set manifest could name paired result directories for
-  `benchpack report`, but it should be a narrow read-only CLI shape with tests
-  and docs rather than part of this cleanup slice.
+- Curated source report-set manifests can be added later when a run-log entry
+  needs a durable named group, but generated `results/*` artifacts still stay
+  ignored unless intentionally curated.
 
 ## 2026-05-05 (tmux metadata matrix helper)
 

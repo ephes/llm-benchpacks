@@ -482,6 +482,15 @@ reads sibling `hardware.json` and `run-metadata.json`, and writes Markdown to
 stdout only. Missing `hardware.json` or `run-metadata.json` is tolerated because
 older or pulled-back compare inputs may contain only `run.jsonl`.
 
+When invoked with `--set <manifest.toml>`, the report command first loads a
+small source TOML report-set manifest with `version = 1` and `result_dirs =
+[...]`, resolves relative entries against the manifest file's parent directory,
+and passes those paths to the same result-directory loader used by positional
+report inputs. This is only a read-only input expansion step. The manifest
+loader does not execute packs, start runtimes, contact remote hosts, copy
+results, write report artifacts, inspect `raw/`, or alter compare/report
+summarization.
+
 The report renderer is intended for run-log and comparison-note assembly. It
 summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
 identity when available, user-supplied runtime/model/operating metadata when

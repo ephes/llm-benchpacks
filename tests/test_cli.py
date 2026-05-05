@@ -2015,6 +2015,61 @@ def test_cli_report_prints_markdown_for_result_dirs(
     ) in output
 
 
+def test_cli_report_set_prints_markdown_for_manifest_dirs(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "results" / "run-a"
+    run_b = tmp_path / "results" / "run-b"
+    _write_compare_run(run_a, wall_s=1.0)
+    _write_compare_run(run_b, wall_s=2.0)
+    manifest_dir = tmp_path / "sets"
+    manifest_dir.mkdir()
+    manifest = manifest_dir / "qwen.toml"
+    manifest.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                "result_dirs = [",
+                '  "../results/run-a",',
+                '  "../results/run-b",',
+                "]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["report", "--set", str(manifest)]) == 0
+
+    output = capsys.readouterr().out
+    assert "# benchpack report" in output
+    assert "## Compare Medians" in output
+    assert (
+        "| run-a | short | 1 | 1 | 1.000 | 0.100 | — | 40.00 | 30.00 | "
+        "60 | 10 | — | 0/1 | cache-missing |"
+    ) in output
+    assert (
+        "| run-b | short | 1 | 1 | 2.000 | 0.100 | — | 40.00 | 30.00 | "
+        "60 | 10 | — | 0/1 | cache-missing |"
+    ) in output
+
+
+def test_cli_report_rejects_set_and_positional_dirs(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    manifest = tmp_path / "set.toml"
+    manifest.write_text('version = 1\nresult_dirs = ["run-a"]\n', encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="either --set or result directories"):
+        main(["report", "--set", str(manifest), str(run_a)])
+
+
+def test_cli_report_rejects_no_inputs() -> None:
+    with pytest.raises(SystemExit, match="at least one result directory or --set"):
+        main(["report"])
+
+
 def test_cli_report_rejects_missing_run_jsonl(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     _write_compare_run(run_a)

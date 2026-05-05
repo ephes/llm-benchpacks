@@ -90,9 +90,10 @@ For remote M4 runs, only `run.jsonl`, `summary.md`, `hardware.json`, and
 artifacts, task logs, and verifier artifacts stayed generated/local unless a
 future curated run explicitly needs them.
 
-## Next Follow-Up
+## Report Assembly
 
-A narrow report-set manifest may be useful for naming the paired result
-directories that feed `benchpack report`, but it should be designed as a small
-source-only, read-only CLI shape with tests and docs. This run finalization does
-not add that manifest.
+`benchpack report --set <manifest.toml>` can now name the paired result
+directories that feed the existing Markdown report renderer. Use source
+manifests with placeholder or relative result paths when documenting reusable
+groups; do not commit generated `results/*` artifacts unless a later run-log
+entry explicitly curates a small subset.

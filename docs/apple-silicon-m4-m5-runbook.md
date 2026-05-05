@@ -458,6 +458,34 @@ uv run benchpack report \
   results/<date>-m4-max-patch
 ```
 
+For repeated report assembly, keep the result grouping in a source report-set
+manifest instead of pasting the full positional list every time:
+
+```toml
+version = 1
+result_dirs = [
+  "results/<date>-m5-max-smoke",
+  "results/<date>-m4-max-smoke",
+  "results/<date>-m5-max-runtime",
+  "results/<date>-m4-max-runtime",
+  "results/<date>-m5-max-wrap",
+  "results/<date>-m4-max-wrap",
+  "results/<date>-m5-max-patch",
+  "results/<date>-m4-max-patch",
+]
+```
+
+Then render the same Markdown report with:
+
+```sh
+uv run benchpack report --set reports/<report-set>.toml
+```
+
+Relative `result_dirs` entries resolve relative to the manifest file's parent
+directory. The manifest only names existing result directories; it does not run
+benchmarks, start tmux, contact the M4 host, pull files back, write report
+output, or mutate result directories.
+
 `benchpack compare` reports both emitted `WARNING:` lines and a table
 `prefill parity` column. Treat both as part of result interpretation, but keep
 their meanings separate.

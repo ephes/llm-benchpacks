@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,68 @@ from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 class ReportError(ValueError):
     """Raised when report inputs cannot be loaded."""
+
+
+def load_report_set(path: Path | str) -> list[Path]:
+    """Load a report-set manifest and expand it to result directories."""
+
+    manifest_path = Path(path)
+    try:
+        with manifest_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ReportError(
+            f"could not parse report set manifest {manifest_path}: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise ReportError(
+            f"could not read report set manifest {manifest_path}: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ReportError(f"expected TOML table in report set manifest: {manifest_path}")
+
+    version = data.get("version")
+    if version is not None and (
+        not isinstance(version, int) or isinstance(version, bool)
+    ):
+        raise ReportError(
+            f"report set manifest version must be integer 1: {manifest_path}"
+        )
+    if version is not None and version != 1:
+        raise ReportError(f"report set manifest version must be 1: {manifest_path}")
+
+    result_dirs = data.get("result_dirs")
+    if result_dirs is None:
+        raise ReportError(f"report set manifest requires result_dirs: {manifest_path}")
+    if not isinstance(result_dirs, list):
+        raise ReportError(
+            f"report set manifest result_dirs must be a non-empty list of strings: "
+            f"{manifest_path}"
+        )
+    if not result_dirs:
+        raise ReportError(
+            f"report set manifest result_dirs must not be empty: {manifest_path}"
+        )
+
+    expanded: list[Path] = []
+    for index, raw_dir in enumerate(result_dirs, start=1):
+        if not isinstance(raw_dir, str):
+            raise ReportError(
+                "report set manifest result_dirs entries must be strings "
+                f"({manifest_path}, entry {index})"
+            )
+        if raw_dir == "":
+            raise ReportError(
+                "report set manifest result_dirs entries must not be empty "
+                f"({manifest_path}, entry {index})"
+            )
+        result_dir = Path(raw_dir)
+        if not result_dir.is_absolute():
+            result_dir = manifest_path.parent / result_dir
+        expanded.append(result_dir)
+
+    return expanded
 
 
 def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
