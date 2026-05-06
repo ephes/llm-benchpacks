@@ -65,6 +65,11 @@ should prefer one object per call with a minimal line such as
 avoid putting full prompts, full responses, request bodies, headers,
 environment variables, API keys, bearer tokens, or credentials in the default
 telemetry shape.
+See
+[`examples/external-agent/reference-agent.py`](examples/external-agent/reference-agent.py)
+for a deterministic local reference harness that validates the public context
+handoff, mutates only the prepared workspace, and writes that optional JSONL
+line without making live model calls.
 
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack

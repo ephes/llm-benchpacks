@@ -982,6 +982,134 @@ print("external stderr trace", file=sys.stderr)
     }
 
 
+def test_cli_external_agent_reference_example_runs_public_handoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "adapter output remains separate")
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 5 }}',
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+marker = Path(args.workspace, "external-agent-example.txt")
+content = marker.read_text(encoding="utf-8")
+expected = (
+    "external-agent reference harness\\n"
+    "case=edit-repo\\n"
+    "repetition=1\\n"
+)
+if content != expected:
+    raise SystemExit(2)
+patch_text = Path(args.patch).read_text(encoding="utf-8")
+if "+external-agent reference harness\\n" not in patch_text:
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"marker": content, "patch_has_marker": True}, fh)
+""",
+    )
+    example_script = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "external-agent"
+        / "reference-agent.py"
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps([sys.executable, str(example_script)]),
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    assert len(calls) == 1
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    marker = workspace / "external-agent-example.txt"
+    assert marker.read_text(encoding="utf-8") == (
+        "external-agent reference harness\n"
+        "case=edit-repo\n"
+        "repetition=1\n"
+    )
+    source_repo = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo"
+    assert (source_repo / "README.md").read_text(encoding="utf-8") == (
+        "source repo\n"
+    )
+    assert not (source_repo / "external-agent-example.txt").exists()
+
+    context_file = out / "task" / "edit-repo" / "rep-001.context.json"
+    assert context_file.is_file()
+    context = json.loads(context_file.read_text(encoding="utf-8"))
+    model_call_log_path = Path(context["run"]["model_call_log_path"])
+    assert model_call_log_path == (
+        out / "task" / "edit-repo" / "rep-001.model-calls.jsonl"
+    ).resolve()
+    assert "raw" not in model_call_log_path.relative_to(out).parts
+    assert (out / "raw").is_dir()
+    assert not any("model-calls" in path.name for path in (out / "raw").iterdir())
+    model_call_lines = model_call_log_path.read_text(encoding="utf-8").splitlines()
+    assert len(model_call_lines) == 1
+    assert json.loads(model_call_lines[0]) == {
+        "schema_version": 1,
+        "sequence": 1,
+        "model": "test-model",
+        "ok": True,
+    }
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert "model_call_log_path" not in record
+    assert "model_call_log_path" not in record["task"]
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "reference-agent wrote external-agent-example.txt for edit-repo\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- /dev/null\n"
+        "+++ b/external-agent-example.txt\n"
+        "@@ -0,0 +1,3 @@\n"
+        "+external-agent reference harness\n"
+        "+case=edit-repo\n"
+        "+repetition=1\n"
+    )
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "marker": (
+            "external-agent reference harness\n"
+            "case=edit-repo\n"
+            "repetition=1\n"
+        ),
+        "exit_code": 0,
+        "passed": True,
+        "patch_has_marker": True,
+    }
+
+
 def test_cli_repo_task_mixed_external_agent_and_fenced_patch_cases(
     tmp_path: Path,
     monkeypatch,

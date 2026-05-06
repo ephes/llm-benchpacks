@@ -295,6 +295,15 @@ keys, bearer tokens, or credentials. Richer harness-owned telemetry is outside
 the runner-normalized contract until a later schema slice explicitly defines
 it.
 
+A deterministic local reference harness is available at
+`examples/external-agent/reference-agent.py`. It demonstrates the public argv
+and context handoff, validates core context fields against the appended
+arguments, mutates only the prepared workspace, writes one recommended
+model-call JSONL line to the context-provided path, and makes no live model
+calls. It is example harness guidance only; it does not change runner parsing,
+validation, result rows, summaries, reports, adapter raw artifacts, or
+production agent integration.
+
 Other richer harness artifacts must be explicitly named by a later
 artifact/schema slice before they are allowed. It must not mutate pack-owned
 fixtures, prompts, verifier scripts, source docs, `run-metadata.json`,

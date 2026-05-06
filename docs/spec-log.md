@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent reference harness example)
+
+### Changed
+
+- Added `examples/external-agent/reference-agent.py` as a deterministic local
+  reference harness for the public `external-agent` subprocess and context
+  handoff.
+- The example validates core context fields against the appended argv, mutates
+  only the prepared workspace by writing a small marker file, and writes one
+  recommended model-call JSONL line to `run.model_call_log_path` without making
+  live model calls.
+- Added example usage documentation and focused CLI coverage that runs the
+  source-controlled example through `BENCHPACK_EXTERNAL_AGENT_ARGV`, preserving
+  adapter-before-task ordering, patch capture, verifier execution, and the
+  existing result row shape.
+- Kept the model-call log optional, harness-owned, and opaque to the runner:
+  no parsing, validation, summaries, reports, `run.jsonl` fields, adapter
+  schema changes, normal `raw/` artifacts, manifest command syntax, task
+  environments, or production agent integration were added.
+
+### Open Questions
+
+- Real production harnesses may still prove a need for enforced model-call
+  telemetry schema, richer task status, named harness artifacts, or process-tree
+  cleanup policy in later slices.
+
 ## 2026-05-06 (external-agent recommended model-call JSONL shape)
 
 ### Changed

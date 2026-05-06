@@ -503,6 +503,13 @@ outside the prepared workspace and allowed run-output artifacts. Patch capture
 still compares the source fixture to the post-task workspace, and verifier
 execution still follows patch capture.
 
+The source-controlled `examples/external-agent/reference-agent.py` script is a
+deterministic local reference for this handoff. It reads the appended context,
+checks the core public fields, writes a small workspace marker file, and writes
+one recommended model-call JSONL line. It is not a manifest command, does not
+make live model calls, and does not make the optional model-call log a runner
+schema.
+
 Directory fixture semantics for repo-task cases:
 
 - The referenced `kind = "repo"` fixture is immutable source. The runner must
