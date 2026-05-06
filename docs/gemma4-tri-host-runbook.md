@@ -151,6 +151,15 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   empty normal assistant content, and did not contain `Paris`. Treat this as a
   local serving/prompt-budget blocker, not as permission to launch
   `runtime-sweep` or the four-pack matrix.
+- Thinking-control status: a follow-up direct HTTP smoke with the same
+  `smoke-chat` France prompt, `temperature=0`, `max_tokens=64`, and
+  `stream=false` succeeded when the same local `llama-server` command added
+  `--reasoning off`. The server logged `thinking = 0`, returned normal
+  assistant content `The capital of France is Paris.`, omitted
+  `reasoning_content`, and stopped with `finish_reason=stop`. The next local
+  M5 `benchpack smoke-chat` retry should start `llama-server` with
+  `--reasoning off`; `--reasoning-budget 0` remains untested because the first
+  control resolved the direct smoke behavior.
 - Memory note: this is a local M5 load observation only. With the settings
   above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
   and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and

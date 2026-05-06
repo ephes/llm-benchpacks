@@ -333,14 +333,18 @@ Scope:
   endpoint and wrote one measured row with `ok=true`, but scoring failed
   because the model spent the full `max_tokens=64` completion budget on
   `reasoning_content`, returned empty normal assistant content, and did not
-  contain `Paris`. Resolve that Gemma 4 thinking behavior deliberately before
-  `runtime-sweep` or the four-pack matrix; local `llama-server --help` exposes
-  untested candidate controls such as `--reasoning off`,
-  `--reasoning-budget 0`, `--chat-template-kwargs`, and
-  `--reasoning-format`. M4/Hetzner checksum parity, strict same-GGUF
-  `llama-server` load behavior, comparable runtime options, memory fit, token
-  provisioning, SSH/inventory, and serving readiness remain preflight blockers
-  before any benchmark matrix.
+  contain `Paris`. **Local M5 thinking-control direct smoke landed
+  2026-05-06.** Restarting the same local `llama-server` command with
+  `--reasoning off` made the exact `smoke-chat` France prompt return normal
+  assistant content containing `Paris`, no `reasoning_content`, and
+  `finish_reason=stop` within the 64-token non-streaming direct HTTP request.
+  The next local M5 `benchpack smoke-chat` retry should use `--reasoning off`
+  before any `runtime-sweep` or four-pack matrix; `--reasoning-budget 0`
+  remains untested because the first serving control resolved the direct smoke
+  behavior. M4/Hetzner checksum parity, strict same-GGUF `llama-server` load
+  behavior, comparable runtime options, memory fit, token provisioning,
+  SSH/inventory, and serving readiness remain preflight blockers before any
+  benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal

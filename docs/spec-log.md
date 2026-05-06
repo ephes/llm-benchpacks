@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 local M5 thinking-control smoke)
+
+### Changed
+
+- Started the selected local M5 `gemma4-e2b-q4km` GGUF through
+  `/opt/homebrew/bin/llama-server` on loopback with the previous conservative
+  context/cache/batch settings plus exactly one thinking-control override:
+  `--reasoning off`.
+- `llama-server` loaded successfully and logged `thinking = 0` for the Gemma 4
+  chat template. A single direct non-streaming `/v1/chat/completions` request
+  using the bundled `smoke-chat` France prompt, `temperature=0`,
+  `max_tokens=64`, and `stream=false` returned HTTP 200, valid JSON, normal
+  assistant content `The capital of France is Paris.`, no
+  `reasoning_content`, and `finish_reason=stop`.
+- Recorded the compact direct-smoke observation in ignored
+  `metadata/m5-gemma4-llama-server.json`, stopped the server, and deliberately
+  did not run `benchpack run`, `runtime-sweep`, a benchmark matrix, M4 work,
+  Hetzner work, SSH commands, or non-loopback endpoint calls.
+
+### Open Questions
+
+- A future local M5 `benchpack run smoke-chat` retry should use the same
+  `llama-server` command with `--reasoning off` before launching
+  `runtime-sweep` or the four-pack matrix.
+- `--reasoning-budget 0` remains untested in this slice because
+  `--reasoning off` resolved the direct 64-token smoke behavior.
+- M4 and Hetzner strict same-GGUF checksum parity, `llama-server` support,
+  comparable runtime options, memory fit, token provisioning, SSH/inventory,
+  and serving readiness remain unresolved.
+
 ## 2026-05-06 (Gemma 4 local M5 benchpack smoke-chat)
 
 ### Changed
