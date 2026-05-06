@@ -328,10 +328,19 @@ Scope:
   `stream_options.include_usage=true` with a final usage chunk, so the local
   `openai-chat` path can keep the default `--openai-stream-usage include`.
   Gemma 4 thinking behavior may still consume an entire very small streaming
-  token budget before normal content appears. M4/Hetzner checksum parity,
-  strict same-GGUF `llama-server` load behavior, comparable runtime options,
-  memory fit, token provisioning, SSH/inventory, and serving readiness remain
-  preflight blockers before any benchmark matrix.
+  token budget before normal content appears. **Local M5 `smoke-chat`
+  benchpack run attempted 2026-05-06.** The `openai-chat` adapter reached the
+  endpoint and wrote one measured row with `ok=true`, but scoring failed
+  because the model spent the full `max_tokens=64` completion budget on
+  `reasoning_content`, returned empty normal assistant content, and did not
+  contain `Paris`. Resolve that Gemma 4 thinking behavior deliberately before
+  `runtime-sweep` or the four-pack matrix; local `llama-server --help` exposes
+  untested candidate controls such as `--reasoning off`,
+  `--reasoning-budget 0`, `--chat-template-kwargs`, and
+  `--reasoning-format`. M4/Hetzner checksum parity, strict same-GGUF
+  `llama-server` load behavior, comparable runtime options, memory fit, token
+  provisioning, SSH/inventory, and serving readiness remain preflight blockers
+  before any benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal

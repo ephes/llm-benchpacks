@@ -16,6 +16,37 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 local M5 benchpack smoke-chat)
+
+### Changed
+
+- Ran exactly one local M5 `benchpack run smoke-chat` against the selected
+  `gemma4-e2b-q4km` alias on `http://127.0.0.1:8081/v1`, with
+  `--run-metadata metadata/m5-gemma4-llama-server.json`.
+- The `openai-chat` adapter reached the local `llama-server` endpoint and
+  wrote one measured row with `ok=true`, but bundled `smoke-chat` scoring
+  failed because the response spent the full `max_tokens=64` completion budget
+  on `reasoning_content`, returned empty normal assistant content, and did not
+  contain `Paris`.
+- Recorded the compact smoke result in ignored local metadata and left the
+  generated `results/2026-05-06-m5-max-gemma4-llama-20260506-2044-smoke/`
+  directory ignored and uncommitted. The server was stopped after the run. No
+  benchmark matrix, M4 work, Hetzner work, SSH command, sibling-repo work, or
+  non-loopback endpoint call was performed.
+
+### Open Questions
+
+- Gemma 4 thinking behavior needs a deliberate serving, prompt, adapter, or
+  token-budget strategy before running `runtime-sweep` or the four-pack matrix
+  with this local `llama-server` configuration.
+- Local `llama-server --help` exposes untested candidate controls such as
+  `--reasoning off`, `--reasoning-budget 0`, `--chat-template-kwargs`, and
+  `--reasoning-format`; a future narrow slice should validate one of those
+  before retrying benchmark packs.
+- M4 and Hetzner strict same-GGUF checksum parity, `llama-server` support,
+  comparable runtime options, memory fit, token provisioning, SSH/inventory,
+  and serving readiness remain unresolved.
+
 ## 2026-05-06 (Gemma 4 local M5 chat-completions smoke)
 
 ### Changed

@@ -144,6 +144,13 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   The streaming request emitted only `reasoning_content` before
   `finish_reason=length`, so Gemma 4 thinking behavior may consume an entire
   very small streaming token budget before any normal content is emitted.
+- Benchpack smoke status: a single local M5
+  `benchpack run smoke-chat --adapter openai-chat` reached the endpoint and
+  wrote one measured row with `ok=true`, but scoring failed. The response used
+  the full `max_tokens=64` completion budget on `reasoning_content`, returned
+  empty normal assistant content, and did not contain `Paris`. Treat this as a
+  local serving/prompt-budget blocker, not as permission to launch
+  `runtime-sweep` or the four-pack matrix.
 - Memory note: this is a local M5 load observation only. With the settings
   above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
   and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and
@@ -151,8 +158,8 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   infer M4 or Hetzner fit from this.
 - Local metadata: `metadata/m5-gemma4-llama-server.json` records the full
   machine-local path, command, checksum, load notes, direct chat-completions
-  smoke observations, and dry-run status. The file is ignored and should not be
-  committed by default.
+  smoke observations, benchpack smoke result, and dry-run status. The file is
+  ignored and should not be committed by default.
 
 ## Metadata Examples
 
@@ -478,6 +485,12 @@ that the result is runtime-and-format evidence.
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
   benchmark quality evidence.
+- Resolve local Gemma 4 thinking behavior before running `runtime-sweep` or a
+  four-pack matrix: the local M5 `smoke-chat` adapter call succeeded but did
+  not pass scoring because the 64-token completion budget was consumed by
+  `reasoning_content` before normal answer content. Local `llama-server --help`
+  exposes untested candidate controls such as `--reasoning off`,
+  `--reasoning-budget 0`, `--chat-template-kwargs`, and `--reasoning-format`.
 - Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
   Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
