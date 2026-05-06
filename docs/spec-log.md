@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (authenticated openai-chat endpoints)
+
+### Changed
+
+- Added explicit `benchpack run --openai-api-key-env <ENV_NAME>` support for
+  `openai-chat` so authenticated OpenAI-compatible endpoints can receive
+  `Authorization: Bearer <token>` headers.
+- The token is read only from the named environment variable when that option
+  is supplied. Unauthenticated local endpoint behavior remains the default, and
+  the runner does not implicitly read `OPENAI_API_KEY`.
+- Preserved the existing result row shape, raw request/response body artifacts,
+  `--openai-stream-usage include|omit` behavior, compare/report behavior, and
+  manifest syntax. Raw request files remain JSON request bodies only and do not
+  include HTTP headers.
+- External-agent context and adapter defaults may contain the configured
+  environment variable name, but never the resolved bearer token value. Missing
+  or empty configured env vars fail deterministically without logging a token.
+- No live benchmarks were run and no generated `results/*` artifacts were
+  produced.
+
+### Open Questions
+
+- Hetzner token provisioning, live SSH/inventory verification, and Gemma 4
+  serving readiness remain operational prerequisites before the next live
+  tri-host benchmark campaign.
+
 ## 2026-05-06 (external-agent process-tree timeout cleanup)
 
 ### Changed

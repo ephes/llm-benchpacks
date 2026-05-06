@@ -42,6 +42,8 @@ uv run benchpack run smoke-chat --adapter openai-chat --model qwen3-coder:latest
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --force
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-runtime --run-metadata metadata/runtime.json --force
 uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --openai-stream-usage omit --host-label local-runtime --force
+# Set BENCHPACK_REMOTE_OPENAI_TOKEN locally from your secret store first; do not commit secrets.
+uv run benchpack run smoke-chat --adapter openai-chat --model '<model>' --endpoint '<remote-openai-compatible-v1-url>' --openai-api-key-env BENCHPACK_REMOTE_OPENAI_TOKEN --host-label remote-smoke
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
 uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
@@ -119,6 +121,15 @@ return token usage chunks. Use `--openai-stream-usage omit` for
 OpenAI-compatible local servers that reject that option; streamed output and
 TTFT remain available, while usage-derived token counts and token-rate fields
 stay null unless the server still reports usage.
+
+For authenticated OpenAI-compatible endpoints, pass
+`--openai-api-key-env <ENV_NAME>`. The adapter reads the bearer token from that
+environment variable only when the option is supplied, sends
+`Authorization: Bearer <token>` on `openai-chat` requests, and stores only the
+environment variable name in adapter defaults or external-agent context. It
+does not implicitly read `OPENAI_API_KEY`. Do not put API keys, bearer tokens,
+or endpoint credentials in tracked docs, run metadata, task logs, model-call
+logs, or committed result artifacts.
 
 `benchpack compare` is read-only and compares existing result directories that
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,

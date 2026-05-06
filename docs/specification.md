@@ -543,6 +543,21 @@ Adapters and backends that do not report an equivalent value write
 `tokens.cached_prompt = null`. The field records reported prompt-cache hits; it
 does not by itself prove that two compared runs used equivalent cache state.
 
+`openai-chat` can optionally authenticate to OpenAI-compatible endpoints with a
+bearer token read from an explicitly named environment variable. The CLI option
+is `--openai-api-key-env <ENV_NAME>`. When supplied, the adapter reads
+`ENV_NAME` at request time and sends `Authorization: Bearer <value>` on both
+streaming and non-streaming HTTP requests. When omitted, no Authorization
+header is sent, and the runner does not implicitly read `OPENAI_API_KEY` or any
+other default secret variable. If the option is supplied but the named
+environment variable is missing or empty, the adapter fails deterministically
+with an error that names only the environment variable. Raw request artifacts
+remain the JSON request body only; they do not include headers. Result rows,
+summaries, reports, run metadata, task logs, and external-agent context must
+not contain bearer token values. External-agent context may contain the
+configured environment variable name as part of adapter defaults, never the
+resolved token value.
+
 ## CLI
 
 The runner exposes subcommands for executing packs, comparing existing result
@@ -557,6 +572,7 @@ benchpack run <pack> --adapter <adapter> --model <model>
                      [--host-label <label>]
                      [--run-metadata <json-file>]
                      [--openai-stream-usage {include,omit}]
+                     [--openai-api-key-env <ENV_NAME>]
                      [--force]
 ```
 
@@ -572,6 +588,14 @@ benchpack run <pack> --adapter <adapter> --model <model>
   the pack requests streaming. `omit` still sends `"stream": true` but leaves
   out the `stream_options` key for endpoints that reject OpenAI streaming usage
   options. The option does not change non-streaming `openai-chat` requests.
+- `--openai-api-key-env` controls only `openai-chat` HTTP authentication. When
+  supplied, the adapter reads the bearer token from the named environment
+  variable and sends `Authorization: Bearer <token>` on each request. The
+  option is explicit and opt-in; the runner does not automatically read
+  `OPENAI_API_KEY`. The environment variable name may appear in adapter
+  defaults and external-agent context, but the token value must not be written
+  to raw request/response artifacts, result rows, summaries, task logs,
+  run metadata, reports, or committed documentation.
 - `--out` overrides the output directory. The default is
   `results/<YYYY-MM-DD>-<host-label>/`.
 - `--host-label` overrides the auto-derived host label used in the default

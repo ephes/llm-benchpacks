@@ -203,7 +203,9 @@ and before each measured adapter execution:
    logs. The context JSON includes pack/case metadata, the loaded prompt,
    fixture inventory, prepared workspace and task-log paths, optional
    `run-metadata.json` path, optional model-call JSONL path, and selected
-   adapter/model/endpoint/defaults. When `harness.timeout_s` is set, the
+   adapter/model/endpoint/defaults. If `openai-chat` auth is configured, those
+   defaults may include the configured environment variable name, but never the
+   bearer token value. When `harness.timeout_s` is set, the
    subprocess starts in a POSIX process group/session; on timeout, the runner
    terminates that process group, waits a short bounded grace period, escalates
    to a kill signal when needed, and then writes the existing task logs.
@@ -378,6 +380,12 @@ treated as cache counts.
 `/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
 argument).  It is recorded so result records remain unambiguous when the same
 adapter/model points at different local servers.
+
+Transport-only adapter configuration is not part of the adapter result
+payload. For example, `openai-chat` may receive an explicit auth environment
+variable name through adapter defaults and send a bearer token in HTTP headers,
+but the resolved token value is not written to `run.jsonl`, raw request bodies,
+summaries, task logs, run metadata, reports, or external-agent context.
 
 ### Collector sample
 

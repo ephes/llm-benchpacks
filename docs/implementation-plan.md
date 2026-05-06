@@ -271,10 +271,12 @@ Validation:
 Keep model selection explicit and current before launching new cross-host
 benchmark campaigns.
 
-**Status:** started 2026-05-06 as planning/docs only. The first slice landed
-`docs/model-targets.md` as the source-controlled catalog for preferred/current
-model targets, artifact-parity notes, and review cadence. No benchmark results,
-runtime behavior, adapter schemas, or generated artifacts changed.
+**Status:** started 2026-05-06. The first slice landed `docs/model-targets.md`
+as the source-controlled catalog for preferred/current model targets,
+artifact-parity notes, and review cadence. A narrow authenticated
+OpenAI-compatible endpoint slice also landed for `openai-chat` via explicit
+`--openai-api-key-env <ENV_NAME>` bearer-token configuration. No live benchmark
+results or generated artifacts were produced.
 
 Scope:
 
@@ -283,9 +285,13 @@ Scope:
   planning target and Qwen3.6 retained as the continuity target for the
   documented M4/M5 sweep.
 - Add authenticated OpenAI-compatible endpoint support for `openai-chat`.
-  **Planned.** The public Hetzner `/v1` endpoint currently requires a bearer
-  token, and the adapter has no Authorization header path. Keep secret values
-  out of result rows, metadata, raw artifacts, task logs, and docs.
+  **Landed 2026-05-06.** `benchpack run` now accepts
+  `--openai-api-key-env <ENV_NAME>` for `openai-chat`; the adapter reads the
+  token from that named environment variable at request time and sends
+  `Authorization: Bearer <token>` on streaming and non-streaming requests.
+  Secret values stay out of result rows, metadata, raw artifacts, task logs,
+  docs, and external-agent context. The runner does not automatically read
+  `OPENAI_API_KEY`.
 - Add a Gemma 4 tri-host runbook slice for M4, M5, and the Hetzner CUDA host.
   **Planned.** It should reuse the existing metadata-backed matrix workflow,
   record whether each comparison is strict artifact parity or
@@ -779,10 +785,10 @@ Validation:
 Make remote GPU runs practical.
 
 **Status:** planned. The model-target catalog and Gemma 4 tri-host planning
-slice identified two immediate blockers for the Hetzner path: authenticated
-OpenAI-compatible endpoint support in this repo and verified SSH/inventory
-access plus runtime readiness in the sibling deployment repo. The sibling repo
-now tracks that work in its `docs/backlog.md`.
+slice identified two immediate blockers for the Hetzner path. Authenticated
+OpenAI-compatible endpoint support in this repo has landed through
+`openai-chat --openai-api-key-env`; verified SSH/inventory access plus runtime
+readiness remain tracked in the sibling deployment repo's `docs/backlog.md`.
 
 Scope:
 

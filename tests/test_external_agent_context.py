@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from benchpack.adapters.openai_chat import OPENAI_STREAM_USAGE_KEY
+from benchpack.adapters.openai_chat import (
+    OPENAI_API_KEY_ENV_KEY,
+    OPENAI_STREAM_USAGE_KEY,
+)
 from benchpack.external_agent_context import (
     ExternalAgentContextError,
     build_external_agent_context,
@@ -22,6 +25,7 @@ from benchpack.workspaces import PreparedWorkspace, prepare_repo_task_workspace
 
 def test_external_agent_context_contents_and_path_are_deterministic(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pack_dir = tmp_path / "pack"
     repo_dir = pack_dir / "fixtures" / "repo"
@@ -76,7 +80,10 @@ harness = { id = "external-agent", timeout_s = 120 }
         "max_tokens": 32,
         "stream": True,
         OPENAI_STREAM_USAGE_KEY: "omit",
+        OPENAI_API_KEY_ENV_KEY: "BENCHPACK_OPENAI_TOKEN",
     }
+    token_value = "dont-leak-context-token"
+    monkeypatch.setenv("BENCHPACK_OPENAI_TOKEN", token_value)
     original_defaults = dict(defaults)
 
     context_path = external_agent_context_path(out, case, 2)
@@ -149,6 +156,11 @@ harness = { id = "external-agent", timeout_s = 120 }
         "endpoint": "http://example.test/v1",
         "defaults": original_defaults,
     }
+    serialized = json.dumps(loaded, sort_keys=True)
+    assert "BENCHPACK_OPENAI_TOKEN" in serialized
+    assert token_value not in serialized
+    assert "Bearer" not in serialized
+    assert "Authorization" not in serialized
     assert loaded["fixtures"] == [
         {
             "id": "notes",

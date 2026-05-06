@@ -13,6 +13,8 @@ from pathlib import Path
 
 from .adapters import Adapter, AdapterRequest, get_adapter
 from .adapters.openai_chat import (
+    OPENAI_API_KEY_ENV_KEY,
+    OpenAIChatAuthError,
     OPENAI_STREAM_USAGE_INCLUDE,
     OPENAI_STREAM_USAGE_KEY,
     OPENAI_STREAM_USAGE_OMIT,
@@ -128,10 +130,13 @@ def _effective_adapter_defaults(
     adapter: Adapter,
     pack: Pack,
     openai_stream_usage: str,
+    openai_api_key_env: str | None = None,
 ) -> dict:
     defaults = dict(pack.defaults)
     if adapter.name == "openai-chat":
         defaults[OPENAI_STREAM_USAGE_KEY] = openai_stream_usage
+        if openai_api_key_env is not None:
+            defaults[OPENAI_API_KEY_ENV_KEY] = openai_api_key_env
     return defaults
 
 
@@ -160,11 +165,17 @@ def _run_case(
     request_path: Path,
     response_path: Path,
     openai_stream_usage: str = OPENAI_STREAM_USAGE_INCLUDE,
+    openai_api_key_env: str | None = None,
     collect_resources: bool = True,
 ) -> tuple[object, dict]:
     if case.prompt is None:
         raise SystemExit(f"case {case.id!r} has no 'prompt' field")
-    defaults = _effective_adapter_defaults(adapter, pack, openai_stream_usage)
+    defaults = _effective_adapter_defaults(
+        adapter,
+        pack,
+        openai_stream_usage,
+        openai_api_key_env,
+    )
     request = AdapterRequest(
         prompt=case.prompt,
         model=model,
@@ -173,7 +184,10 @@ def _run_case(
         request_path=request_path,
         response_path=response_path,
     )
-    result = adapter.run(request)
+    try:
+        result = adapter.run(request)
+    except OpenAIChatAuthError as exc:
+        raise SystemExit(str(exc)) from exc
     sample = sample_resources() if collect_resources else {}
     return result, sample
 
@@ -237,6 +251,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 request_path=request_path,
                 response_path=response_path,
                 openai_stream_usage=args.openai_stream_usage,
+                openai_api_key_env=args.openai_api_key_env,
                 collect_resources=False,
             )
 
@@ -273,6 +288,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 request_path=request_path,
                 response_path=response_path,
                 openai_stream_usage=args.openai_stream_usage,
+                openai_api_key_env=args.openai_api_key_env,
             )
             if prepared_workspace is not None:
                 harness_id = (
@@ -315,6 +331,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                                 adapter,
                                 pack,
                                 args.openai_stream_usage,
+                                args.openai_api_key_env,
                             ),
                             run_metadata_path=persisted_run_metadata_path,
                             model_call_log_path=model_call_log_file,
@@ -456,6 +473,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "For openai-chat streaming requests, include "
             "stream_options.include_usage or omit stream_options entirely "
             "(default: include)"
+        ),
+    )
+    run.add_argument(
+        "--openai-api-key-env",
+        default=None,
+        help=(
+            "For openai-chat requests, read the bearer token from this named "
+            "environment variable and send it as Authorization: Bearer <token>"
         ),
     )
     run.add_argument(

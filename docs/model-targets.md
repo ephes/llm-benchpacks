@@ -59,9 +59,12 @@ Tri-host comparison modes:
 
 Current blockers:
 
-- `openai-chat` does not yet support an Authorization header, so it cannot call
-  authenticated OpenAI-compatible endpoints such as the public Hetzner
-  `/v1` surface directly.
+- Authenticated OpenAI-compatible endpoint calls now use
+  `benchpack run --adapter openai-chat --openai-api-key-env <ENV_NAME>`, which
+  reads the bearer token from the named environment variable and sends the
+  Authorization header without writing token values to result artifacts. Token
+  provisioning for the public Hetzner `/v1` surface remains an operational
+  prerequisite for live runs.
 - Live Hetzner SSH/inventory access is not confirmed, so exact RAM, GPU model,
   driver version, and runtime state still need read-only verification.
 - The sibling deployment repo's deployed vLLM stack has not been re-validated
@@ -93,5 +96,5 @@ default answer to every new “current preferred model” question.
   IDs and revisions are verified.
 - Add a tiny metadata example for a Gemma 4 tri-host run, including whether the
   run is strict parity or runtime-and-format.
-- Revisit the catalog when authenticated Hetzner endpoint support and live host
-  inventory are ready.
+- Revisit the catalog when Hetzner token provisioning, live host inventory, and
+  Gemma 4 serving readiness are confirmed.

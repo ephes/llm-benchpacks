@@ -22,6 +22,7 @@ from benchpack.adapters import (
     Tokens,
 )
 from benchpack.adapters.openai_chat import (
+    OPENAI_API_KEY_ENV_KEY,
     OpenAIChatAdapter,
     OPENAI_STREAM_USAGE_INCLUDE,
     OPENAI_STREAM_USAGE_KEY,
@@ -982,6 +983,56 @@ print("external stderr trace", file=sys.stderr)
         "passed": True,
         "patch_has_external": True,
     }
+
+
+def test_cli_openai_api_key_env_reaches_defaults_without_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_defaults_recording_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    monkeypatch.setenv("BENCHPACK_OPENAI_TOKEN", "dont-leak-cli-token")
+
+    assert main(_argv(["--openai-api-key-env", "BENCHPACK_OPENAI_TOKEN"])) == 0
+
+    assert len(calls) == 1
+    defaults = calls[0]["defaults"]
+    assert defaults[OPENAI_API_KEY_ENV_KEY] == "BENCHPACK_OPENAI_TOKEN"
+    serialized = json.dumps(defaults, sort_keys=True)
+    assert "dont-leak-cli-token" not in serialized
+    assert "Bearer" not in serialized
+    assert "Authorization" not in serialized
+
+
+def test_cli_openai_api_key_env_missing_fails_without_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    monkeypatch.delenv("BENCHPACK_OPENAI_TOKEN", raising=False)
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            _argv(
+                [
+                    "--out",
+                    str(out),
+                    "--openai-api-key-env",
+                    "BENCHPACK_OPENAI_TOKEN",
+                ]
+            )
+        )
+
+    message = str(excinfo.value)
+    assert "BENCHPACK_OPENAI_TOKEN" in message
+    assert "not set or is empty" in message
+    assert "Bearer" not in message
+    assert "Authorization" not in message
+    assert not (out / "run.jsonl").exists()
 
 
 def test_cli_external_agent_reference_example_runs_public_handoff(

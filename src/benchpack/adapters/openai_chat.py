@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any
 
@@ -21,6 +22,11 @@ from . import (
 OPENAI_STREAM_USAGE_KEY = "_openai_stream_usage"
 OPENAI_STREAM_USAGE_INCLUDE = "include"
 OPENAI_STREAM_USAGE_OMIT = "omit"
+OPENAI_API_KEY_ENV_KEY = "_openai_api_key_env"
+
+
+class OpenAIChatAuthError(ValueError):
+    """Raised when explicit openai-chat auth configuration is unusable."""
 
 
 def _resolve_url(endpoint: str | None) -> str:
@@ -57,6 +63,22 @@ def _cached_prompt_tokens(usage: dict[str, Any]) -> int | None:
     return value
 
 
+def _auth_headers(defaults: dict[str, Any]) -> dict[str, str] | None:
+    env_name = defaults.get(OPENAI_API_KEY_ENV_KEY)
+    if env_name is None:
+        return None
+    if not isinstance(env_name, str) or not env_name:
+        raise OpenAIChatAuthError(
+            "openai-chat auth env var name must be a non-empty string"
+        )
+    token = os.environ.get(env_name)
+    if token is None or token == "":
+        raise OpenAIChatAuthError(
+            f"openai-chat auth env var {env_name!r} is not set or is empty"
+        )
+    return {"Authorization": f"Bearer {token}"}
+
+
 @register
 class OpenAIChatAdapter:
     name = "openai-chat"
@@ -71,6 +93,7 @@ class OpenAIChatAdapter:
 
     def run(self, request: AdapterRequest) -> AdapterResult:
         url = _resolve_url(request.endpoint)
+        headers = _auth_headers(request.defaults)
         body: dict[str, Any] = {
             "model": request.model,
             "messages": [{"role": "user", "content": request.prompt}],
@@ -93,7 +116,7 @@ class OpenAIChatAdapter:
                     "openai-chat stream usage mode must be "
                     f"{OPENAI_STREAM_USAGE_INCLUDE!r} or {OPENAI_STREAM_USAGE_OMIT!r}"
                 )
-            return self._run_streaming(request, url, body)
+            return self._run_streaming(request, url, body, headers)
 
         request.request_path.write_text(json.dumps(body, indent=2))
 
@@ -105,7 +128,7 @@ class OpenAIChatAdapter:
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
         try:
-            response = client.post(url, json=body)
+            response = client.post(url, json=body, headers=headers)
         except httpx.HTTPError as exc:
             ok = False
             error = f"transport error: {exc!r}"
@@ -163,6 +186,7 @@ class OpenAIChatAdapter:
         request: AdapterRequest,
         url: str,
         body: dict[str, Any],
+        headers: dict[str, str] | None,
     ) -> AdapterResult:
         request.request_path.write_text(json.dumps(body, indent=2))
 
@@ -178,7 +202,7 @@ class OpenAIChatAdapter:
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
         try:
-            with client.stream("POST", url, json=body) as response:
+            with client.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     response.read()
                     error_payload = _json_payload_from_response(response)
