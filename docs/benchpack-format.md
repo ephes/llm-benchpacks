@@ -269,6 +269,9 @@ strings. The runner rejects manifests that violate this at load time.
   `task/<case-id>/rep-NNN.stderr.log`, executes `verify-script` scoring when
   declared, and records workspace metadata, `patch.path`, `task`, `verify`,
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
+  Public `external-agent` executions also receive a runner-owned context input
+  at `task/<case-id>/rep-NNN.context.json`; that file is not a result row
+  field.
   A minimal internal agent-session harness path exists behind the same
   executor boundary for runner-side callers and tests. Current CLI runs use the
   fenced `diff`/`patch` executor by default, and repo-task cases may explicitly
@@ -411,8 +414,9 @@ Rules:
 - Runner-side internal in-process harness callables cannot be combined with
   task timeout.
 - Public harness selection does not change adapter request or result schemas.
-  Harness-owned model calls, if added later, are runner/harness concerns rather
-  than normal adapter request fields.
+  The generated external-agent context file is harness input and is not
+  duplicated into `run.jsonl`. Harness-owned model calls, if added later, are
+  runner/harness concerns rather than normal adapter request fields.
 - Existing task logs remain `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`.
 - Patch capture still happens after the selected task phase and reflects the
@@ -447,23 +451,25 @@ The manifest does not name the command. The runner loads
 value must be a JSON array of non-empty strings without NUL bytes; it is not
 shell-parsed and plain command strings are rejected. The runner appends
 `--workspace <prepared-workspace>`, `--case <case-id>`,
-`--output-dir <run-output-dir>`, and `--repetition <N>` before executing the
-subprocess without a shell in the prepared workspace. Missing or malformed
-configuration fails before run output directory creation and before adapter
-calls.
+`--output-dir <run-output-dir>`, `--repetition <N>`, and
+`--context <run-output-dir>/task/<case-id>/rep-NNN.context.json` before
+executing the subprocess without a shell in the prepared workspace. Missing or
+malformed configuration fails before run output directory creation and before
+adapter calls.
 
 This shape keeps explicit case-local selection, optional task-phase timeout, no
 task command list, no task environment table, no shell expansion, no secrets
 handling, no workspace retention flag, and no pack-level harness default.
 
 External harness inputs are runner-side invocation context, not additional
-manifest syntax. The first public slice passes only the appended workspace, case
-id, output directory, and repetition arguments. Future production slices may
-pass case metadata, pack metadata, loaded prompt text, fixture refs and source
-repo metadata, task log paths, selected harness options, optional run metadata,
-model, adapter id, endpoint, request defaults, and compatibility options as
-explicit harness context. Those values do not alter normal adapter
-request/result schemas and do not create new `run.jsonl` fields by default.
+manifest syntax. The public external-agent subprocess receives appended
+workspace, case id, output directory, repetition, and context-file arguments.
+The context JSON has `version = 1` and includes case metadata, pack metadata,
+loaded prompt text, fixture refs and source repo metadata, task log paths,
+selected harness options, optional run metadata path, model, adapter id,
+endpoint argument, request defaults, and compatibility options as explicit
+harness input. Those values do not alter normal adapter request/result schemas
+and do not create new `run.jsonl` fields by default.
 
 External harnesses may mutate only the prepared workspace. They may write the
 existing task stdout/stderr logs through runner-owned capture and, only after a
@@ -538,6 +544,10 @@ Workspace and artifact layout:
   short deterministic success message and stderr is empty; no-patch and
   rejected-patch outcomes are recorded in stderr. For internal harness runs,
   the same files record the harness task phase without adding result fields.
+- External-agent context capture writes deterministic runner-owned context JSON
+  at `task/<case-id>/rep-NNN.context.json` for public `external-agent`
+  executions only. The file is harness input and is not referenced from
+  measured `run.jsonl` rows.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and

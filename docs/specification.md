@@ -99,7 +99,8 @@ workspaces for measured executions, parses an optional case-local public
 internal executor boundary whose default CLI implementation applies model
 output through a fenced unified-diff contract, and can explicitly route
 `harness = { id = "external-agent" }` to a runner-owned subprocess argv with
-optional case-local task timeout support on that harness declaration,
+an appended runner-owned JSON context file and optional case-local task timeout
+support on that harness declaration,
 captures deterministic patch
 artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
@@ -242,21 +243,27 @@ BENCHPACK_EXTERNAL_AGENT_ARGV='["/path/to/fake-agent.py"]'
 
 The runner does not use shell parsing and does not accept a plain command
 string. It appends `--workspace <prepared-workspace>`, `--case <case-id>`,
-`--output-dir <run-output-dir>`, and `--repetition <N>` to that argv, runs the
-process without a shell in the prepared workspace, captures stdout/stderr into
-the existing task logs, then captures the workspace patch and runs any
-verifier. The normal adapter call still happens before the repo-task task phase
-in this slice; full harness-owned model-call logging remains future work.
+`--output-dir <run-output-dir>`, `--repetition <N>`, and
+`--context <run-output-dir>/task/<case-id>/rep-NNN.context.json` to that argv,
+runs the process without a shell in the prepared workspace, captures
+stdout/stderr into the existing task logs, then captures the workspace patch
+and runs any verifier. The normal adapter call still happens before the
+repo-task task phase in this slice; full harness-owned model-call logging
+remains future work.
 
 An external harness receives runner-owned inputs, not broad manifest command
 blobs: currently the appended prepared workspace path, case id, run output
-directory, and measured repetition number. Future production slices may add case
-and pack metadata, loaded prompt text, fixture/source-repo metadata, selected
-harness options, optional run metadata, and model/adapter/endpoint/defaults
-context as explicit harness input. That context is not a change to normal
-adapter request fields, and harness-owned model calls do not write normal
-adapter `raw/` request/response artifacts unless a later result schema slice
-explicitly defines how they are represented.
+directory, measured repetition number, and the explicit JSON context file. The
+context JSON is versioned with `version = 1` and includes pack id/version/
+description, case id/kind/loaded prompt/fixture refs/harness id and timeout,
+prepared workspace path and source fixture metadata, run output directory,
+repetition, task stdout/stderr paths, optional persisted `run-metadata.json`
+path, selected adapter id/model/user endpoint argument/effective defaults, and
+the pack fixture inventory with manifest-declared relative fixture paths. It
+does not include raw adapter request/response payloads, environment variables,
+credentials, or new result row fields. Harness-owned model calls do not write
+normal adapter `raw/` request/response artifacts unless a later result schema
+slice explicitly defines how they are represented.
 
 An external harness may inspect and mutate only the prepared workspace. It may
 write the existing task stdout/stderr logs through the runner-owned capture path
@@ -327,6 +334,8 @@ Current repo-task artifacts include:
   task executor phase
 - `task/<case-id>/rep-NNN.stdout.log`, task stdout for the task executor phase
 - `task/<case-id>/rep-NNN.stderr.log`, task stderr for the task executor phase
+- `task/<case-id>/rep-NNN.context.json`, runner-owned external-agent context
+  input for public `external-agent` executions only
 - `verify/<case-id>/rep-NNN.json`, structured verifier output
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr
@@ -349,7 +358,8 @@ and does not add new row fields. Runner-side callers and tests may also supply
 an internal external-process harness request through `run_repo_task_executor`.
 That path accepts an explicit argv sequence from runner-owned code, appends
 bounded context arguments for the prepared workspace, case id, output
-directory, and repetition, runs without a shell in the prepared workspace,
+directory, repetition, and optional context JSON path, runs without a shell in
+the prepared workspace,
 captures stdout/stderr to the existing task log paths, and preserves patch
 capture and verifier ordering. A clean nonzero subprocess exit and a timeout
 where the runner stops the direct subprocess and closes logs are task outcomes
@@ -357,8 +367,9 @@ represented through the existing logs and downstream verifier result. Unsafe
 argv shape, missing executable, invalid workspace/output paths, incompatible
 harness combinations, or unwritable required logs remain runner failures. The
 public `external-agent` CLI path now routes to this subprocess executor with an
-argv loaded from `BENCHPACK_EXTERNAL_AGENT_ARGV`; it does not add CLI flags,
-manifest commands, adapter fields, raw artifacts, or `run.jsonl` fields.
+argv loaded from `BENCHPACK_EXTERNAL_AGENT_ARGV` plus `--context <path>` to the
+runner-owned JSON context file; it does not add CLI flags, manifest commands,
+adapter fields, raw artifacts, or `run.jsonl` fields.
 
 Future executor implementations, including production external harnesses and
 richer agent-session harnesses,

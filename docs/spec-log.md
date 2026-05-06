@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent context handoff)
+
+### Changed
+
+- Added the next narrow public `external-agent` slice: the runner now writes a
+  deterministic JSON context file at `task/<case-id>/rep-NNN.context.json` for
+  public external-agent executions and appends `--context <path>` to the
+  subprocess argv.
+- Versioned the context with `version = 1` and included explicit non-secret
+  runner context: pack id/version/description, case id/kind/loaded prompt/
+  fixture refs/harness id and timeout, prepared workspace path and source
+  fixture metadata, run output directory, repetition, task stdout/stderr paths,
+  optional persisted `run-metadata.json` path, selected adapter id/model/user
+  endpoint argument/effective defaults, and pack fixture inventory.
+- Kept the context as harness input only. No `run.jsonl` fields, adapter
+  schemas, normal `raw/` artifacts, compare/report behavior, manifest command
+  syntax, task environment configuration, or secrets handling changed.
+- Preserved public `external-agent` argv loading policy, direct executor
+  rejection of `harness_id="external-agent"`, fenced-patch default and explicit
+  behavior, normal adapter call before the task phase, patch capture after the
+  task phase, and verifier execution after patch capture.
+
+### Open Questions
+
+- Full production external coding-agent integration still needs harness-owned
+  model-call logging, process-tree cleanup policy, and evidence for whether
+  task logs plus verifier status are enough.
+
 ## 2026-05-05 (public external-agent runnable slice)
 
 ### Changed

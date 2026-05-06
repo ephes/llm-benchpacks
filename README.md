@@ -51,8 +51,12 @@ Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
 That public harness uses runner-owned subprocess configuration rather than a
 manifest command: set `BENCHPACK_EXTERNAL_AGENT_ARGV` to a JSON array of argv
 strings before running the pack. The runner appends workspace/case/output
-context arguments, runs without a shell, and writes through the existing task
-logs.
+arguments plus `--context <path>` to a runner-owned JSON context file under
+`task/<case-id>/rep-NNN.context.json`, runs without a shell, and writes through
+the existing task logs. The context file includes pack/case metadata, the loaded
+prompt, fixture metadata, prepared workspace path, task log paths, run metadata
+path when supplied, and the selected adapter/model/endpoint/defaults. It is
+harness input only and is not duplicated into `run.jsonl`.
 
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack

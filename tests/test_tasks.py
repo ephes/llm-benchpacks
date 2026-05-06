@@ -857,6 +857,82 @@ raise SystemExit(7)
     )
 
 
+def test_run_repo_task_executor_external_process_appends_context_arg(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    context_path = out / "task" / "edit-repo" / "rep-001.context.json"
+    context_path.parent.mkdir(parents=True)
+    context_path.write_text('{"version": 1}\n', encoding="utf-8")
+    script = write_fake_external_harness(
+        tmp_path,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+parser.add_argument("--context", required=True)
+args = parser.parse_args()
+context = json.loads(Path(args.context).read_text(encoding="utf-8"))
+if context != {"version": 1}:
+    raise SystemExit(2)
+print(Path(args.context).name)
+""",
+    )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            external_process_harness=ExternalProcessHarness(
+                argv=(sys.executable, str(script)),
+            ),
+            external_context_path=context_path,
+        )
+    )
+
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "rep-001.context.json\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
+
+
+def test_run_repo_task_executor_external_process_missing_context_path_is_clear(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    context_path = out / "task" / "edit-repo" / "rep-001.context.json"
+
+    with pytest.raises(TaskError, match="context path") as excinfo:
+        run_repo_task_executor(
+            TaskExecutionRequest(
+                output_dir=out,
+                case=make_case(),
+                repetition=1,
+                workspace=workspace,
+                model_output_text="",
+                external_process_harness=ExternalProcessHarness(
+                    argv=(sys.executable, "-c", "pass"),
+                ),
+                external_context_path=context_path,
+            )
+        )
+
+    assert str(context_path) in str(excinfo.value)
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
 def test_run_repo_task_executor_external_process_timeout_writes_task_logs(
     tmp_path: Path,
 ) -> None:

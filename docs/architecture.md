@@ -49,8 +49,8 @@ than changing the adapter boundary:
   ids and harness declarations on non-`repo-task` cases are rejected. The
   external-agent subprocess slice stays behind this same boundary: richer
   runner-owned context such as pack metadata, prompt text, run metadata, and
-  model/adapter/endpoint/defaults may be added only as harness input, not as
-  adapter schema fields. Full external coding-agent harness
+  model/adapter/endpoint/defaults is passed through an explicit generated JSON
+  context file, not as adapter schema fields. Full external coding-agent harness
   production integration, task environment, retention, richer
   status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
@@ -136,9 +136,11 @@ results/
    preflight is a runner failure because partial mutation cannot be ruled out.
    When the case declares `harness = { id = "external-agent" }`, the CLI passes
    the preloaded runner-owned subprocess argv to `ExternalProcessHarness`, which
-   appends workspace, case, output directory, and repetition context arguments,
-   runs without a shell, captures existing task logs, and treats clean nonzero
-   exits or direct-subprocess timeouts as task outcomes. Runner-side code can
+   writes `task/<case-id>/rep-NNN.context.json` as runner-owned harness input,
+   appends workspace, case, output directory, repetition, and context-path
+   arguments, runs without a shell, captures existing task logs, and treats
+   clean nonzero exits or direct-subprocess timeouts as task outcomes.
+   Runner-side code can
    supply an internal agent-session harness behind this same boundary without
    changing the adapter request shape or public result row shape by default, but
    direct internal harness callables reject `task_timeout_s`.
@@ -191,9 +193,12 @@ and before each measured adapter execution:
 6. For `harness = { id = "external-agent" }`, the CLI routes the task phase to
    the runner-owned external subprocess harness. The argv comes from
    `BENCHPACK_EXTERNAL_AGENT_ARGV`, not from the manifest. The runner appends
-   `--workspace`, `--case`, `--output-dir`, and `--repetition`, runs without a
-   shell in the prepared workspace, and captures stdout/stderr to the existing
-   task logs.
+   `--workspace`, `--case`, `--output-dir`, `--repetition`, and `--context`
+   pointing at `task/<case-id>/rep-NNN.context.json`, runs without a shell in
+   the prepared workspace, and captures stdout/stderr to the existing task
+   logs. The context JSON includes pack/case metadata, the loaded prompt,
+   fixture inventory, prepared workspace and task-log paths, optional
+   `run-metadata.json` path, and selected adapter/model/endpoint/defaults.
 7. An internal agent-session harness can occupy the same runner-owned task
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
@@ -259,7 +264,8 @@ and before each measured adapter execution:
 Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
 remains for model request/response payloads. Current repo-task artifacts are
 `workspace/`, `patch/<case-id>/rep-NNN.diff`,
-`task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, and
+`task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, public external-agent
+`task/<case-id>/rep-NNN.context.json` context inputs, and
 `verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`. Task logs now describe
 the executor-owned task phase: the default fenced unified-diff
 extraction/application phase for default CLI runs, the public external-agent
@@ -283,7 +289,8 @@ again at the task-executor boundary if they somehow reach it.
 This selection leaves adapter request/result schemas, raw request/response
 paths, task log paths, patch capture after the task phase, verifier execution
 after patch capture, and existing measured row shapes unchanged. Normal adapter
-schemas remain unchanged by default; harness-owned model calls, if added later,
+schemas remain unchanged by default; the generated external-agent context file
+is harness input and is not duplicated into `run.jsonl`; harness-owned model calls, if added later,
 are runner/harness concerns rather than normal adapter request fields. External
 harnesses may mutate only the prepared workspace and write only allowed
 run-output artifacts. Pack-owned fixtures, prompts, verifier scripts, source
@@ -293,14 +300,15 @@ defaults, full production external coding-agent integration, and repo-task warmu
 remain separate future design and implementation slices.
 
 The external-agent invocation is still a runner-side task phase, not a manifest
-command runner. This first public slice provides only explicit subprocess
-context appended to the configured argv: prepared workspace, case id, output
-directory, and repetition. Future production slices may add case metadata, pack
-metadata, loaded prompt text, fixture/source-repo metadata, selected harness
-options, optional run metadata, selected model, adapter id, endpoint, defaults,
-and compatibility options as explicit harness context. Those calls do not
-become normal adapter calls, do not change adapter envelopes, and do not write
-normal `raw/` artifacts unless a later schema slice defines that mapping.
+command runner. The public subprocess argv receives explicit runner-owned
+arguments for prepared workspace, case id, output directory, repetition, and
+`--context <path>`. That JSON context is versioned and contains pack metadata,
+loaded prompt text, fixture/source-repo metadata, selected harness options,
+optional run metadata path, selected model, adapter id, endpoint argument,
+defaults, and compatibility options as explicit harness input. Those calls do
+not become normal adapter calls, do not change adapter envelopes, do not add
+`run.jsonl` fields, and do not write normal `raw/` artifacts unless a later
+schema slice defines that mapping.
 
 External harness process failures divide the same way as current task execution.
 Unsafe paths, unwritable required logs, inability to stop a subprocess, or

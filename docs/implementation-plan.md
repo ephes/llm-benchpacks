@@ -384,7 +384,11 @@ accepts `harness = { id = "external-agent", timeout_s = ... }` on `repo-task`
 cases, the CLI requires runner-owned `BENCHPACK_EXTERNAL_AGENT_ARGV` only when
 such a case is selected, routes those cases to `ExternalProcessHarness`, and
 keeps adapter schemas, raw paths, result rows, task log paths, patch/verifier
-ordering, and fenced-patch defaults unchanged.
+ordering, and fenced-patch defaults unchanged. The next narrow external-agent
+context handoff slice landed 2026-05-06: public external-agent executions now
+write `task/<case-id>/rep-NNN.context.json` with versioned runner-owned JSON
+context and append `--context <path>` to the subprocess argv while preserving
+the same adapter/result/report boundaries.
 
 Scope:
 
@@ -597,6 +601,15 @@ Scope:
   task environments, raw artifact paths, result row fields, compare/report
   changes, workspace retention controls, repo-task warmups, or live benchmark
   artifacts were added.
+- Add runner-owned public `external-agent` context input. **Landed 2026-05-06**
+  as deterministic `task/<case-id>/rep-NNN.context.json` files plus appended
+  `--context <path>` subprocess arguments. The context includes pack/case
+  metadata, loaded prompt text, fixture/source workspace metadata, task log
+  paths, optional run metadata path, and selected adapter/model/endpoint/
+  defaults. It remains harness input only: no new manifest commands, CLI
+  task-command flags, task environments, adapter fields, raw artifacts,
+  `run.jsonl` fields, compare/report changes, or live benchmark artifacts were
+  added.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

@@ -18,6 +18,12 @@ from .adapters.openai_chat import (
     OPENAI_STREAM_USAGE_OMIT,
 )
 from .compare import CompareError, load_result_run, render_comparison
+from .external_agent_context import (
+    ExternalAgentContextError,
+    build_external_agent_context,
+    external_agent_context_path,
+    write_external_agent_context,
+)
 from .hardware import collect_hardware, sample_resources
 from .packs import (
     Case,
@@ -36,12 +42,13 @@ from .report import (
     render_report,
 )
 from .results import RunReporter
-from .run_metadata import RunMetadataError, load_run_metadata
+from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, load_run_metadata
 from .tasks import (
     ExternalProcessHarness,
     TaskError,
     TaskExecutionRequest,
     run_repo_task_executor,
+    task_artifact_paths,
 )
 from .verifiers import (
     DEFAULT_VERIFY_TIMEOUT_S,
@@ -116,6 +123,17 @@ def _load_external_agent_harness(pack: Pack) -> ExternalProcessHarness | None:
     return ExternalProcessHarness(argv=tuple(argv))
 
 
+def _effective_adapter_defaults(
+    adapter: Adapter,
+    pack: Pack,
+    openai_stream_usage: str,
+) -> dict:
+    defaults = dict(pack.defaults)
+    if adapter.name == "openai-chat":
+        defaults[OPENAI_STREAM_USAGE_KEY] = openai_stream_usage
+    return defaults
+
+
 def _derive_host_label(hardware: dict) -> str:
     hostname = (hardware.get("hostname") or "host").split(".")[0].lower()
     label = re.sub(r"[^a-z0-9-]+", "-", hostname).strip("-")
@@ -145,9 +163,7 @@ def _run_case(
 ) -> tuple[object, dict]:
     if case.prompt is None:
         raise SystemExit(f"case {case.id!r} has no 'prompt' field")
-    defaults = dict(pack.defaults)
-    if adapter.name == "openai-chat":
-        defaults[OPENAI_STREAM_USAGE_KEY] = openai_stream_usage
+    defaults = _effective_adapter_defaults(adapter, pack, openai_stream_usage)
     request = AdapterRequest(
         prompt=case.prompt,
         model=model,
@@ -204,6 +220,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     reporter = RunReporter(out_dir, pack)
     if run_metadata is not None:
         reporter.write_run_metadata(run_metadata)
+    persisted_run_metadata_path = (
+        out_dir / RUN_METADATA_FILENAME if run_metadata is not None else None
+    )
 
     for case in pack.cases:
         for warmup_index in range(1, warmup + 1):
@@ -267,6 +286,35 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     and case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT
                     else None
                 )
+                external_context_file = None
+                if external_process_harness is not None:
+                    external_context_file = external_agent_context_path(
+                        out_dir,
+                        case,
+                        repetition,
+                    )
+                    task_paths = task_artifact_paths(out_dir, case, repetition)
+                    try:
+                        context = build_external_agent_context(
+                            pack=pack,
+                            case=case,
+                            prepared_workspace=prepared_workspace,
+                            output_dir=out_dir,
+                            repetition=repetition,
+                            task_paths=task_paths,
+                            adapter_id=adapter.name,
+                            model=args.model,
+                            endpoint=args.endpoint,
+                            adapter_defaults=_effective_adapter_defaults(
+                                adapter,
+                                pack,
+                                args.openai_stream_usage,
+                            ),
+                            run_metadata_path=persisted_run_metadata_path,
+                        )
+                        write_external_agent_context(external_context_file, context)
+                    except ExternalAgentContextError as exc:
+                        raise SystemExit(str(exc)) from exc
                 try:
                     task_metadata = run_repo_task_executor(
                         TaskExecutionRequest(
@@ -282,6 +330,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                                 else None
                             ),
                             external_process_harness=external_process_harness,
+                            external_context_path=external_context_file,
                         )
                     )
                     patch_metadata = capture_workspace_patch(

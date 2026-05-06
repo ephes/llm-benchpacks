@@ -413,7 +413,9 @@ routes public `external-agent` cases to `ExternalProcessHarness`, which appends
 the prepared workspace, case id, output directory, and repetition arguments,
 runs without a shell, and writes through the existing task stdout/stderr log
 artifacts. Missing or malformed argv fails before output directory creation and
-before adapter calls.
+before adapter calls. D-027 extends this invocation with a runner-owned
+`--context <path>` JSON input while keeping the argv source and shell-free
+execution policy unchanged.
 
 Reason: accepting the public harness id is useful only if the runner can execute
 a real subprocess, but manifest command blobs, task environments, shell
@@ -422,3 +424,29 @@ contract too early. A single runner-owned JSON argv keeps execution explicit,
 testable, shell-free, and outside adapter/result schemas while preserving
 current patch capture, verifier ordering, task log paths, and `run.jsonl`
 shape.
+
+## D-027: External-agent Context Is Runner-Owned JSON Input
+
+Public `external-agent` subprocesses receive `--context <path>` in addition to
+the existing workspace, case, output directory, and repetition arguments. The
+path points to a deterministic runner-generated JSON file under
+`task/<case-id>/rep-NNN.context.json` in the run output directory. The context
+is versioned from the start with `version = 1` and carries only explicit
+non-secret runner context: pack id/version/description, case id/kind/loaded
+prompt/fixture refs/harness id and timeout, prepared workspace path and source
+fixture metadata, run output directory, repetition, task stdout/stderr paths,
+optional persisted `run-metadata.json` path, selected adapter id/model/user
+endpoint argument/effective defaults, and pack fixture inventory using
+manifest-declared relative fixture paths.
+
+The context file is harness input, not result data. It is not duplicated into
+`run.jsonl`, does not change adapter request/result schemas, does not add
+normal adapter `raw/` artifacts for harness-owned calls, and does not expose
+environment variables or credentials.
+
+Reason: real external agents need more than scalar argv values to act on a
+repo-task, but adding manifest command syntax, task environment tables, secret
+injection, or result schema fields would widen the public contract too early.
+A runner-owned JSON input file keeps the handoff explicit, inspectable,
+language-neutral, shell-free, and compatible with the existing task artifact
+layout.

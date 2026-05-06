@@ -170,7 +170,8 @@ class ExternalProcessHarness:
 
     ``argv`` is supplied by runner-side code or tests, not by pack manifests.
     The executor runs it without a shell and appends explicit context arguments
-    for the prepared workspace, case id, output directory, and repetition.
+    for the prepared workspace, case id, output directory, repetition, and
+    optional runner-owned context JSON file.
     """
 
     argv: Sequence[str]
@@ -189,6 +190,7 @@ class TaskExecutionRequest:
     task_timeout_s: float | None = None
     agent_session_harness: AgentSessionHarness | None = None
     external_process_harness: ExternalProcessHarness | None = None
+    external_context_path: Path | None = None
 
 
 class _PatchContractError(ValueError):
@@ -439,12 +441,28 @@ def _external_process_command(
 
     try:
         workspace = request.workspace.resolve(strict=True)
+    except OSError as exc:
+        raise TaskError(
+            f"could not resolve external subprocess harness workspace path "
+            f"{request.workspace} for repo-task case {request.case.id!r}"
+        ) from exc
+    try:
         output_dir = request.output_dir.resolve(strict=False)
     except OSError as exc:
         raise TaskError(
-            f"could not resolve external subprocess harness paths for "
-            f"repo-task case {request.case.id!r}"
+            f"could not resolve external subprocess harness output directory "
+            f"{request.output_dir} for repo-task case {request.case.id!r}"
         ) from exc
+    context_path = None
+    if request.external_context_path is not None:
+        try:
+            context_path = request.external_context_path.resolve(strict=True)
+        except OSError as exc:
+            raise TaskError(
+                f"could not resolve external subprocess harness context path "
+                f"{request.external_context_path} for repo-task case "
+                f"{request.case.id!r}"
+            ) from exc
     if not workspace.is_dir():
         raise TaskError(
             f"external subprocess harness workspace is not a directory for "
@@ -462,6 +480,11 @@ def _external_process_command(
             str(output_dir),
             "--repetition",
             str(request.repetition),
+            *(
+                []
+                if context_path is None
+                else ["--context", str(context_path)]
+            ),
         ],
         workspace,
     )

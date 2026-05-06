@@ -26,6 +26,7 @@ from benchpack.adapters.openai_chat import (
     OPENAI_STREAM_USAGE_OMIT,
 )
 from benchpack.cli import main
+from benchpack.external_agent_context import ExternalAgentContextError
 from benchpack.packs import (
     InvalidHarnessError,
     PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
@@ -864,6 +865,7 @@ with open(args.output, "w", encoding="utf-8") as fh:
         tmp_path,
         """
 import argparse
+import json
 import sys
 from pathlib import Path
 parser = argparse.ArgumentParser()
@@ -871,10 +873,20 @@ parser.add_argument("--workspace", required=True)
 parser.add_argument("--case", required=True)
 parser.add_argument("--output-dir", required=True)
 parser.add_argument("--repetition", required=True)
+parser.add_argument("--context", required=True)
 args = parser.parse_args()
-workspace = Path(args.workspace)
+context = json.loads(Path(args.context).read_text(encoding="utf-8"))
+workspace = Path(context["workspace"]["path"])
 if args.case != "edit-repo" or args.repetition != "1":
     raise SystemExit(2)
+if context["case"]["id"] != args.case or context["run"]["repetition"] != 1:
+    raise SystemExit(4)
+if context["adapter"]["model"] != "test-model":
+    raise SystemExit(5)
+if context["run"]["run_metadata_path"] is not None:
+    raise SystemExit(6)
+if Path(args.workspace).resolve() != workspace.resolve():
+    raise SystemExit(7)
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
@@ -893,6 +905,19 @@ print("external stderr trace", file=sys.stderr)
     assert len(calls) == 1
     workspace = out / "workspace" / "edit-repo" / "rep-001"
     assert (workspace / "README.md").read_text(encoding="utf-8") == "external repo\n"
+    context_file = out / "task" / "edit-repo" / "rep-001.context.json"
+    assert context_file.is_file()
+    context = json.loads(context_file.read_text(encoding="utf-8"))
+    assert context["case"]["prompt"] == "Change the repository."
+    assert context["case"]["harness"] == {
+        "id": PUBLIC_HARNESS_EXTERNAL_AGENT,
+        "timeout_s": 5.0,
+    }
+    assert context["workspace"]["path"] == str(workspace.resolve())
+    assert context["run"]["task_stdout_path"] == str(
+        (out / "task" / "edit-repo" / "rep-001.stdout.log").resolve()
+    )
+    assert context["adapter"]["endpoint"] == "http://example.test/v1"
     source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
     assert source.read_text(encoding="utf-8") == "source repo\n"
 
@@ -953,16 +978,21 @@ def test_cli_repo_task_mixed_external_agent_and_fenced_patch_cases(
         tmp_path,
         """
 import argparse
+import json
 from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("--workspace", required=True)
 parser.add_argument("--case", required=True)
 parser.add_argument("--output-dir", required=True)
 parser.add_argument("--repetition", required=True)
+parser.add_argument("--context", required=True)
 args = parser.parse_args()
 if args.case != "external-repo" or args.repetition != "1":
     raise SystemExit(2)
-workspace = Path(args.workspace)
+context = json.loads(Path(args.context).read_text(encoding="utf-8"))
+workspace = Path(context["workspace"]["path"])
+if context["case"]["id"] != "external-repo":
+    raise SystemExit(4)
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
@@ -989,6 +1019,8 @@ print(f"external stdout case={args.case} rep={args.repetition}")
     assert (
         out / "workspace" / "fenced-repo" / "rep-001" / "README.md"
     ).read_text(encoding="utf-8") == "fenced repo\n"
+    assert (out / "task" / "external-repo" / "rep-001.context.json").is_file()
+    assert not (out / "task" / "fenced-repo" / "rep-001.context.json").exists()
 
     records = [
         json.loads(line)
@@ -1022,6 +1054,86 @@ print(f"external stdout case={args.case} rep={args.repetition}")
         "-source repo\n"
         "+fenced repo\n"
     )
+
+
+def test_cli_external_agent_context_write_failure_skips_subprocess(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "adapter output still runs first")
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}" }}',
+        scoring='[scoring]\nmode = "none"\n',
+    )
+    marker = tmp_path / "subprocess-ran.txt"
+    script = _write_fake_external_agent(
+        tmp_path,
+        f"""
+from pathlib import Path
+Path({str(marker)!r}).write_text("ran\\n", encoding="utf-8")
+""",
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps([sys.executable, str(script)]),
+    )
+
+    def fail_context_write(path, context):
+        raise ExternalAgentContextError("could not write external-agent context file")
+
+    monkeypatch.setattr("benchpack.cli.write_external_agent_context", fail_context_write)
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="could not write external-agent context"):
+        main(_argv(["--out", str(out)]))
+
+    assert len(calls) == 1
+    assert not marker.exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "patch" / "edit-repo" / "rep-001.diff").exists()
+    assert not (out / "run.jsonl").exists()
+
+
+def test_cli_external_agent_context_build_failure_skips_subprocess(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "adapter output still runs first")
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}" }}',
+        scoring='[scoring]\nmode = "none"\n',
+    )
+    marker = tmp_path / "subprocess-ran.txt"
+    script = _write_fake_external_agent(
+        tmp_path,
+        f"""
+from pathlib import Path
+Path({str(marker)!r}).write_text("ran\\n", encoding="utf-8")
+""",
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps([sys.executable, str(script)]),
+    )
+
+    def fail_context_build(**kwargs):
+        raise ExternalAgentContextError("could not build external-agent context")
+
+    monkeypatch.setattr("benchpack.cli.build_external_agent_context", fail_context_build)
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="could not build external-agent context"):
+        main(_argv(["--out", str(out)]))
+
+    assert len(calls) == 1
+    assert not marker.exists()
+    assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+    assert not (out / "patch" / "edit-repo" / "rep-001.diff").exists()
+    assert not (out / "run.jsonl").exists()
 
 
 def test_cli_invalid_harness_timeout_manifest_fails_before_execution(
