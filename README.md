@@ -21,6 +21,8 @@ and whether the final repository changes pass verification.
 - [Implementation Plan](docs/implementation-plan.md): phased path from minimal runner to remote GPU comparisons.
 - [Benchpack Format](docs/benchpack-format.md): initial manifest sketch.
 - [Hardware Targets](docs/hardware-targets.md): initial machines and runtime assumptions.
+- [Model Target Catalog](docs/model-targets.md): preferred/current model
+  targets, artifact-parity notes, and revisit cadence.
 - [Apple Silicon M4/M5 Runbook](docs/apple-silicon-m4-m5-runbook.md): local
   M5 plus SSH-to-M4 run workflow, result pullback, and compare guidance.
 - [Qwen3.6 M4/M5 Benchmark Summary](docs/qwen36-m4-m5-benchmark-summary.md):

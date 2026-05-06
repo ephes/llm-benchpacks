@@ -38,6 +38,35 @@ working history and open questions.
   logging, task environments, and production coding-agent integration remain
   separate future slices.
 
+## 2026-05-06 (model target catalog and Gemma 4 tri-host planning)
+
+### Changed
+
+- Added `docs/model-targets.md` as the source-controlled catalog for current
+  preferred model targets, artifact-parity notes, and revisit cadence.
+- Recorded Gemma 4 as the preferred current small-model planning target for a
+  future M4/M5/Hetzner slice, while retaining Qwen3.6 as the continuity target
+  for explicit Qwen M4/M5 comparisons and existing curated results.
+- Added backlog items in the implementation plan for authenticated
+  OpenAI-compatible endpoint support, Gemma 4 tri-host runbook work, parity
+  mode selection, runtime/artifact validation, and live Hetzner inventory
+  verification through the sibling deployment repo.
+- Coordinated with the sibling `llm-node-bare` planning shift to a Markdown
+  backlog in that repo's `docs/backlog.md`, including LiteLLM removal or
+  justification as deployment-side work.
+- No live benchmarks were run and no generated `results/*` artifacts were
+  produced.
+
+### Open Questions
+
+- Exact Gemma 4 artifacts, revisions, quantizations, MLX/GGUF/Ollama/vLLM
+  support, license gates, and memory fit still need validation before launch.
+- The first Gemma 4 tri-host comparison still needs an explicit choice between
+  strict same-GGUF parity and an operational runtime-and-format comparison.
+- The public Hetzner endpoint currently requires authentication, and
+  `openai-chat` still needs a safe Authorization header path before it can be
+  used directly.
+
 ## 2026-05-06 (external-agent deterministic model-call example)
 
 ### Changed

@@ -266,6 +266,54 @@ Validation:
 - Do not run live M4/M5 benchmarks as part of implementation validation unless
   explicitly requested; curated benchmark outcomes belong in `docs/run-log.md`.
 
+## Operational Track: Model Targets And Tri-host Gemma 4
+
+Keep model selection explicit and current before launching new cross-host
+benchmark campaigns.
+
+**Status:** started 2026-05-06 as planning/docs only. The first slice landed
+`docs/model-targets.md` as the source-controlled catalog for preferred/current
+model targets, artifact-parity notes, and review cadence. No benchmark results,
+runtime behavior, adapter schemas, or generated artifacts changed.
+
+Scope:
+
+- Maintain a source-controlled model target catalog. **Landed 2026-05-06** in
+  `docs/model-targets.md`, with Gemma 4 as the preferred current small tri-host
+  planning target and Qwen3.6 retained as the continuity target for the
+  documented M4/M5 sweep.
+- Add authenticated OpenAI-compatible endpoint support for `openai-chat`.
+  **Planned.** The public Hetzner `/v1` endpoint currently requires a bearer
+  token, and the adapter has no Authorization header path. Keep secret values
+  out of result rows, metadata, raw artifacts, task logs, and docs.
+- Add a Gemma 4 tri-host runbook slice for M4, M5, and the Hetzner CUDA host.
+  **Planned.** It should reuse the existing metadata-backed matrix workflow,
+  record whether each comparison is strict artifact parity or
+  runtime-and-format, and avoid committing generated `results/*`.
+- Decide and document the first Gemma 4 comparison mode before running it.
+  **Planned.** The conservative strict-parity option is the same GGUF artifact
+  through `llama-server` on all three hosts. The operational service-shaped
+  option is MLX/GGUF on Apple Silicon versus vLLM Hugging Face weights on
+  Hetzner, labeled as runtime-and-format rather than artifact parity.
+- Validate Gemma 4 runtime support and artifacts before live runs.
+  **Planned.** Exact Hugging Face revisions, GGUF/Ollama artifacts, MLX
+  conversions, vLLM/transformers support, license/auth gates, and memory fit
+  must be recorded before launching a benchmark matrix.
+- Restore live Hetzner inventory access through the sibling deployment repo.
+  **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
+  in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal
+  or justification, Gemma 4 serving readiness, and authenticated benchmark
+  access. Until SSH/inventory access is confirmed, treat the documented
+  GEX44-class RTX 4000 SFF Ada 20 GB target as an intended host class rather
+  than verified live hardware state.
+
+Validation:
+
+- Documentation-only catalog/backlog changes should pass link/path review and
+  `git status --short`.
+- Adapter auth and runbook implementation slices should add focused tests and
+  avoid live benchmark artifacts unless explicitly requested.
+
 ## Phase 3: Desktop Django Workload
 
 Add the first real coding-agent-shaped workload.
@@ -730,9 +778,17 @@ Validation:
 
 Make remote GPU runs practical.
 
+**Status:** planned. The model-target catalog and Gemma 4 tri-host planning
+slice identified two immediate blockers for the Hetzner path: authenticated
+OpenAI-compatible endpoint support in this repo and verified SSH/inventory
+access plus runtime readiness in the sibling deployment repo. The sibling repo
+now tracks that work in its `docs/backlog.md`.
+
 Scope:
 
 - Document a manual remote workflow first.
+- Add or document safe authentication for OpenAI-compatible remote endpoints
+  without leaking bearer tokens into result artifacts.
 - Optional SSH runner after local execution is stable.
 - Artifact pullback from hosts such as `hetzner-gex44`.
 - Host labels and result comparison across machines.

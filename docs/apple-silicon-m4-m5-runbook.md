@@ -95,6 +95,11 @@ execution, larger repo-task packs, and curated reporting around those runs.
 
 ## Default Qwen3.6 Targets
 
+These defaults are for explicit Qwen3.6 Apple Silicon comparison work and for
+continuity with the curated 2026-05-05 M4/M5 sweep. For current preferred model
+targets such as Gemma 4, consult `docs/model-targets.md` before launching a new
+campaign.
+
 When the goal is the current 30B-class Qwen comparison, run two model targets
 unless the run note says otherwise:
 

@@ -29,6 +29,9 @@ and OpenAI-compatible local servers.
   GEX44-class machines are first-class targets.
 - Do not hide backend-specific metrics when they are useful. Normalize common
   fields, but preserve native Ollama, llama.cpp, MLX, or CUDA timing details.
+- Consult `docs/model-targets.md` when the user asks for current, preferred, or
+  interesting model targets. Keep that catalog current before substantial live
+  benchmark campaigns.
 
 ## Default Qwen M4/M5 Benchmark Workflow
 
@@ -37,6 +40,11 @@ M5 and the M4 Studio and does not provide exact runtime/model details, use this
 default workflow instead of asking for basic choices again. Ask only when a
 real blocker remains, such as missing SSH access, authentication-gated model
 downloads, insufficient disk, or an explicit cost/time concern.
+
+These Qwen3.6 defaults are for explicit Qwen M4/M5 comparison work and
+continuity with existing curated results. They do not override the current
+preferred-target catalog in `docs/model-targets.md` for new generic model
+selection questions.
 
 Default model targets:
 
