@@ -16,6 +16,41 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 local M5 chat-completions smoke)
+
+### Changed
+
+- Started the already-selected local M5
+  `bartowski/google_gemma-4-E2B-it-GGUF` E2B Q4_K_M artifact through
+  `/opt/homebrew/bin/llama-server` on loopback with alias
+  `gemma4-e2b-q4km` and the previously captured conservative context/cache/
+  batch settings.
+- Sent one direct non-streaming `/v1/chat/completions` request to
+  `http://127.0.0.1:8081/v1` without running `benchpack run`; the endpoint
+  returned HTTP 200, valid chat-completion JSON, and exact
+  `GEMMA4_SMOKE_OK` content without visible template, tool, thinking, or EOG
+  leakage.
+- Sent one tiny streaming compatibility request with
+  `stream_options.include_usage=true`; the endpoint accepted it and returned a
+  final usage chunk, so future `openai-chat` runs can keep the default
+  `--openai-stream-usage include` for this local server.
+- Recorded the direct smoke observations in ignored
+  `metadata/m5-gemma4-llama-server.json`. No `benchpack run`, benchmark
+  matrix, M4 work, Hetzner work, SSH command, endpoint call outside local
+  loopback, or generated `results/*` artifact was produced.
+
+### Open Questions
+
+- The tiny streaming request emitted only `reasoning_content` chunks before
+  `finish_reason=length`, so Gemma 4 thinking behavior may consume an entire
+  very small streaming token budget before any normal content is emitted, even
+  though include-usage compatibility is confirmed.
+- M4 and Hetzner strict same-GGUF checksum parity, `llama-server` support,
+  comparable runtime options, memory fit, token provisioning, SSH/inventory,
+  and serving readiness remain unresolved.
+- A full `benchpack run smoke-chat` and any four-pack matrix still require
+  explicit authorization.
+
 ## 2026-05-06 (Gemma 4 local M5 GGUF preflight)
 
 ### Changed

@@ -135,16 +135,24 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   `tokenizer.chat_template`; `llama-server` initialized a Gemma-style chat
   template with `thinking=1`. Load logs warned that control-looking tokens
   `<|tool_response>` and `</s>` were overridden, and `</s>` was removed from
-  the EOG list because `<|tool_response>` is present. Chat-completion output
-  formatting remains unresolved until an explicitly authorized smoke call.
+  the EOG list because `<|tool_response>` is present. A direct local
+  non-streaming `/v1/chat/completions` smoke call returned exact
+  `GEMMA4_SMOKE_OK` content without visible template, tool, thinking, or EOG
+  leakage. A tiny streaming request with `stream_options.include_usage=true`
+  was accepted and returned a final usage chunk, so the local M5
+  `openai-chat` path can keep the default `--openai-stream-usage include`.
+  The streaming request emitted only `reasoning_content` before
+  `finish_reason=length`, so Gemma 4 thinking behavior may consume an entire
+  very small streaming token budget before any normal content is emitted.
 - Memory note: this is a local M5 load observation only. With the settings
   above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
   and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and
   `memory_pressure` reported 84 percent free with no throttled pages. Do not
   infer M4 or Hetzner fit from this.
 - Local metadata: `metadata/m5-gemma4-llama-server.json` records the full
-  machine-local path, command, checksum, load notes, and dry-run status. The
-  file is ignored and should not be committed by default.
+  machine-local path, command, checksum, load notes, direct chat-completions
+  smoke observations, and dry-run status. The file is ignored and should not be
+  committed by default.
 
 ## Metadata Examples
 
@@ -468,8 +476,8 @@ that the result is runtime-and-format evidence.
   unverified on M4 and Hetzner.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
-  quality or smoke authorization; the local M5 load alone is not quality
-  evidence.
+  quality authorization; the local M5 load and minimal smoke checks are not
+  benchmark quality evidence.
 - Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
   Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified

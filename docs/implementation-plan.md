@@ -322,11 +322,16 @@ Scope:
   `/opt/homebrew/bin/llama-server` version `9030 (a09a00e50)` loaded it on
   loopback with alias `gemma4-e2b-q4km`, conservative context/cache/batch
   settings, and ignored metadata in `metadata/m5-gemma4-llama-server.json`.
-  Chat-completion output formatting still needs explicit smoke authorization,
-  and M4/Hetzner checksum parity, strict same-GGUF `llama-server` load
-  behavior, comparable runtime options, memory fit, token provisioning,
-  SSH/inventory, and serving readiness remain preflight blockers before any
-  benchmark matrix.
+  **Local M5 chat-completions smoke landed 2026-05-06.** A direct
+  non-streaming `/v1/chat/completions` request returned exact
+  `GEMMA4_SMOKE_OK` content, and a tiny streaming request accepted
+  `stream_options.include_usage=true` with a final usage chunk, so the local
+  `openai-chat` path can keep the default `--openai-stream-usage include`.
+  Gemma 4 thinking behavior may still consume an entire very small streaming
+  token budget before normal content appears. M4/Hetzner checksum parity,
+  strict same-GGUF `llama-server` load behavior, comparable runtime options,
+  memory fit, token provisioning, SSH/inventory, and serving readiness remain
+  preflight blockers before any benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal
