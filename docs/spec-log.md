@@ -16,6 +16,35 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 tri-host runbook and comparison mode)
+
+### Changed
+
+- Added `docs/gemma4-tri-host-runbook.md` for M4, M5, and Hetzner Gemma 4
+  campaign planning without running live benchmarks.
+- Selected strict same-GGUF parity through `llama-server` on all three hosts as
+  the primary first campaign mode, subject to artifact, runtime, and memory-fit
+  validation.
+- Documented the secondary service-shaped Apple-vs-Hetzner path as
+  runtime-and-format evidence, not strict artifact parity.
+- Added placeholder-only metadata examples for M5, M4, Hetzner
+  `llama-server`, and optional Hetzner vLLM, including runtime command,
+  artifact, quantization, checksum, endpoint, auth env var name, context/cache,
+  power, thermal, background load, and comparison mode fields.
+- Extended `scripts/benchpack-tmux-matrix` with
+  `--openai-api-key-env <ENV_NAME>` as a dry-run/testable pass-through to
+  generated `benchpack run` commands. The helper does not read token values.
+- Updated the README, Apple Silicon runbook, model target catalog,
+  implementation plan, and architecture helper boundary notes. No live
+  benchmarks were run and no generated `results/*` artifacts were produced.
+
+### Open Questions
+
+- Exact Gemma 4 artifact IDs, revisions, quantization filenames, checksums,
+  license gates, MLX/GGUF/vLLM support, and memory fit still need validation.
+- Hetzner token provisioning, SSH/inventory verification, and Gemma 4 serving
+  readiness remain operational blockers before any live tri-host campaign.
+
 ## 2026-05-06 (authenticated openai-chat endpoints)
 
 ### Changed

@@ -293,14 +293,21 @@ Scope:
   docs, and external-agent context. The runner does not automatically read
   `OPENAI_API_KEY`.
 - Add a Gemma 4 tri-host runbook slice for M4, M5, and the Hetzner CUDA host.
-  **Planned.** It should reuse the existing metadata-backed matrix workflow,
-  record whether each comparison is strict artifact parity or
-  runtime-and-format, and avoid committing generated `results/*`.
+  **Landed 2026-05-06** in `docs/gemma4-tri-host-runbook.md`. It reuses the
+  metadata-backed matrix workflow, records whether each comparison is strict
+  artifact parity or runtime-and-format, includes placeholder metadata examples
+  and dry-run command matrices, and avoids committing generated `results/*`.
 - Decide and document the first Gemma 4 comparison mode before running it.
-  **Planned.** The conservative strict-parity option is the same GGUF artifact
-  through `llama-server` on all three hosts. The operational service-shaped
-  option is MLX/GGUF on Apple Silicon versus vLLM Hugging Face weights on
-  Hetzner, labeled as runtime-and-format rather than artifact parity.
+  **Landed 2026-05-06.** The first campaign mode is strict same-GGUF parity
+  through `llama-server` on all three hosts, subject to artifact/runtime/memory
+  fit. The secondary service-shaped option is MLX/GGUF on Apple Silicon versus
+  vLLM Hugging Face weights on Hetzner, labeled as runtime-and-format rather
+  than artifact parity.
+- Add authenticated endpoint pass-through to the tmux matrix helper.
+  **Landed 2026-05-06** as `scripts/benchpack-tmux-matrix
+  --openai-api-key-env <ENV_NAME>`, which passes the environment variable name
+  through to generated `benchpack run` commands without reading token values or
+  changing benchmark semantics.
 - Validate Gemma 4 runtime support and artifacts before live runs.
   **Planned.** Exact Hugging Face revisions, GGUF/Ollama artifacts, MLX
   conversions, vLLM/transformers support, license/auth gates, and memory fit

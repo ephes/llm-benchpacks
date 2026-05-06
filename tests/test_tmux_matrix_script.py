@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -54,6 +55,7 @@ def test_dry_run_generates_default_matrix_commands() -> None:
     assert "attach: tmux attach-session -t bench-test" in result.stdout
     assert "--force" not in result.stdout
     assert "--openai-stream-usage" not in result.stdout
+    assert "--openai-api-key-env" not in result.stdout
 
     benchpack_lines = [
         line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
@@ -99,6 +101,47 @@ def test_dry_run_propagates_metadata_to_each_benchpack_run() -> None:
     assert all("--endpoint" not in line for line in benchpack_lines)
 
 
+def test_dry_run_passes_openai_api_key_env_name_without_reading_value() -> None:
+    secret_value = "test-token-value-that-must-not-render"
+    env_name = "BENCHPACK_TEST_REMOTE_OPENAI_TOKEN"
+    old_value = os.environ.get(env_name)
+    os.environ[env_name] = secret_value
+    try:
+        result = _run_script(
+            "--dry-run",
+            "--adapter",
+            "openai-chat",
+            "--model",
+            "<model>",
+            "--endpoint",
+            "<endpoint>",
+            "--host-label-prefix",
+            "hetzner-gemma4-<stamp>",
+            "--run-metadata",
+            "<metadata-file>",
+            "--openai-api-key-env",
+            env_name,
+        )
+    finally:
+        if old_value is None:
+            os.environ.pop(env_name, None)
+        else:
+            os.environ[env_name] = old_value
+
+    assert result.returncode == 0, result.stderr
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert len(benchpack_lines) == 4
+    assert all(f"--openai-api-key-env {env_name}" in line for line in benchpack_lines)
+    assert all(
+        f"--run-metadata '<metadata-file>' --openai-api-key-env {env_name}" in line
+        for line in benchpack_lines
+    )
+    assert secret_value not in result.stdout
+    assert secret_value not in result.stderr
+
+
 def test_dry_run_maps_default_pack_suffixes_to_host_labels() -> None:
     result = _run_script(
         "--dry-run",
@@ -120,6 +163,7 @@ def test_dry_run_maps_default_pack_suffixes_to_host_labels() -> None:
 
 
 def test_dry_run_accepts_optional_force_stream_usage_and_custom_packs() -> None:
+    env_name = "BENCHPACK_TEST_REMOTE_OPENAI_TOKEN"
     result = _run_script(
         "--dry-run",
         "--session-name",
@@ -134,6 +178,8 @@ def test_dry_run_accepts_optional_force_stream_usage_and_custom_packs() -> None:
         "<metadata-file>",
         "--openai-stream-usage",
         "omit",
+        "--openai-api-key-env",
+        env_name,
         "--force",
         "runtime-sweep",
         "custom-pack",
@@ -146,10 +192,12 @@ def test_dry_run_accepts_optional_force_stream_usage_and_custom_packs() -> None:
     assert benchpack_lines == [
         "benchpack: uv run benchpack run runtime-sweep --adapter openai-chat "
         "--model '<model>' --host-label 'm4-max-llama-<stamp>-runtime' "
-        "--run-metadata '<metadata-file>' --openai-stream-usage omit --force",
+        "--run-metadata '<metadata-file>' --openai-stream-usage omit "
+        f"--openai-api-key-env {env_name} --force",
         "benchpack: uv run benchpack run custom-pack --adapter openai-chat "
         "--model '<model>' --host-label 'm4-max-llama-<stamp>-custom-pack' "
-        "--run-metadata '<metadata-file>' --openai-stream-usage omit --force",
+        "--run-metadata '<metadata-file>' --openai-stream-usage omit "
+        f"--openai-api-key-env {env_name} --force",
     ]
     assert "tmux new-session -d -s bench-custom -n runtime" in result.stdout
     assert "tmux new-window -t bench-custom -n custom-pack" in result.stdout

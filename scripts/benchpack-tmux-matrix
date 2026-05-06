@@ -76,6 +76,8 @@ def _benchpack_command(args: argparse.Namespace, pack: str) -> list[str]:
     )
     if args.openai_stream_usage:
         command.extend(["--openai-stream-usage", args.openai_stream_usage])
+    if args.openai_api_key_env:
+        command.extend(["--openai-api-key-env", args.openai_api_key_env])
     if args.force:
         command.append("--force")
     return command
@@ -269,6 +271,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Optional benchpack run streaming usage mode. When omitted, "
             "benchpack run keeps its current default."
+        ),
+    )
+    parser.add_argument(
+        "--openai-api-key-env",
+        default=None,
+        help=(
+            "Optional environment variable name passed to benchpack run for "
+            "openai-chat bearer auth. The helper does not read the value."
         ),
     )
     parser.add_argument(

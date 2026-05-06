@@ -164,6 +164,9 @@ The default matrix is `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
 `--endpoint` may be omitted for adapters with useful defaults, such as a local
 Ollama-native run. `--openai-stream-usage include|omit` is optional; when it is
 omitted, the underlying `benchpack run` command keeps its current default.
+`--openai-api-key-env <ENV_NAME>` is also optional for authenticated
+OpenAI-compatible endpoints. The helper passes the environment variable name to
+`benchpack run` but does not read or print the token value.
 
 After inspecting the dry run, launch the tmux session:
 

@@ -49,13 +49,15 @@ Sources:
 
 Tri-host comparison modes:
 
-- Strict parity: use the same GGUF artifact through `llama-server` on M4, M5,
-  and the Linux CUDA host. This is the cleanest hardware/runtime comparison if
-  the CUDA host has a suitable llama.cpp build and the selected quantization
-  fits.
+- Primary strict parity: use the same GGUF artifact through `llama-server` on
+  M4, M5, and the Linux CUDA host. This is the first campaign mode documented
+  in `docs/gemma4-tri-host-runbook.md` and is the cleanest hardware/runtime
+  comparison if the CUDA host has a suitable llama.cpp build and the selected
+  quantization fits.
 - Service-shaped comparison: use MLX or GGUF on Apple Silicon and Hugging Face
-  weights through vLLM on Hetzner. This is useful operational evidence, but
-  must be labeled as runtime-and-format rather than strict artifact parity.
+  weights through vLLM on Hetzner. This secondary/fallback mode is useful
+  operational evidence, but must be labeled as runtime-and-format rather than
+  strict artifact parity.
 
 Current blockers:
 
@@ -64,7 +66,8 @@ Current blockers:
   reads the bearer token from the named environment variable and sends the
   Authorization header without writing token values to result artifacts. Token
   provisioning for the public Hetzner `/v1` surface remains an operational
-  prerequisite for live runs.
+  prerequisite for live runs. The tmux helper can pass the same option through
+  in dry-run matrices without reading the token value.
 - Live Hetzner SSH/inventory access is not confirmed, so exact RAM, GPU model,
   driver version, and runtime state still need read-only verification.
 - The sibling deployment repo's deployed vLLM stack has not been re-validated
@@ -94,7 +97,8 @@ default answer to every new “current preferred model” question.
 
 - Add a tested Gemma 4 artifact table after exact MLX/GGUF/Ollama/vLLM model
   IDs and revisions are verified.
-- Add a tiny metadata example for a Gemma 4 tri-host run, including whether the
-  run is strict parity or runtime-and-format.
+- Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
+  first tri-host campaign and keep its placeholder metadata examples aligned
+  with verified artifacts when they are known.
 - Revisit the catalog when Hetzner token provisioning, live host inventory, and
   Gemma 4 serving readiness are confirmed.

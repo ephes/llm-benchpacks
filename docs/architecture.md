@@ -592,8 +592,10 @@ the result schema. Compare remains independent of `run-metadata.json`.
 `scripts/benchpack-tmux-matrix` is an operator convenience wrapper, not a new
 runner component. It assembles existing `uv run benchpack run ...` invocations
 for a pack matrix, injects the same user-supplied `--run-metadata` file into
-each command, and optionally starts one tmux session with deterministic pack
-windows. The tmux windows are gated so the benchmark commands run sequentially
+each command, optionally passes through the `--openai-api-key-env` environment
+variable name for authenticated `openai-chat` endpoints, and optionally starts
+one tmux session with deterministic pack windows. It does not read token
+values. The tmux windows are gated so the benchmark commands run sequentially
 instead of contending for one local runtime. Failures are propagated through a
 tmux session environment marker so already-created downstream windows wake up
 and report that they were skipped rather than waiting indefinitely. Its dry-run

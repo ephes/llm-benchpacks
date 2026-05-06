@@ -25,6 +25,9 @@ and whether the final repository changes pass verification.
   targets, artifact-parity notes, and revisit cadence.
 - [Apple Silicon M4/M5 Runbook](docs/apple-silicon-m4-m5-runbook.md): local
   M5 plus SSH-to-M4 run workflow, result pullback, and compare guidance.
+- [Gemma 4 Tri-host Runbook](docs/gemma4-tri-host-runbook.md): M4, M5, and
+  Hetzner planning workflow, strict-parity mode, authenticated dry-run
+  matrices, and blocker checklist.
 - [Qwen3.6 M4/M5 Benchmark Summary](docs/qwen36-m4-m5-benchmark-summary.md):
   compact 2026-05-05 MLX-vs-llama.cpp-vs-Ollama result summary.
 - [Decisions](docs/decisions.md): durable design decisions.
@@ -101,9 +104,12 @@ scripts/benchpack-tmux-matrix \
 
 The helper defaults to `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`,
 and `patch-from-failure`, passes `--run-metadata` to every pack run, and omits
-`--force` unless explicitly requested. Launch mode checks that the metadata
-file exists before creating tmux windows. It does not change benchmark
-semantics; after runs finish, use `benchpack report` on the result directories.
+`--force` unless explicitly requested. `--openai-api-key-env <ENV_NAME>` is an
+optional pass-through for authenticated `openai-chat` endpoints; the helper
+renders the environment variable name in generated commands but does not read
+the token value. Launch mode checks that the metadata file exists before
+creating tmux windows. It does not change benchmark semantics; after runs
+finish, use `benchpack report` on the result directories.
 
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
