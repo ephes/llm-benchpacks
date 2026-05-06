@@ -317,10 +317,11 @@ schema prematurely.
 ## D-023: Public Repo-Task Harness Selection Must Be Explicit
 
 Public repo-task harness selection uses an explicit case-local manifest table,
-shaped as `harness = { id = "..." }` on `repo-task` cases. The only implemented
-public id is currently `fenced-patch`, and it routes to the existing fenced
-model-output `diff`/`patch` executor. When the field is absent, current
-compatibility behavior remains the same fenced executor. Selection must not be
+shaped as `harness = { id = "..." }` on `repo-task` cases. `fenced-patch`
+routes to the existing fenced model-output `diff`/`patch` executor, and
+`external-agent` routes to a runner-owned subprocess argv per D-026. When the
+field is absent, current compatibility behavior remains the same fenced
+executor. Selection must not be
 inferred from model names, adapters, endpoints, fixture shape, verifier choice,
 host environment, or pack id. The manifest loader rejects `harness` on
 non-`repo-task` cases, unknown ids, missing or non-string ids, non-table
@@ -332,27 +333,28 @@ shapes, or task log artifact paths. Task logs remain
 `task/<case-id>/rep-NNN.stderr.log`. Patch capture still happens after the
 selected task phase, verifier execution still happens after patch capture,
 repo-task warmups remain rejected, and this narrow implementation adds no
-result row fields. Production external coding-agent integration, task
+result row fields. Full production external coding-agent integration, task
 environment, workspace retention, richer status/reporting, and pack-level
 harness defaults remain future work.
 
 Reason: public harness selection crosses manifest compatibility, executor
 dispatch, task logs, status reporting, timeout and environment policy,
-workspace retention, and external coding-agent integration. Implementing only
-the compatibility `fenced-patch` id proves the public boundary while preserving
-current CLI behavior and result compatibility until those adjacent contracts are
-designed and tested.
+workspace retention, and external coding-agent integration. The first public
+ids prove the boundary while preserving current result compatibility until
+adjacent contracts are designed and tested.
 
 ## D-024: External Harness Contract Is Public And Task Timeouts Stay Narrow
 
 Future production external repo-task harnesses are public harnesses selected by
 explicit case-local `harness.id` values. The runner must not infer an external
 harness from model names, adapters, endpoints, fixture shape, verifier choice,
-host environment, or pack id. The only implemented public id remains
-`fenced-patch`. Normal adapter request/result schemas stay unchanged by
-default; if future harnesses own model calls, those calls are runner/harness
-concerns rather than normal adapter request fields. External harnesses may
-mutate only the prepared workspace and write only allowed run-output artifacts.
+host environment, or pack id. The implemented public ids are now
+`fenced-patch` and `external-agent`; D-026 records the runner-owned argv policy
+for the first public external subprocess slice. Normal adapter request/result
+schemas stay unchanged by default; if future harnesses own model calls, those
+calls are runner/harness concerns rather than normal adapter request fields.
+External harnesses may mutate only the prepared workspace and write only allowed
+run-output artifacts.
 Pack-owned fixtures, prompts, verifier scripts, source docs, and raw model
 artifacts remain immutable or runner-owned. Existing task stdout/stderr paths,
 raw paths, result row shapes, patch capture after task execution, verifier
@@ -361,17 +363,18 @@ immutability remain unchanged.
 
 Task timeout support is deliberately narrow and lives on the case-local harness
 table as `harness.timeout_s`. It must be a positive TOML integer or float and
-is accepted only for `repo-task` harness declarations. It currently bounds the
-subprocess-backed fenced executor's `git apply --check` and `git apply` calls.
-A preflight timeout is a task outcome because the workspace is known unchanged:
-the runner writes deterministic task stderr and continues to patch capture and
-verification. A timeout during actual patch application after successful
-preflight is a runner failure because partial workspace mutation cannot be
-ruled out. Internal in-process agent-session harness callables reject
+is accepted only for `repo-task` harness declarations. It bounds
+subprocess-backed task executors: for `fenced-patch`, the `git apply --check`
+and `git apply` calls; for `external-agent`, the direct configured subprocess.
+A fenced-patch preflight timeout is a task outcome because the workspace is
+known unchanged: the runner writes deterministic task stderr and continues to
+patch capture and verification. A timeout during actual patch application after
+successful preflight is a runner failure because partial workspace mutation
+cannot be ruled out. Internal in-process agent-session harness callables reject
 `task_timeout_s` because Python cannot safely preempt arbitrary callable
-execution. This slice adds no production external coding-agent integration, CLI
-flags, task commands, task environment support, workspace retention options,
-pack-level harness defaults, or new adapter/result fields.
+execution. This slice adds no manifest task commands, task environment support,
+workspace retention options, pack-level harness defaults, or new adapter/result
+fields.
 
 Reason: production external harness integration needs bounded execution before
 it is safe to run, but the external harness process, model-call, environment,
@@ -397,3 +400,25 @@ servers, and CUDA hosts. Capturing them as user-supplied metadata reduces
 manual run-log prose without introducing unreliable runtime autodiscovery,
 adapter schema changes, benchmark semantic changes, or median/parity behavior
 changes.
+
+## D-026: Public external-agent Uses Runner-Owned JSON Argv
+
+The first public `external-agent` repo-task harness is selected explicitly with
+`harness = { id = "external-agent" }` on `repo-task` cases, but its subprocess
+argv is runner-owned configuration, not manifest syntax. `benchpack run` reads
+`BENCHPACK_EXTERNAL_AGENT_ARGV` only when the loaded pack contains an
+`external-agent` case. The value must be a JSON array of non-empty strings
+without NUL bytes; plain command strings and shell parsing are rejected. The CLI
+routes public `external-agent` cases to `ExternalProcessHarness`, which appends
+the prepared workspace, case id, output directory, and repetition arguments,
+runs without a shell, and writes through the existing task stdout/stderr log
+artifacts. Missing or malformed argv fails before output directory creation and
+before adapter calls.
+
+Reason: accepting the public harness id is useful only if the runner can execute
+a real subprocess, but manifest command blobs, task environments, shell
+expansion, secrets handling, and CLI task-command flags would widen the source
+contract too early. A single runner-owned JSON argv keeps execution explicit,
+testable, shell-free, and outside adapter/result schemas while preserving
+current patch capture, verifier ordering, task log paths, and `run.jsonl`
+shape.

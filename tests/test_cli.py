@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ from benchpack.cli import main
 from benchpack.packs import (
     InvalidHarnessError,
     PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
+    PUBLIC_HARNESS_EXTERNAL_AGENT,
     PUBLIC_HARNESS_FENCED_PATCH,
 )
 
@@ -327,9 +329,59 @@ fixture_refs = {fixture_refs}
     return pack_dir
 
 
+def _write_mixed_repo_task_harness_pack(tmp_path: Path) -> Path:
+    pack_dir = tmp_path / "benchpacks" / "smoke-chat"
+    pack_dir.mkdir(parents=True)
+    repo_dir = pack_dir / "fixtures" / "repo"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / "README.md").write_text("source repo\n", encoding="utf-8")
+    (pack_dir / "benchpack.toml").write_text(
+        f"""
+[pack]
+id = "smoke-chat"
+version = "0.1.0"
+
+[defaults]
+temperature = 0
+max_tokens = 32
+stream = false
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+
+[[cases]]
+id = "external-repo"
+kind = "repo-task"
+prompt = "Change the repository with an external agent."
+fixture_refs = ["repo"]
+harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 5 }}
+
+[[cases]]
+id = "fenced-repo"
+kind = "repo-task"
+prompt = "Change the repository with a fenced patch."
+fixture_refs = ["repo"]
+harness = {{ id = "{PUBLIC_HARNESS_FENCED_PATCH}", timeout_s = 5 }}
+
+[scoring]
+mode = "none"
+""",
+        encoding="utf-8",
+    )
+    return pack_dir
+
+
 def _write_verifier_script(pack_dir: Path, body: str) -> Path:
     script = pack_dir / "verify" / "check.py"
     script.parent.mkdir(parents=True)
+    script.write_text(body, encoding="utf-8")
+    return script
+
+
+def _write_fake_external_agent(tmp_path: Path, body: str) -> Path:
+    script = tmp_path / "fake_external_agent.py"
     script.write_text(body, encoding="utf-8")
     return script
 
@@ -698,7 +750,7 @@ def test_cli_repo_task_explicit_fenced_patch_harness_matches_default_shape(
     )
 
 
-def test_cli_invalid_harness_manifest_fails_before_execution(
+def test_cli_external_agent_missing_argv_fails_before_execution(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -712,14 +764,264 @@ def test_cli_invalid_harness_manifest_fails_before_execution(
     )
     out = tmp_path / "run"
 
-    with pytest.raises(InvalidHarnessError) as excinfo:
+    monkeypatch.delenv("BENCHPACK_EXTERNAL_AGENT_ARGV", raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
         main(_argv(["--out", str(out)]))
 
     message = str(excinfo.value)
+    assert "BENCHPACK_EXTERNAL_AGENT_ARGV is required" in message
     assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID in message
-    assert PUBLIC_HARNESS_FENCED_PATCH in message
     assert calls == []
     assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "raw_env",
+    [
+        "python fake-agent.py",
+        '"python fake-agent.py"',
+        "[]",
+        '[""]',
+        '["python", 3]',
+        '["python", "bad\\u0000arg"]',
+        '{"cmd": "python"}',
+    ],
+)
+def test_cli_external_agent_malformed_argv_fails_before_execution(
+    tmp_path: Path,
+    monkeypatch,
+    raw_env: str,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "unused")
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}" }}',
+    )
+    out = tmp_path / "run"
+    monkeypatch.setenv("BENCHPACK_EXTERNAL_AGENT_ARGV", raw_env)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(_argv(["--out", str(out)]))
+
+    assert "BENCHPACK_EXTERNAL_AGENT_ARGV must be a JSON array" in str(excinfo.value)
+    assert calls == []
+    assert not out.exists()
+
+
+def test_cli_ignores_external_agent_argv_when_pack_does_not_select_it(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_output_adapter(monkeypatch, "Paris.")
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    monkeypatch.setenv("BENCHPACK_EXTERNAL_AGENT_ARGV", "not json")
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+    assert (out / "run.jsonl").exists()
+
+
+def test_cli_repo_task_external_agent_runs_configured_subprocess(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_output_adapter(monkeypatch, "adapter output should be preserved")
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 5 }}',
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+content = Path(args.workspace, "README.md").read_text(encoding="utf-8")
+patch_text = Path(args.patch).read_text(encoding="utf-8")
+if content != "external repo\\n":
+    raise SystemExit(2)
+if "+external repo\\n" not in patch_text:
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"content": content, "patch_has_external": True}, fh)
+""",
+    )
+    script = _write_fake_external_agent(
+        tmp_path,
+        """
+import argparse
+import sys
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+workspace = Path(args.workspace)
+if args.case != "edit-repo" or args.repetition != "1":
+    raise SystemExit(2)
+if Path.cwd().resolve() != workspace.resolve():
+    raise SystemExit(3)
+(workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
+print(f"external stdout case={args.case} rep={args.repetition}")
+print("external stderr trace", file=sys.stderr)
+""",
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps([sys.executable, str(script)]),
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    assert len(calls) == 1
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "external repo\n"
+    source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
+    assert source.read_text(encoding="utf-8") == "source repo\n"
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "external stdout case=edit-repo rep=1\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == (
+        "external stderr trace\n"
+    )
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+external repo\n"
+    )
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "content": "external repo\n",
+        "exit_code": 0,
+        "passed": True,
+        "patch_has_external": True,
+    }
+
+
+def test_cli_repo_task_mixed_external_agent_and_fenced_patch_cases(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = """```diff
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-source repo
++fenced repo
+```
+"""
+    calls = _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(tmp_path)
+    _write_mixed_repo_task_harness_pack(tmp_path)
+    script = _write_fake_external_agent(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+if args.case != "external-repo" or args.repetition != "1":
+    raise SystemExit(2)
+workspace = Path(args.workspace)
+if Path.cwd().resolve() != workspace.resolve():
+    raise SystemExit(3)
+(workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
+print(f"external stdout case={args.case} rep={args.repetition}")
+""",
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps([sys.executable, str(script)]),
+    )
+    out = tmp_path / "run"
+
+    assert main(_argv(["--out", str(out)])) == 0
+
+    assert [call["request_path"] for call in calls] == [
+        "external-repo.request.json",
+        "fenced-repo.request.json",
+    ]
+    source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
+    assert source.read_text(encoding="utf-8") == "source repo\n"
+    assert (
+        out / "workspace" / "external-repo" / "rep-001" / "README.md"
+    ).read_text(encoding="utf-8") == "external repo\n"
+    assert (
+        out / "workspace" / "fenced-repo" / "rep-001" / "README.md"
+    ).read_text(encoding="utf-8") == "fenced repo\n"
+
+    records = [
+        json.loads(line)
+        for line in (out / "run.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [record["case"] for record in records] == ["external-repo", "fenced-repo"]
+    external_record, fenced_record = records
+    assert (out / external_record["task"]["stdout_path"]).read_text(
+        encoding="utf-8"
+    ) == "external stdout case=external-repo rep=1\n"
+    assert (out / external_record["task"]["stderr_path"]).read_text(
+        encoding="utf-8"
+    ) == ""
+    assert (out / fenced_record["task"]["stdout_path"]).read_text(
+        encoding="utf-8"
+    ) == "Applied fenced model patch to workspace.\n"
+    assert (out / fenced_record["task"]["stderr_path"]).read_text(
+        encoding="utf-8"
+    ) == ""
+    assert (out / external_record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+external repo\n"
+    )
+    assert (out / fenced_record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-source repo\n"
+        "+fenced repo\n"
+    )
 
 
 def test_cli_invalid_harness_timeout_manifest_fails_before_execution(

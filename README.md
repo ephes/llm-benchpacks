@@ -47,6 +47,13 @@ uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-ll
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
+Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
+That public harness uses runner-owned subprocess configuration rather than a
+manifest command: set `BENCHPACK_EXTERNAL_AGENT_ARGV` to a JSON array of argv
+strings before running the pack. The runner appends workspace/case/output
+context arguments, runs without a shell, and writes through the existing task
+logs.
+
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack
 windows. Pack commands run sequentially inside tmux so they do not contend for

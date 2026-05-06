@@ -378,7 +378,13 @@ rows, compare/report behavior, and the default matrix unchanged. The public
 `PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant is intentionally excluded from
 `KNOWN_PUBLIC_HARNESS_IDS`, parser/CLI/executor tests reference that constant
 directly, and the provisional id remains rejected at all three layers without
-adding production external coding-agent execution.
+adding production external coding-agent execution. The first narrow public
+`external-agent` repo-task harness slice then landed 2026-05-05: the loader now
+accepts `harness = { id = "external-agent", timeout_s = ... }` on `repo-task`
+cases, the CLI requires runner-owned `BENCHPACK_EXTERNAL_AGENT_ARGV` only when
+such a case is selected, routes those cases to `ExternalProcessHarness`, and
+keeps adapter schemas, raw paths, result rows, task log paths, patch/verifier
+ordering, and fenced-patch defaults unchanged.
 
 Scope:
 
@@ -562,7 +568,8 @@ Scope:
   task log paths, and keeps nonzero exits and cleanly stopped timeouts inside
   the existing task/verifier flow. Invalid harness combinations, unsafe argv,
   missing executables, invalid workspaces, and unwritable logs remain runner
-  failures. `external-agent` remains loader-rejected.
+  failures. At landing time, `external-agent` remained loader-rejected; the
+  later public runnable slice below superseded that parser policy.
 - Lock the public `external-agent` parser policy as loader-rejected.
   **Landed 2026-05-05** without changing executor or CLI behavior: a named
   `PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant lives alongside
@@ -575,7 +582,21 @@ Scope:
   logs and without mutating the prepared workspace. Existing fenced-patch
   defaults, internal in-process and runner-side subprocess harness paths,
   adapter schemas, raw paths, row shapes, patch/verifier ordering,
-  compare/report behavior, and the default M4/M5 matrix remain unchanged.
+  compare/report behavior, and the default M4/M5 matrix remain unchanged. This
+  policy was intentionally superseded by the following public runnable slice.
+- Implement the first narrow public `external-agent` repo-task harness slice.
+  **Landed 2026-05-05** with parser support for
+  `harness = { id = "external-agent", timeout_s = <positive number> }` on
+  `repo-task` cases, CLI loading of runner-owned
+  `BENCHPACK_EXTERNAL_AGENT_ARGV` as a JSON array of non-empty strings, routing
+  through the existing `ExternalProcessHarness` subprocess executor, and early
+  missing/malformed argv failures before output directory creation or adapter
+  calls. Direct executor `harness_id="external-agent"` remains rejected so the
+  CLI owns public-to-internal routing. The normal adapter call still precedes
+  the task harness phase, and no manifest command blobs, CLI task-command flags,
+  task environments, raw artifact paths, result row fields, compare/report
+  changes, workspace retention controls, repo-task warmups, or live benchmark
+  artifacts were added.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -591,10 +612,10 @@ Scope:
   as an internal executor path for runner-side callers only, public
   `fenced-patch` selection for the existing compatibility executor, the
   2026-05-05 production external contract refinement, and a runner-side
-  subprocess skeleton for deterministic external harness boundary tests. Actual
-  external coding-agent execution, parser support for a concrete external id,
-  harness-owned model-call context, and richer harness configuration remain
-  planned later.
+  subprocess skeleton for deterministic external harness boundary tests, plus
+  the first public `external-agent` CLI routing slice. Full production external
+  coding-agent execution, harness-owned model-call context, and richer harness
+  configuration remain planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

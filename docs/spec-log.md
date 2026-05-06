@@ -16,6 +16,42 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-05 (public external-agent runnable slice)
+
+### Changed
+
+- Promoted `external-agent` from loader-rejected provisional id to accepted
+  public `repo-task` harness id. It is valid only in the case-local
+  `harness = { id = "external-agent", timeout_s = ... }` table on `repo-task`
+  cases; non-`repo-task` harness declarations and malformed harness tables
+  remain rejected.
+- Added runner-owned CLI configuration through `BENCHPACK_EXTERNAL_AGENT_ARGV`.
+  The CLI reads it only when a loaded pack selects `external-agent`, parses it
+  as a JSON array of non-empty strings without NUL bytes, rejects plain command
+  strings and shell parsing, and fails before run output directory creation and
+  before adapter calls when it is missing or malformed.
+- Routed public `external-agent` cases to the existing
+  `ExternalProcessHarness` executor path. The runner appends `--workspace`,
+  `--case`, `--output-dir`, and `--repetition`, runs the subprocess without a
+  shell in the prepared workspace, captures stdout/stderr into existing task
+  log artifacts, then preserves patch capture and verifier execution ordering.
+- Kept direct executor `harness_id="external-agent"` rejected so public
+  manifest routing remains a CLI responsibility in this slice.
+- Preserved existing fenced-patch defaults and explicit
+  `harness = { id = "fenced-patch" }` behavior, the normal adapter call before
+  the repo-task task phase, adapter request/result schemas, raw artifact paths,
+  task log paths, measured row shapes, compare/report behavior, repo-task
+  warmup rejection, and generated-result policy.
+
+### Open Questions
+
+- Full production external coding-agent integration still needs harness-owned
+  model-call logging, richer runner-owned context, process-tree cleanup policy,
+  and evidence for whether task logs plus verifier status are sufficient.
+- A future cleanup can remove or rename the backward-compatible
+  `PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID` constant once downstream references
+  have moved to `PUBLIC_HARNESS_EXTERNAL_AGENT`.
+
 ## 2026-05-05 (external-agent loader-rejection policy lock)
 
 ### Changed

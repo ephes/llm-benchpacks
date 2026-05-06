@@ -19,6 +19,7 @@ from benchpack.packs import (
     InvalidPromptSourceError,
     KNOWN_PUBLIC_HARNESS_IDS,
     PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
+    PUBLIC_HARNESS_EXTERNAL_AGENT,
     PUBLIC_HARNESS_FENCED_PATCH,
     PackError,
     load_pack,
@@ -342,6 +343,33 @@ harness = { id = "fenced-patch" }
     assert case.raw["harness"] == {"id": "fenced-patch"}
 
 
+def test_load_pack_parses_repo_task_external_agent_harness(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "externalharnesspack"
+version = "0.1.0"
+
+[[cases]]
+id = "edit-repo"
+kind = "repo-task"
+prompt = "Change the repository."
+harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 120 }}
+""",
+    )
+
+    case = load_pack(pack_dir).cases[0]
+
+    assert case.harness is not None
+    assert case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT
+    assert case.harness.timeout_s == 120.0
+    assert case.raw["harness"] == {
+        "id": PUBLIC_HARNESS_EXTERNAL_AGENT,
+        "timeout_s": 120,
+    }
+
+
 def test_load_pack_parses_repo_task_harness_timeout_float(
     tmp_path: Path,
 ) -> None:
@@ -464,10 +492,13 @@ harness = {{ id = "fenced-patch", timeout_s = {timeout_s} }}
         load_pack(pack_dir)
 
 
-def test_known_public_harness_ids_excludes_provisional_external_agent() -> None:
+def test_known_public_harness_ids_include_external_agent() -> None:
     assert PUBLIC_HARNESS_FENCED_PATCH in KNOWN_PUBLIC_HARNESS_IDS
-    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID not in KNOWN_PUBLIC_HARNESS_IDS
-    assert KNOWN_PUBLIC_HARNESS_IDS == frozenset({PUBLIC_HARNESS_FENCED_PATCH})
+    assert PUBLIC_HARNESS_EXTERNAL_AGENT in KNOWN_PUBLIC_HARNESS_IDS
+    assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID == PUBLIC_HARNESS_EXTERNAL_AGENT
+    assert KNOWN_PUBLIC_HARNESS_IDS == frozenset(
+        {PUBLIC_HARNESS_FENCED_PATCH, PUBLIC_HARNESS_EXTERNAL_AGENT}
+    )
 
 
 def test_load_pack_rejects_unknown_harness_id(tmp_path: Path) -> None:
@@ -482,7 +513,7 @@ version = "0.1.0"
 id = "edit-repo"
 kind = "repo-task"
 prompt = "Change the repository."
-harness = {{ id = "{PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID}" }}
+harness = {{ id = "missing-agent" }}
 """,
     )
 
@@ -491,6 +522,7 @@ harness = {{ id = "{PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID}" }}
 
     message = str(excinfo.value)
     assert "unknown harness id" in message
+    assert "missing-agent" in message
     assert PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID in message
     assert PUBLIC_HARNESS_FENCED_PATCH in message
 
@@ -588,6 +620,28 @@ id = "capital"
 kind = "chat"
 prompt = "What is the capital of France?"
 harness = { id = "fenced-patch" }
+""",
+    )
+
+    with pytest.raises(InvalidHarnessError, match="only supported for repo-task"):
+        load_pack(pack_dir)
+
+
+def test_load_pack_rejects_external_agent_harness_on_non_repo_task_case(
+    tmp_path: Path,
+) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        f"""
+[pack]
+id = "chatexternalharness"
+version = "0.1.0"
+
+[[cases]]
+id = "capital"
+kind = "chat"
+prompt = "What is the capital of France?"
+harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}" }}
 """,
     )
 

@@ -273,10 +273,12 @@ strings. The runner rejects manifests that violate this at load time.
   executor boundary for runner-side callers and tests. Current CLI runs use the
   fenced `diff`/`patch` executor by default, and repo-task cases may explicitly
   select that same public compatibility executor with
-  `harness = { id = "fenced-patch" }`. That harness table may also declare a
-  narrow positive numeric `timeout_s` for the task executor phase. This format
-  does not currently add
-  external coding-agent integration, manifest task commands, retention options,
+  `harness = { id = "fenced-patch" }` or route to a runner-owned external
+  subprocess with `harness = { id = "external-agent" }` plus
+  `BENCHPACK_EXTERNAL_AGENT_ARGV`. That harness table may also declare a narrow
+  positive numeric `timeout_s` for the task executor phase. This format does
+  not currently add full production external coding-agent integration,
+  manifest task commands, retention options,
   repo-task warmups, task environment configuration, pack-level harness
   defaults, or production external agent-harness behavior. Bundled repo-task
   examples currently include `patch-from-failure` and `python-regression-fix`.
@@ -296,9 +298,9 @@ directory fixtures are rejected for repo-task; the single referenced repo
 directory is copied into a run-owned workspace; the measured result record
 includes the prepared workspace metadata, `patch.path`, task log artifact
 paths, verifier artifact paths, final verifier status, and top-level
-`verify-script` scoring. The runner has an internal harness path, but it still
-does not expose agent harness selection or execute manifest-declared task
-commands.
+`verify-script` scoring. The runner has internal harness paths and one public
+external subprocess harness id, but it still does not execute
+manifest-declared task commands.
 
 Repo-task cases should use this conservative shape:
 
@@ -358,10 +360,10 @@ boundary, return true after deleting an existing regular file or in-workspace
 symlink-to-file workspace entry, return false for missing paths and directories,
 and unlink symlink entries without deleting their targets. Future harnesses may
 add pack metadata and model/adapter/endpoint/default context. Pack authors
-should not rely on manifest-declared shell commands, task environment, external
-coding-agent harnesses, pack-level harness defaults, or workspace retention
-because those fields do not exist yet. The only task timeout field is the
-narrow `harness.timeout_s` policy described below.
+should not rely on manifest-declared shell commands, task environment, pack-level
+harness defaults, or workspace retention because those fields do not exist yet.
+The only task timeout field is the narrow `harness.timeout_s` policy described
+below.
 
 #### Public Harness Selection
 
@@ -380,24 +382,14 @@ scoring = { mode = "verify-script", script = "verify/fix-repo.py" }
 
 Rules:
 
-- `harness.id` names a runner-known public harness. The only implemented public
-  id is `fenced-patch`, which routes to the existing fenced model-output
-  `diff`/`patch` executor.
-- Future production external harnesses are also public repo-task harnesses and
-  must be selected by explicit case-local `harness.id` values. Selection must
+- `harness.id` names a runner-known public harness. `fenced-patch` routes to the
+  existing fenced model-output `diff`/`patch` executor. `external-agent` routes
+  to the runner-owned external subprocess harness and requires
+  `BENCHPACK_EXTERNAL_AGENT_ARGV` when the CLI runs the pack.
+- Production external harnesses are public repo-task harnesses and must be
+  selected by explicit case-local `harness.id` values. Selection must
   not be inferred from model names, adapters, endpoints, fixture shape,
   verifier choice, host environment, or pack id.
-- No production external harness id is accepted by the loader today.
-  `external-agent` is a provisional documentation name for a likely future
-  public harness shape, not a runnable or reserved id in the current manifest
-  parser. The loader rejects `harness = { id = "external-agent" }` as an unknown
-  harness id. The id is intentionally kept out of `KNOWN_PUBLIC_HARNESS_IDS`,
-  and parser, CLI, and executor tests reference the provisional id constant
-  directly to lock that exclusion against future regressions. The repo-task executor boundary
-  also rejects the id with `TaskError` if it ever reaches
-  `run_repo_task_executor`, so neither manifest load nor executor dispatch can
-  silently accept it. A later implementation slice will add parser, CLI, and
-  executor tests for the accepted-id behavior.
 - When `harness` is absent, the default/current behavior remains the fenced
   `diff`/`patch` executor for compatibility.
 - `harness` is accepted only on `repo-task` cases. The loader rejects
@@ -408,13 +400,14 @@ Rules:
   integer or float. Booleans, strings, zero, negative values, arrays, and
   tables are rejected. It bounds the selected task harness/executor phase, not
   the adapter request and not the verifier subprocess.
-- In this slice, task timeout is enforced only by the subprocess-backed
-  `fenced-patch` executor. It is passed to both `git apply --check` and
-  `git apply`. A timeout during `git apply --check` leaves the workspace
-  unchanged, writes deterministic task stderr, and still allows patch capture
-  and verifier execution. A timeout during the actual `git apply` after
-  successful preflight is a runner failure because the workspace may be
-  partially changed.
+- Task timeout is enforced by subprocess-backed task executors. For
+  `fenced-patch`, it is passed to both `git apply --check` and `git apply`. A
+  timeout during `git apply --check` leaves the workspace unchanged, writes
+  deterministic task stderr, and still allows patch capture and verifier
+  execution. A timeout during the actual `git apply` after successful preflight
+  is a runner failure because the workspace may be partially changed. For
+  `external-agent`, a direct-subprocess timeout is captured in the task stderr
+  log after the runner stops the process.
 - Runner-side internal in-process harness callables cannot be combined with
   task timeout.
 - Public harness selection does not change adapter request or result schemas.
@@ -430,14 +423,14 @@ Rules:
   allowed run-output artifacts. Pack-owned fixtures, prompts, verifier scripts,
   source docs, and raw model artifacts remain immutable or runner-owned.
 - Task environment configuration, workspace retention, richer task
-  status/reporting, pack-level harness defaults, production external
+  status/reporting, pack-level harness defaults, full production external
   coding-agent integration, and repo-task warmups are separate future slices,
   not implicit support in `harness`.
 - This narrow selection adds no CLI flags, `run.jsonl` fields, adapter schema
   changes, raw artifact path changes, or task log path changes.
 
-The planned production external harness manifest shape should stay as small as
-the current public table:
+The public external subprocess harness manifest shape stays as small as the
+current public table:
 
 ```toml
 [[cases]]
@@ -449,26 +442,33 @@ harness = { id = "external-agent", timeout_s = 120 }
 scoring = { mode = "verify-script", script = "verify/fix-repo.py" }
 ```
 
-That example is not valid for the current loader. It documents the intended
-shape for a later slice: explicit case-local selection, optional task-phase
-timeout, no task command list, no task environment table, no shell expansion, no
-secrets handling, no workspace retention flag, and no pack-level harness
-default.
+The manifest does not name the command. The runner loads
+`BENCHPACK_EXTERNAL_AGENT_ARGV` when an `external-agent` case is selected. The
+value must be a JSON array of non-empty strings without NUL bytes; it is not
+shell-parsed and plain command strings are rejected. The runner appends
+`--workspace <prepared-workspace>`, `--case <case-id>`,
+`--output-dir <run-output-dir>`, and `--repetition <N>` before executing the
+subprocess without a shell in the prepared workspace. Missing or malformed
+configuration fails before run output directory creation and before adapter
+calls.
 
-Future production external harness inputs are runner-side invocation context,
-not additional manifest syntax. The runner may pass the prepared workspace path,
-case metadata, pack metadata, loaded prompt text, fixture refs and source repo
-metadata, run output directory, measured repetition number, task log paths,
-selected harness options, and optional run metadata. If the harness owns model
-calls, the runner may also pass model, adapter id, endpoint, request defaults,
-and compatibility options as harness context. Those values do not alter normal
-adapter request/result schemas and do not create new `run.jsonl` fields by
-default.
+This shape keeps explicit case-local selection, optional task-phase timeout, no
+task command list, no task environment table, no shell expansion, no secrets
+handling, no workspace retention flag, and no pack-level harness default.
 
-Future production external harnesses may mutate only the prepared workspace.
-They may write the existing task stdout/stderr logs and, only after a later
-schema slice names them, additional explicit harness artifacts under the run
-output directory. They must not write pack-owned fixtures, prompts, verifier
+External harness inputs are runner-side invocation context, not additional
+manifest syntax. The first public slice passes only the appended workspace, case
+id, output directory, and repetition arguments. Future production slices may
+pass case metadata, pack metadata, loaded prompt text, fixture refs and source
+repo metadata, task log paths, selected harness options, optional run metadata,
+model, adapter id, endpoint, request defaults, and compatibility options as
+explicit harness context. Those values do not alter normal adapter
+request/result schemas and do not create new `run.jsonl` fields by default.
+
+External harnesses may mutate only the prepared workspace. They may write the
+existing task stdout/stderr logs through runner-owned capture and, only after a
+later schema slice names them, additional explicit harness artifacts under the
+run output directory. They must not write pack-owned fixtures, prompts, verifier
 scripts, source docs, normal adapter `raw/` artifacts, `hardware.json`,
 `run-metadata.json`, or paths outside the prepared workspace and allowed
 run-output artifacts. Patch capture still compares the source fixture to the

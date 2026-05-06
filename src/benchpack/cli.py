@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import shutil
 import sys
@@ -20,6 +22,7 @@ from .hardware import collect_hardware, sample_resources
 from .packs import (
     Case,
     Pack,
+    PUBLIC_HARNESS_EXTERNAL_AGENT,
     Scoring,
     load_pack,
     repetitions_from_defaults,
@@ -34,7 +37,12 @@ from .report import (
 )
 from .results import RunReporter
 from .run_metadata import RunMetadataError, load_run_metadata
-from .tasks import TaskError, TaskExecutionRequest, run_repo_task_executor
+from .tasks import (
+    ExternalProcessHarness,
+    TaskError,
+    TaskExecutionRequest,
+    run_repo_task_executor,
+)
 from .verifiers import (
     DEFAULT_VERIFY_TIMEOUT_S,
     VerifierError,
@@ -47,6 +55,12 @@ from .workspaces import (
     prepare_repo_task_workspace,
     validate_repo_task_cases,
     workspace_record,
+)
+
+
+EXTERNAL_AGENT_ARGV_ERROR = (
+    "BENCHPACK_EXTERNAL_AGENT_ARGV must be a JSON array of non-empty strings "
+    "without NUL bytes"
 )
 
 
@@ -68,6 +82,38 @@ def _validate_verify_script_usage(pack: Pack) -> None:
             resolve_verify_script(pack, scoring)
         except VerifierError as exc:
             raise SystemExit(str(exc)) from exc
+
+
+def _load_external_agent_harness(pack: Pack) -> ExternalProcessHarness | None:
+    if not any(
+        case.harness is not None
+        and case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT
+        for case in pack.cases
+    ):
+        return None
+
+    raw_argv = os.environ.get("BENCHPACK_EXTERNAL_AGENT_ARGV")
+    if raw_argv is None:
+        raise SystemExit(
+            "BENCHPACK_EXTERNAL_AGENT_ARGV is required for harness id "
+            f"{PUBLIC_HARNESS_EXTERNAL_AGENT!r}"
+        )
+    try:
+        argv = json.loads(raw_argv)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(EXTERNAL_AGENT_ARGV_ERROR) from exc
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or any(
+            not isinstance(argument, str)
+            or argument == ""
+            or "\x00" in argument
+            for argument in argv
+        )
+    ):
+        raise SystemExit(EXTERNAL_AGENT_ARGV_ERROR)
+    return ExternalProcessHarness(argv=tuple(argv))
 
 
 def _derive_host_label(hardware: dict) -> str:
@@ -129,6 +175,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         raise SystemExit(
             "repo-task warmups are not supported yet; set defaults.warmup = 0"
         )
+    external_agent_harness = _load_external_agent_harness(pack)
 
     adapter = get_adapter(args.adapter)
     run_metadata = None
@@ -208,6 +255,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 openai_stream_usage=args.openai_stream_usage,
             )
             if prepared_workspace is not None:
+                harness_id = (
+                    case.harness.id
+                    if case.harness is not None
+                    and case.harness.id != PUBLIC_HARNESS_EXTERNAL_AGENT
+                    else None
+                )
+                external_process_harness = (
+                    external_agent_harness
+                    if case.harness is not None
+                    and case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT
+                    else None
+                )
                 try:
                     task_metadata = run_repo_task_executor(
                         TaskExecutionRequest(
@@ -216,14 +275,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
                             repetition=repetition,
                             workspace=prepared_workspace.path,
                             model_output_text=result.output_text,
-                            harness_id=(
-                                case.harness.id if case.harness is not None else None
-                            ),
+                            harness_id=harness_id,
                             task_timeout_s=(
                                 case.harness.timeout_s
                                 if case.harness is not None
                                 else None
                             ),
+                            external_process_harness=external_process_harness,
                         )
                     )
                     patch_metadata = capture_workspace_patch(

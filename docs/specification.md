@@ -95,9 +95,10 @@ measurement, not model-quality comparison.
 a repository and prove correctness with deterministic verification. The current
 implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, parses an optional case-local public
-`harness = { id = "fenced-patch" }` selection for `repo-task` cases, runs the
-task phase through a narrow internal executor boundary whose default CLI
-implementation applies model output through a fenced unified-diff contract with
+`harness` selection for `repo-task` cases, runs the task phase through a narrow
+internal executor boundary whose default CLI implementation applies model
+output through a fenced unified-diff contract, and can explicitly route
+`harness = { id = "external-agent" }` to a runner-owned subprocess argv with
 optional case-local task timeout support on that harness declaration,
 captures deterministic patch
 artifacts from
@@ -107,9 +108,8 @@ the prepared workspace with a manifest-configurable verifier timeout and a
 fixed `300.0` second default when no timeout is declared. The effective
 `verify-script` scoring table may also declare a verifier-only string-to-string
 `environment` table, which is overlaid onto a copy of the runner environment for
-the verifier subprocess. It does not yet expose or run a public external
-coding-agent harness, support manifest task commands, support repo-task warmups,
-expose workspace cleanup/retention options, or configure task environments.
+the verifier subprocess. It does not support manifest task commands, repo-task
+warmups, workspace cleanup/retention options, or task environments.
 Measured repo-task
 records include prepared workspace metadata, patch artifact paths, task log
 artifact paths, verifier artifact paths, final repo-task verifier status, and
@@ -169,9 +169,8 @@ distinct from task outcomes, such as a model or harness failing to produce a
 useful change; this narrow implementation does not add task status fields to
 express that distinction.
 
-Public repo-task harness selection is implemented only for the compatibility
-executor. The public shape is an explicit case-local table on `repo-task`
-cases:
+Public repo-task harness selection uses an explicit case-local table on
+`repo-task` cases:
 
 ```toml
 [[cases]]
@@ -180,29 +179,30 @@ kind = "repo-task"
 harness = { id = "fenced-patch" }
 ```
 
-`harness.id` names a runner-known public harness. The only implemented public
-id is currently `fenced-patch`, and it routes to the same fenced `diff`/`patch`
-executor used when `harness` is absent. Future production external harnesses
-will also be public repo-task harnesses selected by explicit case-local
-`harness.id` values. They must not be inferred from model names, adapters,
-endpoints, fixture shape, verifier choice, host environment, or pack id.
-Absence of the field does not infer an external harness; the compatibility
-default remains the current fenced executor.
+`harness.id` names a runner-known public harness. `fenced-patch` routes to the
+same fenced `diff`/`patch` executor used when `harness` is absent.
+`external-agent` routes to the runner-side `ExternalProcessHarness` subprocess
+path when the runner has configured a subprocess argv through
+`BENCHPACK_EXTERNAL_AGENT_ARGV`. Harness selection must not be inferred from
+model names, adapters, endpoints, fixture shape, verifier choice, host
+environment, or pack id. Absence of the field does not infer an external
+harness; the compatibility default remains the current fenced executor.
 
 The loader rejects `harness` on non-`repo-task` cases, unknown ids, missing or
 non-string `id` values, non-table `harness` values, and unexpected extra keys.
 The supported keys are currently `id` and optional `timeout_s`. When present,
 `harness.timeout_s` must be a positive TOML integer or float and bounds the
 selected task harness/executor phase; booleans, strings, zero, negative values,
-arrays, and tables are rejected. It is currently enforced only for the
-subprocess-backed fenced-patch executor. A timeout during `git apply --check`
-is a task outcome: the workspace is known unchanged, task stderr records the
-timeout, patch capture still runs, and verifier execution still follows patch
-capture. A timeout during the actual `git apply` after successful preflight is
-a runner failure because the workspace may be partially changed. Runner-side
-internal agent-session harness callables cannot be combined with
-`task_timeout_s`, because Python cannot safely preempt arbitrary in-process
-code.
+arrays, and tables are rejected. It is enforced for the subprocess-backed
+fenced-patch and external-agent executors. For `fenced-patch`, a timeout during
+`git apply --check` is a task outcome: the workspace is known unchanged, task
+stderr records the timeout, patch capture still runs, and verifier execution
+still follows patch capture. A timeout during the actual `git apply` after
+successful preflight is a runner failure because the workspace may be partially
+changed. For `external-agent`, a timeout is a task outcome when the direct
+subprocess is stopped and task logs can be written. Runner-side internal
+agent-session harness callables cannot be combined with `task_timeout_s`,
+because Python cannot safely preempt arbitrary in-process code.
 
 Public harness selection and task timeout support do not change adapter request
 or adapter result schemas, existing raw request/response paths, existing
@@ -216,15 +216,12 @@ prepared workspace and write only allowed run-output artifacts. Pack-owned
 fixtures, prompts, verifier scripts, source docs, and raw model artifacts
 remain immutable or runner-owned as currently documented. Task environment
 configuration, workspace retention, richer status/reporting, pack-level
-harness defaults, repo-task warmups, and production external coding-agent
+harness defaults, repo-task warmups, and full production external coding-agent
 integration remain explicit future slices. Patch capture still reflects the
 post-task workspace, verifier execution still runs after patch capture, and
 this narrow public selection adds no new `run.jsonl` row fields.
 
-The next planned external harness is a public repo-task harness, but no such id
-is accepted by the loader yet. `external-agent` is a provisional documentation
-name for that future shape, not a runnable or reserved manifest id in the
-current code. A future implementation slice may make the shape concrete as:
+The first public external subprocess harness uses this manifest shape:
 
 ```toml
 [[cases]]
@@ -233,52 +230,59 @@ kind = "repo-task"
 harness = { id = "external-agent", timeout_s = 120 }
 ```
 
-Until that slice changes and tests the loader and executor routing, manifests
-that declare `harness = { id = "external-agent" }` must continue to fail as an
-unknown public harness id.
+The subprocess argv is runner-owned, not manifest-owned. When any loaded case
+uses `harness.id = "external-agent"`, `benchpack run` requires
+`BENCHPACK_EXTERNAL_AGENT_ARGV` before it creates the run output directory or
+makes adapter calls. The value must be a JSON array of non-empty strings without
+NUL bytes, for example:
 
-A production external harness should receive runner-owned inputs, not broad
-manifest command blobs: the prepared workspace path, case metadata, pack
-metadata, the prompt text loaded from `prompt` or `prompt_file`, fixture refs and
-the source repo fixture metadata, the run output directory, measured repetition
-number, deterministic task stdout/stderr log paths, the selected harness table,
-and user-supplied run metadata as either the `run-metadata.json` path or a
-validated normalized object when available. If the harness owns model calls, the
-runner may also provide the selected model, adapter id, endpoint, request
-defaults, and runner compatibility options as harness context. That context is
-not a change to normal adapter request fields, and harness-owned model calls do
-not write normal adapter `raw/` request/response artifacts unless a later result
-schema slice explicitly defines how they are represented.
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/path/to/fake-agent.py"]'
+```
 
-A production external harness may inspect and mutate only the prepared
-workspace. It may write the existing task stdout/stderr logs under
-`task/<case-id>/rep-NNN.*.log`; any richer harness artifacts must be explicitly
-named by a later artifact/schema slice before they are allowed. It must not
-mutate pack-owned fixtures, prompts, verifier scripts, source docs,
+The runner does not use shell parsing and does not accept a plain command
+string. It appends `--workspace <prepared-workspace>`, `--case <case-id>`,
+`--output-dir <run-output-dir>`, and `--repetition <N>` to that argv, runs the
+process without a shell in the prepared workspace, captures stdout/stderr into
+the existing task logs, then captures the workspace patch and runs any
+verifier. The normal adapter call still happens before the repo-task task phase
+in this slice; full harness-owned model-call logging remains future work.
+
+An external harness receives runner-owned inputs, not broad manifest command
+blobs: currently the appended prepared workspace path, case id, run output
+directory, and measured repetition number. Future production slices may add case
+and pack metadata, loaded prompt text, fixture/source-repo metadata, selected
+harness options, optional run metadata, and model/adapter/endpoint/defaults
+context as explicit harness input. That context is not a change to normal
+adapter request fields, and harness-owned model calls do not write normal
+adapter `raw/` request/response artifacts unless a later result schema slice
+explicitly defines how they are represented.
+
+An external harness may inspect and mutate only the prepared workspace. It may
+write the existing task stdout/stderr logs through the runner-owned capture path
+under `task/<case-id>/rep-NNN.*.log`; any richer harness artifacts must be
+explicitly named by a later artifact/schema slice before they are allowed. It
+must not mutate pack-owned fixtures, prompts, verifier scripts, source docs,
 `run-metadata.json`, `hardware.json`, raw adapter artifacts, or any path outside
 the prepared workspace and permitted run-output artifacts. The current contract
 does not provide manifest task environment configuration, shell expansion,
 secret injection, arbitrary shell commands, workspace retention, or cleanup
 controls.
 
-For a future external subprocess harness, `harness.timeout_s` remains the
-case-local task-phase timeout. It is separate from adapter request timeouts,
-verifier `scoring.timeout_s`, and any future whole-run timeout. An external
-harness timeout may be recorded as a task outcome only when the runner can stop
-the harness process tree, close task logs, and continue with a bounded prepared
-workspace for patch capture and verification. If the runner cannot guarantee
-that the harness is stopped or cannot write required artifacts, the timeout is a
-runner failure. This keeps runner failures, such as unsafe paths or unwritable
-logs, distinct from task outcomes, such as the external harness timing out,
-making no useful change, or leaving verifier failures for deterministic scoring.
+`harness.timeout_s` remains the case-local task-phase timeout. It is separate
+from adapter request timeouts, verifier `scoring.timeout_s`, and any future
+whole-run timeout. This keeps runner failures, such as unsafe paths or
+unwritable logs, distinct from task outcomes, such as the external harness
+timing out, exiting nonzero, making no useful change, or leaving verifier
+failures for deterministic scoring.
 
-The surrounding ordering is fixed for the future external harness unless a later
-specification slice deliberately changes it: prepare the workspace, execute the
-selected task harness, capture `patch/<case-id>/rep-NNN.diff` from source
-fixture versus post-task workspace, run any `verify-script`, then write the
-result record. The existing task logs and verifier status are sufficient for the
-next implementation slice; no new row fields are required until a real external
-harness proves that richer status or reporting is necessary.
+The surrounding ordering is fixed unless a later specification slice
+deliberately changes it: prepare the workspace, execute the selected task
+harness, capture `patch/<case-id>/rep-NNN.diff` from source fixture versus
+post-task workspace, run any `verify-script`, then write the result record. The
+existing task logs and verifier status are sufficient for this public slice; no
+new row fields are required until a real external harness proves that richer
+status or reporting is necessary.
 
 Repo-task cases use `kind = "repo"` directory fixtures as immutable source
 repository snapshots:
@@ -339,7 +343,7 @@ still records the measured row. If timeout occurs during the actual
 `git apply` after successful preflight, the runner fails rather than recording
 a possibly partial workspace as a task outcome. On success, task stdout records
 a short deterministic success message and task stderr remains empty. This
-remains the behavior for current CLI repo-task runs.
+remains the default behavior for current CLI repo-task runs.
 The separate internal harness path is not a public executor selection system
 and does not add new row fields. Runner-side callers and tests may also supply
 an internal external-process harness request through `run_repo_task_executor`.
@@ -351,10 +355,10 @@ capture and verifier ordering. A clean nonzero subprocess exit and a timeout
 where the runner stops the direct subprocess and closes logs are task outcomes
 represented through the existing logs and downstream verifier result. Unsafe
 argv shape, missing executable, invalid workspace/output paths, incompatible
-harness combinations, or unwritable required logs remain runner failures. This
-internal subprocess skeleton does not make `external-agent` manifest-runnable
-and does not add CLI flags, manifest commands, adapter fields, raw artifacts,
-or `run.jsonl` fields.
+harness combinations, or unwritable required logs remain runner failures. The
+public `external-agent` CLI path now routes to this subprocess executor with an
+argv loaded from `BENCHPACK_EXTERNAL_AGENT_ARGV`; it does not add CLI flags,
+manifest commands, adapter fields, raw artifacts, or `run.jsonl` fields.
 
 Future executor implementations, including production external harnesses and
 richer agent-session harnesses,
