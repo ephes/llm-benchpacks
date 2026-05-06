@@ -309,9 +309,16 @@ Scope:
   through to generated `benchpack run` commands without reading token values or
   changing benchmark semantics.
 - Validate Gemma 4 runtime support and artifacts before live runs.
-  **Planned.** Exact Hugging Face revisions, GGUF/Ollama artifacts, MLX
-  conversions, vLLM/transformers support, license/auth gates, and memory fit
-  must be recorded before launching a benchmark matrix.
+  **Artifact catalog slice landed 2026-05-06.** The source-controlled catalog
+  now verifies the public `google/gemma-4-E2B-it` and
+  `google/gemma-4-E4B-it` Hugging Face IDs, immutable HF revisions, GGUF
+  conversion repos/files, official Ollama tags, MLX conversion repos,
+  vLLM/Transformers support docs, and license/auth gate state from primary
+  sources. The tri-host runbook now names the first strict same-GGUF dry-run
+  candidate and keeps unresolved fields explicit. Post-download checksums, live
+  `llama-server`/Ollama/MLX/vLLM load behavior, tokenizer/chat-template
+  behavior through each server, and memory fit remain preflight blockers before
+  any benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal

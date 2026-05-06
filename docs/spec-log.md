@@ -16,6 +16,39 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 artifact verification and catalog table)
+
+### Changed
+
+- Updated `docs/model-targets.md` with a verified Gemma 4 artifact table based
+  on current primary sources: Google announcement/model pages, Hugging Face
+  model and repo metadata, Transformers Gemma4 docs, vLLM supported-models and
+  Gemma 4 recipe docs, ggml-org/bartowski/Unsloth GGUF repos, official Ollama
+  tags, and mlx-community MLX conversion repos.
+- Resolved the previous placeholder IDs as real public Hugging Face repos:
+  `google/gemma-4-E2B-it` and `google/gemma-4-E4B-it`, with Apache 2.0 license
+  metadata, non-gated HF API state, and immutable repo revision guidance.
+- Recorded exact small-target GGUF and MLX artifact candidates, including the
+  first strict same-GGUF dry-run candidate
+  `bartowski/google_gemma-4-E2B-it-GGUF` file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf`, plus upstream ggml-org and Unsloth
+  alternatives, official Ollama Q4_K_M tags, and MLX Community 4-bit
+  conversions.
+- Aligned `docs/gemma4-tri-host-runbook.md` with the verified catalog while
+  keeping endpoint values, hostnames, checksums, runtime versions, context/cache
+  options, memory fit, and live run status as placeholders.
+- Marked the catalog/runbook artifact verification slice as landed in
+  `docs/implementation-plan.md`. No live benchmarks, endpoint calls, SSH
+  commands, model downloads, or generated `results/*` artifacts were produced.
+
+### Open Questions
+
+- Post-download checksums, exact local `llama-server`/Ollama/MLX/vLLM load
+  behavior, tokenizer/chat-template behavior through each server, and memory fit
+  still need preflight validation before launch.
+- Hetzner token provisioning, live SSH/inventory verification, and serving
+  readiness remain operational blockers tracked outside this repo slice.
+
 ## 2026-05-06 (Gemma 4 tri-host runbook and comparison mode)
 
 ### Changed
