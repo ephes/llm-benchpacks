@@ -315,10 +315,18 @@ Scope:
   conversion repos/files, official Ollama tags, MLX conversion repos,
   vLLM/Transformers support docs, and license/auth gate state from primary
   sources. The tri-host runbook now names the first strict same-GGUF dry-run
-  candidate and keeps unresolved fields explicit. Post-download checksums, live
-  `llama-server`/Ollama/MLX/vLLM load behavior, tokenizer/chat-template
-  behavior through each server, and memory fit remain preflight blockers before
-  any benchmark matrix.
+  candidate and keeps unresolved fields explicit. **Local M5 first-candidate
+  preflight landed 2026-05-06.** The selected
+  `bartowski/google_gemma-4-E2B-it-GGUF` E2B Q4_K_M artifact was downloaded
+  from the pinned revision, its local SHA-256 was captured, and local
+  `/opt/homebrew/bin/llama-server` version `9030 (a09a00e50)` loaded it on
+  loopback with alias `gemma4-e2b-q4km`, conservative context/cache/batch
+  settings, and ignored metadata in `metadata/m5-gemma4-llama-server.json`.
+  Chat-completion output formatting still needs explicit smoke authorization,
+  and M4/Hetzner checksum parity, strict same-GGUF `llama-server` load
+  behavior, comparable runtime options, memory fit, token provisioning,
+  SSH/inventory, and serving readiness remain preflight blockers before any
+  benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal

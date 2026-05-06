@@ -2,8 +2,10 @@
 
 This runbook prepares a Gemma 4 benchmark campaign across the local M5, the M4
 Studio, and a Hetzner CUDA host. It is planning and operator workflow only. Do
-not run live benchmarks, download models, contact Hetzner endpoints, or add
-generated `results/*` artifacts while applying this runbook slice.
+not run live benchmarks, contact Hetzner endpoints, or add generated
+`results/*` artifacts while applying documentation-only planning slices.
+Explicit local preflight work should keep machine-local facts in ignored
+`metadata/*.json` files and add only durable status notes here.
 
 The first campaign mode is strict same-GGUF parity through `llama-server` on
 all three hosts, subject to artifact, runtime, and memory-fit validation. The
@@ -14,11 +16,11 @@ be labeled as runtime-and-format in metadata and reports.
 
 ## Non-goals
 
-- No live M4, M5, or Hetzner benchmark runs.
-- No model downloads, endpoint calls, SSH commands, or generated result
-  artifacts in this slice.
-- No live Gemma 4 load, serving, checksum, or memory-fit validation in this
-  slice.
+- No live M4, M5, or Hetzner benchmark matrix runs.
+- No SSH commands, Hetzner endpoint calls, or generated result artifacts in
+  documentation-only slices.
+- No live Gemma 4 load, serving, checksum, or memory-fit validation unless the
+  operator is explicitly performing a preflight slice.
 - No SSH orchestration implementation.
 - No serving, LiteLLM, vLLM, or sibling-repo deployment changes.
 - No result schema, manifest syntax, compare/report, or adapter semantics
@@ -37,8 +39,9 @@ Complete these checks before any live run:
   `patch-from-failure`.
 - Gemma 4 artifacts: exact model IDs, revisions, artifact filenames,
   quantization, license gates, and authentication requirements are recorded in
-  `docs/model-targets.md`. Artifact checksums and memory-fit notes remain
-  placeholders until post-download/live preflight.
+  `docs/model-targets.md`. Artifact checksums and memory-fit notes are
+  host-local preflight fields; the local M5 E2B Q4_K_M checksum/load note is
+  recorded below, while M4 and Hetzner remain placeholders.
 - Strict-parity runtime: the same GGUF artifact loads through `llama-server` on
   Apple Silicon and on the CUDA host, with comparable context, cache, batch,
   and GPU-offload settings.
@@ -80,8 +83,9 @@ Primary mode:
   `google_gemma-4-E2B-it-Q4_K_M.gguf`, base model
   `google/gemma-4-E2B-it`. The optional multimodal projector files in that
   repo are verified but are not needed for the current text-only four-pack
-  matrix unless a future multimodal pack is added. Keep checksum and local fit
-  placeholders until preflight.
+  matrix unless a future multimodal pack is added. The local M5 preflight below
+  confirms checksum and a conservative load command for this artifact only;
+  M4 and Hetzner checksum/load/fit still need their own preflights.
 - Alternative verified GGUF sources, to use only if the first candidate is
   rejected during preflight:
   `ggml-org/gemma-4-E2B-it-GGUF` has Q8_0/BF16 files but no Q4_K_M file in
@@ -108,6 +112,40 @@ Secondary/fallback mode:
   other OpenAI-compatible MLX path still needs local preflight before live
   matrices.
 
+## M5 Local Preflight Status
+
+Status as of 2026-05-06 for the first strict same-GGUF candidate only:
+
+- Artifact:
+  `bartowski/google_gemma-4-E2B-it-GGUF` revision
+  `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf`.
+- Local M5 SHA-256:
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`.
+- Local alias: `gemma4-e2b-q4km`.
+- Runtime: `/opt/homebrew/bin/llama-server`, llama.cpp version
+  `9030 (a09a00e50)`, built with AppleClang
+  `21.0.0.21000099` for Darwin arm64.
+- Load command:
+  `llama-server --model <downloaded-gguf> --alias gemma4-e2b-q4km --host 127.0.0.1 --port 8081 --ctx-size 8192 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui`.
+- Load result: succeeded on the local M5 with Metal, offloading 36/36 layers,
+  `n_ctx=8192`, `n_batch=1024`, `n_ubatch=512`, f16 KV caches, and the server
+  listening on `http://127.0.0.1:8081`.
+- Tokenizer/chat-template notes: GGUF metadata includes
+  `tokenizer.chat_template`; `llama-server` initialized a Gemma-style chat
+  template with `thinking=1`. Load logs warned that control-looking tokens
+  `<|tool_response>` and `</s>` were overridden, and `</s>` was removed from
+  the EOG list because `<|tool_response>` is present. Chat-completion output
+  formatting remains unresolved until an explicitly authorized smoke call.
+- Memory note: this is a local M5 load observation only. With the settings
+  above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
+  and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and
+  `memory_pressure` reported 84 percent free with no throttled pages. Do not
+  infer M4 or Hetzner fit from this.
+- Local metadata: `metadata/m5-gemma4-llama-server.json` records the full
+  machine-local path, command, checksum, load notes, and dry-run status. The
+  file is ignored and should not be committed by default.
+
 ## Metadata Examples
 
 Create local ignored files under `metadata/` before launching any real matrix.
@@ -115,6 +153,10 @@ The snippets below are examples only; keep placeholders until exact artifact
 and host details are verified.
 
 M5 strict GGUF through `llama-server`:
+
+The M5 snippet is a portable template. The captured local M5 values for this
+preflight are in ignored `metadata/m5-gemma4-llama-server.json` and summarized
+above.
 
 ```json
 {
@@ -420,13 +462,16 @@ that the result is runtime-and-format evidence.
 
 ## Remaining Blockers
 
-- Post-download checksums, strict same-GGUF `llama-server` load behavior, and
-  memory fit remain unverified on M4, M5, and Hetzner.
+- Post-download checksum and conservative `llama-server` load behavior are now
+  captured for the local M5 first candidate only. Equivalent checksum,
+  strict same-GGUF `llama-server` load behavior, and memory fit remain
+  unverified on M4 and Hetzner.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
-  upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after local load
-  and quality/fit preflight.
-- Confirm strict same-GGUF llama.cpp support and memory fit on M4, M5, and the
-  Hetzner CUDA host.
+  upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
+  quality or smoke authorization; the local M5 load alone is not quality
+  evidence.
+- Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
+  Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.

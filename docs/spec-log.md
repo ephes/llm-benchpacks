@@ -16,6 +16,47 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 local M5 GGUF preflight)
+
+### Changed
+
+- Downloaded exactly the first strict same-GGUF candidate,
+  `bartowski/google_gemma-4-E2B-it-GGUF` revision
+  `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf`, to the local Hugging Face cache for M5
+  preflight.
+- Captured local SHA-256
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705` and
+  recorded it in ignored metadata.
+- Verified that local `/opt/homebrew/bin/llama-server` version
+  `9030 (a09a00e50)` can load the selected GGUF on loopback with alias
+  `gemma4-e2b-q4km`, `--ctx-size 8192`, `--batch-size 1024`,
+  `--ubatch-size 512`, f16 KV cache types, `--gpu-layers auto`, and
+  `--parallel 1`.
+- Recorded load behavior, tokenizer/chat-template observations, and local idle
+  memory notes in `metadata/m5-gemma4-llama-server.json`, which remains ignored
+  and local by default.
+- Ran only the `scripts/benchpack-tmux-matrix --dry-run` render for the local
+  M5 Gemma 4 alias. No benchmark matrix, `benchpack run`, M4 work, Hetzner
+  work, SSH commands, endpoint calls, or generated `results/*` artifacts were
+  produced.
+- Updated `docs/gemma4-tri-host-runbook.md` with the durable M5 preflight
+  status while keeping M4 and Hetzner checksum/load/memory-fit blockers open.
+- Updated `docs/implementation-plan.md` so the Gemma 4 operational track now
+  records the local M5 first-candidate preflight as landed while leaving
+  chat-completion smoke, M4/Hetzner parity, token provisioning, SSH/inventory,
+  and serving readiness open.
+
+### Open Questions
+
+- Chat-completion output formatting remains unresolved until a single smoke
+  call is explicitly authorized; the preflight used only load logs and
+  `/v1/models`.
+- M4 and Hetzner strict same-GGUF checksum parity, `llama-server` support,
+  comparable runtime options, and memory fit remain unverified.
+- Hetzner token provisioning, SSH/inventory, serving readiness, and checksums
+  for alternative Gemma 4 artifacts remain separate follow-ups.
+
 ## 2026-05-06 (Gemma 4 artifact verification and catalog table)
 
 ### Changed
