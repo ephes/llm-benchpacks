@@ -55,8 +55,11 @@ arguments plus `--context <path>` to a runner-owned JSON context file under
 `task/<case-id>/rep-NNN.context.json`, runs without a shell, and writes through
 the existing task logs. The context file includes pack/case metadata, the loaded
 prompt, fixture metadata, prepared workspace path, task log paths, run metadata
-path when supplied, and the selected adapter/model/endpoint/defaults. It is
-harness input only and is not duplicated into `run.jsonl`.
+path when supplied, an optional harness-owned model-call JSONL path at
+`task/<case-id>/rep-NNN.model-calls.jsonl`, and the selected adapter/model/
+endpoint/defaults. It is harness input only and is not duplicated into
+`run.jsonl`; the runner exposes the model-call path but does not require or
+parse that file.
 
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack

@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent optional model-call log path)
+
+### Changed
+
+- Added a narrow optional model-call artifact handoff for public
+  `external-agent` executions: the runner now includes
+  `run.model_call_log_path` in the context JSON, pointing at
+  `task/<case-id>/rep-NNN.model-calls.jsonl` under the run output directory.
+- Kept the artifact optional and harness-owned. The runner exposes the path but
+  does not pre-create, require, validate, parse, summarize, report, or add it
+  to `run.jsonl`.
+- Kept harness-owned model calls outside normal adapter `raw/` request/response
+  artifacts and preserved existing task stdout/stderr paths, subprocess argv,
+  adapter call ordering, patch capture ordering, verifier ordering, result row
+  shape, compare/report behavior, and manifest/CLI surfaces.
+
+### Open Questions
+
+- A later production harness slice still needs a recommended or enforced
+  model-call JSONL schema only if real agents prove that parsing or reporting
+  that telemetry is necessary.
+- Process-tree cleanup policy and evidence for richer task status/reporting
+  remain open for full production external coding-agent integration.
+
 ## 2026-05-06 (external-agent context handoff)
 
 ### Changed

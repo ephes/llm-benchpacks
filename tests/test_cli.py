@@ -889,6 +889,10 @@ if Path(args.workspace).resolve() != workspace.resolve():
     raise SystemExit(7)
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
+Path(context["run"]["model_call_log_path"]).write_text(
+    json.dumps({"sequence": 1, "model": "test-model", "ok": True}) + "\\n",
+    encoding="utf-8",
+)
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
 print(f"external stdout case={args.case} rep={args.repetition}")
 print("external stderr trace", file=sys.stderr)
@@ -917,15 +921,25 @@ print("external stderr trace", file=sys.stderr)
     assert context["run"]["task_stdout_path"] == str(
         (out / "task" / "edit-repo" / "rep-001.stdout.log").resolve()
     )
+    model_call_log_path = out / "task" / "edit-repo" / "rep-001.model-calls.jsonl"
+    assert context["run"]["model_call_log_path"] == str(
+        model_call_log_path.resolve()
+    )
+    assert "raw" not in model_call_log_path.relative_to(out).parts
     assert context["adapter"]["endpoint"] == "http://example.test/v1"
     source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
     assert source.read_text(encoding="utf-8") == "source repo\n"
+    assert model_call_log_path.read_text(encoding="utf-8") == (
+        '{"sequence": 1, "model": "test-model", "ok": true}\n'
+    )
 
     record = json.loads((out / "run.jsonl").read_text())
     assert record["raw"] == {
         "request_path": "raw/edit-repo.request.json",
         "response_path": "raw/edit-repo.response.json",
     }
+    assert "model_call_log_path" not in record
+    assert "model_call_log_path" not in record["task"]
     assert record["task"] == {
         "stdout_path": "task/edit-repo/rep-001.stdout.log",
         "stderr_path": "task/edit-repo/rep-001.stderr.log",
@@ -995,6 +1009,10 @@ if context["case"]["id"] != "external-repo":
     raise SystemExit(4)
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
+Path(context["run"]["model_call_log_path"]).write_text(
+    json.dumps({"sequence": 1, "model": "test-model", "ok": True}) + "\\n",
+    encoding="utf-8",
+)
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
 print(f"external stdout case={args.case} rep={args.repetition}")
 """,
@@ -1021,6 +1039,14 @@ print(f"external stdout case={args.case} rep={args.repetition}")
     ).read_text(encoding="utf-8") == "fenced repo\n"
     assert (out / "task" / "external-repo" / "rep-001.context.json").is_file()
     assert not (out / "task" / "fenced-repo" / "rep-001.context.json").exists()
+    assert (
+        out / "task" / "external-repo" / "rep-001.model-calls.jsonl"
+    ).read_text(encoding="utf-8") == (
+        '{"sequence": 1, "model": "test-model", "ok": true}\n'
+    )
+    assert not (
+        out / "task" / "fenced-repo" / "rep-001.model-calls.jsonl"
+    ).exists()
 
     records = [
         json.loads(line)

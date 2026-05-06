@@ -22,6 +22,7 @@ from .external_agent_context import (
     ExternalAgentContextError,
     build_external_agent_context,
     external_agent_context_path,
+    external_agent_model_call_log_path,
     write_external_agent_context,
 )
 from .hardware import collect_hardware, sample_resources
@@ -293,6 +294,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
                         case,
                         repetition,
                     )
+                    model_call_log_file = external_agent_model_call_log_path(
+                        out_dir,
+                        case,
+                        repetition,
+                    )
                     task_paths = task_artifact_paths(out_dir, case, repetition)
                     try:
                         context = build_external_agent_context(
@@ -311,6 +317,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                                 args.openai_stream_usage,
                             ),
                             run_metadata_path=persisted_run_metadata_path,
+                            model_call_log_path=model_call_log_file,
                         )
                         write_external_agent_context(external_context_file, context)
                     except ExternalAgentContextError as exc:

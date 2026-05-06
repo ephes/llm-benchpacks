@@ -100,7 +100,8 @@ internal executor boundary whose default CLI implementation applies model
 output through a fenced unified-diff contract, and can explicitly route
 `harness = { id = "external-agent" }` to a runner-owned subprocess argv with
 an appended runner-owned JSON context file and optional case-local task timeout
-support on that harness declaration,
+support on that harness declaration, and exposes a deterministic optional
+external-agent model-call JSONL artifact path through that context,
 captures deterministic patch
 artifacts from
 source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
@@ -248,8 +249,10 @@ string. It appends `--workspace <prepared-workspace>`, `--case <case-id>`,
 runs the process without a shell in the prepared workspace, captures
 stdout/stderr into the existing task logs, then captures the workspace patch
 and runs any verifier. The normal adapter call still happens before the
-repo-task task phase in this slice; full harness-owned model-call logging
-remains future work.
+repo-task task phase in this slice. The context also names an optional
+harness-owned model-call log path at
+`task/<case-id>/rep-NNN.model-calls.jsonl`; required logging, JSONL schema
+validation, parsing, summaries, and reports remain future work.
 
 An external harness receives runner-owned inputs, not broad manifest command
 blobs: currently the appended prepared workspace path, case id, run output
@@ -258,23 +261,27 @@ context JSON is versioned with `version = 1` and includes pack id/version/
 description, case id/kind/loaded prompt/fixture refs/harness id and timeout,
 prepared workspace path and source fixture metadata, run output directory,
 repetition, task stdout/stderr paths, optional persisted `run-metadata.json`
-path, selected adapter id/model/user endpoint argument/effective defaults, and
-the pack fixture inventory with manifest-declared relative fixture paths. It
-does not include raw adapter request/response payloads, environment variables,
-credentials, or new result row fields. Harness-owned model calls do not write
-normal adapter `raw/` request/response artifacts unless a later result schema
-slice explicitly defines how they are represented.
+path, optional model-call JSONL artifact path, selected adapter id/model/user
+endpoint argument/effective defaults, and the pack fixture inventory with
+manifest-declared relative fixture paths. It does not include raw adapter
+request/response payloads, environment variables, credentials, or new result
+row fields. Harness-owned model calls do not write normal adapter `raw/`
+request/response artifacts unless a later result schema slice explicitly
+defines how they are represented.
 
 An external harness may inspect and mutate only the prepared workspace. It may
 write the existing task stdout/stderr logs through the runner-owned capture path
-under `task/<case-id>/rep-NNN.*.log`; any richer harness artifacts must be
-explicitly named by a later artifact/schema slice before they are allowed. It
-must not mutate pack-owned fixtures, prompts, verifier scripts, source docs,
-`run-metadata.json`, `hardware.json`, raw adapter artifacts, or any path outside
-the prepared workspace and permitted run-output artifacts. The current contract
-does not provide manifest task environment configuration, shell expansion,
-secret injection, arbitrary shell commands, workspace retention, or cleanup
-controls.
+under `task/<case-id>/rep-NNN.*.log` and may optionally write JSONL model-call
+telemetry to the context-provided
+`task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
+validate, parse, summarize, or report that file in this slice. Other richer
+harness artifacts must be explicitly named by a later artifact/schema slice
+before they are allowed. It must not mutate pack-owned fixtures, prompts,
+verifier scripts, source docs, `run-metadata.json`, `hardware.json`, raw adapter
+artifacts, or any path outside the prepared workspace and permitted run-output
+artifacts. The current contract does not provide manifest task environment
+configuration, shell expansion, secret injection, arbitrary shell commands,
+workspace retention, or cleanup controls.
 
 `harness.timeout_s` remains the case-local task-phase timeout. It is separate
 from adapter request timeouts, verifier `scoring.timeout_s`, and any future
@@ -336,6 +343,8 @@ Current repo-task artifacts include:
 - `task/<case-id>/rep-NNN.stderr.log`, task stderr for the task executor phase
 - `task/<case-id>/rep-NNN.context.json`, runner-owned external-agent context
   input for public `external-agent` executions only
+- `task/<case-id>/rep-NNN.model-calls.jsonl`, optional external-agent
+  harness-owned model-call telemetry path exposed only through the context
 - `verify/<case-id>/rep-NNN.json`, structured verifier output
 - `verify/<case-id>/rep-NNN.stdout.log`, verifier stdout
 - `verify/<case-id>/rep-NNN.stderr.log`, verifier stderr

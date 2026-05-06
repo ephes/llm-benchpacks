@@ -271,7 +271,8 @@ strings. The runner rejects manifests that violate this at load time.
   `repo_task`, and top-level `scoring` in the measured `run.jsonl` row.
   Public `external-agent` executions also receive a runner-owned context input
   at `task/<case-id>/rep-NNN.context.json`; that file is not a result row
-  field.
+  field. The context exposes an optional harness-owned model-call JSONL path at
+  `task/<case-id>/rep-NNN.model-calls.jsonl`, also outside `run.jsonl`.
   A minimal internal agent-session harness path exists behind the same
   executor boundary for runner-side callers and tests. Current CLI runs use the
   fenced `diff`/`patch` executor by default, and repo-task cases may explicitly
@@ -415,8 +416,10 @@ Rules:
   task timeout.
 - Public harness selection does not change adapter request or result schemas.
   The generated external-agent context file is harness input and is not
-  duplicated into `run.jsonl`. Harness-owned model calls, if added later, are
-  runner/harness concerns rather than normal adapter request fields.
+  duplicated into `run.jsonl`. The context-provided
+  `task/<case-id>/rep-NNN.model-calls.jsonl` path is optional and is not
+  required, parsed, summarized, or reported by the runner. Harness-owned model
+  calls are runner/harness concerns rather than normal adapter request fields.
 - Existing task logs remain `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`.
 - Patch capture still happens after the selected task phase and reflects the
@@ -466,19 +469,22 @@ manifest syntax. The public external-agent subprocess receives appended
 workspace, case id, output directory, repetition, and context-file arguments.
 The context JSON has `version = 1` and includes case metadata, pack metadata,
 loaded prompt text, fixture refs and source repo metadata, task log paths,
-selected harness options, optional run metadata path, model, adapter id,
-endpoint argument, request defaults, and compatibility options as explicit
-harness input. Those values do not alter normal adapter request/result schemas
-and do not create new `run.jsonl` fields by default.
+selected harness options, optional run metadata path, optional model-call JSONL
+path, model, adapter id, endpoint argument, request defaults, and compatibility
+options as explicit harness input. Those values do not alter normal adapter
+request/result schemas and do not create new `run.jsonl` fields by default.
 
 External harnesses may mutate only the prepared workspace. They may write the
-existing task stdout/stderr logs through runner-owned capture and, only after a
-later schema slice names them, additional explicit harness artifacts under the
-run output directory. They must not write pack-owned fixtures, prompts, verifier
-scripts, source docs, normal adapter `raw/` artifacts, `hardware.json`,
-`run-metadata.json`, or paths outside the prepared workspace and allowed
-run-output artifacts. Patch capture still compares the source fixture to the
-post-task workspace, and verifier execution still follows patch capture.
+existing task stdout/stderr logs through runner-owned capture and may
+optionally write JSONL model-call telemetry to the context-provided
+`task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
+validate, parse, summarize, or report that file. Other additional explicit
+harness artifacts under the run output directory require a later schema slice.
+They must not write pack-owned fixtures, prompts, verifier scripts, source
+docs, normal adapter `raw/` artifacts, `hardware.json`, `run-metadata.json`, or
+paths outside the prepared workspace and allowed run-output artifacts. Patch
+capture still compares the source fixture to the post-task workspace, and
+verifier execution still follows patch capture.
 
 Directory fixture semantics for repo-task cases:
 
@@ -548,6 +554,10 @@ Workspace and artifact layout:
   at `task/<case-id>/rep-NNN.context.json` for public `external-agent`
   executions only. The file is harness input and is not referenced from
   measured `run.jsonl` rows.
+- External-agent model-call logs, when a public external harness chooses to
+  write them, use the context-provided
+  `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not create
+  or require the file, and measured `run.jsonl` rows do not reference it.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and
@@ -560,7 +570,8 @@ Workspace and artifact layout:
   timeout). Timeout rows keep the same artifact and result object shape and set
   top-level scoring to `{"mode": "verify-script", "passed": false}`.
 - Model request/response payloads remain under `raw/`; repo-task workspace,
-  patch, task logs, and verifier artifacts are conceptually separate.
+  patch, task logs, external-agent context/model-call artifacts, and verifier
+  artifacts are conceptually separate.
 
 The current directory snapshot diff is deterministic and does not require the
 fixture or workspace to be a Git repository. It compares the immutable source

@@ -50,7 +50,9 @@ than changing the adapter boundary:
   external-agent subprocess slice stays behind this same boundary: richer
   runner-owned context such as pack metadata, prompt text, run metadata, and
   model/adapter/endpoint/defaults is passed through an explicit generated JSON
-  context file, not as adapter schema fields. Full external coding-agent harness
+  context file, not as adapter schema fields. That context also exposes an
+  optional runner-owned model-call JSONL artifact path for harness-owned model
+  calls, without requiring or parsing the file. Full external coding-agent harness
   production integration, task environment, retention, richer
   status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
@@ -137,9 +139,11 @@ results/
    When the case declares `harness = { id = "external-agent" }`, the CLI passes
    the preloaded runner-owned subprocess argv to `ExternalProcessHarness`, which
    writes `task/<case-id>/rep-NNN.context.json` as runner-owned harness input,
-   appends workspace, case, output directory, repetition, and context-path
-   arguments, runs without a shell, captures existing task logs, and treats
-   clean nonzero exits or direct-subprocess timeouts as task outcomes.
+   exposes optional model-call telemetry at
+   `task/<case-id>/rep-NNN.model-calls.jsonl` through that context, appends
+   workspace, case, output directory, repetition, and context-path arguments,
+   runs without a shell, captures existing task logs, and treats clean nonzero
+   exits or direct-subprocess timeouts as task outcomes.
    Runner-side code can
    supply an internal agent-session harness behind this same boundary without
    changing the adapter request shape or public result row shape by default, but
@@ -198,7 +202,8 @@ and before each measured adapter execution:
    the prepared workspace, and captures stdout/stderr to the existing task
    logs. The context JSON includes pack/case metadata, the loaded prompt,
    fixture inventory, prepared workspace and task-log paths, optional
-   `run-metadata.json` path, and selected adapter/model/endpoint/defaults.
+   `run-metadata.json` path, optional model-call JSONL path, and selected
+   adapter/model/endpoint/defaults.
 7. An internal agent-session harness can occupy the same runner-owned task
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
@@ -265,7 +270,8 @@ Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
 remains for model request/response payloads. Current repo-task artifacts are
 `workspace/`, `patch/<case-id>/rep-NNN.diff`,
 `task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, public external-agent
-`task/<case-id>/rep-NNN.context.json` context inputs, and
+`task/<case-id>/rep-NNN.context.json` context inputs, optional public
+external-agent `task/<case-id>/rep-NNN.model-calls.jsonl` model-call logs, and
 `verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`. Task logs now describe
 the executor-owned task phase: the default fenced unified-diff
 extraction/application phase for default CLI runs, the public external-agent
@@ -290,11 +296,13 @@ This selection leaves adapter request/result schemas, raw request/response
 paths, task log paths, patch capture after the task phase, verifier execution
 after patch capture, and existing measured row shapes unchanged. Normal adapter
 schemas remain unchanged by default; the generated external-agent context file
-is harness input and is not duplicated into `run.jsonl`; harness-owned model calls, if added later,
-are runner/harness concerns rather than normal adapter request fields. External
-harnesses may mutate only the prepared workspace and write only allowed
-run-output artifacts. Pack-owned fixtures, prompts, verifier scripts, source
-docs, and raw model artifacts remain immutable or runner-owned. Task
+is harness input and is not duplicated into `run.jsonl`; the optional
+model-call JSONL path exposed through that context is not required, parsed,
+summarized, or reported. Harness-owned model calls are runner/harness concerns
+rather than normal adapter request fields. External harnesses may mutate only
+the prepared workspace and write only allowed run-output artifacts. Pack-owned
+fixtures, prompts, verifier scripts, source docs, and raw model artifacts
+remain immutable or runner-owned. Task
 environment, retention, richer task status/reporting, pack-level harness
 defaults, full production external coding-agent integration, and repo-task warmups
 remain separate future design and implementation slices.
@@ -305,10 +313,13 @@ arguments for prepared workspace, case id, output directory, repetition, and
 `--context <path>`. That JSON context is versioned and contains pack metadata,
 loaded prompt text, fixture/source-repo metadata, selected harness options,
 optional run metadata path, selected model, adapter id, endpoint argument,
-defaults, and compatibility options as explicit harness input. Those calls do
-not become normal adapter calls, do not change adapter envelopes, do not add
-`run.jsonl` fields, and do not write normal `raw/` artifacts unless a later
-schema slice defines that mapping.
+defaults, compatibility options, and an optional
+`task/<case-id>/rep-NNN.model-calls.jsonl` path as explicit harness input. That
+optional JSONL file is a harness-owned artifact when written; it is not
+required, parsed, summarized, or reported. Those calls do not become normal
+adapter calls, do not change adapter envelopes, do not add `run.jsonl` fields,
+and do not write normal `raw/` artifacts unless a later schema slice defines
+that mapping.
 
 External harness process failures divide the same way as current task execution.
 Unsafe paths, unwritable required logs, inability to stop a subprocess, or

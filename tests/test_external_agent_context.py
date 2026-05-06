@@ -12,6 +12,7 @@ from benchpack.external_agent_context import (
     ExternalAgentContextError,
     build_external_agent_context,
     external_agent_context_path,
+    external_agent_model_call_log_path,
     write_external_agent_context,
 )
 from benchpack.packs import load_pack
@@ -79,6 +80,7 @@ harness = { id = "external-agent", timeout_s = 120 }
     original_defaults = dict(defaults)
 
     context_path = external_agent_context_path(out, case, 2)
+    model_call_log_path = external_agent_model_call_log_path(out, case, 2)
     context = build_external_agent_context(
         pack=pack,
         case=case,
@@ -91,12 +93,19 @@ harness = { id = "external-agent", timeout_s = 120 }
         endpoint="http://example.test/v1",
         adapter_defaults=defaults,
         run_metadata_path=run_metadata_path,
+        model_call_log_path=model_call_log_path,
     )
     assert pack.defaults == original_pack_defaults
     defaults["temperature"] = 1
     written = write_external_agent_context(context_path, context)
 
     assert written == out / "task" / "edit-repo" / "rep-002.context.json"
+    assert model_call_log_path == (
+        out / "task" / "edit-repo" / "rep-002.model-calls.jsonl"
+    )
+    assert "raw" not in context_path.relative_to(out).parts
+    assert "raw" not in model_call_log_path.relative_to(out).parts
+    assert not model_call_log_path.exists()
     loaded = json.loads(written.read_text(encoding="utf-8"))
     assert loaded["version"] == 1
     assert loaded["pack"] == {
@@ -132,6 +141,7 @@ harness = { id = "external-agent", timeout_s = 120 }
             (out / "task" / "edit-repo" / "rep-002.stderr.log").resolve()
         ),
         "run_metadata_path": str(run_metadata_path.resolve()),
+        "model_call_log_path": str(model_call_log_path.resolve()),
     }
     assert loaded["adapter"] == {
         "id": "openai-chat",
@@ -199,9 +209,13 @@ harness = { id = "external-agent" }
         endpoint=None,
         adapter_defaults={},
         run_metadata_path=None,
+        model_call_log_path=external_agent_model_call_log_path(out, case, 1),
     )
 
     assert context["run"]["run_metadata_path"] is None
+    assert context["run"]["model_call_log_path"] == str(
+        (out / "task" / "edit-repo" / "rep-001.model-calls.jsonl").resolve()
+    )
 
 
 def test_external_agent_context_missing_workspace_failure_is_clear(
@@ -233,6 +247,11 @@ def test_external_agent_context_missing_workspace_failure_is_clear(
             endpoint=None,
             adapter_defaults={},
             run_metadata_path=None,
+            model_call_log_path=external_agent_model_call_log_path(
+                tmp_path / "run",
+                case,
+                1,
+            ),
         )
 
 

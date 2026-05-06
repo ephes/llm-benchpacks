@@ -388,7 +388,11 @@ ordering, and fenced-patch defaults unchanged. The next narrow external-agent
 context handoff slice landed 2026-05-06: public external-agent executions now
 write `task/<case-id>/rep-NNN.context.json` with versioned runner-owned JSON
 context and append `--context <path>` to the subprocess argv while preserving
-the same adapter/result/report boundaries.
+the same adapter/result/report boundaries. The follow-up optional model-call
+log path slice landed 2026-05-06: external-agent contexts now expose
+`run.model_call_log_path` at
+`task/<case-id>/rep-NNN.model-calls.jsonl` without requiring, parsing, reporting,
+or adding that artifact to `run.jsonl`.
 
 Scope:
 
@@ -610,6 +614,12 @@ Scope:
   task-command flags, task environments, adapter fields, raw artifacts,
   `run.jsonl` fields, compare/report changes, or live benchmark artifacts were
   added.
+- Expose an optional external-agent model-call log path. **Landed 2026-05-06**
+  as `run.model_call_log_path` in the external-agent context, using the
+  deterministic task artifact location
+  `task/<case-id>/rep-NNN.model-calls.jsonl`. The runner does not pre-create,
+  require, validate, parse, summarize, report, or add that file to `run.jsonl`;
+  harness-owned model calls remain outside normal adapter `raw/` artifacts.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -626,9 +636,10 @@ Scope:
   `fenced-patch` selection for the existing compatibility executor, the
   2026-05-05 production external contract refinement, and a runner-side
   subprocess skeleton for deterministic external harness boundary tests, plus
-  the first public `external-agent` CLI routing slice. Full production external
-  coding-agent execution, harness-owned model-call context, and richer harness
-  configuration remain planned later.
+  the first public `external-agent` CLI routing slice and optional model-call
+  log artifact path. Full production external coding-agent execution, required
+  model-call logging/schema/reporting, and richer harness configuration remain
+  planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

@@ -450,3 +450,20 @@ injection, or result schema fields would widen the public contract too early.
 A runner-owned JSON input file keeps the handoff explicit, inspectable,
 language-neutral, shell-free, and compatible with the existing task artifact
 layout.
+
+## D-028: External-agent Model-Call Log Path Is Optional Harness Artifact
+
+Public `external-agent` subprocess contexts expose
+`run.model_call_log_path`, a deterministic absolute path under the run output
+directory at `task/<case-id>/rep-NNN.model-calls.jsonl`. External harnesses
+that own model calls may write JSONL telemetry there. The runner owns and
+exposes the path but does not require the file to exist, pre-create it,
+validate its JSONL schema, parse it into summaries or reports, add it to
+`run.jsonl`, or mirror harness-owned calls into normal adapter `raw/`
+request/response artifacts.
+
+Reason: real external agents need a stable place to put model-call telemetry
+without changing normal adapter, raw artifact, result, compare, or report
+contracts. Keeping the file under the existing task artifact area makes the
+handoff deterministic and inspectable while preserving optionality for fake
+agents and early integrations.

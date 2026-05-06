@@ -34,6 +34,25 @@ def external_agent_context_path(
     )
 
 
+def external_agent_model_call_log_path(
+    output_dir: Path,
+    case: Case,
+    repetition: int,
+) -> Path:
+    """Return the optional external-agent model-call JSONL artifact path."""
+
+    if isinstance(repetition, bool) or not isinstance(repetition, int):
+        raise ValueError("repetition must be an integer >= 1")
+    if repetition < 1:
+        raise ValueError("repetition must be an integer >= 1")
+    return (
+        Path(output_dir)
+        / "task"
+        / case.id
+        / f"rep-{repetition:03d}.model-calls.jsonl"
+    )
+
+
 def build_external_agent_context(
     *,
     pack: Pack,
@@ -47,6 +66,7 @@ def build_external_agent_context(
     endpoint: str | None,
     adapter_defaults: dict[str, Any],
     run_metadata_path: Path | None,
+    model_call_log_path: Path,
 ) -> dict[str, Any]:
     """Build the JSON-serializable context for one external-agent execution."""
 
@@ -92,6 +112,9 @@ def build_external_agent_context(
                 None
                 if run_metadata_path is None
                 else str(Path(run_metadata_path).resolve(strict=False))
+            ),
+            "model_call_log_path": str(
+                Path(model_call_log_path).resolve(strict=False)
             ),
         },
         "adapter": {
