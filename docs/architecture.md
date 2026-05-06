@@ -143,7 +143,7 @@ results/
    `task/<case-id>/rep-NNN.model-calls.jsonl` through that context, appends
    workspace, case, output directory, repetition, and context-path arguments,
    runs without a shell, captures existing task logs, and treats clean nonzero
-   exits or direct-subprocess timeouts as task outcomes.
+   exits or process-group-cleaned timeouts as task outcomes.
    Runner-side code can
    supply an internal agent-session harness behind this same boundary without
    changing the adapter request shape or public result row shape by default, but
@@ -203,7 +203,10 @@ and before each measured adapter execution:
    logs. The context JSON includes pack/case metadata, the loaded prompt,
    fixture inventory, prepared workspace and task-log paths, optional
    `run-metadata.json` path, optional model-call JSONL path, and selected
-   adapter/model/endpoint/defaults.
+   adapter/model/endpoint/defaults. When `harness.timeout_s` is set, the
+   subprocess starts in a POSIX process group/session; on timeout, the runner
+   terminates that process group, waits a short bounded grace period, escalates
+   to a kill signal when needed, and then writes the existing task logs.
 7. An internal agent-session harness can occupy the same runner-owned task
    phase when supplied by runner-side code. It receives the prepared workspace
    path, case metadata, model output text, output directory, repetition, and
@@ -330,9 +333,10 @@ fields, and do not write normal `raw/` artifacts unless a later schema slice
 defines that mapping.
 
 External harness process failures divide the same way as current task execution.
-Unsafe paths, unwritable required logs, inability to stop a subprocess, or
-failure to preserve the workspace/output boundary are runner failures. A harness
-that exits nonzero, times out after the runner has stopped it and closed logs, or
+Unsafe paths, unwritable required logs, inability to stop a subprocess process
+group, or failure to preserve the workspace/output boundary are runner failures.
+A harness that exits nonzero, times out after the runner has stopped its
+process group and closed logs, or
 leaves a workspace that fails verification is a task outcome represented by the
 existing task logs, patch artifact, verifier artifacts, `repo_task` verifier
 status, and top-level scoring. `harness.timeout_s` remains a task-phase timeout,

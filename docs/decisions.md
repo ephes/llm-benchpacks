@@ -365,7 +365,8 @@ Task timeout support is deliberately narrow and lives on the case-local harness
 table as `harness.timeout_s`. It must be a positive TOML integer or float and
 is accepted only for `repo-task` harness declarations. It bounds
 subprocess-backed task executors: for `fenced-patch`, the `git apply --check`
-and `git apply` calls; for `external-agent`, the direct configured subprocess.
+and `git apply` calls; for `external-agent`, the configured subprocess process
+group.
 A fenced-patch preflight timeout is a task outcome because the workspace is
 known unchanged: the runner writes deterministic task stderr and continues to
 patch capture and verification. A timeout during actual patch application after

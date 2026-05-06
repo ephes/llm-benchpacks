@@ -410,8 +410,9 @@ Rules:
   deterministic task stderr, and still allows patch capture and verifier
   execution. A timeout during the actual `git apply` after successful preflight
   is a runner failure because the workspace may be partially changed. For
-  `external-agent`, a direct-subprocess timeout is captured in the task stderr
-  log after the runner stops the process.
+  `external-agent`, a subprocess timeout is captured in the task stderr log
+  after the runner stops the external process group with a bounded
+  terminate-then-kill cleanup policy.
 - Runner-side internal in-process harness callables cannot be combined with
   task timeout.
 - Public harness selection does not change adapter request or result schemas.
@@ -457,9 +458,11 @@ shell-parsed and plain command strings are rejected. The runner appends
 `--workspace <prepared-workspace>`, `--case <case-id>`,
 `--output-dir <run-output-dir>`, `--repetition <N>`, and
 `--context <run-output-dir>/task/<case-id>/rep-NNN.context.json` before
-executing the subprocess without a shell in the prepared workspace. Missing or
-malformed configuration fails before run output directory creation and before
-adapter calls.
+executing the subprocess without a shell in the prepared workspace. On
+`harness.timeout_s`, timed-out external subprocesses are cleaned up as a POSIX
+process group with bounded termination and kill escalation before timeout task
+logs are written. Missing or malformed configuration fails before run output
+directory creation and before adapter calls.
 
 This shape keeps explicit case-local selection, optional task-phase timeout, no
 task command list, no task environment table, no shell expansion, no secrets

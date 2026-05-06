@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import signal
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -10,6 +12,11 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
+
+
+# Keep timeout cleanup bounded while still giving cooperative harnesses a moment
+# to flush output and exit before SIGKILL escalation.
+_EXTERNAL_PROCESS_TIMEOUT_GRACE_S = 0.5
 
 
 class TaskError(ValueError):
@@ -391,33 +398,125 @@ def _run_external_process_harness_executor(
 
     command, workspace = _external_process_command(request, harness)
     try:
-        completed = subprocess.run(
+        stdout, stderr, timed_out = _run_external_process_command(
             command,
-            cwd=workspace,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=request.task_timeout_s,
+            workspace,
+            timeout_s=request.task_timeout_s,
+            case_id=request.case.id,
         )
-    except subprocess.TimeoutExpired as exc:
-        stdout = _timeout_stream_to_text(exc.stdout)
-        stderr = _timeout_stream_to_text(exc.stderr)
-        stderr += (
-            f"External subprocess harness timed out after "
-            f"{request.task_timeout_s:g} seconds; process stopped.\n"
-        )
-        return _write_task_logs(request, stdout=stdout, stderr=stderr)
     except OSError as exc:
         raise TaskError(
             f"could not run external subprocess harness for repo-task case "
             f"{request.case.id!r}"
         ) from exc
 
+    if timed_out:
+        stderr += (
+            f"External subprocess harness timed out after "
+            f"{request.task_timeout_s:g} seconds; process stopped.\n"
+        )
+        return _write_task_logs(request, stdout=stdout, stderr=stderr)
+
     return _write_task_logs(
         request,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=stdout,
+        stderr=stderr,
     )
+
+
+def _run_external_process_command(
+    command: Sequence[str],
+    workspace: Path,
+    *,
+    timeout_s: float | None,
+    case_id: str,
+) -> tuple[str, str, bool]:
+    """Run an external harness subprocess with POSIX process-group cleanup."""
+
+    process = subprocess.Popen(
+        command,
+        cwd=workspace,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_s)
+        return (
+            _process_stream_to_text(stdout),
+            _process_stream_to_text(stderr),
+            False,
+        )
+    except subprocess.TimeoutExpired:
+        stdout, stderr = _stop_external_process_group(process, case_id)
+        return stdout, stderr, True
+
+
+def _stop_external_process_group(
+    process: subprocess.Popen[str],
+    case_id: str,
+) -> tuple[str, str]:
+    """Terminate a timed-out external harness process group and drain output."""
+
+    try:
+        pgid = os.getpgid(process.pid)
+    except ProcessLookupError:
+        return _communicate_after_external_timeout(process, case_id)
+    except OSError as exc:
+        raise TaskError(
+            f"could not inspect external subprocess harness process group for "
+            f"repo-task case {case_id!r}"
+        ) from exc
+
+    _signal_external_process_group(pgid, signal.SIGTERM, case_id)
+    try:
+        return _communicate_after_external_timeout(process, case_id)
+    except subprocess.TimeoutExpired:
+        _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+        try:
+            return _communicate_after_external_timeout(process, case_id)
+        except subprocess.TimeoutExpired as exc:
+            raise TaskError(
+                f"could not stop external subprocess harness process group for "
+                f"repo-task case {case_id!r}"
+            ) from exc
+
+
+def _signal_external_process_group(
+    pgid: int,
+    signal_number: signal.Signals,
+    case_id: str,
+) -> None:
+    """Send one signal to a harness process group, tolerating already-dead groups."""
+
+    try:
+        os.killpg(pgid, signal_number)
+    except ProcessLookupError:
+        return
+    except OSError as exc:
+        raise TaskError(
+            f"could not stop external subprocess harness process group for "
+            f"repo-task case {case_id!r}"
+        ) from exc
+
+
+def _communicate_after_external_timeout(
+    process: subprocess.Popen[str],
+    case_id: str,
+) -> tuple[str, str]:
+    """Drain process output after timeout signaling with a bounded wait."""
+
+    try:
+        stdout, stderr = process.communicate(
+            timeout=_EXTERNAL_PROCESS_TIMEOUT_GRACE_S
+        )
+    except OSError as exc:
+        raise TaskError(
+            f"could not collect external subprocess harness logs for "
+            f"repo-task case {case_id!r}"
+        ) from exc
+    return _process_stream_to_text(stdout), _process_stream_to_text(stderr)
 
 
 def _external_process_command(
@@ -510,8 +609,8 @@ def _write_task_logs(
     return task_record(paths, request.output_dir)
 
 
-def _timeout_stream_to_text(value: str | bytes | None) -> str:
-    """Normalize captured TimeoutExpired output to text for task logs."""
+def _process_stream_to_text(value: str | bytes | None) -> str:
+    """Normalize captured process output to text for task logs."""
 
     if value is None:
         return ""

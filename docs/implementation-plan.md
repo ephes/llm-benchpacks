@@ -409,7 +409,11 @@ JSON request to an example-owned fake endpoint, writes the deterministic
 response content only into the prepared workspace, writes one safe model-call
 JSONL telemetry line to `run.model_call_log_path`, and is exercised through the
 existing public CLI external-agent path while leaving runner schemas and
-artifact parsing unchanged.
+artifact parsing unchanged. The external-agent process-tree cleanup slice then
+landed 2026-05-06: timed-out external subprocess harnesses now run in a POSIX
+process group/session, receive bounded terminate-then-kill cleanup, preserve
+captured task stdout/stderr plus deterministic timeout text, and remain task
+outcomes when cleanup and log writing succeed.
 
 Scope:
 
@@ -663,6 +667,12 @@ Scope:
   at `run.model_call_log_path`. The runner still does not parse, validate,
   summarize, report, or add that file to `run.jsonl`, and no adapter raw
   artifacts are created for harness-owned calls.
+- Add external-agent process-tree cleanup on timeout. **Landed 2026-05-06**
+  for POSIX/macOS/Linux subprocess harnesses: external agents run in a new
+  process group/session, timeout cleanup sends a bounded terminate signal and
+  escalates to kill when needed, captured stdout/stderr is preserved in the
+  existing task logs with deterministic timeout text, and cleaned-up timeouts
+  remain task outcomes without adding result fields or task artifact paths.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

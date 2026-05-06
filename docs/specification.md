@@ -201,9 +201,10 @@ fenced-patch and external-agent executors. For `fenced-patch`, a timeout during
 stderr records the timeout, patch capture still runs, and verifier execution
 still follows patch capture. A timeout during the actual `git apply` after
 successful preflight is a runner failure because the workspace may be partially
-changed. For `external-agent`, a timeout is a task outcome when the direct
-subprocess is stopped and task logs can be written. Runner-side internal
-agent-session harness callables cannot be combined with `task_timeout_s`,
+changed. For `external-agent`, a timeout is a task outcome when the runner
+stops the external subprocess process group and task logs can be written.
+Runner-side internal agent-session harness callables cannot be combined with
+`task_timeout_s`,
 because Python cannot safely preempt arbitrary in-process code.
 
 Public harness selection and task timeout support do not change adapter request
@@ -248,9 +249,12 @@ string. It appends `--workspace <prepared-workspace>`, `--case <case-id>`,
 `--context <run-output-dir>/task/<case-id>/rep-NNN.context.json` to that argv,
 runs the process without a shell in the prepared workspace, captures
 stdout/stderr into the existing task logs, then captures the workspace patch
-and runs any verifier. The normal adapter call still happens before the
-repo-task task phase in this slice. The context also names an optional
-harness-owned model-call log path at
+and runs any verifier. When `harness.timeout_s` is set, the external subprocess
+runs in a POSIX process group/session so the runner can terminate the process
+tree on timeout, wait a short bounded grace period, and escalate to a kill
+signal if needed before writing timeout task logs. The normal adapter call
+still happens before the repo-task task phase in this slice. The context also
+names an optional harness-owned model-call log path at
 `task/<case-id>/rep-NNN.model-calls.jsonl`; required logging, enforced JSONL
 schema validation, parsing, summaries, and reports remain future work.
 
@@ -409,8 +413,9 @@ directory, repetition, and optional context JSON path, runs without a shell in
 the prepared workspace,
 captures stdout/stderr to the existing task log paths, and preserves patch
 capture and verifier ordering. A clean nonzero subprocess exit and a timeout
-where the runner stops the direct subprocess and closes logs are task outcomes
-represented through the existing logs and downstream verifier result. Unsafe
+where the runner stops the external subprocess process group and closes logs
+are task outcomes represented through the existing logs and downstream verifier
+result. Unsafe
 argv shape, missing executable, invalid workspace/output paths, incompatible
 harness combinations, or unwritable required logs remain runner failures. The
 public `external-agent` CLI path now routes to this subprocess executor with an

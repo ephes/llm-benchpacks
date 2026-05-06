@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -997,6 +998,112 @@ Path(args.workspace, "done.txt").write_text("should not exist\\n", encoding="utf
     assert "started before timeout" in (
         out / patch_metadata["path"]
     ).read_text(encoding="utf-8")
+
+
+def test_run_repo_task_executor_external_process_timeout_stops_child_processes(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    source = tmp_path / "pack" / "fixtures" / "repo"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    source.mkdir(parents=True)
+    workspace.mkdir(parents=True)
+    (source / "README.md").write_text("source repo\n", encoding="utf-8")
+    (workspace / "README.md").write_text("source repo\n", encoding="utf-8")
+    child_script = tmp_path / "child_ignores_sigterm.py"
+    child_script.write_text(
+        """
+import signal
+import sys
+import time
+from pathlib import Path
+
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+workspace = Path(sys.argv[1])
+(workspace / "child-started.txt").write_text("child started\\n", encoding="utf-8")
+time.sleep(2.0)
+(workspace / "child-survived.txt").write_text("child survived\\n", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
+    script = write_fake_external_harness(
+        tmp_path,
+        f"""
+import argparse
+import subprocess
+import sys
+import time
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace", required=True)
+parser.add_argument("--case", required=True)
+parser.add_argument("--output-dir", required=True)
+parser.add_argument("--repetition", required=True)
+args = parser.parse_args()
+workspace = Path(args.workspace)
+workspace.joinpath("README.md").write_text(
+    "parent mutation before timeout\\n",
+    encoding="utf-8",
+)
+subprocess.Popen([sys.executable, {str(child_script)!r}, str(workspace)])
+deadline = time.monotonic() + 1.0
+while not workspace.joinpath("child-started.txt").exists():
+    if time.monotonic() >= deadline:
+        raise SystemExit(8)
+    time.sleep(0.01)
+print("parent stdout before timeout", flush=True)
+print("parent stderr before timeout", file=sys.stderr, flush=True)
+time.sleep(5)
+workspace.joinpath("parent-done.txt").write_text(
+    "should not exist\\n",
+    encoding="utf-8",
+)
+""",
+    )
+
+    record = run_repo_task_executor(
+        TaskExecutionRequest(
+            output_dir=out,
+            case=make_case(),
+            repetition=1,
+            workspace=workspace,
+            model_output_text="",
+            task_timeout_s=1.0,
+            external_process_harness=ExternalProcessHarness(
+                argv=(sys.executable, str(script)),
+            ),
+        )
+    )
+
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "parent stdout before timeout\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == (
+        "parent stderr before timeout\n"
+        "External subprocess harness timed out after 1 seconds; "
+        "process stopped.\n"
+    )
+    assert (workspace / "README.md").read_text(encoding="utf-8") == (
+        "parent mutation before timeout\n"
+    )
+    assert (workspace / "child-started.txt").read_text(encoding="utf-8") == (
+        "child started\n"
+    )
+    assert not (workspace / "parent-done.txt").exists()
+    assert not (workspace / "child-survived.txt").exists()
+
+    fixture = make_repo_fixture(source)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    patch_metadata = capture_workspace_patch(prepared, out, make_case(), 1)
+    patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
+    assert "parent mutation before timeout" in patch_text
+
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline:
+        if (workspace / "child-survived.txt").exists():
+            break
+        time.sleep(0.05)
+    assert not (workspace / "child-survived.txt").exists()
 
 
 def test_run_repo_task_executor_rejects_public_and_external_harness_combination(

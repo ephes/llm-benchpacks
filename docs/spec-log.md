@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent process-tree timeout cleanup)
+
+### Changed
+
+- Replaced direct timeout handling for runner-owned external subprocess
+  harnesses with POSIX process-group cleanup: external agents start in a new
+  process group/session, timeout handling sends a bounded terminate signal, and
+  escalates to kill when processes do not exit.
+- Preserved existing external-agent task logs, deterministic timeout stderr
+  text, patch capture, verifier ordering, direct executor rejection of
+  `harness_id="external-agent"`, public CLI argv/context behavior, and
+  `run.jsonl` row shape.
+- Added executor coverage proving a child process that ignores `SIGTERM` does
+  not survive an external harness timeout and that pre-timeout workspace
+  mutation still reaches patch capture.
+
+### Open Questions
+
+- Richer task status/reporting, named harness artifacts, required model-call
+  logging, task environments, and production coding-agent integration remain
+  separate future slices.
+
 ## 2026-05-06 (external-agent deterministic model-call example)
 
 ### Changed

@@ -53,9 +53,12 @@ manifest command: set `BENCHPACK_EXTERNAL_AGENT_ARGV` to a JSON array of argv
 strings before running the pack. The runner appends workspace/case/output
 arguments plus `--context <path>` to a runner-owned JSON context file under
 `task/<case-id>/rep-NNN.context.json`, runs without a shell, and writes through
-the existing task logs. The context file includes pack/case metadata, the loaded
-prompt, fixture metadata, prepared workspace path, task log paths, run metadata
-path when supplied, an optional harness-owned model-call JSONL path at
+the existing task logs. When `harness.timeout_s` is set, timeout cleanup stops
+the external subprocess process group with a bounded terminate-then-kill policy
+before the runner writes timeout task logs. The context file includes pack/case
+metadata, the loaded prompt, fixture metadata, prepared workspace path, task
+log paths, run metadata path when supplied, an optional harness-owned
+model-call JSONL path at
 `task/<case-id>/rep-NNN.model-calls.jsonl`, and the selected adapter/model/
 endpoint/defaults. It is harness input only and is not duplicated into
 `run.jsonl`; the runner exposes the model-call path but does not require or
