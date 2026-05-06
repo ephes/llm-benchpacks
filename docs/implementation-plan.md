@@ -402,7 +402,14 @@ reference external-agent harness example also landed 2026-05-06 under
 mutates only the prepared workspace, writes one recommended model-call JSONL
 line, and is covered through the public CLI external-agent path without adding
 runner parsing, validation, result fields, reports, raw artifacts, manifest
-commands, task environments, or production agent integration.
+commands, task environments, or production agent integration. The deterministic
+model-call-shaped external-agent example then landed 2026-05-06 as
+`examples/external-agent/model-call-agent.py`: it performs one tiny local HTTP
+JSON request to an example-owned fake endpoint, writes the deterministic
+response content only into the prepared workspace, writes one safe model-call
+JSONL telemetry line to `run.model_call_log_path`, and is exercised through the
+existing public CLI external-agent path while leaving runner schemas and
+artifact parsing unchanged.
 
 Scope:
 
@@ -647,6 +654,15 @@ Scope:
   prepared workspace and one recommended JSONL line at
   `run.model_call_log_path`, makes no live model calls, and leaves the runner's
   optional/opaque treatment of that file unchanged.
+- Add a deterministic model-call-shaped external-agent example. **Landed
+  2026-05-06** as `examples/external-agent/model-call-agent.py` plus usage docs
+  and focused CLI coverage. The example reads the public context, performs one
+  stdlib local HTTP JSON request to an example-owned fake endpoint, sends only
+  case id, repetition, and model, writes the deterministic response content
+  only inside the prepared workspace, and writes one safe JSONL telemetry line
+  at `run.model_call_log_path`. The runner still does not parse, validate,
+  summarize, report, or add that file to `run.jsonl`, and no adapter raw
+  artifacts are created for harness-owned calls.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

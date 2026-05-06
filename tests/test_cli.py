@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import http.server
 import json
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -1104,6 +1106,309 @@ with open(args.output, "w", encoding="utf-8") as fh:
             "case=edit-repo\n"
             "repetition=1\n"
         ),
+        "exit_code": 0,
+        "passed": True,
+        "patch_has_marker": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        ("http://example.test/model-call", "must use a loopback host"),
+        ("http://u:p@127.0.0.1/model-call", "must not contain credentials"),
+        (
+            "http://127.0.0.1/model-call?api_key=secret",
+            "must not contain a query string",
+        ),
+    ],
+)
+def test_external_agent_model_call_example_rejects_non_local_or_secret_urls(
+    tmp_path: Path,
+    url: str,
+    message: str,
+) -> None:
+    example_script = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "external-agent"
+        / "model-call-agent.py"
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(example_script),
+            "--model-call-url",
+            url,
+            "--workspace",
+            str(tmp_path),
+            "--case",
+            "edit-repo",
+            "--output-dir",
+            str(tmp_path),
+            "--repetition",
+            "1",
+            "--context",
+            str(tmp_path / "missing.context.json"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert message in completed.stderr
+
+
+def test_cli_external_agent_model_call_example_runs_local_http_harness(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    events: list[str] = []
+    adapter_calls: list[dict[str, str]] = []
+
+    class RecordingAdapter:
+        name = "openai-chat"
+
+        def run(self, request: AdapterRequest) -> AdapterResult:
+            events.append("adapter")
+            adapter_calls.append(
+                {
+                    "prompt": request.prompt,
+                    "request_path": request.request_path.name,
+                    "response_path": request.response_path.name,
+                }
+            )
+            request.request_path.write_text(json.dumps({"prompt": request.prompt}))
+            request.response_path.write_text(
+                json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "adapter output remains separate",
+                                }
+                            }
+                        ],
+                        "usage": {"prompt_tokens": 7, "completion_tokens": 2},
+                    }
+                )
+            )
+            return AdapterResult(
+                adapter=self.name,
+                endpoint="http://example.test/v1/chat/completions",
+                model=request.model,
+                ok=True,
+                timing=Timing(wall_s=1.0),
+                tokens=Tokens(prompt=7, output=2),
+                raw=RawPaths(
+                    request_path=str(request.request_path),
+                    response_path=str(request.response_path),
+                ),
+                output_text="adapter output remains separate",
+            )
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", RecordingAdapter)
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 5 }}',
+        scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
+    )
+    _write_verifier_script(
+        pack_dir,
+        """
+import argparse
+import json
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument("--workspace")
+parser.add_argument("--case")
+parser.add_argument("--pack-id")
+parser.add_argument("--pack-version")
+parser.add_argument("--source-fixture-id")
+parser.add_argument("--patch")
+parser.add_argument("--output")
+args = parser.parse_args()
+marker = Path(args.workspace, "external-agent-model-call.txt")
+content = marker.read_text(encoding="utf-8")
+expected = "model-call content for edit-repo\\n"
+if content != expected:
+    raise SystemExit(2)
+patch_text = Path(args.patch).read_text(encoding="utf-8")
+if "+model-call content for edit-repo\\n" not in patch_text:
+    raise SystemExit(3)
+with open(args.output, "w", encoding="utf-8") as fh:
+    json.dump({"marker": content, "patch_has_marker": True}, fh)
+""",
+    )
+
+    model_requests: list[dict[str, Any]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length).decode("utf-8")
+            model_requests.append(
+                {
+                    "path": self.path,
+                    "headers": dict(self.headers),
+                    "body_text": body,
+                    "body": json.loads(body),
+                }
+            )
+            events.append("model_call")
+            response = {
+                "ok": True,
+                "workspace_file": "external-agent-model-call.txt",
+                "content": "model-call content for edit-repo\n",
+                "model": "test-model",
+                "prompt_tokens": 3,
+                "output_tokens": 5,
+            }
+            payload = json.dumps(response).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://127.0.0.1:{server.server_port}/model-call"
+    example_script = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "external-agent"
+        / "model-call-agent.py"
+    )
+    monkeypatch.setenv(
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        json.dumps(
+            [
+                sys.executable,
+                str(example_script),
+                "--model-call-url",
+                endpoint,
+            ]
+        ),
+    )
+    out = tmp_path / "run"
+
+    try:
+        assert main(_argv(["--out", str(out)])) == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert events == ["adapter", "model_call"]
+    assert [call["request_path"] for call in adapter_calls] == [
+        "edit-repo.request.json"
+    ]
+    assert len(model_requests) == 1
+    request = model_requests[0]
+    assert request["path"] == "/model-call"
+    assert request["body"] == {
+        "case": "edit-repo",
+        "repetition": 1,
+        "model": "test-model",
+    }
+    assert "Authorization" not in request["headers"]
+    forbidden_fragments = [
+        "Change the repository.",
+        "adapter output remains separate",
+        "model-call content for edit-repo",
+        "external-agent-model-call.txt",
+        "BENCHPACK_EXTERNAL_AGENT_ARGV",
+        "Authorization",
+        "Bearer",
+        "password",
+        "credential",
+        "secret",
+        "raw/edit-repo.request.json",
+        "raw/edit-repo.response.json",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in request["body_text"]
+
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    marker = workspace / "external-agent-model-call.txt"
+    assert marker.read_text(encoding="utf-8") == "model-call content for edit-repo\n"
+    source_repo = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo"
+    assert (source_repo / "README.md").read_text(encoding="utf-8") == (
+        "source repo\n"
+    )
+    assert not (source_repo / "external-agent-model-call.txt").exists()
+
+    context_file = out / "task" / "edit-repo" / "rep-001.context.json"
+    assert context_file.is_file()
+    context = json.loads(context_file.read_text(encoding="utf-8"))
+    model_call_log_path = Path(context["run"]["model_call_log_path"])
+    assert model_call_log_path == (
+        out / "task" / "edit-repo" / "rep-001.model-calls.jsonl"
+    ).resolve()
+    assert "raw" not in model_call_log_path.relative_to(out).parts
+    raw_files = sorted(path.name for path in (out / "raw").iterdir())
+    assert raw_files == ["edit-repo.request.json", "edit-repo.response.json"]
+    assert not any("model-call" in name or "model-calls" in name for name in raw_files)
+
+    model_call_lines = model_call_log_path.read_text(encoding="utf-8").splitlines()
+    assert len(model_call_lines) == 1
+    telemetry = json.loads(model_call_lines[0])
+    assert telemetry["schema_version"] == 1
+    assert telemetry["sequence"] == 1
+    assert telemetry["model"] == "test-model"
+    assert telemetry["ok"] is True
+    assert telemetry["adapter"] == "example-local-http"
+    assert telemetry["endpoint"] == "local-http"
+    assert telemetry["prompt_tokens"] == 3
+    assert telemetry["output_tokens"] == 5
+    assert isinstance(telemetry["duration_s"], float)
+    assert telemetry["duration_s"] >= 0
+    assert "content" not in telemetry
+    assert "prompt" not in telemetry
+    assert "request" not in telemetry
+    assert "headers" not in telemetry
+    assert "authorization" not in telemetry
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert "model_call_log_path" not in record
+    assert "model_call_log_path" not in record["task"]
+    assert record["raw"] == {
+        "request_path": "raw/edit-repo.request.json",
+        "response_path": "raw/edit-repo.response.json",
+    }
+    assert record["task"] == {
+        "stdout_path": "task/edit-repo/rep-001.stdout.log",
+        "stderr_path": "task/edit-repo/rep-001.stderr.log",
+    }
+    assert record["patch"] == {"path": "patch/edit-repo/rep-001.diff"}
+    assert record["verify"] == {
+        "path": "verify/edit-repo/rep-001.json",
+        "stdout_path": "verify/edit-repo/rep-001.stdout.log",
+        "stderr_path": "verify/edit-repo/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "model-call-agent wrote external-agent-model-call.txt for edit-repo\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "--- /dev/null\n"
+        "+++ b/external-agent-model-call.txt\n"
+        "@@ -0,0 +1 @@\n"
+        "+model-call content for edit-repo\n"
+    )
+    assert json.loads((out / record["verify"]["path"]).read_text()) == {
+        "marker": "model-call content for edit-repo\n",
         "exit_code": 0,
         "passed": True,
         "patch_has_marker": True,

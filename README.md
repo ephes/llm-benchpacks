@@ -69,7 +69,11 @@ See
 [`examples/external-agent/reference-agent.py`](examples/external-agent/reference-agent.py)
 for a deterministic local reference harness that validates the public context
 handoff, mutates only the prepared workspace, and writes that optional JSONL
-line without making live model calls.
+line without making live model calls. The sibling
+[`examples/external-agent/model-call-agent.py`](examples/external-agent/model-call-agent.py)
+example adds one deterministic local HTTP request to a fake/recorded endpoint
+and records only safe model-call telemetry while keeping the runner boundary
+unchanged.
 
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack

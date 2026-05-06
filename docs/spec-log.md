@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent deterministic model-call example)
+
+### Changed
+
+- Added `examples/external-agent/model-call-agent.py` as a deterministic,
+  offline, production-shaped external-agent example that reads the public
+  context, performs one stdlib HTTP JSON request to an example-owned local fake
+  endpoint, mutates only the prepared workspace from the deterministic
+  response, and writes one safe model-call JSONL line to
+  `run.model_call_log_path`.
+- Added focused CLI coverage that runs the source-controlled example through
+  `BENCHPACK_EXTERNAL_AGENT_ARGV`, verifies the normal adapter call still
+  happens before the external task phase, proves the local fake endpoint sees
+  exactly one tiny safe request, and preserves patch capture, verifier
+  execution, source fixture immutability, and existing result row shape.
+- Updated example and project docs to make both external-agent examples
+  discoverable while keeping the model-call log optional, harness-owned, and
+  opaque to the runner. No runner parsing, validation, summaries, reports,
+  `run.jsonl` fields, adapter raw artifacts for harness-owned calls, manifest
+  command syntax, task environments, or live benchmark artifacts were added.
+- Review follow-up tightened `model-call-agent.py` so `--model-call-url` must
+  point at a plain HTTP loopback host and must not contain credentials or query
+  strings.
+
+### Open Questions
+
+- Real production harnesses may still prove a need for enforced model-call
+  telemetry schema, richer task status, named harness artifacts, or
+  process-tree cleanup policy in later slices.
+
 ## 2026-05-06 (external-agent reference harness example)
 
 ### Changed

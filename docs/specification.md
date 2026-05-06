@@ -304,6 +304,15 @@ calls. It is example harness guidance only; it does not change runner parsing,
 validation, result rows, summaries, reports, adapter raw artifacts, or
 production agent integration.
 
+A second deterministic example is available at
+`examples/external-agent/model-call-agent.py`. It uses the same public argv and
+context handoff, performs one tiny HTTP JSON request to an example-owned local
+loopback endpoint supplied by `--model-call-url`, rejects credentials and query
+strings in that URL, writes only the deterministic response content into the
+prepared workspace, and writes one safe JSONL telemetry line to the
+context-provided model-call path. The example does not call live model services
+by itself and does not make the model-call log a runner schema.
+
 Other richer harness artifacts must be explicitly named by a later
 artifact/schema slice before they are allowed. It must not mutate pack-owned
 fixtures, prompts, verifier scripts, source docs, `run-metadata.json`,

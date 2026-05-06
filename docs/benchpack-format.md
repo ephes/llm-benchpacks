@@ -510,6 +510,16 @@ one recommended model-call JSONL line. It is not a manifest command, does not
 make live model calls, and does not make the optional model-call log a runner
 schema.
 
+The sibling `examples/external-agent/model-call-agent.py` script demonstrates a
+deterministic harness-owned call boundary without changing the manifest format.
+It accepts an example-owned `--model-call-url` that must point to an HTTP
+loopback host without credentials or query string, sends one tiny local HTTP
+JSON request containing only safe identifiers such as case id, repetition, and
+model, writes the deterministic response content inside the prepared workspace,
+and writes one safe JSONL telemetry line to the context-provided model-call
+path. It remains example guidance; the runner still treats the optional JSONL
+file as opaque.
+
 Directory fixture semantics for repo-task cases:
 
 - The referenced `kind = "repo"` fixture is immutable source. The runner must
