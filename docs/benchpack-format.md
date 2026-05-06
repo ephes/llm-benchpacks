@@ -418,8 +418,9 @@ Rules:
   The generated external-agent context file is harness input and is not
   duplicated into `run.jsonl`. The context-provided
   `task/<case-id>/rep-NNN.model-calls.jsonl` path is optional and is not
-  required, parsed, summarized, or reported by the runner. Harness-owned model
-  calls are runner/harness concerns rather than normal adapter request fields.
+  required, pre-created, validated, parsed, summarized, reported, or added to
+  `run.jsonl` by the runner. Harness-owned model calls are runner/harness
+  concerns rather than normal adapter request fields.
 - Existing task logs remain `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`.
 - Patch capture still happens after the selected task phase and reflects the
@@ -478,13 +479,29 @@ External harnesses may mutate only the prepared workspace. They may write the
 existing task stdout/stderr logs through runner-owned capture and may
 optionally write JSONL model-call telemetry to the context-provided
 `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
-validate, parse, summarize, or report that file. Other additional explicit
-harness artifacts under the run output directory require a later schema slice.
-They must not write pack-owned fixtures, prompts, verifier scripts, source
-docs, normal adapter `raw/` artifacts, `hardware.json`, `run-metadata.json`, or
-paths outside the prepared workspace and allowed run-output artifacts. Patch
-capture still compares the source fixture to the post-task workspace, and
-verifier execution still follows patch capture.
+pre-create, validate, parse, summarize, report, or add that file to
+`run.jsonl`. The recommended minimal line is:
+
+```json
+{"schema_version":1,"sequence":1,"model":"test-model","ok":true}
+```
+
+Each line should describe one harness-owned model call. `schema_version` is
+currently integer `1` for this recommended shape, `sequence` is the positive
+call sequence within the external-agent task phase, `model` is the model id
+when known, and `ok` records whether the call completed successfully. Optional
+fields may include `started_at`, `ended_at`, `duration_s`, `adapter`,
+`endpoint`, `prompt_tokens`, `output_tokens`, `cached_prompt_tokens`, and a
+short `error` string for failed calls. This is not a manifest schema and is not
+validated by the runner. Harnesses should not put full prompts, full responses,
+request bodies, headers, environment variables, API keys, bearer tokens, or
+credentials in the default telemetry shape. Other additional explicit harness
+artifacts under the run output directory require a later schema slice. They
+must not write pack-owned fixtures, prompts, verifier scripts, source docs,
+normal adapter `raw/` artifacts, `hardware.json`, `run-metadata.json`, or paths
+outside the prepared workspace and allowed run-output artifacts. Patch capture
+still compares the source fixture to the post-task workspace, and verifier
+execution still follows patch capture.
 
 Directory fixture semantics for repo-task cases:
 
@@ -557,7 +574,10 @@ Workspace and artifact layout:
 - External-agent model-call logs, when a public external harness chooses to
   write them, use the context-provided
   `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not create
-  or require the file, and measured `run.jsonl` rows do not reference it.
+  or require the file, does not validate or parse it, and measured `run.jsonl`
+  rows do not reference it. Harness authors should prefer the recommended
+  per-call JSON object shape shown above, starting with
+  `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
   `verify/<case-id>/rep-NNN.stdout.log`, and

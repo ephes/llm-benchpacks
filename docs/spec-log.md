@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (external-agent recommended model-call JSONL shape)
+
+### Changed
+
+- Documented a recommended, non-enforced JSONL object shape for public
+  `external-agent` model-call logs written to the context-provided
+  `task/<case-id>/rep-NNN.model-calls.jsonl` path.
+- Recommended the minimal per-call line
+  `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`, with
+  optional safe timing, adapter/endpoint label, token count, and short error
+  fields.
+- Kept the artifact optional, harness-owned, and opaque to the runner. The
+  runner still does not pre-create, require, validate, parse, summarize,
+  report, or add the file to `run.jsonl`, and harness-owned calls remain
+  outside normal adapter `raw/` request/response artifacts.
+- Added explicit safety guidance against logging full prompts, full responses,
+  request bodies, headers, environment variables, API keys, bearer tokens, or
+  credentials in the default recommended shape.
+
+### Open Questions
+
+- A later production harness can prove whether the recommended shape should
+  become an enforced schema, parsed summary, report input, or result field.
+- Richer harness artifacts, process-tree cleanup, and task status/reporting
+  remain separate future external-agent slices.
+
 ## 2026-05-06 (external-agent optional model-call log path)
 
 ### Changed

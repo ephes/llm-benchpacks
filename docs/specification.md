@@ -251,8 +251,8 @@ stdout/stderr into the existing task logs, then captures the workspace patch
 and runs any verifier. The normal adapter call still happens before the
 repo-task task phase in this slice. The context also names an optional
 harness-owned model-call log path at
-`task/<case-id>/rep-NNN.model-calls.jsonl`; required logging, JSONL schema
-validation, parsing, summaries, and reports remain future work.
+`task/<case-id>/rep-NNN.model-calls.jsonl`; required logging, enforced JSONL
+schema validation, parsing, summaries, and reports remain future work.
 
 An external harness receives runner-owned inputs, not broad manifest command
 blobs: currently the appended prepared workspace path, case id, run output
@@ -274,14 +274,34 @@ write the existing task stdout/stderr logs through the runner-owned capture path
 under `task/<case-id>/rep-NNN.*.log` and may optionally write JSONL model-call
 telemetry to the context-provided
 `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
-validate, parse, summarize, or report that file in this slice. Other richer
-harness artifacts must be explicitly named by a later artifact/schema slice
-before they are allowed. It must not mutate pack-owned fixtures, prompts,
-verifier scripts, source docs, `run-metadata.json`, `hardware.json`, raw adapter
-artifacts, or any path outside the prepared workspace and permitted run-output
-artifacts. The current contract does not provide manifest task environment
-configuration, shell expansion, secret injection, arbitrary shell commands,
-workspace retention, or cleanup controls.
+pre-create, validate, parse, summarize, report, or add that file to `run.jsonl`
+in this slice. The recommended minimal JSONL line shape for harness authors is
+one JSON object per harness-owned model call:
+
+```json
+{"schema_version":1,"sequence":1,"model":"test-model","ok":true}
+```
+
+Recommended core fields are `schema_version` as integer `1` for this
+recommended shape, `sequence` as a positive integer call sequence within the
+external-agent task phase, `model` as the model identifier when known, and `ok`
+as a boolean success indicator. Useful optional fields include `started_at`,
+`ended_at`, `duration_s`, `adapter`, `endpoint`, `prompt_tokens`,
+`output_tokens`, `cached_prompt_tokens`, and a short `error` string when
+`ok` is false. This is guidance only: the runner treats the file as
+harness-owned and opaque. The default recommended shape should not log full
+prompts, full responses, request bodies, headers, environment variables, API
+keys, bearer tokens, or credentials. Richer harness-owned telemetry is outside
+the runner-normalized contract until a later schema slice explicitly defines
+it.
+
+Other richer harness artifacts must be explicitly named by a later
+artifact/schema slice before they are allowed. It must not mutate pack-owned
+fixtures, prompts, verifier scripts, source docs, `run-metadata.json`,
+`hardware.json`, raw adapter artifacts, or any path outside the prepared
+workspace and permitted run-output artifacts. The current contract does not
+provide manifest task environment configuration, shell expansion, secret
+injection, arbitrary shell commands, workspace retention, or cleanup controls.
 
 `harness.timeout_s` remains the case-local task-phase timeout. It is separate
 from adapter request timeouts, verifier `scoring.timeout_s`, and any future

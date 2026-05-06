@@ -890,7 +890,15 @@ if Path(args.workspace).resolve() != workspace.resolve():
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
 Path(context["run"]["model_call_log_path"]).write_text(
-    json.dumps({"sequence": 1, "model": "test-model", "ok": True}) + "\\n",
+    json.dumps(
+        {
+            "schema_version": 1,
+            "sequence": 1,
+            "model": "test-model",
+            "ok": True,
+        }
+    )
+    + "\\n",
     encoding="utf-8",
 )
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
@@ -930,7 +938,8 @@ print("external stderr trace", file=sys.stderr)
     source = tmp_path / "benchpacks" / "smoke-chat" / "fixtures" / "repo" / "README.md"
     assert source.read_text(encoding="utf-8") == "source repo\n"
     assert model_call_log_path.read_text(encoding="utf-8") == (
-        '{"sequence": 1, "model": "test-model", "ok": true}\n'
+        '{"schema_version": 1, "sequence": 1, '
+        '"model": "test-model", "ok": true}\n'
     )
 
     record = json.loads((out / "run.jsonl").read_text())
@@ -1010,7 +1019,15 @@ if context["case"]["id"] != "external-repo":
 if Path.cwd().resolve() != workspace.resolve():
     raise SystemExit(3)
 Path(context["run"]["model_call_log_path"]).write_text(
-    json.dumps({"sequence": 1, "model": "test-model", "ok": True}) + "\\n",
+    json.dumps(
+        {
+            "schema_version": 1,
+            "sequence": 1,
+            "model": "test-model",
+            "ok": True,
+        }
+    )
+    + "\\n",
     encoding="utf-8",
 )
 (workspace / "README.md").write_text("external repo\\n", encoding="utf-8")
@@ -1042,7 +1059,8 @@ print(f"external stdout case={args.case} rep={args.repetition}")
     assert (
         out / "task" / "external-repo" / "rep-001.model-calls.jsonl"
     ).read_text(encoding="utf-8") == (
-        '{"sequence": 1, "model": "test-model", "ok": true}\n'
+        '{"schema_version": 1, "sequence": 1, '
+        '"model": "test-model", "ok": true}\n'
     )
     assert not (
         out / "task" / "fenced-repo" / "rep-001.model-calls.jsonl"

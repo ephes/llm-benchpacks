@@ -59,7 +59,12 @@ path when supplied, an optional harness-owned model-call JSONL path at
 `task/<case-id>/rep-NNN.model-calls.jsonl`, and the selected adapter/model/
 endpoint/defaults. It is harness input only and is not duplicated into
 `run.jsonl`; the runner exposes the model-call path but does not require or
-parse that file.
+parse that file. Harness authors who write the optional model-call JSONL file
+should prefer one object per call with a minimal line such as
+`{"schema_version":1,"sequence":1,"model":"test-model","ok":true}` and should
+avoid putting full prompts, full responses, request bodies, headers,
+environment variables, API keys, bearer tokens, or credentials in the default
+telemetry shape.
 
 For long metadata-backed matrix runs, `scripts/benchpack-tmux-matrix` wraps the
 existing `benchpack run` command in one tmux session with deterministic pack

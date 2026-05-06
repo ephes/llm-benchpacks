@@ -299,10 +299,13 @@ schemas remain unchanged by default; the generated external-agent context file
 is harness input and is not duplicated into `run.jsonl`; the optional
 model-call JSONL path exposed through that context is not required, parsed,
 summarized, or reported. Harness-owned model calls are runner/harness concerns
-rather than normal adapter request fields. External harnesses may mutate only
-the prepared workspace and write only allowed run-output artifacts. Pack-owned
-fixtures, prompts, verifier scripts, source docs, and raw model artifacts
-remain immutable or runner-owned. Task
+rather than normal adapter request fields. The recommended JSONL line shape
+starts with
+`{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`, but the
+runner does not validate or normalize that file. External harnesses may mutate
+only the prepared workspace and write only allowed run-output artifacts.
+Pack-owned fixtures, prompts, verifier scripts, source docs, and raw model
+artifacts remain immutable or runner-owned. Task
 environment, retention, richer task status/reporting, pack-level harness
 defaults, full production external coding-agent integration, and repo-task warmups
 remain separate future design and implementation slices.
@@ -316,10 +319,15 @@ optional run metadata path, selected model, adapter id, endpoint argument,
 defaults, compatibility options, and an optional
 `task/<case-id>/rep-NNN.model-calls.jsonl` path as explicit harness input. That
 optional JSONL file is a harness-owned artifact when written; it is not
-required, parsed, summarized, or reported. Those calls do not become normal
-adapter calls, do not change adapter envelopes, do not add `run.jsonl` fields,
-and do not write normal `raw/` artifacts unless a later schema slice defines
-that mapping.
+required, pre-created, validated, parsed, summarized, reported, or added to
+`run.jsonl`. The recommended JSONL shape uses one object per model call with
+`schema_version`, `sequence`, `model`, and `ok` as the minimal fields and
+optional timing/token/error fields when safe. The default shape should not
+contain full prompts, full responses, request bodies, headers, environment
+variables, API keys, bearer tokens, or credentials. Those calls do not become
+normal adapter calls, do not change adapter envelopes, do not add `run.jsonl`
+fields, and do not write normal `raw/` artifacts unless a later schema slice
+defines that mapping.
 
 External harness process failures divide the same way as current task execution.
 Unsafe paths, unwritable required logs, inability to stop a subprocess, or

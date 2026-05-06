@@ -462,8 +462,26 @@ validate its JSONL schema, parse it into summaries or reports, add it to
 `run.jsonl`, or mirror harness-owned calls into normal adapter `raw/`
 request/response artifacts.
 
+The recommended, non-enforced JSONL line shape is one JSON object per
+harness-owned model call, with this minimal core:
+
+```json
+{"schema_version":1,"sequence":1,"model":"test-model","ok":true}
+```
+
+`schema_version` is currently integer `1`, `sequence` is the positive call
+sequence within the external-agent task phase, `model` is the model identifier
+when known, and `ok` indicates whether the call completed successfully.
+Harnesses may add safe optional timing, adapter/endpoint label, token count, or
+short error fields. The recommended default shape should not include full
+prompts, full responses, request bodies, headers, environment variables, API
+keys, bearer tokens, or credentials.
+
 Reason: real external agents need a stable place to put model-call telemetry
 without changing normal adapter, raw artifact, result, compare, or report
 contracts. Keeping the file under the existing task artifact area makes the
 handoff deterministic and inspectable while preserving optionality for fake
-agents and early integrations.
+agents and early integrations. Recommending a tiny object shape gives harness
+authors a portable starting point without committing the runner to validation,
+normalization, summaries, or result schema fields before real harnesses prove
+what should be standardized.

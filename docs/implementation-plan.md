@@ -392,7 +392,11 @@ the same adapter/result/report boundaries. The follow-up optional model-call
 log path slice landed 2026-05-06: external-agent contexts now expose
 `run.model_call_log_path` at
 `task/<case-id>/rep-NNN.model-calls.jsonl` without requiring, parsing, reporting,
-or adding that artifact to `run.jsonl`.
+or adding that artifact to `run.jsonl`. The next recommended-shape slice also
+landed 2026-05-06: docs and fake external-agent coverage now use the minimal
+recommended JSONL line
+`{"schema_version":1,"sequence":1,"model":"test-model","ok":true}` while
+leaving the runner's treatment of the file optional and opaque.
 
 Scope:
 
@@ -620,6 +624,16 @@ Scope:
   `task/<case-id>/rep-NNN.model-calls.jsonl`. The runner does not pre-create,
   require, validate, parse, summarize, report, or add that file to `run.jsonl`;
   harness-owned model calls remain outside normal adapter `raw/` artifacts.
+- Document a recommended external-agent model-call JSONL object shape. **Landed
+  2026-05-06** as guidance and fake external-agent coverage only. The
+  recommended minimal per-call line is
+  `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`, with
+  optional safe timing, adapter/endpoint label, token count, and short error
+  fields. This did not add runner parsing, validation, summaries, reports,
+  result schema fields, or normal adapter `raw/` artifacts for harness-owned
+  calls, and it explicitly avoids recommending full prompts, full responses,
+  request bodies, headers, environment variables, API keys, bearer tokens, or
+  credentials in the default shape.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -637,9 +651,10 @@ Scope:
   2026-05-05 production external contract refinement, and a runner-side
   subprocess skeleton for deterministic external harness boundary tests, plus
   the first public `external-agent` CLI routing slice and optional model-call
-  log artifact path. Full production external coding-agent execution, required
-  model-call logging/schema/reporting, and richer harness configuration remain
-  planned later.
+  log artifact path plus a recommended, non-enforced model-call JSONL line
+  shape. Full production external coding-agent execution, required model-call
+  logging/schema/reporting, and richer harness configuration remain planned
+  later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
