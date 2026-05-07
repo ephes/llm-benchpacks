@@ -20,6 +20,14 @@ working history and open questions.
 
 ### Changed
 
+- Added `docs/gemma4-strict-gguf-trihost-summary.md`, a compact durable
+  summary of the completed strict same-GGUF Gemma 4 E2B Q4_K_M four-pack
+  evidence across M5, M4, and Hetzner. It records the exact artifact,
+  result directories, outcome matrix, comparable runtime-sweep token/s table,
+  Hetzner workload token/s rows, interpretation boundaries, production
+  restoration boundary, and compact-artifact policy without committing
+  generated result artifacts.
+
 - Completed the missing Hetzner strict same-GGUF four-pack evidence for the
   selected Gemma 4 E2B Q4_K_M artifact. The remote checkout was clean at
   `65baa81`, then fast-forwarded from a local git bundle to `b1e62c0` because

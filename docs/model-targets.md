@@ -167,7 +167,8 @@ default answer to every new “current preferred model” question.
   baseline changes. The sibling repo now has both vLLM E2B readiness evidence
   and strict same-GGUF llama.cpp E2B Q4_K_M checksum/load/memory-fit evidence;
   this repo now has strict-GGUF four-pack evidence for the same artifact on M5,
-  M4, and Hetzner.
+  M4, and Hetzner, summarized in
+  `docs/gemma4-strict-gguf-trihost-summary.md`.
 - Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
   first tri-host campaign and keep its placeholder metadata examples aligned
   with verified artifacts when they are known.
