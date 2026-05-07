@@ -21,6 +21,10 @@ and OpenAI-compatible local servers.
 ## Working Rules
 
 - Treat benchmark packs, specs, and result schemas as source contracts.
+- Treat `docs/implementation-plan.md` as this repo's backlog. Use
+  `docs/spec-log.md` for dated backlog/status movement, and use the sibling
+  `../llm-node-bare/docs/backlog.md` only for deployment-side Hetzner service
+  work referenced from this repo.
 - Keep raw generated results out of git unless a small curated artifact is
   intentionally committed.
 - Prefer deterministic scoring over LLM-as-judge. If a pack uses LLM-as-judge,
