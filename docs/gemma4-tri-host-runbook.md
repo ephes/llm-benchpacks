@@ -594,9 +594,11 @@ that the result is runtime-and-format evidence.
   captured for the local M5 and M4 Studio first candidate. Same-commit M4 and
   M5 four-pack matrices have also run with `--reasoning off`. Equivalent
   checksum, strict same-GGUF `llama-server` load behavior, and memory fit
-  remain unverified on Hetzner. The Hetzner deployment-side repo has verified
-  SSH/inventory and an isolated Gemma-4-capable vLLM candidate, but not
-  same-GGUF llama.cpp parity or full-card Gemma 4 memory fit.
+  remain unverified on Hetzner. The Hetzner deployment-side repo has now
+  verified GPU-driver recovery, Qwen2.5 baseline restoration, a
+  Gemma-4-capable vLLM production role path, and a local-only full-card
+  idle-load fit for pinned `google/gemma-4-E2B-it`; those are
+  runtime-and-format vLLM readiness facts, not same-GGUF llama.cpp parity.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
@@ -611,17 +613,19 @@ that the result is runtime-and-format evidence.
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.
 - Provision and test the Hetzner authenticated `/v1` token outside the repo.
-- Hetzner SSH/inventory is confirmed in the sibling deployment repo, but the
-  next deployment-side gate is GPU-driver/service recovery after a post-apt
-  NVIDIA driver/library mismatch: `nvidia-smi` fails, `llm.service` is in
-  `activating (auto-restart)`, local Qwen2.5 `/v1/models` is down, and
-  management `/readyz/` reports `backend_available: false`.
-- After the deployment host is healthy again, serving readiness is still
-  blocked on LNB-008: an operator-approved exclusive-GPU full-card E2B load
-  preflight with the resident Qwen2.5 service stopped, because Qwen2.5 occupied
-  about 16.1 GiB of the 20,475 MiB RTX 4000 SFF Ada card during the first
-  isolated preflight. Schedule Hetzner benchmark runs only after that preflight
-  succeeds and the Qwen2.5 service has been restored and re-verified.
+- Hetzner SSH/inventory, GPU-driver recovery, Qwen2.5 baseline restoration,
+  and the LNB-008 full-card local-only vLLM E2B load preflight are recorded as
+  landed in the sibling deployment repo. The preflight used the resident
+  Qwen2.5 service stopped for an exclusive-GPU window, reached local
+  `/v1/models`, measured about 17,600 MiB Gemma 4 GPU memory use, and restored
+  the Qwen2.5 baseline afterward. No benchmark or generation call was made in
+  that deployment-side item.
+- The Hetzner authenticated benchmark access contract has landed in sibling
+  LNB-005: use public TLS `/v1` through the Django Bearer-auth proxy with token
+  env var `BENCHPACK_HETZNER_OPENAI_TOKEN`; direct unauthenticated vLLM is not
+  the benchmark contract. Schedule public remote benchmark runs only after live
+  token provisioning, an authenticated smoke, and explicit operator approval
+  for the target service mode.
 - On Hetzner, use the sibling readiness notes for the isolated Hugging Face
   cache layout; the complete pinned E2B weights are under the alternate
   `models--google--gemma-4-E2B-it/snapshots/...` layout, not the incomplete

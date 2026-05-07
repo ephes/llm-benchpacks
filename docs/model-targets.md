@@ -91,22 +91,24 @@ Current blockers:
   provisioning for the public Hetzner `/v1` surface remains an operational
   prerequisite for live runs. The tmux helper can pass the same option through
   in dry-run matrices without reading the token value.
-- Live Hetzner SSH/inventory was confirmed through the sibling deployment repo
-  in an initial 2026-05-07 read-only recheck: the host had an RTX 4000 SFF Ada
-  with 20,475 MiB VRAM, driver 580.126.09, active Qwen2.5 vLLM service, healthy
-  management/proxy endpoints, and public unauthenticated `/v1/models` returning
-  HTTP 401.
-- The sibling deployment repo has an isolated Gemma-4-capable vLLM candidate
-  (`vllm==0.20.1+cu129`, `torch==2.11.0+cu129`) and the pinned E2B snapshot
-  cached. The current deployment-side blocker is a later same-day post-apt
-  NVIDIA driver/library mismatch: `nvidia-smi` fails, `llm.service` is in
-  auto-restart, local Qwen2.5 `/v1/models` is down, and management `/readyz/`
-  reports `backend_available: false`.
-- After GPU/service recovery and Qwen2.5 baseline verification, Hetzner still
-  has not proven full-card idle-loaded E2B fit because the resident Qwen2.5
-  service remained active during the first preflight and occupied about
-  16.1 GiB VRAM. An operator-approved exclusive-GPU load preflight remains
-  required before changing the deployed model or running Hetzner benchmarks.
+- Live Hetzner SSH/inventory, GPU-driver recovery, Qwen2.5 baseline
+  restoration, Gemma-4-capable vLLM role support, and a local-only full-card
+  idle-load preflight for pinned `google/gemma-4-E2B-it` are now recorded as
+  landed in the sibling deployment repo's backlog. The proven service-shaped
+  Hetzner path is vLLM `0.20.1+cu129` with Torch `2.11.0+cu129`, BF16 Hugging
+  Face weights, 8K context, one sequence, `--gpu-memory-utilization 0.85`,
+  text-only multimodal limits, and `--enforce-eager`. That is not strict
+  same-GGUF parity with the Apple `llama-server` runs.
+- Hetzner strict same-GGUF `llama-server`/llama.cpp support, checksum parity,
+  comparable runtime options, and memory fit remain separate unverified
+  blockers. Use the vLLM route only as runtime-and-format evidence unless a
+  later strict-GGUF preflight lands.
+- Token provisioning for authenticated public Hetzner `/v1` benchmark access
+  remains the next operational prerequisite before remote `benchpack` runs.
+  The sibling LNB-005 contract has landed: use public TLS `/v1` through the
+  Django Bearer-auth proxy with token env var
+  `BENCHPACK_HETZNER_OPENAI_TOKEN`. What remains is operator token
+  provisioning plus an authenticated live smoke before benchmark scheduling.
   On Hetzner, follow the sibling readiness notes for the isolated Hugging Face
   cache layout because the complete pinned E2B weights are in the alternate
   `models--google--gemma-4-E2B-it/snapshots/...` directory.
@@ -153,10 +155,13 @@ default answer to every new “current preferred model” question.
 ## Next Catalog Work
 
 - Capture post-download checksums, runtime versions, load commands, local
-  tokenizer/chat-template behavior, and memory fit for the selected Gemma 4
-  artifacts on Hetzner before any live tri-host benchmark matrix.
+  tokenizer/chat-template behavior, and memory fit for any selected Gemma 4
+  Hetzner mode before live benchmark matrices. The sibling repo has current
+  vLLM E2B readiness evidence; strict same-GGUF llama.cpp evidence is still
+  absent.
 - Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
   first tri-host campaign and keep its placeholder metadata examples aligned
   with verified artifacts when they are known.
-- Revisit the catalog when Hetzner token provisioning, live host inventory, and
-  Gemma 4 serving readiness are confirmed.
+- Revisit the catalog when an authenticated public Hetzner `/v1` benchmark
+  smoke succeeds or when a strict same-GGUF Hetzner `llama-server` preflight
+  lands.

@@ -16,6 +16,31 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (Hetzner backlog sync)
+
+### Changed
+
+- Synced `llm-benchpacks` forward-looking Gemma 4 planning docs with the
+  sibling `llm-node-bare` backlog after LNB-008 and LNB-009 landed there.
+- Updated the model target catalog, implementation plan, and tri-host runbook
+  to stop treating Hetzner GPU-driver recovery, Qwen2.5 baseline restoration,
+  Gemma-4-capable vLLM role support, and the vLLM E2B full-card idle-load
+  preflight as current blockers.
+- Preserved the comparison boundary: the proven Hetzner route is
+  service-shaped vLLM with Hugging Face BF16 weights, not strict same-GGUF
+  `llama-server` parity with the Apple runs. No SSH command, endpoint call,
+  benchmark run, generated result artifact, inventory change, or secret change
+  was made in this repo.
+
+### Open Questions
+
+- The sibling LNB-005 authenticated benchmark access contract has landed, with
+  `BENCHPACK_HETZNER_OPENAI_TOKEN` as the benchmark token environment variable.
+  Live token provisioning and an authenticated public `/v1` smoke remain the
+  next prerequisites before remote `benchpack` runtime-sweep runs.
+- Strict same-GGUF Hetzner llama.cpp checksum/load/memory-fit parity remains
+  unverified and should stay separate from the vLLM service-shaped path.
+
 ## 2026-05-07 (Gemma 4 Apple strict-GGUF four-pack)
 
 ### Changed
@@ -56,9 +81,10 @@ working history and open questions.
 - The `patch-from-failure` verifier failure remains a consistent tiny
   repo-task model/task-quality signal on both Apple hosts, not a serving or
   adapter blocker.
-- Hetzner remains separate and blocked by deployment-side GPU-driver/service
-  recovery, exclusive-GPU full-card Gemma 4 serving preflight, same-GGUF
-  llama.cpp parity, and authenticated benchmark access.
+- Hetzner remains separate from this Apple strict-GGUF result. The later
+  Hetzner backlog sync entry above supersedes the deployment-side recovery and
+  vLLM full-card preflight blockers; strict same-GGUF llama.cpp parity and
+  authenticated benchmark access remain separate.
 
 ## 2026-05-07 (Gemma 4 M4 strict-GGUF preflight)
 
@@ -142,13 +168,17 @@ working history and open questions.
   recovery and a healthy Qwen2.5 baseline again. Only then should LNB-008 stop
   the current `llm` service for an exclusive-GPU full-card preflight with
   temporary local-only vLLM on `127.0.0.1:18007`.
-- Authenticated public benchmark credentials remain a deployment-side procedure
-  item even though `llm-benchpacks` already supports
-  `--openai-api-key-env`.
+- Superseded by the 2026-05-07 Hetzner backlog sync entry above: GPU-driver
+  recovery, Qwen2.5 baseline restoration, and the LNB-008 full-card vLLM E2B
+  idle-load preflight have since landed in the sibling deployment repo.
+- The sibling LNB-005 contract later landed the authenticated benchmark access
+  procedure; live token provisioning and authenticated smoke execution remain
+  later operator actions.
 - Local M5 `runtime-sweep` remained an independent gate at the time of this
   Hetzner recheck; the follow-up same-day local M5 entry below records that
-  result. M4 checksum/load/smoke and Hetzner full-card serving preflight remain
-  independent gates before any meaningful M4/M5/Hetzner comparison matrix.
+  result. M4 checksum/load/smoke and Hetzner full-card serving preflight were
+  independent gates at the time of this entry and are superseded by the later
+  same-day Apple and Hetzner backlog-sync entries above.
 
 ## 2026-05-07 (Gemma 4 local M5 runtime-sweep with reasoning off)
 

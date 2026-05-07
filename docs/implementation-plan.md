@@ -383,24 +383,20 @@ Scope:
   `patch-from-failure` reached the endpoint but failed `verify-script`
   scoring. Runtime-sweep compare reported `prefill parity=comparable` for all
   three cases. Median total TPS M5 vs M4 was 158.45 vs 137.19 short, 159.73 vs
-  137.83 medium, and 161.02 vs 138.63 long. Hetzner checksum parity, strict
-  same-GGUF `llama-server` load behavior, comparable runtime options, memory
-  fit, token provisioning, SSH/inventory, and serving readiness remain
-  preflight blockers before any tri-host benchmark matrix.
+  137.83 medium, and 161.02 vs 138.63 long. Hetzner strict same-GGUF
+  `llama-server` checksum parity, load behavior, comparable runtime options,
+  and memory fit remain preflight blockers for a strict tri-host matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
-  **Partly landed 2026-05-07.** An initial read-only SSH recheck and sibling
-  `llm-node-bare` notes confirmed the live GEX44-class host, RTX 4000 SFF Ada
-  20 GB inventory, healthy resident Qwen2.5 service, public unauthenticated
-  401 boundary, an isolated Gemma-4-capable vLLM 0.20.1+cu129 runtime, and a
-  cached pinned E2B snapshot. A later same-day post-apt health gate superseded
-  that healthy snapshot: `nvidia-smi` now fails with a NVIDIA driver/library
-  mismatch, `llm.service` is in auto-restart, local Qwen2.5 `/v1/models` is
-  down, and management `/readyz/` reports `backend_available: false`. Hetzner
-  Gemma 4 serving readiness first needs operator-approved GPU-driver/service
-  recovery and Qwen2.5 baseline verification; after that, LNB-008 still must
-  prove exclusive-GPU full-card E2B load fit and restore/re-verify Qwen2.5
-  before any Hetzner benchmark scheduling. Authenticated benchmark credentials
-  also remain a deployment-side procedure item before public remote runs.
+  **Updated 2026-05-07.** Companion `llm-node-bare` backlog entries now record
+  GPU-driver recovery, Qwen2.5 baseline restoration, a pinned Gemma 4 E2B
+  vLLM full-card idle-load preflight on the RTX 4000 SFF Ada host, and
+  production role support for the Gemma-4-capable vLLM stack. That clears the
+  deployment-side vLLM service-shaped readiness blockers that were previously
+  recorded in this repo, but it does not prove strict same-GGUF llama.cpp
+  parity. The sibling LNB-005 authenticated benchmark access contract has also
+  landed with `BENCHPACK_HETZNER_OPENAI_TOKEN`; live token provisioning and an
+  authenticated remote smoke remain required before public remote `benchpack`
+  runs.
 
 Validation:
 
@@ -876,8 +872,11 @@ Make remote GPU runs practical.
 **Status:** planned. The model-target catalog and Gemma 4 tri-host planning
 slice identified two immediate blockers for the Hetzner path. Authenticated
 OpenAI-compatible endpoint support in this repo has landed through
-`openai-chat --openai-api-key-env`; verified SSH/inventory access plus runtime
-readiness remain tracked in the sibling deployment repo's `docs/backlog.md`.
+`openai-chat --openai-api-key-env`; the sibling deployment repo has current
+SSH/inventory and service-shaped vLLM Gemma 4 readiness evidence. The
+authenticated benchmark access contract has landed in the sibling repo; the
+next remote-run blocker is live token provisioning plus an authenticated smoke,
+while strict same-GGUF llama.cpp readiness remains a separate unproven path.
 
 Scope:
 
