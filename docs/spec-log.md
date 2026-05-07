@@ -33,8 +33,8 @@ working history and open questions.
   on the first line with the literal diff fence, to close the fence, to use
   exact repo-root paths, and to produce a `git apply`-applicable unified diff.
   The prompts now explicitly forbid `<think>`, hidden reasoning, analysis,
-  explanations, shell commands, markdown outside the fence, placeholder
-  `index` lines, and invented paths.
+  explanations, shell commands, markdown outside the fence, `index` lines, and
+  invented paths.
 - Added focused prompt contract tests for the stricter format wording and
   embedded source/test anchors. Runner semantics, result schemas, adapter APIs,
   verifier behavior, pack manifests, tmux helper behavior, default matrices,

@@ -48,7 +48,7 @@ Output contract:
 - Do not include `<think>`, hidden reasoning, analysis, explanations, shell
   commands, or markdown outside the fenced block.
 - Use only exact repo-root paths listed above.
-- Do not use placeholder `index` lines or invented paths.
+- Omit `index` lines and do not invent paths.
 - Inside the block, return a complete unified diff that applies with
   `git apply` from the repository root.
 - Close the fenced block.
