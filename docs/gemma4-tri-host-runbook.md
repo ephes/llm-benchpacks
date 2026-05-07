@@ -337,9 +337,7 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
   M4, and Hetzner runtime directories reported `prefill parity=comparable` for
   `short`, `medium`, and `long`. Median total TPS M5 vs M4 vs Hetzner was
   158.45 vs 137.19 vs 118.49 short, 159.73 vs 137.83 vs 117.50 medium, and
-  161.02 vs 138.63 vs 117.33 long. Treat this as preliminary strict-GGUF
-  tri-host runtime-sweep evidence because the Hetzner slice did not run the
-  full four-pack matrix.
+  161.02 vs 138.63 vs 117.33 long.
 - Post-run cleanup: the temporary `llama-server` was stopped, no listener
   remained on TCP port 18011, no matching `llama-server.*gemma4-e2b-q4km`
   process remained, production `llm.service` was restarted, `llm`, `llm-mgmt`,
@@ -347,6 +345,42 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
   public `/readyz/` reported `backend_available=true`, unauthenticated public
   `/v1/models` returned HTTP 401, and GPU memory returned to about 18,328 MiB
   used by production vLLM.
+- Missing-pack completion slice: a later same-day exclusive-GPU window ran
+  exactly one `desktop-django-wrap` and exactly one `patch-from-failure` from
+  the remote repo at `b1e62c0`. The remote repo was clean before running; it
+  was fast-forwarded from a local git bundle because the remote GitHub SSH
+  origin needed host-key verification. The helper dry run showed only the two
+  intended packs and did not include `--openai-api-key-env`.
+- `desktop-django-wrap` status:
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-161956-wrap`
+  wrote two rows, both `ok=true`, and both deterministic regex cases passed.
+- `patch-from-failure` status:
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-161956-patch`
+  wrote one `fix-greeting` row with adapter `ok=true`, but deterministic
+  `verify-script` scoring failed. Sampled remote task/verify artifacts showed
+  the fenced unified diff could not be applied cleanly and the workspace was
+  left unchanged, matching the Apple M4/M5 failure class for this artifact.
+- Four-pack tri-host status: strict same-GGUF Gemma 4 E2B Q4_K_M evidence now
+  covers `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure` on M5, M4, and Hetzner. Smoke passed on all three
+  hosts, runtime rows were all `ok=true`, wrap regex scoring passed on all
+  three hosts, and patch reached each endpoint but failed deterministic
+  verification on all three hosts. Treat wrap as prompt-only behavior and
+  patch as a tiny repo-task model/task-quality signal, not broad coding-agent
+  quality.
+- Second-slice cleanup: the temporary `llama-server` was stopped again, no
+  listener remained on TCP port 18011, no matching
+  `llama-server.*gemma4-e2b-q4km` process remained, production `llm.service`
+  was restarted, `llm`, `llm-mgmt`, and `caddy` were active/enabled, public
+  `/healthz/` returned HTTP 200, public `/readyz/` reported
+  `backend_available=true`, unauthenticated public `/v1/models` returned
+  HTTP 401, and GPU memory returned to about 18,328 MiB used by production
+  vLLM.
+- Second-slice artifacts: only compact `run.jsonl`, `summary.md`,
+  `hardware.json`, and `run-metadata.json` files were pulled back for the wrap
+  and patch directories. Remote `raw/`, `patch/`, `task/`, and `verify/`
+  payloads stayed on Hetzner. Generated result artifacts remain ignored and
+  were not force-added.
 
 ## Metadata Examples
 
@@ -668,21 +702,23 @@ that the result is runtime-and-format evidence.
 
 - Post-download checksum and conservative `llama-server` load behavior are now
   captured for the local M5, M4 Studio, and Hetzner first candidate.
-  Same-commit M4 and M5 four-pack matrices have also run with `--reasoning off`.
-  Hetzner has local-only strict same-GGUF `llama-server` checksum/load/memory-fit
-  evidence, but no Hetzner benchmark pack, runtime-sweep, load test, warmup, or
-  quality evaluation has run.
+  Same-commit M4 and M5 four-pack matrices have run with `--reasoning off`.
+  Hetzner now has local-only strict same-GGUF `llama-server`
+  checksum/load/memory-fit evidence plus four-pack benchmark evidence across
+  the smoke/runtime and wrap/patch slices. The remaining work is interpretation
+  and any future broader campaign, not first evidence collection for this
+  selected artifact.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
-  quality authorization; the local M5 load and minimal smoke checks are not
-  benchmark quality evidence.
+  quality authorization; the completed E2B four-pack is still compact
+  benchmark evidence, not broad model-quality evidence.
 - Apple Gemma 4 thinking behavior is resolved for the strict-GGUF
-  `llama-server --reasoning off` path on M5 and M4. The remaining Apple-lane
+  `llama-server --reasoning off` path on M5, M4, and Hetzner. The remaining
   quality caveat is consistent `patch-from-failure` `verify-script` failure on
-  both hosts.
-- Schedule explicit operator-approved Hetzner benchmark runs only after choosing
-  the strict same-GGUF lane versus the service-shaped vLLM lane and recording
-  matching metadata.
+  all three hosts.
+- For future Hetzner benchmark runs, choose the strict same-GGUF lane versus
+  the service-shaped vLLM lane explicitly and record matching metadata before
+  stopping production.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.

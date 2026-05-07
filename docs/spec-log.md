@@ -20,6 +20,52 @@ working history and open questions.
 
 ### Changed
 
+- Completed the missing Hetzner strict same-GGUF four-pack evidence for the
+  selected Gemma 4 E2B Q4_K_M artifact. The remote checkout was clean at
+  `65baa81`, then fast-forwarded from a local git bundle to `b1e62c0` because
+  the remote's GitHub SSH origin was blocked by host-key verification. The
+  remote tree was clean before running.
+- Rechecked the live host before disruption: SSH worked; `llm`, `llm-mgmt`,
+  and `caddy` were active/enabled; public `/healthz/` returned HTTP 200;
+  public `/readyz/` returned `backend_available=true`; unauthenticated public
+  `/v1/models` returned HTTP 401; TCP port 18011 had no listener; no matching
+  `llama-server.*gemma4-e2b-q4km` process existed; and production GPU use was
+  about 18,328 MiB at 38 C and 11.95 W.
+- Created ignored remote metadata
+  `metadata/hetzner-gemma4-llama-strict-gguf-20260507-161956-wrap-patch.json`
+  and dry-ran `scripts/benchpack-tmux-matrix` for exactly
+  `desktop-django-wrap` and `patch-from-failure` with `openai-chat`,
+  `gemma4-e2b-q4km`, `http://127.0.0.1:18011/v1`, and no auth env var.
+- Took a second short exclusive-GPU window by stopping only production
+  `llm.service`, starting the same isolated CUDA `llama-server` command on
+  `127.0.0.1:18011`, verifying local `/v1/models` returned one model, and
+  running exactly one missing wrap pack and exactly one missing patch pack.
+  `desktop-django-wrap` wrote
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-161956-wrap`
+  with two rows, both `ok=true`, and both regex cases passed.
+  `patch-from-failure` wrote
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-161956-patch`
+  with one `fix-greeting` row, adapter `ok=true`, and deterministic
+  `verify-script` scoring failed. The sampled verifier artifact showed
+  `exit_code=1`; the task stderr summarized that the unified diff could not be
+  applied cleanly and the workspace was left unchanged. This matches the Apple
+  M4/M5 patch failure class and is model/task-quality evidence, not a serving
+  or adapter failure.
+- Pulled back only compact files from the two new Hetzner result directories:
+  `run.jsonl`, `summary.md`, `hardware.json`, and `run-metadata.json`. Remote
+  `raw/`, `patch/`, `task/`, and `verify/` artifacts stayed on Hetzner, and
+  generated `results/*` artifacts remain ignored and uncommitted.
+- Restored production after the two-pack slice. Final checks passed:
+  `llm`, `llm-mgmt`, and `caddy` active/enabled; public `/healthz/` HTTP 200;
+  public `/readyz/` with `backend_available=true`; unauthenticated public
+  `/v1/models` HTTP 401; no listener on TCP port 18011; no matching
+  `llama-server.*gemma4-e2b-q4km` process; and GPU memory back to about
+  18,328 MiB used.
+- Generated a read-only `benchpack report` across the strict-GGUF tri-host
+  four-pack set. The report warns when mixed pack IDs are compared together,
+  so performance claims stay limited to the matching `runtime-sweep` compare.
+  Wrap and patch are recorded as scoring outcomes only.
+
 - Ran the next narrow Hetzner strict same-GGUF benchmark slice for the selected
   Gemma 4 E2B Q4_K_M artifact. The remote `/Users/jochen/projects/llm-benchpacks`
   checkout did not already exist, so it was created from the clean local
@@ -101,11 +147,11 @@ working history and open questions.
 - Authenticated public `/v1` smoke is complete for the Qwen2.5 production vLLM
   lane. It remains separate from Gemma 4 service-shaped vLLM evidence and from
   the strict same-GGUF local-only `llama-server` lane.
-- Hetzner strict same-GGUF `smoke-chat` and `runtime-sweep` now pass for the
-  selected Gemma 4 E2B Q4_K_M artifact. The remaining scheduling question is
-  whether to spend another exclusive-GPU window on the full four-pack tri-host
-  matrix, including the prompt-only wrap pack and the tiny repo-task patch pack
-  that already fails verification consistently on the Apple hosts.
+- Hetzner strict same-GGUF `smoke-chat`, `runtime-sweep`,
+  `desktop-django-wrap`, and `patch-from-failure` have now all run for the
+  selected Gemma 4 E2B Q4_K_M artifact. The strict-GGUF tri-host four-pack
+  evidence is complete enough to summarize, with patch verifier failure
+  consistent across M5, M4, and Hetzner.
 
 ## 2026-05-07 (External-agent model-call summaries)
 

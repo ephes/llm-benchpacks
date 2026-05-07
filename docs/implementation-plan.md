@@ -400,8 +400,18 @@ Scope:
   runtime directories plus the new Hetzner runtime directory reported
   `prefill parity=comparable` for short, medium, and long; median total TPS
   M5 vs M4 vs Hetzner was 158.45 vs 137.19 vs 118.49 short, 159.73 vs 137.83
-  vs 117.50 medium, and 161.02 vs 138.63 vs 117.33 long. This is preliminary
-  strict-GGUF tri-host runtime-sweep evidence, not a full four-pack matrix.
+  vs 117.50 medium, and 161.02 vs 138.63 vs 117.33 long. **Hetzner strict
+  same-GGUF wrap/patch completion slice landed 2026-05-07.** A follow-up
+  exclusive-GPU window fast-forwarded the clean remote repo to `b1e62c0`,
+  dry-ran the helper for exactly `desktop-django-wrap` and
+  `patch-from-failure`, and ran exactly one of each against the same
+  local-only CUDA endpoint. Wrap wrote two `ok=true` rows and both regex cases
+  passed. Patch wrote one `ok=true` adapter row and failed deterministic
+  `verify-script` because the generated unified diff could not be applied
+  cleanly. Production was restored healthy afterward. This completes the
+  strict-GGUF tri-host four-pack evidence for the selected artifact; keep
+  throughput claims limited to matching `runtime-sweep` reports and treat
+  wrap/patch as scoring outcomes.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Updated 2026-05-07.** Companion `llm-node-bare` backlog entries now record
   GPU-driver recovery, Qwen2.5 baseline restoration, a pinned Gemma 4 E2B
@@ -908,11 +918,11 @@ Make remote GPU runs practical.
 repo has landed through `openai-chat --openai-api-key-env`; the sibling
 deployment repo has current SSH/inventory, service-shaped vLLM Gemma 4
 readiness evidence, authenticated benchmark access, a live authenticated public
-`smoke-chat`, strict same-GGUF CUDA `llama-server` preflight evidence, and a
-first strict same-GGUF Hetzner `smoke-chat` plus `runtime-sweep` slice. The
-remaining remote-run blocker is not runner capability; it is explicit operator
-scheduling for broader matrices, especially the full strict-GGUF four-pack
-tri-host pass.
+`smoke-chat`, strict same-GGUF CUDA `llama-server` preflight evidence, and
+strict same-GGUF Hetzner four-pack evidence split across the smoke/runtime and
+wrap/patch slices on 2026-05-07. The remaining remote-run blocker is not
+runner capability; it is explicit operator scheduling for broader future
+matrices beyond this completed strict-GGUF tri-host four-pack.
 
 Scope:
 
