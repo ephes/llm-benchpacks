@@ -19,12 +19,25 @@ DEFAULT_PACKS = (
     "desktop-django-wrap",
     "patch-from-failure",
 )
+CODING_TASK_PACKS = (
+    "patch-from-failure",
+    "python-regression-fix",
+    "django-dashboard-regression-fix",
+)
+DEFAULT_PACK_SET = "default"
+CODING_TASK_PACK_SET = "coding-tasks"
+PACK_SETS = {
+    DEFAULT_PACK_SET: DEFAULT_PACKS,
+    CODING_TASK_PACK_SET: CODING_TASK_PACKS,
+}
 
 PACK_LABEL_SUFFIXES = {
     "smoke-chat": "smoke",
     "runtime-sweep": "runtime",
     "desktop-django-wrap": "wrap",
     "patch-from-failure": "patch",
+    "python-regression-fix": "python-regression",
+    "django-dashboard-regression-fix": "dashboard-regression",
 }
 TMUX_FAILURE_ENV = "BENCHPACK_MATRIX_FAILED"
 
@@ -214,6 +227,8 @@ def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
 def _print_dry_run(args: argparse.Namespace, commands: list[MatrixCommand]) -> None:
     print("# benchpack-tmux-matrix dry run")
     print(f"# session: {args.session_name}")
+    if args.pack_set is not None:
+        print(f"# pack-set: {args.pack_set}")
     for command in commands:
         print(f"# pack: {command.pack}")
         print(f"# host-label: {command.host_label}")
@@ -287,9 +302,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Pass --force to every benchpack run. Omitted by default.",
     )
     parser.add_argument(
+        "--pack-set",
+        choices=tuple(PACK_SETS),
+        default=None,
+        help=(
+            "Named pack set to run. 'default' expands to the standard "
+            "four-pack matrix; 'coding-tasks' expands to the optional "
+            "repo-task pack matrix."
+        ),
+    )
+    parser.add_argument(
         "packs",
         nargs="*",
-        default=list(DEFAULT_PACKS),
+        default=None,
         help=(
             "Packs to run. Defaults to: "
             + " ".join(DEFAULT_PACKS)
@@ -301,6 +326,14 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.packs and args.pack_set is not None:
+        parser.error("positional packs cannot be combined with --pack-set")
+    if args.packs:
+        args.packs = tuple(args.packs)
+    elif args.pack_set is not None:
+        args.packs = PACK_SETS[args.pack_set]
+    else:
+        args.packs = DEFAULT_PACKS
     commands = build_matrix_commands(args)
 
     if args.dry_run:

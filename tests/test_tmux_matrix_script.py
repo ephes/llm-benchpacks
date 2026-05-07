@@ -41,6 +41,7 @@ def test_dry_run_generates_default_matrix_commands() -> None:
     assert result.stderr == ""
     assert result.stdout.splitlines()[0] == "# benchpack-tmux-matrix dry run"
     assert "# session: bench-test" in result.stdout
+    assert "# pack-set:" not in result.stdout
     assert "tmux new-session -d -s bench-test -n smoke" in result.stdout
     assert "tmux new-window -t bench-test -n runtime" in result.stdout
     assert "tmux new-window -t bench-test -n wrap" in result.stdout
@@ -59,6 +60,12 @@ def test_dry_run_generates_default_matrix_commands() -> None:
 
     benchpack_lines = [
         line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert [line.split()[5] for line in benchpack_lines] == [
+        "smoke-chat",
+        "runtime-sweep",
+        "desktop-django-wrap",
+        "patch-from-failure",
     ]
     assert all("--endpoint '<endpoint>'" in line for line in benchpack_lines)
 
@@ -160,6 +167,125 @@ def test_dry_run_maps_default_pack_suffixes_to_host_labels() -> None:
     assert "--host-label 'm5-max-llama-<stamp>-runtime'" in result.stdout
     assert "--host-label 'm5-max-llama-<stamp>-wrap'" in result.stdout
     assert "--host-label 'm5-max-llama-<stamp>-patch'" in result.stdout
+
+
+def test_dry_run_pack_set_coding_tasks_generates_repo_task_commands() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--pack-set",
+        "coding-tasks",
+        "--session-name",
+        "bench-coding",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "<model>",
+        "--endpoint",
+        "<endpoint>",
+        "--host-label-prefix",
+        "m5-max-coding-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "# pack-set: coding-tasks" in result.stdout
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert [line.split()[5] for line in benchpack_lines] == [
+        "patch-from-failure",
+        "python-regression-fix",
+        "django-dashboard-regression-fix",
+    ]
+    assert "benchpack run smoke-chat" not in result.stdout
+    assert "benchpack run runtime-sweep" not in result.stdout
+    assert "benchpack run desktop-django-wrap" not in result.stdout
+    assert "tmux new-session -d -s bench-coding -n patch" in result.stdout
+    assert "tmux new-window -t bench-coding -n python-regression" in result.stdout
+    assert "tmux new-window -t bench-coding -n dashboard-regression" in result.stdout
+    assert "'/bin/sh -c " in result.stdout
+
+
+def test_dry_run_pack_set_coding_tasks_uses_stable_host_label_suffixes() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--pack-set",
+        "coding-tasks",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "<model>",
+        "--host-label-prefix",
+        "m5-max-coding-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--host-label 'm5-max-coding-<stamp>-patch'" in result.stdout
+    assert "--host-label 'm5-max-coding-<stamp>-python-regression'" in result.stdout
+    assert "--host-label 'm5-max-coding-<stamp>-dashboard-regression'" in result.stdout
+    assert "# host-label: m5-max-coding-<stamp>-patch" in result.stdout
+    assert "# host-label: m5-max-coding-<stamp>-python-regression" in result.stdout
+    assert "# host-label: m5-max-coding-<stamp>-dashboard-regression" in result.stdout
+
+
+def test_dry_run_pack_set_coding_tasks_passes_existing_options_to_each_pack() -> None:
+    env_name = "BENCHPACK_TEST_REMOTE_OPENAI_TOKEN"
+    result = _run_script(
+        "--dry-run",
+        "--pack-set",
+        "coding-tasks",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "<model>",
+        "--endpoint",
+        "<endpoint>",
+        "--host-label-prefix",
+        "m5-max-coding-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+        "--openai-stream-usage",
+        "omit",
+        "--openai-api-key-env",
+        env_name,
+        "--force",
+    )
+
+    assert result.returncode == 0, result.stderr
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert len(benchpack_lines) == 3
+    assert all("--endpoint '<endpoint>'" in line for line in benchpack_lines)
+    assert all("--run-metadata '<metadata-file>'" in line for line in benchpack_lines)
+    assert all("--openai-stream-usage omit" in line for line in benchpack_lines)
+    assert all(f"--openai-api-key-env {env_name}" in line for line in benchpack_lines)
+    assert all(line.endswith("--force") for line in benchpack_lines)
+
+
+def test_pack_set_rejects_positional_packs_before_dry_run_commands() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--pack-set",
+        "coding-tasks",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "<model>",
+        "--host-label-prefix",
+        "m5-max-coding-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+        "custom-pack",
+    )
+
+    assert result.returncode == 2
+    assert "positional packs cannot be combined with --pack-set" in result.stderr
+    assert result.stdout == ""
 
 
 def test_dry_run_accepts_optional_force_stream_usage_and_custom_packs() -> None:

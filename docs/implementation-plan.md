@@ -138,7 +138,9 @@ runner can already execute useful first-pass benchmarks for this goal with
 `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
 `patch-from-failure`. The optional bundled `python-regression-fix` and
 `django-dashboard-regression-fix` repo-task packs are now available for deeper
-fenced-patch signal, but they are not part of the default four-pack matrix.
+fenced-patch signal, and the tmux helper now exposes them through an explicit
+optional `--pack-set coding-tasks` matrix, but they are not part of the default
+four-pack matrix.
 Apple host model metadata and report-ready matrix guidance have also landed. A
 read-only Markdown report generator also landed to
 assemble run-log and comparison-note skeletons from existing result
@@ -218,6 +220,13 @@ Scope:
   default M4/M5 matrix, requires `--run-metadata`, maps pack names to stable
   host-label suffixes, and keeps `--force` opt-in. It is not a remote
   orchestration framework and does not change benchmark semantics.
+- Add an explicit optional coding-task pack set to the tmux matrix helper.
+  **Landed 2026-05-07** as `scripts/benchpack-tmux-matrix --pack-set
+  coding-tasks`, expanding to `patch-from-failure`, `python-regression-fix`,
+  and `django-dashboard-regression-fix` while keeping the default four-pack
+  matrix unchanged and rejecting mixed positional packs plus `--pack-set`.
+  This is helper ergonomics for exploratory fenced-patch repo-task evidence,
+  not broad production external-agent proof.
 - Add a compact durable summary for the completed Qwen3.6 M4/M5 benchmark
   sweep. **Landed 2026-05-05** as
   `docs/qwen36-m4-m5-benchmark-summary.md`, which summarizes the host/runtime/
@@ -254,6 +263,10 @@ Suggested implementation handoffs:
   SSH-launched benchmark matrix easier to dry-run and start in tmux while
   leaving result generation and reporting in the existing CLI. **Landed
   2026-05-05** as `scripts/benchpack-tmux-matrix`.
+- Tmux coding-task pack-set slice: expose the current bundled repo-task packs
+  as an explicit optional matrix without changing defaults or runner
+  semantics. **Landed 2026-05-07** as `scripts/benchpack-tmux-matrix
+  --pack-set coding-tasks`.
 - Report-set manifest slice: let repeated comparison reports name their
   existing result directories once without changing report output or writing
   generated report artifacts. **Landed 2026-05-05** as `benchpack report

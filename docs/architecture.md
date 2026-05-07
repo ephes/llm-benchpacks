@@ -611,6 +611,12 @@ and report that they were skipped rather than waiting indefinitely. Its dry-run
 path prints the assembled `benchpack run` and tmux commands without launching
 tmux or contacting an endpoint.
 
+The helper's default pack list remains the standard four-pack matrix. Named
+pack sets are explicit operator shortcuts, currently including
+`--pack-set coding-tasks` for `patch-from-failure`, `python-regression-fix`,
+and `django-dashboard-regression-fix`; named pack sets cannot be combined with
+positional custom packs.
+
 The helper preserves the existing execution boundary: `benchpack run` still
 loads packs, adapters, hardware metadata, run metadata, and result writers.
 The helper does not probe runtimes, discover model paths, inspect servers,

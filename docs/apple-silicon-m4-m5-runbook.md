@@ -168,6 +168,26 @@ omitted, the underlying `benchpack run` command keeps its current default.
 OpenAI-compatible endpoints. The helper passes the environment variable name to
 `benchpack run` but does not read or print the token value.
 
+For optional exploratory repo-task evidence, dry-run a separate coding-task
+matrix instead of changing the default four-pack workflow:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --pack-set coding-tasks \
+  --session-name 'bench-m5-coding-tasks-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-coding-tasks-<stamp>' \
+  --run-metadata metadata/m5-llama-server.json
+```
+
+`--pack-set coding-tasks` expands to `patch-from-failure`,
+`python-regression-fix`, and `django-dashboard-regression-fix`, in that order.
+Do not combine `--pack-set` with positional custom packs; the helper rejects
+that mix before generating commands.
+
 After inspecting the dry run, launch the tmux session:
 
 ```sh
@@ -671,6 +691,11 @@ but it is not enough for broad coding-agent conclusions.
 `python-regression-fix` is an optional next repo-task pack for the same fenced
 patch path. It is more realistic than `patch-from-failure`, but it is not part
 of the default four-pack M4/M5 matrix in this runbook.
+
+`django-dashboard-regression-fix` is an optional stronger multi-file repo-task
+pack for the same fenced patch path. Use `--pack-set coding-tasks` to run the
+current repo-task pack set as a separate exploratory matrix before treating its
+results as campaign evidence.
 
 Larger coding-agent claims should wait for production external harness support,
 larger repo-task packs, and curated reporting around those runs.

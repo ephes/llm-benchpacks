@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (tmux coding-task pack set)
+
+### Changed
+
+- Added an explicit `scripts/benchpack-tmux-matrix --pack-set coding-tasks`
+  option for exploratory repo-task evidence. The named set expands to
+  `patch-from-failure`, `python-regression-fix`, and
+  `django-dashboard-regression-fix`, in that order.
+- Kept the helper's no-argument default matrix unchanged:
+  `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure`.
+- Positional custom packs continue to select an ad hoc matrix. The helper now
+  rejects positional packs combined with `--pack-set` before printing dry-run
+  commands or launching tmux, so operators do not accidentally run a mixed
+  matrix.
+- The new pack set remains a wrapper over existing `benchpack run` commands:
+  metadata, endpoint, auth-env, stream-usage, `--force`, tmux sequencing, and
+  launch-mode metadata-file checks keep the existing behavior. No runner
+  semantics, result schemas, adapter APIs, pack manifests, verifier behavior,
+  compare/report behavior, live benchmark workflow, or generated result
+  artifact policy changed.
+
+### Open Questions
+
+- The coding-task pack set is ready for dry-run and local launch. The next
+  useful evidence is an M5-only exploratory live run of
+  `django-dashboard-regression-fix` or the full `coding-tasks` set before
+  deciding whether any larger repo-task pack belongs in a future default
+  campaign.
+
 ## 2026-05-07 (dashboard repo-task pack)
 
 ### Changed

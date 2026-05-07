@@ -115,6 +115,28 @@ the token value. Launch mode checks that the metadata file exists before
 creating tmux windows. It does not change benchmark semantics; after runs
 finish, use `benchpack report` on the result directories.
 
+For optional exploratory repo-task evidence, select the coding-task pack set
+explicitly instead of changing the default four-pack matrix:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --pack-set coding-tasks \
+  --session-name 'bench-coding-tasks-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-coding-tasks-<stamp>' \
+  --run-metadata metadata/example.json
+```
+
+`--pack-set coding-tasks` expands to `patch-from-failure`,
+`python-regression-fix`, and `django-dashboard-regression-fix`, in that order.
+This is a convenience matrix for inspecting current fenced-patch repo-task
+evidence; it is optional exploratory signal, not part of the default matrix and
+not broad production external-agent proof. Positional custom packs still work,
+but they cannot be combined with `--pack-set`.
+
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
 `--run-metadata <json-file>` is supplied, the runner also validates that JSON
