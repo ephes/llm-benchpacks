@@ -217,12 +217,14 @@ contract checks only; do not use them as live coding-agent evidence. For local
 Codex OSS/Ollama evidence, the source-controlled wrapper shape is:
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/codex-oss-agent.py","--codex-model","qwen3-coder:latest","--local-provider","ollama"]'
+BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/codex-oss-agent.py\",\"--codex-model\",\"qwen3-coder:latest\",\"--local-provider\",\"ollama\"]"
 ```
 
 In launch mode, the helper requires `BENCHPACK_EXTERNAL_AGENT_ARGV` for this
 pack set and injects it into the tmux windows. Dry-run output names the
-requirement but does not print the value.
+requirement but does not print the value. Use an absolute wrapper path because
+the harness launches the external process from the prepared repo-task
+workspace.
 
 After inspecting the dry run, launch the tmux session:
 

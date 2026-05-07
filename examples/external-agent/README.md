@@ -18,7 +18,7 @@ Configure the runner-owned subprocess argv with a JSON array, not a shell
 command string. The minimal context handoff example does not make model calls:
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/reference-agent.py"]' \
+BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/reference-agent.py\"]" \
   uv run benchpack run <pack> --adapter openai-chat --model test-model --endpoint http://localhost:11434/v1
 ```
 
@@ -44,7 +44,7 @@ such as `127.0.0.1`, `::1`, or `localhost`, and must not contain credentials or
 a query string:
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/model-call-agent.py","--model-call-url","http://127.0.0.1:8000/model-call"]' \
+BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/model-call-agent.py\",\"--model-call-url\",\"http://127.0.0.1:8000/model-call\"]" \
   uv run benchpack run <pack> --adapter openai-chat --model test-model --endpoint http://localhost:11434/v1
 ```
 
@@ -79,9 +79,13 @@ writes one safe model-call telemetry line. Use it only when `codex exec --oss`
 and the selected local provider/model are already available locally:
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/codex-oss-agent.py","--codex-model","qwen3-coder:latest","--local-provider","ollama"]' \
+BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/codex-oss-agent.py\",\"--codex-model\",\"qwen3-coder:latest\",\"--local-provider\",\"ollama\"]" \
   uv run benchpack run patch-from-failure-external-agent --adapter ollama-generate --model qwen3-coder:latest
 ```
+
+Use an absolute script path in `BENCHPACK_EXTERNAL_AGENT_ARGV`. Repo-task
+harnesses launch the external process with the prepared workspace as its
+current directory, so repo-relative argv paths resolve inside that workspace.
 
 The wrapper passes `--sandbox workspace-write`, `--skip-git-repo-check`, and
 `--ephemeral` to `codex exec`. It is intended for local OSS/provider evidence,

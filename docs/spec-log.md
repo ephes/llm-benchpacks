@@ -42,12 +42,22 @@ working history and open questions.
 - Added focused pack and helper tests for the external-agent selection path and
   for preserving the existing fenced-patch coding-task behavior.
 
+### Live Evidence
+
+- Ran the M5-only `coding-tasks-external-agent` slice on 2026-05-07 with
+  Codex CLI 0.128.0 in OSS/Ollama mode against `qwen3-coder:latest`.
+  The public external-agent harness path, tmux environment injection, metadata,
+  and model-call telemetry all worked, but all three verifiers still failed
+  because the copied fenced-diff prompts caused the agent to emit diffs to
+  stdout instead of editing the prepared workspaces. See `docs/run-log.md` for
+  result directories and artifact policy.
+
 ### Open Questions
 
-- The next useful evidence is an M5-only live run of
-  `--pack-set coding-tasks-external-agent` with a real non-interactive coding
-  agent command in `BENCHPACK_EXTERNAL_AGENT_ARGV`. Deterministic example
-  harnesses remain contract tests only, not coding-agent evidence.
+- The next useful evidence is an external-agent-specific task instruction path
+  that asks the coding agent to edit the workspace directly, while preserving
+  the existing fenced-patch default packs, result schema, and verifier
+  semantics.
 
 ## 2026-05-07 (repo-task prompt contract tightening)
 
