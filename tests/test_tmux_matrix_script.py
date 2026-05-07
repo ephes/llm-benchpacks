@@ -228,6 +228,11 @@ def test_dry_run_pack_set_coding_tasks_external_agent_is_explicit() -> None:
     assert result.returncode == 0, result.stderr
     assert result.stderr == ""
     assert "# pack-set: coding-tasks-external-agent" in result.stdout
+    assert (
+        "# external-agent-env: BENCHPACK_EXTERNAL_AGENT_ARGV required at launch"
+        in result.stdout
+    )
+    assert "BENCHPACK_EXTERNAL_AGENT_ARGV=" not in result.stdout
     benchpack_lines = [
         line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
     ]
@@ -265,6 +270,44 @@ def test_dry_run_pack_set_coding_tasks_external_agent_is_explicit() -> None:
         "--host-label 'm5-max-coding-agent-<stamp>-dashboard-regression-external-agent'"
         in result.stdout
     )
+
+
+def test_launch_pack_set_coding_tasks_external_agent_requires_argv(
+    tmp_path: Path,
+) -> None:
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text("{}", encoding="utf-8")
+    env = os.environ.copy()
+    env.pop("BENCHPACK_EXTERNAL_AGENT_ARGV", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--pack-set",
+            "coding-tasks-external-agent",
+            "--adapter",
+            "ollama-generate",
+            "--model",
+            "<model>",
+            "--host-label-prefix",
+            "m5-max-coding-agent-<stamp>",
+            "--run-metadata",
+            str(metadata),
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "BENCHPACK_EXTERNAL_AGENT_ARGV is required for "
+        "--pack-set coding-tasks-external-agent"
+        in result.stderr
+    )
+    assert result.stdout == ""
 
 
 def test_dry_run_pack_set_coding_tasks_uses_stable_host_label_suffixes() -> None:

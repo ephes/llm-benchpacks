@@ -236,7 +236,9 @@ Scope:
   same fixture, prompt, and verifier as its fenced-patch source pack, but
   declares `harness = { id = "external-agent", timeout_s = 900 }` on the
   measured repo-task case. The original packs, default four-pack matrix, and
-  fenced-patch `coding-tasks` set remain unchanged.
+  fenced-patch `coding-tasks` set remain unchanged. The helper launch path
+  requires `BENCHPACK_EXTERNAL_AGENT_ARGV` for this pack set and injects it
+  into tmux windows without printing its value in dry-run output.
 - Add a local Codex OSS external-agent wrapper. **Landed 2026-05-07** as
   `examples/external-agent/codex-oss-agent.py`, adapting the public
   external-agent context to `codex exec --oss --local-provider <provider>` for

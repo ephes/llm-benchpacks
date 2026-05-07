@@ -220,6 +220,10 @@ Codex OSS/Ollama evidence, the source-controlled wrapper shape is:
 BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/codex-oss-agent.py","--codex-model","qwen3-coder:latest","--local-provider","ollama"]'
 ```
 
+In launch mode, the helper requires `BENCHPACK_EXTERNAL_AGENT_ARGV` for this
+pack set and injects it into the tmux windows. Dry-run output names the
+requirement but does not print the value.
+
 After inspecting the dry run, launch the tmux session:
 
 ```sh

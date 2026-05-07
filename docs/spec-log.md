@@ -36,6 +36,9 @@ working history and open questions.
   wrapper that adapts the public external-agent context to
   `codex exec --oss --local-provider <provider>` for already-installed local
   providers such as Ollama.
+- Updated the tmux helper launch path for the external-agent pack set to
+  require `BENCHPACK_EXTERNAL_AGENT_ARGV` in the helper process environment and
+  pass it into tmux windows without printing the value in dry-run output.
 - Added focused pack and helper tests for the external-agent selection path and
   for preserving the existing fenced-patch coding-task behavior.
 

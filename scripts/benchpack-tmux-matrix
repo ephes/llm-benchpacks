@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shlex
 import shutil
@@ -52,6 +53,7 @@ PACK_LABEL_SUFFIXES = {
     ),
 }
 TMUX_FAILURE_ENV = "BENCHPACK_MATRIX_FAILED"
+EXTERNAL_AGENT_ARGV_ENV = "BENCHPACK_EXTERNAL_AGENT_ARGV"
 
 
 @dataclass(frozen=True)
@@ -186,10 +188,18 @@ def _tmux_command_shell(shell_command: str) -> str:
     return f"/bin/sh -c {shlex.quote(shell_command)}"
 
 
+def _tmux_environment_args(args: argparse.Namespace) -> list[str]:
+    external_agent_argv = getattr(args, "external_agent_argv", None)
+    if external_agent_argv is None:
+        return []
+    return ["-e", f"{EXTERNAL_AGENT_ARGV_ENV}={external_agent_argv}"]
+
+
 def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
     commands: list[MatrixCommand] = []
     signal_prefix = _signal_prefix(args.session_name)
     signals = [f"{signal_prefix}-{index:03d}" for index in range(1, len(args.packs))]
+    environment_args = _tmux_environment_args(args)
     for index, pack in enumerate(args.packs):
         suffix = _pack_suffix(pack)
         benchpack_command = _benchpack_command(args, pack)
@@ -212,6 +222,7 @@ def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
                 args.session_name,
                 "-n",
                 suffix,
+                *environment_args,
                 tmux_shell_command,
             ]
         else:
@@ -222,6 +233,7 @@ def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
                 args.session_name,
                 "-n",
                 suffix,
+                *environment_args,
                 tmux_shell_command,
             ]
         commands.append(
@@ -241,6 +253,8 @@ def _print_dry_run(args: argparse.Namespace, commands: list[MatrixCommand]) -> N
     print(f"# session: {args.session_name}")
     if args.pack_set is not None:
         print(f"# pack-set: {args.pack_set}")
+    if args.requires_external_agent_argv:
+        print(f"# external-agent-env: {EXTERNAL_AGENT_ARGV_ENV} required at launch")
     for command in commands:
         print(f"# pack: {command.pack}")
         print(f"# host-label: {command.host_label}")
@@ -348,6 +362,18 @@ def main(argv: list[str] | None = None) -> int:
         args.packs = PACK_SETS[args.pack_set]
     else:
         args.packs = DEFAULT_PACKS
+    args.requires_external_agent_argv = any(
+        pack in CODING_TASK_EXTERNAL_AGENT_PACKS for pack in args.packs
+    )
+    args.external_agent_argv = None
+    if not args.dry_run and args.requires_external_agent_argv:
+        external_agent_argv = os.environ.get(EXTERNAL_AGENT_ARGV_ENV)
+        if not external_agent_argv:
+            raise SystemExit(
+                f"{EXTERNAL_AGENT_ARGV_ENV} is required for "
+                f"--pack-set {CODING_TASK_EXTERNAL_AGENT_PACK_SET}"
+            )
+        args.external_agent_argv = external_agent_argv
     commands = build_matrix_commands(args)
 
     if args.dry_run:

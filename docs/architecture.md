@@ -618,7 +618,11 @@ and `django-dashboard-regression-fix`, and
 `--pack-set coding-tasks-external-agent` for the three explicit external-agent
 variants of those workloads. The external-agent set is a separate opt-in path;
 it does not change the default four-pack matrix or the fenced-patch
-`coding-tasks` expansion. Named pack sets cannot be combined with positional
+`coding-tasks` expansion. In launch mode, that external-agent set requires
+`BENCHPACK_EXTERNAL_AGENT_ARGV` in the helper process environment and injects
+that value into the tmux windows because an already-running tmux server may not
+inherit newly exported environment variables. Dry runs name the requirement but
+do not print the value. Named pack sets cannot be combined with positional
 custom packs.
 
 The helper preserves the existing execution boundary: `benchpack run` still
