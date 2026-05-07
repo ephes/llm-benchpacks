@@ -383,20 +383,25 @@ Scope:
   `patch-from-failure` reached the endpoint but failed `verify-script`
   scoring. Runtime-sweep compare reported `prefill parity=comparable` for all
   three cases. Median total TPS M5 vs M4 was 158.45 vs 137.19 short, 159.73 vs
-  137.83 medium, and 161.02 vs 138.63 long. Hetzner strict same-GGUF
-  `llama-server` checksum parity, load behavior, comparable runtime options,
-  and memory fit remain preflight blockers for a strict tri-host matrix.
+  137.83 medium, and 161.02 vs 138.63 long. **Hetzner strict same-GGUF
+  preflight landed 2026-05-07 in the sibling repo.** LNB-011 proved checksum
+  parity, isolated CUDA `llama-server` 9030 (`a09a00e50`) support,
+  conservative 8K local-only load behavior, 36/36 layer offload, and memory
+  fit for the same E2B Q4_K_M artifact. It did not run a benchmark pack,
+  generation request, public request, runtime-sweep, load test, or quality
+  evaluation.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Updated 2026-05-07.** Companion `llm-node-bare` backlog entries now record
   GPU-driver recovery, Qwen2.5 baseline restoration, a pinned Gemma 4 E2B
   vLLM full-card idle-load preflight on the RTX 4000 SFF Ada host, and
   production role support for the Gemma-4-capable vLLM stack. That clears the
   deployment-side vLLM service-shaped readiness blockers that were previously
-  recorded in this repo, but it does not prove strict same-GGUF llama.cpp
-  parity. The sibling LNB-005 authenticated benchmark access contract has also
-  landed with `BENCHPACK_HETZNER_OPENAI_TOKEN`; live token provisioning and an
-  authenticated remote smoke remain required before public remote `benchpack`
-  runs.
+  recorded in this repo, but it is separate from the strict same-GGUF
+  `llama-server` lane preflighted in sibling LNB-011. The sibling LNB-005
+  authenticated benchmark access contract and LNB-010 live authenticated smoke
+  have also landed with `BENCHPACK_HETZNER_OPENAI_TOKEN`; the smoke proves the
+  public TLS -> Django Bearer auth/proxy -> vLLM access path only, not approval
+  for a benchmark matrix.
 
 Validation:
 
@@ -887,14 +892,14 @@ Validation:
 
 Make remote GPU runs practical.
 
-**Status:** planned. The model-target catalog and Gemma 4 tri-host planning
-slice identified two immediate blockers for the Hetzner path. Authenticated
-OpenAI-compatible endpoint support in this repo has landed through
-`openai-chat --openai-api-key-env`; the sibling deployment repo has current
-SSH/inventory and service-shaped vLLM Gemma 4 readiness evidence. The
-authenticated benchmark access contract has landed in the sibling repo; the
-next remote-run blocker is live token provisioning plus an authenticated smoke,
-while strict same-GGUF llama.cpp readiness remains a separate unproven path.
+**Status:** planned. Authenticated OpenAI-compatible endpoint support in this
+repo has landed through `openai-chat --openai-api-key-env`; the sibling
+deployment repo has current SSH/inventory, service-shaped vLLM Gemma 4
+readiness evidence, authenticated benchmark access, a live authenticated public
+`smoke-chat`, and strict same-GGUF CUDA `llama-server` preflight evidence. The
+next remote-run blocker is not runner capability; it is explicit operator
+scheduling plus target-lane approval for either the service-shaped vLLM path or
+the strict same-GGUF `llama-server` path.
 
 Scope:
 

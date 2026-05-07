@@ -28,6 +28,12 @@ working history and open questions.
   Production vLLM was restored afterward. No Hetzner benchmark pack,
   runtime-sweep, matrix, generation, public request, or quality evaluation was
   run.
+- Rechecked the live host after LNB-011. `llm`, `llm-mgmt`, and `caddy` were
+  active/enabled; public `/healthz/` was healthy; public `/readyz/` reported
+  `backend_available=true`; unauthenticated public `/v1/models` returned
+  HTTP 401; and no listener remained on TCP port 18011. No token value,
+  authenticated request, benchmark pack, generation, model switch, deploy, or
+  secret change was made.
 
 - Recorded the sibling LNB-010 outcome: benchmark-scoped authenticated public
   Hetzner `/v1` access was provisioned, authenticated `/v1/models` returned one
@@ -43,11 +49,10 @@ working history and open questions.
   to stop treating Hetzner GPU-driver recovery, Qwen2.5 baseline restoration,
   Gemma-4-capable vLLM role support, and the vLLM E2B full-card idle-load
   preflight as current blockers.
-- Preserved the comparison boundary: the proven Hetzner route is
-  service-shaped vLLM with Hugging Face BF16 weights, not strict same-GGUF
-  `llama-server` parity with the Apple runs. No SSH command, endpoint call,
-  benchmark run, generated result artifact, inventory change, or secret change
-  was made in this repo.
+- Preserved the comparison boundary: the proven Hetzner service route is
+  vLLM with Hugging Face BF16 weights, while sibling LNB-011 separately proves
+  strict same-GGUF `llama-server` load readiness. Neither path has produced a
+  Hetzner Gemma 4 benchmark row yet.
 
 ### Open Questions
 
