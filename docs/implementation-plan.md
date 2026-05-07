@@ -303,12 +303,12 @@ Validation:
 Keep model selection explicit and current before launching new cross-host
 benchmark campaigns.
 
-**Status:** started 2026-05-06. The first slice landed `docs/model-targets.md`
-as the source-controlled catalog for preferred/current model targets,
-artifact-parity notes, and review cadence. A narrow authenticated
-OpenAI-compatible endpoint slice also landed for `openai-chat` via explicit
-`--openai-api-key-env <ENV_NAME>` bearer-token configuration. No live benchmark
-results or generated artifacts were produced.
+**Status:** started 2026-05-06. The model target catalog, authenticated
+`openai-chat` endpoint support, Gemma 4 tri-host runbook, strict same-GGUF
+artifact preflights, and selected Gemma 4 E2B Q4_K_M strict-GGUF four-pack
+evidence across M5, M4, and Hetzner have landed. Generated result artifacts
+remain ignored and uncommitted unless a future curated run-log entry explicitly
+force-adds a compact subset.
 
 Scope:
 
@@ -456,6 +456,11 @@ Scope:
   have also landed with `BENCHPACK_HETZNER_OPENAI_TOKEN`; the smoke proves the
   public TLS -> Django Bearer auth/proxy -> vLLM access path only, not approval
   for a benchmark matrix.
+- Next-work ordering: do not spend the next slice on another broad live
+  tri-host matrix for the current four-pack lane. Groom backlog/research first,
+  design a direct-edit external-agent benchmark slice next, validate that slice
+  locally on M5, and only then consider broader M4/M5/NVIDIA comparison when
+  the benchmark surface is meaningful.
 
 Validation:
 
@@ -903,6 +908,15 @@ Scope:
   wrapper validates the runner context, asks `codex exec --oss` to edit the
   prepared workspace directly through a local provider such as Ollama, and
   writes one safe model-call telemetry line without adding result fields.
+- Record the first public external-agent live evidence. **Landed 2026-05-07**
+  as an M5-only Codex OSS/Ollama run of the
+  `coding-tasks-external-agent` pack set. The adapter, public harness path,
+  tmux environment injection, metadata, and model-call telemetry all worked,
+  but every verifier failed because the copied fenced-diff prompts caused the
+  agent to emit unified diffs to stdout instead of editing the prepared
+  workspace. Captured workspace diffs were empty. Treat this as mechanical
+  harness validation plus benchmark-quality failure, not successful
+  coding-agent task evidence.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -925,9 +939,11 @@ Scope:
   subprocess skeleton for deterministic external harness boundary tests, plus
   the first public `external-agent` CLI routing slice and optional model-call
   log artifact path, a recommended model-call JSONL line shape, and safe
-  aggregate model-call summaries. Full production external coding-agent
-  execution, required model-call logging beyond the optional summary artifact,
-  and richer harness configuration remain planned later.
+  aggregate model-call summaries. The first local live external-agent evidence
+  mechanically validated the public path but failed deterministically under
+  copied fenced-diff prompts. External-agent-specific direct-edit benchmark
+  design, required model-call logging beyond the optional summary artifact, and
+  richer harness configuration remain planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
@@ -940,9 +956,55 @@ Validation:
 
 - The pack runs on Apple Silicon and Linux without path-specific edits.
 
+## Benchmark Design Research Track
+
+Improve the coding-agent benchmark surface before launching broader live
+campaigns. See `docs/benchmark-research.md` for research notes, source leads,
+and caveats.
+
+**Status:** opened 2026-05-07 as documentation/backlog only. No live benchmarks
+were run, no datasets were downloaded, and no generated artifacts were added in
+this grooming slice.
+
+Scope:
+
+- Design external-agent-specific direct-edit task variants that remove
+  fenced-diff output instructions while preserving the current default
+  fenced-patch packs, result schemas, verifier behavior, adapter APIs, and
+  tmux defaults.
+- Research ProjDevBench-inspired project-level tasks where an agent builds or
+  completes an executable project and deterministic execution scoring supplies
+  detailed failure classes.
+- Research product classification, product matching, and price-comparison
+  style tasks where the coding agent writes a program or pipeline and the
+  runner evaluates held-out F1, weighted F1, hierarchical F1, pairwise
+  matching metrics, or cluster metrics.
+- Research resource-aware scoring for agent-written programs: wall time, peak
+  process memory, GPU memory when available, timeouts, memory-limit verdicts,
+  runtime errors, compile errors, and whether those remain separate metrics or
+  feed an explicit weighted score.
+- Validate dataset candidates before implementation: license, access,
+  attribution, size, task fit, train/test split design, offline
+  reproducibility, and whether a small fixture can be committed or an external
+  fetch step is required.
+
+Validation:
+
+- Documentation-only changes should pass `git diff --check`, link/path review,
+  and `git status --short`.
+- Do not run live benchmarks or download Kaggle, Hugging Face, WDC, or other
+  datasets for this research track without explicit operator approval.
+
 ## Phase 4: Task Completion Benchmarks
 
 Move beyond speed into correctness.
+
+**Status:** started. The current bundled task-completion packs establish
+fenced-patch repo-task plumbing and deterministic verifier behavior, but recent
+live evidence shows that fenced-diff prompts are too prompt-contract-sensitive
+for broad coding-agent conclusions. The next useful implementation slice is a
+direct-edit external-agent benchmark design, not another generic rerun of the
+same fenced-patch tasks.
 
 Scope:
 
@@ -956,13 +1018,23 @@ Scope:
   bundled measured repo-mutating repo-task pack with a compact multi-file
   stdlib dashboard fixture, deterministic verifier checks, and the existing
   fenced unified-diff executor.
-- Disposable worktree setup.
-- Model output to patch extraction or agent-harness integration.
-- Deterministic scoring by tests passing, diff size, and timeout.
+- Disposable worktree setup. **Landed** through measured repo-task workspace
+  preparation and artifact recording.
+- Model output to patch extraction. **Landed** through the default fenced
+  unified-diff executor.
+- Public external-agent harness plumbing. **Landed mechanically** through the
+  public `external-agent` path and M5 Codex OSS/Ollama evidence, but current
+  copied prompts failed to produce workspace edits.
+- Direct-edit external-agent benchmark variants. **Planned next** after the
+  research/backlog grooming slice.
+- Deterministic scoring by tests passing, timeouts, and resource use.
+  **Partially landed** for verifier pass/fail and timeouts; resource-aware
+  scoring for agent-written programs remains research/design work.
 
 Validation:
 
-- A baseline model/runtime pair can solve at least one toy fixture end to end.
+- A baseline real external-agent/runtime pair can solve at least one
+  direct-edit fixture end to end without relying on fenced-diff stdout.
 
 ## Phase 5: Remote Host Orchestration
 

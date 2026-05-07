@@ -59,6 +59,43 @@ working history and open questions.
   the existing fenced-patch default packs, result schema, and verifier
   semantics.
 
+## 2026-05-07 (benchmark research backlog grooming)
+
+### Changed
+
+- Groomed `docs/implementation-plan.md` so the selected Gemma 4 E2B Q4_K_M
+  strict-GGUF four-pack lane is no longer phrased as pending after completed
+  M5, M4, and Hetzner evidence.
+- Recorded that the first M5 Codex OSS/Ollama
+  `coding-tasks-external-agent` run mechanically validated the public
+  external-agent path, tmux environment injection, metadata, and model-call
+  telemetry, but failed every deterministic verifier because copied
+  fenced-diff prompts made the agent emit diffs to stdout instead of editing
+  the workspace.
+- Added `docs/benchmark-research.md` as a research backlog for stronger
+  coding-agent benchmarks. It captures ProjDevBench-inspired project-level
+  tasks, direct-edit external-agent variants, product classification/matching
+  program tasks, resource-aware scoring, dataset validation, and scoring-design
+  questions.
+- Linked the research backlog from `README.md`.
+- No live benchmarks were run, no datasets were downloaded, and no generated
+  `results/*`, metadata, raw payloads, workspaces, task logs, model-call logs,
+  secrets, or tokens were added.
+
+### Open Questions
+
+- What benchmark design should replace or complement the tiny fenced-patch
+  repo-task packs for coding-agent comparison?
+- Which direct-edit external-agent task should be implemented first so a real
+  agent edits the prepared workspace while existing fenced-patch packs and
+  verifier semantics remain unchanged?
+- Which product classification or matching dataset can be used legally and
+  reproducibly with small committed fixtures or an explicit external fetch
+  step?
+- Should resource-aware program evaluation report wall time and memory as
+  separate metrics only, or define an explicit weighted score after the first
+  prototype supplies evidence?
+
 ## 2026-05-07 (repo-task prompt contract tightening)
 
 ### Changed
@@ -85,11 +122,10 @@ working history and open questions.
 
 ### Open Questions
 
-- The next useful evidence is a new M5-only exploratory
-  `scripts/benchpack-tmux-matrix --pack-set coding-tasks` run after these
-  prompt changes, preferably first with `qwen3-coder:latest` through
-  `ollama-generate`, then optionally the local Qwen3.6 dense GGUF tag if time
-  allows.
+- Superseded by later same-day live evidence: the post-tightening M5
+  `coding-tasks` runs completed mechanically through Ollama for Qwen3-Coder
+  and Qwen3.6 dense, but all deterministic verifiers still failed. Do not
+  rerun the same fenced-patch prompt set as the next useful slice.
 
 ## 2026-05-07 (tmux coding-task pack set)
 
@@ -115,11 +151,10 @@ working history and open questions.
 
 ### Open Questions
 
-- The coding-task pack set is ready for dry-run and local launch. The next
-  useful evidence is an M5-only exploratory live run of
-  `django-dashboard-regression-fix` or the full `coding-tasks` set before
-  deciding whether any larger repo-task pack belongs in a future default
-  campaign.
+- Superseded by later same-day live evidence: the M5 `coding-tasks` matrix
+  launched and reached the adapter for all three packs, but deterministic
+  verifiers failed across the set. The next useful direction is better
+  benchmark design, not another generic fenced-patch run.
 
 ## 2026-05-07 (dashboard repo-task pack)
 
@@ -487,9 +522,9 @@ working history and open questions.
   configuration supported proceeding to a local M5 four-pack matrix through the
   normal metadata/tmux dry-run workflow; the follow-up same-day entry below
   records that matrix result.
-- M4 strict-GGUF checksum/load/smoke parity remains the next Apple-lane gate,
-  while Hetzner remains blocked by deployment-side GPU-driver/service recovery,
-  exclusive-GPU Gemma 4 serving preflight, and authenticated benchmark access.
+- Superseded by later same-day entries: M4 strict-GGUF smoke/runtime and
+  same-commit four-pack evidence landed, and the Hetzner strict-GGUF lane later
+  completed smoke/runtime plus wrap/patch for the selected artifact.
 
 ## 2026-05-07 (Gemma 4 local M5 four-pack matrix)
 
@@ -523,9 +558,10 @@ working history and open questions.
 - Decide whether the `patch-from-failure` failure is acceptable signal for the
   campaign, should be retried under the same strict local M5 setup, or should
   be compared against M4 after strict-GGUF M4 preflight.
-- M4 strict-GGUF checksum/load/smoke parity remains the next Apple-lane gate,
-  while Hetzner remains blocked by deployment-side GPU-driver/service recovery,
-  exclusive-GPU Gemma 4 serving preflight, and authenticated benchmark access.
+- Superseded by later same-day entries: the Apple same-commit four-pack and the
+  Hetzner strict-GGUF completion slices landed. The current blocker is
+  benchmark quality for coding-agent tasks, not M4 or Hetzner strict-GGUF
+  readiness for the selected four-pack lane.
 
 ## 2026-05-06 (Gemma 4 local M5 smoke-chat with reasoning off)
 

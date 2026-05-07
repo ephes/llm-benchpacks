@@ -30,6 +30,8 @@ and whether the final repository changes pass verification.
   matrices, and blocker checklist.
 - [Qwen3.6 M4/M5 Benchmark Summary](docs/qwen36-m4-m5-benchmark-summary.md):
   compact 2026-05-05 MLX-vs-llama.cpp-vs-Ollama result summary.
+- [Benchmark Research Backlog](docs/benchmark-research.md): research leads and
+  next-work ordering for stronger coding-agent benchmarks.
 - [Decisions](docs/decisions.md): durable design decisions.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
