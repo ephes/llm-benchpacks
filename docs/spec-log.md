@@ -20,6 +20,48 @@ working history and open questions.
 
 ### Changed
 
+- Ran the next narrow Hetzner strict same-GGUF benchmark slice for the selected
+  Gemma 4 E2B Q4_K_M artifact. The remote `/Users/jochen/projects/llm-benchpacks`
+  checkout did not already exist, so it was created from the clean local
+  `65baa81` commit; the remote tree was verified clean before running.
+- Took a short exclusive-GPU window by stopping production `llm.service`,
+  starting the isolated CUDA
+  `/opt/llm/lnb011-llama-cpp-a09a00e50/build-cuda/bin/llama-server`
+  `9030 (a09a00e50)` on `127.0.0.1:18011`, and serving the same
+  `bartowski/google_gemma-4-E2B-it-GGUF` file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf` with SHA-256
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`,
+  alias `gemma4-e2b-q4km`, 8K context, f16 KV caches, prompt cache, and
+  `--reasoning off`.
+- Exactly one remote-local `smoke-chat` run passed against
+  `http://127.0.0.1:18011/v1`, writing
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-154814-smoke`
+  with one `capital` row, `ok=true`, and deterministic `contains` scoring
+  passed. Because smoke passed, exactly one `runtime-sweep` followed and wrote
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-154814-runtime`
+  with 9 measured rows, all `ok=true`, pack scoring mode `none` represented by
+  no row scoring object, no warmup rows in `run.jsonl`, and TTFT, prefill TPS,
+  decode TPS, total TPS, prompt tokens, cached-prompt tokens, and output tokens
+  populated.
+- Sampled remote raw artifacts and the `llama-server` log showed no observed
+  `reasoning_content`, template/tool/EOG leakage, or truncation markers. Raw
+  payload directories stayed on the Hetzner host. Only compact `run.jsonl`,
+  `summary.md`, `hardware.json`, and `run-metadata.json` files were pulled back
+  locally, and generated `results/*` artifacts remain ignored and uncommitted.
+- The strict-GGUF tri-host runtime-sweep compare over the existing Apple
+  current-commit M5/M4 runtime directories and the new Hetzner runtime
+  directory reported `prefill parity=comparable` for short, medium, and long.
+  Median total TPS M5 vs M4 vs Hetzner was 158.45 vs 137.19 vs 118.49 short,
+  159.73 vs 137.83 vs 117.50 medium, and 161.02 vs 138.63 vs 117.33 long.
+  Median decode TPS was 164.00 vs 142.55 vs 122.14 short, 163.63 vs 141.75 vs
+  120.58 medium, and 163.90 vs 141.02 vs 119.38 long.
+- Production was restored after the slice. `llm`, `llm-mgmt`, and `caddy` were
+  active/enabled; public `/healthz/` returned HTTP 200; public `/readyz/`
+  returned `backend_available=true`; unauthenticated public `/v1/models`
+  returned HTTP 401; TCP port 18011 had no listener; no matching
+  `llama-server.*gemma4-e2b-q4km` process remained; and GPU memory returned to
+  the production baseline of about 18,328 MiB used.
+
 - Recorded the sibling LNB-011 outcome: the Hetzner host now has an isolated
   CUDA `llama-server` build at llama.cpp `9030 (a09a00e50)`, the same
   `bartowski/google_gemma-4-E2B-it-GGUF` Q4_K_M artifact with SHA-256
@@ -56,11 +98,14 @@ working history and open questions.
 
 ### Open Questions
 
-- Authenticated public `/v1` smoke is complete, but remote runtime-sweep or
-  matrix runs still need explicit operator scheduling and target-mode approval.
-- Hetzner strict same-GGUF checksum/load/memory-fit preflight is complete, but
-  benchmark matrix scheduling and lane selection still need explicit operator
-  approval.
+- Authenticated public `/v1` smoke is complete for the Qwen2.5 production vLLM
+  lane. It remains separate from Gemma 4 service-shaped vLLM evidence and from
+  the strict same-GGUF local-only `llama-server` lane.
+- Hetzner strict same-GGUF `smoke-chat` and `runtime-sweep` now pass for the
+  selected Gemma 4 E2B Q4_K_M artifact. The remaining scheduling question is
+  whether to spend another exclusive-GPU window on the full four-pack tri-host
+  matrix, including the prompt-only wrap pack and the tiny repo-task patch pack
+  that already fails verification consistently on the Apple hosts.
 
 ## 2026-05-07 (External-agent model-call summaries)
 

@@ -389,7 +389,19 @@ Scope:
   conservative 8K local-only load behavior, 36/36 layer offload, and memory
   fit for the same E2B Q4_K_M artifact. It did not run a benchmark pack,
   generation request, public request, runtime-sweep, load test, or quality
-  evaluation.
+  evaluation. **Hetzner strict same-GGUF smoke/runtime slice landed
+  2026-05-07.** The next narrow Hetzner slice ran exactly one `smoke-chat`
+  against the same local-only CUDA `llama-server` endpoint and, because it
+  passed, exactly one `runtime-sweep`. Smoke passed deterministic `contains`
+  scoring, runtime-sweep wrote 9/9 measured rows `ok=true`, timing/token fields
+  were populated, sampled raw artifacts showed no observed reasoning/template/
+  tool/EOG leakage or truncation markers, and production vLLM was restored
+  healthy afterward. `benchpack compare` over the existing Apple current-commit
+  runtime directories plus the new Hetzner runtime directory reported
+  `prefill parity=comparable` for short, medium, and long; median total TPS
+  M5 vs M4 vs Hetzner was 158.45 vs 137.19 vs 118.49 short, 159.73 vs 137.83
+  vs 117.50 medium, and 161.02 vs 138.63 vs 117.33 long. This is preliminary
+  strict-GGUF tri-host runtime-sweep evidence, not a full four-pack matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Updated 2026-05-07.** Companion `llm-node-bare` backlog entries now record
   GPU-driver recovery, Qwen2.5 baseline restoration, a pinned Gemma 4 E2B
@@ -892,14 +904,15 @@ Validation:
 
 Make remote GPU runs practical.
 
-**Status:** planned. Authenticated OpenAI-compatible endpoint support in this
+**Status:** started. Authenticated OpenAI-compatible endpoint support in this
 repo has landed through `openai-chat --openai-api-key-env`; the sibling
 deployment repo has current SSH/inventory, service-shaped vLLM Gemma 4
 readiness evidence, authenticated benchmark access, a live authenticated public
-`smoke-chat`, and strict same-GGUF CUDA `llama-server` preflight evidence. The
-next remote-run blocker is not runner capability; it is explicit operator
-scheduling plus target-lane approval for either the service-shaped vLLM path or
-the strict same-GGUF `llama-server` path.
+`smoke-chat`, strict same-GGUF CUDA `llama-server` preflight evidence, and a
+first strict same-GGUF Hetzner `smoke-chat` plus `runtime-sweep` slice. The
+remaining remote-run blocker is not runner capability; it is explicit operator
+scheduling for broader matrices, especially the full strict-GGUF four-pack
+tri-host pass.
 
 Scope:
 

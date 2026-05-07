@@ -40,8 +40,8 @@ Complete these checks before any live run:
 - Gemma 4 artifacts: exact model IDs, revisions, artifact filenames,
   quantization, license gates, and authentication requirements are recorded in
   `docs/model-targets.md`. Artifact checksums and memory-fit notes are
-  host-local preflight fields; the local M5 and M4 E2B Q4_K_M checksum/load
-  notes are recorded below, while Hetzner remains a placeholder.
+  host-local preflight fields; the local M5, M4, and Hetzner E2B Q4_K_M
+  checksum/load notes are recorded below.
 - Strict-parity runtime: the same GGUF artifact loads through `llama-server` on
   Apple Silicon and on the CUDA host, with comparable context, cache, batch,
   and GPU-offload settings.
@@ -273,7 +273,7 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
   rows, cleanup status, and result directory names. The file is ignored and
   should not be committed by default.
 
-## Hetzner Strict-GGUF Preflight Status
+## Hetzner Strict-GGUF Status
 
 Status as of 2026-05-07 for the same strict same-GGUF candidate:
 
@@ -305,6 +305,48 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
 - Production restore: `llm`, `llm-mgmt`, and `caddy` active; readiness reported
   `backend_available: true`; public unauthenticated `/v1/models` remained HTTP
   401.
+- Narrow benchmark slice: after LNB-011, a follow-up exclusive-GPU window ran
+  exactly one Hetzner `smoke-chat` and, because smoke passed, exactly one
+  `runtime-sweep` against the same local-only
+  `http://127.0.0.1:18011/v1` endpoint. The remote repo checkout was created
+  at `/Users/jochen/projects/llm-benchpacks` from clean local commit `65baa81`
+  because no prior checkout existed there; the remote tree was clean before
+  running.
+- `smoke-chat` status:
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-154814-smoke`
+  wrote one measured row with `ok=true` and deterministic `contains` scoring
+  passed.
+- `runtime-sweep` status:
+  `results/2026-05-07-hetzner-gex44-gemma4-llama-strict-gguf-20260507-154814-runtime`
+  wrote 9 measured rows, all `ok=true`, pack scoring mode `none` represented
+  by no row scoring object, no warmup rows in `run.jsonl`, and TTFT, prefill
+  TPS, decode TPS, total TPS, prompt tokens, cached-prompt tokens, and output
+  tokens populated. Median total TPS was 118.49 (`short`), 117.50 (`medium`),
+  and 117.33 (`long`). Median decode TPS was 122.14, 120.58, and 119.38
+  respectively. Median TTFT was 21.0 ms, 23.0 ms, and 13.9 ms respectively.
+  Prompt/output/cached-token patterns were 84/83/79, 356/106/351, and
+  799/94/798.
+- Raw/leakage check: sampled remote raw artifacts and the `llama-server` log
+  showed no observed `reasoning_content`, template/tool/EOG leakage, or
+  truncation markers. Raw payload directories stayed on the Hetzner host.
+- Result artifacts: compact Hetzner `run.jsonl`, `summary.md`,
+  `hardware.json`, and `run-metadata.json` files were pulled back locally for
+  the smoke and runtime result directories. Generated `results/*` artifacts
+  remain ignored and were not force-added.
+- Runtime comparison: `benchpack compare` over the current strict-GGUF M5,
+  M4, and Hetzner runtime directories reported `prefill parity=comparable` for
+  `short`, `medium`, and `long`. Median total TPS M5 vs M4 vs Hetzner was
+  158.45 vs 137.19 vs 118.49 short, 159.73 vs 137.83 vs 117.50 medium, and
+  161.02 vs 138.63 vs 117.33 long. Treat this as preliminary strict-GGUF
+  tri-host runtime-sweep evidence because the Hetzner slice did not run the
+  full four-pack matrix.
+- Post-run cleanup: the temporary `llama-server` was stopped, no listener
+  remained on TCP port 18011, no matching `llama-server.*gemma4-e2b-q4km`
+  process remained, production `llm.service` was restarted, `llm`, `llm-mgmt`,
+  and `caddy` were active/enabled, public `/healthz/` returned HTTP 200,
+  public `/readyz/` reported `backend_available=true`, unauthenticated public
+  `/v1/models` returned HTTP 401, and GPU memory returned to about 18,328 MiB
+  used by production vLLM.
 
 ## Metadata Examples
 
@@ -408,8 +450,8 @@ Hetzner strict GGUF through `llama-server`:
     "name": "llama-server",
     "version": "<llama-cpp-version>",
     "command": "llama-server --model google_gemma-4-E2B-it-Q4_K_M.gguf --host <bind-host> --port <port> --ctx-size <ctx-size> --gpu-layers <gpu-layers>",
-    "endpoint": "<hetzner-openai-compatible-v1-url>",
-    "auth_env_var": "BENCHPACK_HETZNER_OPENAI_TOKEN",
+    "endpoint": "http://127.0.0.1:18011/v1",
+    "auth_env_var": null,
     "options": {
       "ctx_size": "<ctx-size>",
       "cache": "<cache-settings>",
@@ -431,7 +473,7 @@ Hetzner strict GGUF through `llama-server`:
     "thermal": "<thermal-or-throttle-notes>",
     "background_load": "<background-load-notes>"
   },
-  "notes": "Strict same-GGUF candidate; auth env var name only, never the token value."
+  "notes": "Strict same-GGUF candidate; run over SSH against the remote-local endpoint and do not expose through the production public auth path."
 }
 ```
 
@@ -516,7 +558,10 @@ ssh <m4-studio-host> '
 If the M4 workflow is local rather than SSH-launched, run the same helper
 directly in the M4 repo with the M4 metadata file and host-label prefix.
 
-Hetzner strict GGUF through an authenticated OpenAI-compatible `/v1` endpoint:
+Hetzner strict GGUF through the remote-local isolated `llama-server` endpoint.
+Run this over SSH from the Hetzner repo while the temporary server is listening
+on `127.0.0.1`; do not expose this endpoint publicly and do not use the
+Django Bearer-auth production path for this strict lane:
 
 ```sh
 scripts/benchpack-tmux-matrix \
@@ -524,8 +569,7 @@ scripts/benchpack-tmux-matrix \
   --session-name 'bench-hetzner-gemma4-llama-<stamp>' \
   --adapter openai-chat \
   --model '<gemma4-server-alias>' \
-  --endpoint '<hetzner-openai-compatible-v1-url>' \
-  --openai-api-key-env BENCHPACK_HETZNER_OPENAI_TOKEN \
+  --endpoint 'http://127.0.0.1:18011/v1' \
   --host-label-prefix 'hetzner-gemma4-llama-<stamp>' \
   --run-metadata metadata/hetzner-gemma4-llama-server.json
 ```
