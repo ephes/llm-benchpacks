@@ -83,10 +83,9 @@ Primary mode:
   `google_gemma-4-E2B-it-Q4_K_M.gguf`, base model
   `google/gemma-4-E2B-it`. The optional multimodal projector files in that
   repo are verified but are not needed for the current text-only four-pack
-  matrix unless a future multimodal pack is added. The local M5 and M4
-  preflight notes below confirm checksum and a conservative load command for
-  this artifact on Apple Silicon; Hetzner checksum/load/fit still needs its own
-  preflight.
+  matrix unless a future multimodal pack is added. The local M5, M4, and
+  Hetzner preflight notes below confirm checksum and conservative load commands
+  for this artifact.
 - Alternative verified GGUF sources, to use only if the first candidate is
   rejected during preflight:
   `ggml-org/gemma-4-E2B-it-GGUF` has Q8_0/BF16 files but no Q4_K_M file in
@@ -273,6 +272,39 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
   machine-local path, command, checksum, load notes, smoke result, runtime-sweep
   rows, cleanup status, and result directory names. The file is ignored and
   should not be committed by default.
+
+## Hetzner Strict-GGUF Preflight Status
+
+Status as of 2026-05-07 for the same strict same-GGUF candidate:
+
+- Artifact:
+  `bartowski/google_gemma-4-E2B-it-GGUF` revision
+  `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf`.
+- Hetzner SHA-256:
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`.
+- Local alias: `gemma4-e2b-q4km`.
+- Runtime:
+  `/opt/llm/lnb011-llama-cpp-a09a00e50/build-cuda/bin/llama-server`,
+  llama.cpp version `9030 (a09a00e50)`, built with GNU `13.3.0` for Linux
+  x86_64 with CUDA enabled. CUDA detected the NVIDIA RTX 4000 SFF Ada
+  Generation, compute capability 8.9.
+- Load command:
+  `llama-server --model <downloaded-gguf> --alias gemma4-e2b-q4km --host 127.0.0.1 --port 18011 --ctx-size 8192 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui --reasoning off`.
+- Load result: succeeded during an operator-approved exclusive-GPU window on
+  the live Hetzner host, with production `llm.service` stopped and restored
+  afterward. Local-only `GET http://127.0.0.1:18011/v1/models` returned
+  `ok: models=1`; no generation, public request, benchmark pack, runtime-sweep,
+  load test, warmup, or quality evaluation was run.
+- GPU memory: production vLLM used about 18,328 MiB before the window; after
+  stopping `llm.service`, GPU use was 2 MiB. `llama-server` offloaded 36/36
+  layers, used a 1,449.69 MiB CUDA model buffer, 48 MiB plus 12 MiB CUDA KV
+  buffers, and reached about 2,222 MiB GPU memory used while listening. After
+  stopping `llama-server`, GPU use returned to 2 MiB, and after restoring
+  production vLLM it returned to about 18,328 MiB.
+- Production restore: `llm`, `llm-mgmt`, and `caddy` active; readiness reported
+  `backend_available: true`; public unauthenticated `/v1/models` remained HTTP
+  401.
 
 ## Metadata Examples
 
@@ -591,14 +623,11 @@ that the result is runtime-and-format evidence.
 ## Remaining Blockers
 
 - Post-download checksum and conservative `llama-server` load behavior are now
-  captured for the local M5 and M4 Studio first candidate. Same-commit M4 and
-  M5 four-pack matrices have also run with `--reasoning off`. Equivalent
-  checksum, strict same-GGUF `llama-server` load behavior, and memory fit
-  remain unverified on Hetzner. The Hetzner deployment-side repo has now
-  verified GPU-driver recovery, Qwen2.5 baseline restoration, a
-  Gemma-4-capable vLLM production role path, and a local-only full-card
-  idle-load fit for pinned `google/gemma-4-E2B-it`; those are
-  runtime-and-format vLLM readiness facts, not same-GGUF llama.cpp parity.
+  captured for the local M5, M4 Studio, and Hetzner first candidate.
+  Same-commit M4 and M5 four-pack matrices have also run with `--reasoning off`.
+  Hetzner has local-only strict same-GGUF `llama-server` checksum/load/memory-fit
+  evidence, but no Hetzner benchmark pack, runtime-sweep, load test, warmup, or
+  quality evaluation has run.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
@@ -607,18 +636,20 @@ that the result is runtime-and-format evidence.
   `llama-server --reasoning off` path on M5 and M4. The remaining Apple-lane
   quality caveat is consistent `patch-from-failure` `verify-script` failure on
   both hosts.
-- Separately confirm strict same-GGUF llama.cpp support and memory fit on the
-  Hetzner CUDA host with comparable runtime options.
+- Schedule explicit operator-approved Hetzner benchmark runs only after choosing
+  the strict same-GGUF lane versus the service-shaped vLLM lane and recording
+  matching metadata.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.
 - Hetzner SSH/inventory, GPU-driver recovery, Qwen2.5 baseline restoration,
-  authenticated benchmark access, and the LNB-008 full-card local-only vLLM
-  E2B load preflight are recorded as landed in the sibling deployment repo. The
-  preflight used the resident Qwen2.5 service stopped for an exclusive-GPU
-  window, reached local `/v1/models`, measured about 17,600 MiB Gemma 4 GPU
-  memory use, and restored the Qwen2.5 baseline afterward. No benchmark or
-  generation call was made in that deployment-side item.
+  authenticated benchmark access, strict same-GGUF llama.cpp preflight, and the
+  LNB-008 full-card local-only vLLM E2B load preflight are recorded as landed
+  in the sibling deployment repo. The vLLM preflight used the resident Qwen2.5
+  service stopped for an exclusive-GPU window, reached local `/v1/models`,
+  measured about 17,600 MiB Gemma 4 GPU memory use, and restored the Qwen2.5
+  baseline afterward. No benchmark or generation call was made in that
+  deployment-side item.
 - The Hetzner authenticated benchmark access contract has landed in sibling
   LNB-005 and the live smoke has landed in sibling LNB-010: use public TLS
   `/v1` through the Django Bearer-auth proxy with token env var

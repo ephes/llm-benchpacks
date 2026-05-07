@@ -81,9 +81,10 @@ Current blockers:
 - Exact small Gemma 4 IDs and first candidate GGUF/MLX/vLLM artifacts are now
   verified above. For the selected strict same-GGUF E2B Q4_K_M artifact, local
   M5 and M4 checksum, `llama-server --reasoning off` load behavior,
-  tokenizer/chat-template behavior, context/cache settings, and same-commit
-  four-pack Apple matrices are captured. Equivalent strict-GGUF llama.cpp
-  support and memory fit remain unverified on Hetzner.
+  tokenizer/chat-template behavior, context/cache settings, same-commit
+  four-pack Apple matrices, and Hetzner CUDA `llama-server` checksum/load/
+  memory-fit preflight are captured. Hetzner preflight used local-only
+  `/v1/models` and did not run a benchmark pack or quality check.
 - Authenticated OpenAI-compatible endpoint calls now use
   `benchpack run --adapter openai-chat --openai-api-key-env <ENV_NAME>`, which
   reads the bearer token from the named environment variable and sends the
@@ -102,9 +103,9 @@ Current blockers:
   limits, and `--enforce-eager`. That is not strict same-GGUF parity with the
   Apple `llama-server` runs.
 - Hetzner strict same-GGUF `llama-server`/llama.cpp support, checksum parity,
-  comparable runtime options, and memory fit remain separate unverified
-  blockers. Use the vLLM route only as runtime-and-format evidence unless a
-  later strict-GGUF preflight lands.
+  conservative 8K load behavior, and memory fit are now preflighted in sibling
+  LNB-011. Use the vLLM route only as runtime-and-format evidence unless the
+  planned run explicitly targets the strict same-GGUF `llama-server` lane.
 - The sibling LNB-010 smoke has landed: authenticated public Hetzner `/v1`
   benchmark access works through the Django Bearer-auth proxy with token env
   var `BENCHPACK_HETZNER_OPENAI_TOKEN`. Treat that as smoke-only access
@@ -156,11 +157,11 @@ default answer to every new “current preferred model” question.
 
 - Capture post-download checksums, runtime versions, load commands, local
   tokenizer/chat-template behavior, and memory fit for any selected Gemma 4
-  Hetzner mode before live benchmark matrices. The sibling repo has current
-  vLLM E2B readiness evidence; strict same-GGUF llama.cpp evidence is still
-  absent.
+  Hetzner mode before live benchmark matrices. The sibling repo now has both
+  vLLM E2B readiness evidence and strict same-GGUF llama.cpp E2B Q4_K_M
+  checksum/load/memory-fit evidence.
 - Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
   first tri-host campaign and keep its placeholder metadata examples aligned
   with verified artifacts when they are known.
-- Revisit the catalog when a strict same-GGUF Hetzner `llama-server` preflight
-  lands or before scheduling the first authenticated remote benchmark matrix.
+- Revisit the catalog before scheduling the first authenticated remote
+  benchmark matrix.

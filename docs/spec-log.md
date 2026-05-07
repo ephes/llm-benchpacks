@@ -20,6 +20,15 @@ working history and open questions.
 
 ### Changed
 
+- Recorded the sibling LNB-011 outcome: the Hetzner host now has an isolated
+  CUDA `llama-server` build at llama.cpp `9030 (a09a00e50)`, the same
+  `bartowski/google_gemma-4-E2B-it-GGUF` Q4_K_M artifact with SHA-256
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`, and a
+  successful local-only CUDA `/v1/models` load with 36/36 layers offloaded.
+  Production vLLM was restored afterward. No Hetzner benchmark pack,
+  runtime-sweep, matrix, generation, public request, or quality evaluation was
+  run.
+
 - Recorded the sibling LNB-010 outcome: benchmark-scoped authenticated public
   Hetzner `/v1` access was provisioned, authenticated `/v1/models` returned one
   model, and exactly one `smoke-chat` run passed through
@@ -44,8 +53,9 @@ working history and open questions.
 
 - Authenticated public `/v1` smoke is complete, but remote runtime-sweep or
   matrix runs still need explicit operator scheduling and target-mode approval.
-- Strict same-GGUF Hetzner llama.cpp checksum/load/memory-fit parity remains
-  unverified and should stay separate from the vLLM service-shaped path.
+- Hetzner strict same-GGUF checksum/load/memory-fit preflight is complete, but
+  benchmark matrix scheduling and lane selection still need explicit operator
+  approval.
 
 ## 2026-05-07 (External-agent model-call summaries)
 
