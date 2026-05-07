@@ -16,6 +16,45 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (Hetzner Gemma 4 progress recheck)
+
+### Changed
+
+- Rechecked the sibling `llm-node-bare` repo and the live
+  `root@llm.django-cast.com` host with read-only SSH commands. The host is
+  reachable, `llm`, `llm-mgmt`, and `caddy` are active/enabled, the resident
+  Qwen2.5 still serves locally, management `/healthz/` and `/readyz/` return
+  HTTP 200, and public unauthenticated `/v1/models` returns HTTP 401.
+- Confirmed the live GPU inventory: NVIDIA RTX 4000 SFF Ada Generation,
+  20,475 MiB VRAM, driver 580.126.09, with the resident Qwen2.5 service using
+  about 16.1 GiB VRAM and about 3.9 GiB free at recheck time.
+- Confirmed sibling deployment progress: an isolated
+  `/opt/llm/lnb007-gemma4-vllm-cu129` runtime imports Gemma 4 support with
+  vLLM 0.20.1, Transformers 5.8.0, Torch 2.11.0+cu129, and CUDA 12.9; the
+  pinned `google/gemma-4-E2B-it` snapshot is cached under the isolated cache
+  layout. Updated backlog/readiness docs to make the next Hetzner item an
+  exclusive-GPU full-card E2B load preflight, not a benchmark run.
+- A later same-day post-`apt dist-upgrade` health gate in the sibling repo
+  blocked that preflight before any Gemma 4 process was launched: `nvidia-smi`
+  fails with `Failed to initialize NVML: Driver/library version mismatch`,
+  `llm.service` is stuck in `activating (auto-restart)`, local Qwen2.5
+  `/v1/models` is down, management `/readyz/` reports
+  `backend_available: false`, and public unauthenticated `/v1/models` still
+  returns HTTP 401.
+
+### Open Questions
+
+- Hetzner Gemma 4 serving readiness first needs operator-approved GPU-driver
+  recovery and a healthy Qwen2.5 baseline again. Only then should LNB-008 stop
+  the current `llm` service for an exclusive-GPU full-card preflight with
+  temporary local-only vLLM on `127.0.0.1:18007`.
+- Authenticated public benchmark credentials remain a deployment-side procedure
+  item even though `llm-benchpacks` already supports
+  `--openai-api-key-env`.
+- Local M5 `runtime-sweep`, M4 checksum/load/smoke, and Hetzner full-card
+  serving preflight are now the next independent gates before any meaningful
+  M4/M5/Hetzner comparison matrix.
+
 ## 2026-05-06 (Gemma 4 local M5 smoke-chat with reasoning off)
 
 ### Changed

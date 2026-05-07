@@ -350,12 +350,19 @@ Scope:
   fit, token provisioning, SSH/inventory, and serving readiness remain
   preflight blockers before any benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
-  **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
-  in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal
-  or justification, Gemma 4 serving readiness, and authenticated benchmark
-  access. Until SSH/inventory access is confirmed, treat the documented
-  GEX44-class RTX 4000 SFF Ada 20 GB target as an intended host class rather
-  than verified live hardware state.
+  **Partly landed 2026-05-07.** An initial read-only SSH recheck and sibling
+  `llm-node-bare` notes confirmed the live GEX44-class host, RTX 4000 SFF Ada
+  20 GB inventory, healthy resident Qwen2.5 service, public unauthenticated
+  401 boundary, an isolated Gemma-4-capable vLLM 0.20.1+cu129 runtime, and a
+  cached pinned E2B snapshot. A later same-day post-apt health gate superseded
+  that healthy snapshot: `nvidia-smi` now fails with a NVIDIA driver/library
+  mismatch, `llm.service` is in auto-restart, local Qwen2.5 `/v1/models` is
+  down, and management `/readyz/` reports `backend_available: false`. Hetzner
+  Gemma 4 serving readiness first needs operator-approved GPU-driver/service
+  recovery and Qwen2.5 baseline verification; after that, LNB-008 still must
+  prove exclusive-GPU full-card E2B load fit and restore/re-verify Qwen2.5
+  before any Hetzner benchmark scheduling. Authenticated benchmark credentials
+  also remain a deployment-side procedure item before public remote runs.
 
 Validation:
 

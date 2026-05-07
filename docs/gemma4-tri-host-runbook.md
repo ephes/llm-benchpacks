@@ -497,24 +497,36 @@ that the result is runtime-and-format evidence.
 - Post-download checksum and conservative `llama-server` load behavior are now
   captured for the local M5 first candidate only. Equivalent checksum,
   strict same-GGUF `llama-server` load behavior, and memory fit remain
-  unverified on M4 and Hetzner.
+  unverified on M4 and Hetzner. The Hetzner deployment-side repo has verified
+  SSH/inventory and an isolated Gemma-4-capable vLLM candidate, but not
+  same-GGUF llama.cpp parity or full-card Gemma 4 memory fit.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
   benchmark quality evidence.
-- Resolve local Gemma 4 thinking behavior before running `runtime-sweep` or a
-  four-pack matrix: the local M5 `smoke-chat` adapter call succeeded but did
-  not pass scoring because the 64-token completion budget was consumed by
-  `reasoning_content` before normal answer content. Local `llama-server --help`
-  exposes untested candidate controls such as `--reasoning off`,
-  `--reasoning-budget 0`, `--chat-template-kwargs`, and `--reasoning-format`.
+- Local M5 Gemma 4 thinking behavior is resolved for smoke-chat when
+  `llama-server` is started with `--reasoning off`; local `runtime-sweep`
+  remains the next explicit M5 performance gate before any four-pack matrix.
 - Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
   Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.
 - Provision and test the Hetzner authenticated `/v1` token outside the repo.
-- Restore or confirm Hetzner SSH/inventory access and serving readiness through
-  deployment-side notes.
+- Hetzner SSH/inventory is confirmed in the sibling deployment repo, but the
+  next deployment-side gate is GPU-driver/service recovery after a post-apt
+  NVIDIA driver/library mismatch: `nvidia-smi` fails, `llm.service` is in
+  `activating (auto-restart)`, local Qwen2.5 `/v1/models` is down, and
+  management `/readyz/` reports `backend_available: false`.
+- After the deployment host is healthy again, serving readiness is still
+  blocked on LNB-008: an operator-approved exclusive-GPU full-card E2B load
+  preflight with the resident Qwen2.5 service stopped, because Qwen2.5 occupied
+  about 16.1 GiB of the 20,475 MiB RTX 4000 SFF Ada card during the first
+  isolated preflight. Schedule Hetzner benchmark runs only after that preflight
+  succeeds and the Qwen2.5 service has been restored and re-verified.
+- On Hetzner, use the sibling readiness notes for the isolated Hugging Face
+  cache layout; the complete pinned E2B weights are under the alternate
+  `models--google--gemma-4-E2B-it/snapshots/...` layout, not the incomplete
+  standard `hub/models--...` snapshot.
 - Record runtime versions, exact server commands, endpoint URLs, context/cache
   settings, power/thermal/background state, and same repo commit before launch.

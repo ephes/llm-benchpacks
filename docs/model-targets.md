@@ -89,11 +89,25 @@ Current blockers:
   provisioning for the public Hetzner `/v1` surface remains an operational
   prerequisite for live runs. The tmux helper can pass the same option through
   in dry-run matrices without reading the token value.
-- Live Hetzner SSH/inventory access is not confirmed, so exact RAM, GPU model,
-  driver version, and runtime state still need read-only verification.
-- The sibling deployment repo's deployed vLLM stack has not been re-validated
-  against Gemma 4. Gemma 4 serving must be validated before changing the
-  deployed model.
+- Live Hetzner SSH/inventory was confirmed through the sibling deployment repo
+  in an initial 2026-05-07 read-only recheck: the host had an RTX 4000 SFF Ada
+  with 20,475 MiB VRAM, driver 580.126.09, active Qwen2.5 vLLM service, healthy
+  management/proxy endpoints, and public unauthenticated `/v1/models` returning
+  HTTP 401.
+- The sibling deployment repo has an isolated Gemma-4-capable vLLM candidate
+  (`vllm==0.20.1+cu129`, `torch==2.11.0+cu129`) and the pinned E2B snapshot
+  cached. The current deployment-side blocker is a later same-day post-apt
+  NVIDIA driver/library mismatch: `nvidia-smi` fails, `llm.service` is in
+  auto-restart, local Qwen2.5 `/v1/models` is down, and management `/readyz/`
+  reports `backend_available: false`.
+- After GPU/service recovery and Qwen2.5 baseline verification, Hetzner still
+  has not proven full-card idle-loaded E2B fit because the resident Qwen2.5
+  service remained active during the first preflight and occupied about
+  16.1 GiB VRAM. An operator-approved exclusive-GPU load preflight remains
+  required before changing the deployed model or running Hetzner benchmarks.
+  On Hetzner, follow the sibling readiness notes for the isolated Hugging Face
+  cache layout because the complete pinned E2B weights are in the alternate
+  `models--google--gemma-4-E2B-it/snapshots/...` directory.
 
 Sources:
 
