@@ -375,11 +375,18 @@ Scope:
   normal Paris content and no `reasoning_content`; exactly one follow-up
   `runtime-sweep` wrote 9/9 `ok=true` unscored measured rows with usage-derived
   timing/token fields present and no observed template/tool/EOG leakage. The
-  M4 server was stopped afterward. M4 four-pack matrix work remains separate.
-  Hetzner checksum parity, strict same-GGUF `llama-server` load behavior,
-  comparable runtime options, memory fit, token provisioning, SSH/inventory,
-  and serving readiness remain preflight blockers before any tri-host benchmark
-  matrix.
+  M4 server was stopped afterward. **Same-commit Apple four-pack matrices
+  landed 2026-05-07.** After refreshing ignored metadata to `2acd1b3`, fresh
+  M5 and M4 matrices ran with the same strict-GGUF `llama-server --reasoning
+  off` setup. On both hosts, `smoke-chat` passed, `runtime-sweep` wrote 9/9
+  `ok=true` rows, `desktop-django-wrap` passed both regex cases, and
+  `patch-from-failure` reached the endpoint but failed `verify-script`
+  scoring. Runtime-sweep compare reported `prefill parity=comparable` for all
+  three cases. Median total TPS M5 vs M4 was 158.45 vs 137.19 short, 159.73 vs
+  137.83 medium, and 161.02 vs 138.63 long. Hetzner checksum parity, strict
+  same-GGUF `llama-server` load behavior, comparable runtime options, memory
+  fit, token provisioning, SSH/inventory, and serving readiness remain
+  preflight blockers before any tri-host benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Partly landed 2026-05-07.** An initial read-only SSH recheck and sibling
   `llm-node-bare` notes confirmed the live GEX44-class host, RTX 4000 SFF Ada

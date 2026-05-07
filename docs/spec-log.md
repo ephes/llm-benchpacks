@@ -16,6 +16,50 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (Gemma 4 Apple strict-GGUF four-pack)
+
+### Changed
+
+- Ran fresh same-commit (`2acd1b3`) Gemma 4 strict-GGUF four-pack matrices on
+  both the local M5 Max and remote M4 Max Studio after updating ignored
+  host-local metadata to record that commit. Both hosts used the same pinned
+  `bartowski/google_gemma-4-E2B-it-GGUF` Q4_K_M artifact, SHA-256
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`,
+  `/opt/homebrew/bin/llama-server` version `9030 (a09a00e50)`,
+  `gemma4-e2b-q4km`, `--reasoning off`, and matching context/cache/batch
+  options.
+- The current-commit M5 matrix wrote
+  `results/2026-05-07-m5-max-gemma4-llama-reasoning-off-4pack-20260507-1112-*`.
+  The current-commit M4 matrix wrote and pulled back compact artifacts under
+  `results/2026-05-07-m4-max-gemma4-llama-reasoning-off-4pack-20260507-1116-*`.
+  Only `run.jsonl`, `summary.md`, `hardware.json`, and `run-metadata.json`
+  were pulled back from the M4; remote raw/workspace/patch/task/verify payloads
+  stayed on the M4 Studio and generated results remain ignored.
+- For both current-commit matrices, `smoke-chat` passed, `runtime-sweep` wrote
+  9/9 `ok=true` unscored rows, both `desktop-django-wrap` rows passed regex
+  scoring, and `patch-from-failure` reached the endpoint but failed
+  deterministic `verify-script` scoring. The tiny repo-task verifier failure is
+  therefore consistent across M5 and M4 for this artifact.
+- `benchpack compare` over the current-commit runtime-sweep directories showed
+  `prefill parity=comparable` for short, medium, and long. Median total TPS
+  M5 vs M4 was 158.45 vs 137.19 short, 159.73 vs 137.83 medium, and 161.02 vs
+  138.63 long. Median decode TPS M5 vs M4 was 164.00 vs 142.55 short, 163.63
+  vs 141.75 medium, and 163.90 vs 141.02 long.
+- Stopped the local M5 and remote M4 `llama-server` sessions after the matrices
+  and confirmed no listener on TCP port 8081 and no matching
+  `llama-server.*gemma4-e2b-q4km` process.
+
+### Open Questions
+
+- Apple-lane Gemma 4 strict-GGUF M4/M5 four-pack parity is now complete for
+  the selected E2B Q4_K_M artifact and `llama-server --reasoning off`.
+- The `patch-from-failure` verifier failure remains a consistent tiny
+  repo-task model/task-quality signal on both Apple hosts, not a serving or
+  adapter blocker.
+- Hetzner remains separate and blocked by deployment-side GPU-driver/service
+  recovery, exclusive-GPU full-card Gemma 4 serving preflight, same-GGUF
+  llama.cpp parity, and authenticated benchmark access.
+
 ## 2026-05-07 (Gemma 4 M4 strict-GGUF preflight)
 
 ### Changed

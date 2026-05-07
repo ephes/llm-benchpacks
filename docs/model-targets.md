@@ -79,9 +79,11 @@ Tri-host comparison modes:
 Current blockers:
 
 - Exact small Gemma 4 IDs and first candidate GGUF/MLX/vLLM artifacts are now
-  verified above. Remaining artifact work is local/live preflight only:
-  checksums after download, runtime load behavior, tokenizer/chat-template
-  behavior through each server, context/cache settings, and memory fit.
+  verified above. For the selected strict same-GGUF E2B Q4_K_M artifact, local
+  M5 and M4 checksum, `llama-server --reasoning off` load behavior,
+  tokenizer/chat-template behavior, context/cache settings, and same-commit
+  four-pack Apple matrices are captured. Equivalent strict-GGUF llama.cpp
+  support and memory fit remain unverified on Hetzner.
 - Authenticated OpenAI-compatible endpoint calls now use
   `benchpack run --adapter openai-chat --openai-api-key-env <ENV_NAME>`, which
   reads the bearer token from the named environment variable and sends the
@@ -152,7 +154,7 @@ default answer to every new “current preferred model” question.
 
 - Capture post-download checksums, runtime versions, load commands, local
   tokenizer/chat-template behavior, and memory fit for the selected Gemma 4
-  artifacts before any live benchmark matrix.
+  artifacts on Hetzner before any live tri-host benchmark matrix.
 - Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
   first tri-host campaign and keep its placeholder metadata examples aligned
   with verified artifacts when they are known.

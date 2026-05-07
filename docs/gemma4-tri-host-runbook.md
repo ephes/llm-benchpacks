@@ -251,7 +251,21 @@ Status as of 2026-05-07 for the same strict same-GGUF candidate:
 - Result artifacts: compact M4 `run.jsonl`, `summary.md`, `hardware.json`, and
   `run-metadata.json` files were pulled back locally for the smoke and runtime
   result directories. Remote `raw/` payloads stayed on the M4 Studio and
-  generated results remain ignored. No M4 four-pack matrix was run.
+  generated results remain ignored.
+- Four-pack matrix status: after the preflight, a fresh same-commit
+  (`2acd1b3`) Apple-lane matrix was run on both M5 and M4 with updated ignored
+  metadata. The M4 matrix wrote
+  `results/2026-05-07-m4-max-gemma4-llama-reasoning-off-4pack-20260507-1116-*`
+  and compact artifacts were pulled back locally. It matched the current M5
+  matrix shape at
+  `results/2026-05-07-m5-max-gemma4-llama-reasoning-off-4pack-20260507-1112-*`:
+  `smoke-chat` passed, `runtime-sweep` wrote 9/9 `ok=true` rows,
+  `desktop-django-wrap` passed both regex cases, and `patch-from-failure`
+  reached the endpoint but failed `verify-script` scoring.
+- Current-commit runtime comparison: `benchpack compare` over the M5 and M4
+  runtime-sweep directories reported `prefill parity=comparable` for short,
+  medium, and long. Median total TPS M5 vs M4 was 158.45 vs 137.19 short,
+  159.73 vs 137.83 medium, and 161.02 vs 138.63 long.
 - Runtime cleanup: the M4 `llama-server` was stopped after the preflight, and
   post-run checks found no listener on TCP port 8081 and no matching
   `llama-server.*gemma4-e2b-q4km` process.
@@ -577,25 +591,22 @@ that the result is runtime-and-format evidence.
 ## Remaining Blockers
 
 - Post-download checksum and conservative `llama-server` load behavior are now
-  captured for the local M5 and M4 Studio first candidate. M4 `smoke-chat` and
-  `runtime-sweep` also passed with `--reasoning off`, but the M4 four-pack
-  matrix has not run. Equivalent checksum, strict same-GGUF `llama-server` load
-  behavior, and memory fit remain unverified on Hetzner. The Hetzner
-  deployment-side repo has verified SSH/inventory and an isolated
-  Gemma-4-capable vLLM candidate, but not same-GGUF llama.cpp parity or
-  full-card Gemma 4 memory fit.
+  captured for the local M5 and M4 Studio first candidate. Same-commit M4 and
+  M5 four-pack matrices have also run with `--reasoning off`. Equivalent
+  checksum, strict same-GGUF `llama-server` load behavior, and memory fit
+  remain unverified on Hetzner. The Hetzner deployment-side repo has verified
+  SSH/inventory and an isolated Gemma-4-capable vLLM candidate, but not
+  same-GGUF llama.cpp parity or full-card Gemma 4 memory fit.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
   benchmark quality evidence.
-- Local M5 Gemma 4 thinking behavior is resolved for the strict-GGUF
-  `llama-server --reasoning off` path, and the default four-pack matrix has
-  run once. The remaining local M5 blocker is `patch-from-failure`
-  `verify-script` failure caused by an inapplicable generated diff.
-- Decide whether to proceed to the M4 four-pack matrix now that M4 checksum,
-  load, smoke, and runtime-sweep have passed. Separately confirm strict
-  same-GGUF llama.cpp support and memory fit on the Hetzner CUDA host with
-  comparable runtime options.
+- Apple Gemma 4 thinking behavior is resolved for the strict-GGUF
+  `llama-server --reasoning off` path on M5 and M4. The remaining Apple-lane
+  quality caveat is consistent `patch-from-failure` `verify-script` failure on
+  both hosts.
+- Separately confirm strict same-GGUF llama.cpp support and memory fit on the
+  Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.
