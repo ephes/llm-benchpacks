@@ -91,7 +91,11 @@ Operational defaults:
   helpers, wrap scripted window commands with an explicit POSIX shell such as
   `/bin/sh -c`; do not assume tmux's default shell is POSIX-compatible.
 - For remote M4 runs, run the same setup and benchmark commands over SSH in the
-  remote repo. Pull back only `run.jsonl`, `summary.md`, `hardware.json`, and
+  remote repo. Before syncing, run `git status --short` and `git log -1
+  --oneline` on the remote repo. If the remote working tree is dirty or has
+  untracked files, do not pull over it; either preserve the state explicitly
+  with an operator-approved stash/worktree or stop and report the blocker.
+  Pull back only `run.jsonl`, `summary.md`, `hardware.json`, and
   `run-metadata.json`; leave `raw/`, `workspace/`, `patch/`, `task/`, and
   `verify/` local unless a curated run-log entry explicitly needs them.
 - After local and remote runs finish, use `benchpack report` over the paired
