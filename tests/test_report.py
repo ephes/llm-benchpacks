@@ -188,6 +188,61 @@ def test_report_renders_user_supplied_runtime_metadata(tmp_path: Path) -> None:
     assert "unit report note" in output
 
 
+def test_report_renders_external_agent_model_call_summary(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(run_a)
+    model_calls = run_a / "task" / "edit-repo" / "rep-001.model-calls.jsonl"
+    model_calls.parent.mkdir(parents=True)
+    model_calls.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "sequence": 1,
+                        "model": "test-model",
+                        "ok": True,
+                        "adapter": "example-local-http",
+                        "endpoint": "local-http",
+                        "duration_s": 0.1,
+                        "prompt_tokens": 3,
+                        "output_tokens": 5,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "sequence": 2,
+                        "model": "test-model",
+                        "ok": False,
+                        "error": "short deterministic error",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "sequence": 3,
+                        "model": "test-model",
+                        "ok": True,
+                        "request": {"prompt": "not safe for summaries"},
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output = render_report(load_report_runs([run_a]))
+
+    assert "## External-Agent Model Calls" in output
+    assert (
+        "| run-a | edit-repo | 1 | 3 | 2 | 1 | 1 | 1 | 1 | test-model | "
+        "example-local-http | local-http | 0.100000 | 3 | 5 | — |"
+    ) in output
+    assert "not safe for summaries" not in output
+
+
 def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     _write_run(run_a)
@@ -195,6 +250,7 @@ def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:
     output = render_report(load_report_runs([run_a]))
 
     assert "| run-a | run-metadata.json missing | — | — | — |" in output
+    assert "## External-Agent Model Calls" not in output
 
 
 def test_report_rejects_malformed_run_metadata_json(tmp_path: Path) -> None:

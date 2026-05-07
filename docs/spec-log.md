@@ -41,6 +41,29 @@ working history and open questions.
 - Strict same-GGUF Hetzner llama.cpp checksum/load/memory-fit parity remains
   unverified and should stay separate from the vLLM service-shaped path.
 
+## 2026-05-07 (External-agent model-call summaries)
+
+### Changed
+
+- Added safe summary parsing for optional public `external-agent`
+  `task/<case-id>/rep-NNN.model-calls.jsonl` artifacts. The runner still does
+  not require or pre-create those files and does not add paths or payloads to
+  `run.jsonl`.
+- `summary.md` and `benchpack report` now render aggregate model-call
+  telemetry when optional logs exist: call counts, valid/invalid counts,
+  ok/failed/error counts, unique model/adapter/endpoint labels, summed
+  duration, and summed token fields.
+- The parser accepts only the recommended allowlisted safe fields and counts
+  malformed or unsafe lines as invalid without echoing their payloads, so full
+  prompts, full responses, request bodies, headers, credentials, and arbitrary
+  harness keys stay out of summaries and reports.
+
+### Open Questions
+
+- Full production external coding-agent execution, required model-call
+  logging beyond the optional summary artifact, richer harness configuration,
+  and richer task status/reporting remain later Phase 3 work.
+
 ## 2026-05-07 (Gemma 4 Apple strict-GGUF four-pack)
 
 ### Changed

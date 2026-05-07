@@ -52,9 +52,10 @@ than changing the adapter boundary:
   model/adapter/endpoint/defaults is passed through an explicit generated JSON
   context file, not as adapter schema fields. That context also exposes an
   optional runner-owned model-call JSONL artifact path for harness-owned model
-  calls, without requiring or parsing the file. Full external coding-agent harness
-  production integration, task environment, retention, richer
-  status/reporting, and pack-level harness defaults remain future work.
+  calls, without requiring the file or adding it to `run.jsonl`; when present,
+  only allowlisted safe telemetry fields are summarized. Full external
+  coding-agent harness production integration, task environment, retention,
+  richer status/reporting, and pack-level harness defaults remain future work.
 - **Verifier**: deterministic checker for measured repo-task outcomes, currently
   implemented for `verify-script`.
 - **Artifact recorder**: reporter-side responsibility for explicit repo-task
@@ -302,13 +303,15 @@ paths, task log paths, patch capture after the task phase, verifier execution
 after patch capture, and existing measured row shapes unchanged. Normal adapter
 schemas remain unchanged by default; the generated external-agent context file
 is harness input and is not duplicated into `run.jsonl`; the optional
-model-call JSONL path exposed through that context is not required, parsed,
-summarized, or reported. Harness-owned model calls are runner/harness concerns
-rather than normal adapter request fields. The recommended JSONL line shape
-starts with
+model-call JSONL path exposed through that context is not required,
+pre-created, or added to `run.jsonl`. When present, allowlisted safe telemetry
+is summarized in `summary.md` and `benchpack report`. Harness-owned model
+calls are runner/harness concerns rather than normal adapter request fields.
+The recommended JSONL line shape starts with
 `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`, but the
-runner does not validate or normalize that file. External harnesses may mutate
-only the prepared workspace and write only allowed run-output artifacts.
+runner validates only safe summary fields from that file. External harnesses
+may mutate only the prepared workspace and write only allowed run-output
+artifacts.
 Pack-owned fixtures, prompts, verifier scripts, source docs, and raw model
 artifacts remain immutable or runner-owned. Task
 environment, retention, richer task status/reporting, pack-level harness
@@ -324,12 +327,14 @@ optional run metadata path, selected model, adapter id, endpoint argument,
 defaults, compatibility options, and an optional
 `task/<case-id>/rep-NNN.model-calls.jsonl` path as explicit harness input. That
 optional JSONL file is a harness-owned artifact when written; it is not
-required, pre-created, validated, parsed, summarized, reported, or added to
-`run.jsonl`. The recommended JSONL shape uses one object per model call with
-`schema_version`, `sequence`, `model`, and `ok` as the minimal fields and
-optional timing/token/error fields when safe. The default shape should not
-contain full prompts, full responses, request bodies, headers, environment
-variables, API keys, bearer tokens, or credentials. Those calls do not become
+required, pre-created, or added to `run.jsonl`. The runner validates only the
+recommended safe telemetry fields for aggregate summaries and counts invalid
+or unsafe lines without echoing their payloads. The recommended JSONL shape
+uses one object per model call with `schema_version`, `sequence`, `model`, and
+`ok` as the minimal fields and optional timing/token/error fields when safe.
+The default shape should not contain full prompts, full responses, request
+bodies, headers, environment variables, API keys, bearer tokens, or
+credentials. Those calls do not become
 normal adapter calls, do not change adapter envelopes, do not add `run.jsonl`
 fields, and do not write normal `raw/` artifacts unless a later schema slice
 defines that mapping.
@@ -561,9 +566,10 @@ shape.
 
 `benchpack report` is also outside the execution flow. It reads existing result
 directories, loads `run.jsonl` through the same loader as compare, optionally
-reads sibling `hardware.json` and `run-metadata.json`, and writes Markdown to
-stdout only. Missing `hardware.json` or `run-metadata.json` is tolerated because
-older or pulled-back compare inputs may contain only `run.jsonl`.
+reads sibling `hardware.json`, `run-metadata.json`, and optional external-agent
+model-call JSONL artifacts under `task/`, and writes Markdown to stdout only.
+Missing `hardware.json`, `run-metadata.json`, or model-call logs is tolerated
+because older or pulled-back compare inputs may contain only `run.jsonl`.
 
 When invoked with `--set <manifest.toml>`, the report command first loads a
 small source TOML report-set manifest with `version = 1` and `result_dirs =
@@ -577,14 +583,16 @@ summarization.
 The report renderer is intended for run-log and comparison-note assembly. It
 summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
 identity when available, user-supplied runtime/model/operating metadata when
-available, row and `ok` counts, and scoring pass/fail/unscored counts.
-Malformed `run-metadata.json` fails clearly because the report is being asked to
-interpret that artifact. Its compare-median section reuses the compare
-summarization,
-prompt/cache warning, and prefill-parity helpers so the report cannot silently
-disagree with `benchpack compare` on median values, cache rows, warnings, or
-`prefill parity` status. It does not load adapters, collect hardware, execute
-packs, read `raw/`, write result artifacts, mutate result directories, or alter
+available, external-agent model-call aggregate telemetry when optional logs are
+present, row and `ok` counts, and scoring pass/fail/unscored counts. Malformed
+`run-metadata.json` fails clearly because the report is being asked to
+interpret that artifact. Malformed or unsafe model-call JSONL lines are counted
+as invalid and their payloads are not echoed. Its compare-median section reuses
+the compare summarization, prompt/cache warning, and prefill-parity helpers so
+the report cannot silently disagree with `benchpack compare` on median values,
+cache rows, warnings, or `prefill parity` status. It does not load adapters,
+collect hardware, execute packs, read `raw/`, write result artifacts, mutate
+result directories, or alter
 the result schema. Compare remains independent of `run-metadata.json`.
 
 ## Operational Helper Flow

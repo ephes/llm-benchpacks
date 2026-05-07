@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import AdapterResult
+from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .packs import Case, Pack
 from .run_metadata import write_run_metadata
 from .scoring import evaluate
@@ -209,6 +210,30 @@ class RunReporter:
             notes = run_metadata.get("notes")
             if isinstance(notes, str) and notes:
                 lines.append(f"Notes: {notes}")
+        try:
+            model_call_summaries = summarize_model_call_logs(self.output_dir)
+        except ModelCallLogError as exc:
+            lines.append("")
+            lines.append("## External-Agent Model Calls")
+            lines.append("")
+            lines.append(f"Could not summarize model-call logs: {exc}")
+        else:
+            if model_call_summaries:
+                lines.append("")
+                lines.append("## External-Agent Model Calls")
+                lines.append("")
+                lines.append(
+                    "| case | repetition | calls | valid | invalid | ok | failed | "
+                    "errors | models | adapters | endpoints | duration_s | "
+                    "prompt_tokens | output_tokens | cached_prompt_tokens |"
+                )
+                lines.append(
+                    "|------|------------|-------|-------|---------|----|--------|"
+                    "--------|--------|----------|-----------|------------|"
+                    "---------------|---------------|----------------------|"
+                )
+                for summary in model_call_summaries:
+                    lines.append(_model_call_summary_row(summary))
         lines.append("")
         lines.append("| case | adapter | model | ok | wall_s | total_tps | scoring |")
         lines.append("|------|---------|-------|----|--------|-----------|---------|")
@@ -257,3 +282,41 @@ def _compact_summary_value(value: Any) -> str:
     if isinstance(value, list):
         return json.dumps(value)
     return str(value)
+
+
+def _model_call_summary_row(summary: Any) -> str:
+    return (
+        "| {case} | {repetition} | {calls} | {valid} | {invalid} | {ok} | "
+        "{failed} | {errors} | {models} | {adapters} | {endpoints} | "
+        "{duration} | {prompt} | {output} | {cached} |"
+    ).format(
+        case=_summary_table_cell(summary.case),
+        repetition=summary.repetition,
+        calls=summary.calls,
+        valid=summary.valid,
+        invalid=summary.invalid,
+        ok=summary.ok,
+        failed=summary.failed,
+        errors=summary.error_count,
+        models=_summary_table_cell(_compact_summary_list(summary.models)),
+        adapters=_summary_table_cell(_compact_summary_list(summary.adapters)),
+        endpoints=_summary_table_cell(_compact_summary_list(summary.endpoints)),
+        duration=(
+            f"{summary.duration_s:.6f}" if summary.duration_s is not None else "—"
+        ),
+        prompt=summary.prompt_tokens if summary.prompt_tokens is not None else "—",
+        output=summary.output_tokens if summary.output_tokens is not None else "—",
+        cached=(
+            summary.cached_prompt_tokens
+            if summary.cached_prompt_tokens is not None
+            else "—"
+        ),
+    )
+
+
+def _compact_summary_list(values: tuple[str, ...]) -> str:
+    return ", ".join(values) if values else "—"
+
+
+def _summary_table_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")

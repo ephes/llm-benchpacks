@@ -530,13 +530,14 @@ context and append `--context <path>` to the subprocess argv while preserving
 the same adapter/result/report boundaries. The follow-up optional model-call
 log path slice landed 2026-05-06: external-agent contexts now expose
 `run.model_call_log_path` at
-`task/<case-id>/rep-NNN.model-calls.jsonl` without requiring, parsing, reporting,
-or adding that artifact to `run.jsonl`. The next recommended-shape slice also
-landed 2026-05-06: docs and fake external-agent coverage now use the minimal
-recommended JSONL line
+`task/<case-id>/rep-NNN.model-calls.jsonl` without requiring, parsing,
+reporting, or adding that artifact to `run.jsonl`. The next recommended-shape
+slice also landed 2026-05-06: docs and fake external-agent coverage now use
+the minimal recommended JSONL line
 `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}` while
-leaving the runner's treatment of the file optional and opaque. A deterministic
-reference external-agent harness example also landed 2026-05-06 under
+leaving the runner's treatment of the file optional and opaque until the later
+safe summary slice. A deterministic reference external-agent harness example
+also landed 2026-05-06 under
 `examples/external-agent/`: it validates the public argv/context handoff,
 mutates only the prepared workspace, writes one recommended model-call JSONL
 line, and is covered through the public CLI external-agent path without adding
@@ -552,7 +553,13 @@ artifact parsing unchanged. The external-agent process-tree cleanup slice then
 landed 2026-05-06: timed-out external subprocess harnesses now run in a POSIX
 process group/session, receive bounded terminate-then-kill cleanup, preserve
 captured task stdout/stderr plus deterministic timeout text, and remain task
-outcomes when cleanup and log writing succeed.
+outcomes when cleanup and log writing succeed. The safe model-call summary
+slice then landed 2026-05-07: optional external-agent
+`task/<case-id>/rep-NNN.model-calls.jsonl` artifacts remain outside
+`run.jsonl`, but `summary.md` and `benchpack report` now parse only the
+allowlisted recommended telemetry fields and render aggregate counts,
+success/failure/error counts, labels, duration, and token totals while counting
+unsafe lines without echoing their payloads.
 
 Scope:
 
@@ -778,8 +785,9 @@ Scope:
   as `run.model_call_log_path` in the external-agent context, using the
   deterministic task artifact location
   `task/<case-id>/rep-NNN.model-calls.jsonl`. The runner does not pre-create,
-  require, validate, parse, summarize, report, or add that file to `run.jsonl`;
-  harness-owned model calls remain outside normal adapter `raw/` artifacts.
+  require, or add that file to `run.jsonl`; harness-owned model calls remain
+  outside normal adapter `raw/` artifacts. Safe summary parsing/reporting for
+  this optional artifact landed in the later 2026-05-07 slice below.
 - Document a recommended external-agent model-call JSONL object shape. **Landed
   2026-05-06** as guidance and fake external-agent coverage only. The
   recommended minimal per-call line is
@@ -795,23 +803,33 @@ Scope:
   and focused CLI coverage. The example reads the public context, validates
   core fields against the appended argv, writes only a small marker inside the
   prepared workspace and one recommended JSONL line at
-  `run.model_call_log_path`, makes no live model calls, and leaves the runner's
-  optional/opaque treatment of that file unchanged.
+  `run.model_call_log_path`, makes no live model calls, and left the runner's
+  optional/opaque treatment of that file unchanged in this slice. Safe summary
+  parsing/reporting landed later without changing `run.jsonl`.
 - Add a deterministic model-call-shaped external-agent example. **Landed
   2026-05-06** as `examples/external-agent/model-call-agent.py` plus usage docs
   and focused CLI coverage. The example reads the public context, performs one
   stdlib local HTTP JSON request to an example-owned fake endpoint, sends only
   case id, repetition, and model, writes the deterministic response content
   only inside the prepared workspace, and writes one safe JSONL telemetry line
-  at `run.model_call_log_path`. The runner still does not parse, validate,
-  summarize, report, or add that file to `run.jsonl`, and no adapter raw
-  artifacts are created for harness-owned calls.
+  at `run.model_call_log_path`. The runner did not parse, validate, summarize,
+  report, or add that file to `run.jsonl` in this slice, and no adapter raw
+  artifacts are created for harness-owned calls. Safe summary parsing/reporting
+  landed later without changing `run.jsonl`.
 - Add external-agent process-tree cleanup on timeout. **Landed 2026-05-06**
   for POSIX/macOS/Linux subprocess harnesses: external agents run in a new
   process group/session, timeout cleanup sends a bounded terminate signal and
   escalates to kill when needed, captured stdout/stderr is preserved in the
   existing task logs with deterministic timeout text, and cleaned-up timeouts
   remain task outcomes without adding result fields or task artifact paths.
+- Add safe external-agent model-call telemetry summaries. **Landed
+  2026-05-07** as a report-only parser for optional
+  `task/<case-id>/rep-NNN.model-calls.jsonl` artifacts. It validates only the
+  recommended allowlisted fields, counts invalid or unsafe lines without
+  echoing their payloads, includes aggregate summaries in `summary.md` and
+  `benchpack report`, and keeps model-call paths, full prompts, full
+  responses, request bodies, headers, credentials, and all model-call payloads
+  out of `run.jsonl`.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -829,10 +847,10 @@ Scope:
   2026-05-05 production external contract refinement, and a runner-side
   subprocess skeleton for deterministic external harness boundary tests, plus
   the first public `external-agent` CLI routing slice and optional model-call
-  log artifact path plus a recommended, non-enforced model-call JSONL line
-  shape. Full production external coding-agent execution, required model-call
-  logging/schema/reporting, and richer harness configuration remain planned
-  later.
+  log artifact path, a recommended model-call JSONL line shape, and safe
+  aggregate model-call summaries. Full production external coding-agent
+  execution, required model-call logging beyond the optional summary artifact,
+  and richer harness configuration remain planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task

@@ -255,8 +255,9 @@ tree on timeout, wait a short bounded grace period, and escalate to a kill
 signal if needed before writing timeout task logs. The normal adapter call
 still happens before the repo-task task phase in this slice. The context also
 names an optional harness-owned model-call log path at
-`task/<case-id>/rep-NNN.model-calls.jsonl`; required logging, enforced JSONL
-schema validation, parsing, summaries, and reports remain future work.
+`task/<case-id>/rep-NNN.model-calls.jsonl`; the runner still does not require
+or pre-create that artifact, and it remains outside `run.jsonl`, but
+allowlisted safe telemetry is summarized when the file exists.
 
 An external harness receives runner-owned inputs, not broad manifest command
 blobs: currently the appended prepared workspace path, case id, run output
@@ -278,9 +279,11 @@ write the existing task stdout/stderr logs through the runner-owned capture path
 under `task/<case-id>/rep-NNN.*.log` and may optionally write JSONL model-call
 telemetry to the context-provided
 `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
-pre-create, validate, parse, summarize, report, or add that file to `run.jsonl`
-in this slice. The recommended minimal JSONL line shape for harness authors is
-one JSON object per harness-owned model call:
+pre-create, or add that file to `run.jsonl`. When the file exists, the runner
+parses only the recommended safe telemetry shape for aggregate summaries in
+`summary.md` and `benchpack report`; invalid or unsafe lines are counted but
+their payloads are not reported. The recommended minimal JSONL line shape for
+harness authors is one JSON object per harness-owned model call:
 
 ```json
 {"schema_version":1,"sequence":1,"model":"test-model","ok":true}
@@ -292,12 +295,19 @@ external-agent task phase, `model` as the model identifier when known, and `ok`
 as a boolean success indicator. Useful optional fields include `started_at`,
 `ended_at`, `duration_s`, `adapter`, `endpoint`, `prompt_tokens`,
 `output_tokens`, `cached_prompt_tokens`, and a short `error` string when
-`ok` is false. This is guidance only: the runner treats the file as
-harness-owned and opaque. The default recommended shape should not log full
-prompts, full responses, request bodies, headers, environment variables, API
-keys, bearer tokens, or credentials. Richer harness-owned telemetry is outside
-the runner-normalized contract until a later schema slice explicitly defines
-it.
+`ok` is false. The summary allowlist is exactly those fields; unknown keys,
+malformed JSON, wrong types, non-finite numbers, negative token counts, and
+unsafe strings make a line invalid for summary purposes. Safe strings are
+short strings without control characters or Unicode separator characters other
+than plain spaces. `endpoint` is treated as a label, not a URL; values
+containing URL schemes, query strings, or userinfo markers are invalid for
+summaries. Summary output reports counts,
+success/failure/error counts, unique model/adapter/endpoint labels, summed
+duration, and summed token fields only. It does not report full prompts, full
+responses, request bodies, headers, environment variables, API keys, bearer
+tokens, credentials, or short error text. Richer harness-owned telemetry is
+outside the runner-normalized contract until a later schema slice explicitly
+defines it.
 
 A deterministic local reference harness is available at
 `examples/external-agent/reference-agent.py`. It demonstrates the public argv
@@ -771,7 +781,10 @@ such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly; malformed metadata
-fails with a clear error.
+fails with a clear error. When external-agent model-call JSONL artifacts exist
+under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
+safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
+unsafe JSONL lines are counted as invalid without echoing their payloads.
 
 The optional `--set <manifest.toml>` mode loads a source TOML report-set
 manifest and expands it to the same existing result-directory inputs before the
@@ -804,6 +817,9 @@ skeleton. It summarizes:
 - adapter, model, and endpoint values from normalized rows
 - user-supplied runtime/model/operating metadata when `run-metadata.json`
   exists
+- external-agent model-call summary counts, success/failure/error counts,
+  unique model/adapter/endpoint labels, summed duration, and summed token
+  fields when optional model-call logs exist
 - row and `ok` counts by run/case
 - scoring pass, fail, and unscored counts by run/case
 - the same median wall time, TTFT, prefill TPS, decode TPS, total TPS, output

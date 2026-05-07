@@ -20,6 +20,7 @@ from .compare import (
     prefill_parity_statuses,
     summarize_runs,
 )
+from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
@@ -114,7 +115,13 @@ def render_report(runs: list[ResultRun]) -> str:
     lines.extend(_render_run_metadata(runs))
     lines.append("")
     lines.extend(_render_runtime_metadata(runs))
-    lines.append("")
+    model_call_lines = _render_external_agent_model_calls(runs)
+    if model_call_lines:
+        lines.append("")
+        lines.extend(model_call_lines)
+        lines.append("")
+    else:
+        lines.append("")
     lines.extend(_render_case_outcomes(runs))
     lines.append("")
     lines.extend(_render_compare_medians(summaries, statuses, warning_lines))
@@ -206,6 +213,56 @@ def _render_case_outcomes(runs: list[ResultRun]) -> list[str]:
                 )
             )
     return lines
+
+
+def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
+    header = [
+        "## External-Agent Model Calls",
+        "",
+        "| run | case | repetition | calls | valid | invalid | ok | failed | "
+        "errors | models | adapters | endpoints | duration_s | prompt_tokens | "
+        "output_tokens | cached_prompt_tokens |",
+        "|-----|------|------------|-------|-------|---------|----|--------|"
+        "--------|--------|----------|-----------|------------|---------------|"
+        "---------------|----------------------|",
+    ]
+    rows: list[str] = []
+    for run in runs:
+        try:
+            summaries = summarize_model_call_logs(run.path)
+        except ModelCallLogError as exc:
+            raise ReportError(str(exc)) from exc
+        for summary in summaries:
+            rows.append(
+                "| {run} | {case} | {repetition} | {calls} | {valid} | "
+                "{invalid} | {ok} | {failed} | {errors} | {models} | "
+                "{adapters} | {endpoints} | {duration} | {prompt} | "
+                "{output} | {cached} |".format(
+                    run=run.label,
+                    case=_markdown_cell(summary.case),
+                    repetition=summary.repetition,
+                    calls=summary.calls,
+                    valid=summary.valid,
+                    invalid=summary.invalid,
+                    ok=summary.ok,
+                    failed=summary.failed,
+                    errors=summary.error_count,
+                    models=_markdown_cell(_join_values(summary.models)),
+                    adapters=_markdown_cell(_join_values(summary.adapters)),
+                    endpoints=_markdown_cell(_join_values(summary.endpoints)),
+                    duration=(
+                        format_float(summary.duration_s, digits=6)
+                        if summary.duration_s is not None
+                        else MISSING
+                    ),
+                    prompt=format_tokens(summary.prompt_tokens),
+                    output=format_tokens(summary.output_tokens),
+                    cached=format_tokens(summary.cached_prompt_tokens),
+                )
+            )
+    if not rows:
+        return []
+    return header + rows
 
 
 def _render_compare_medians(
@@ -371,6 +428,10 @@ def _compact_mapping(values: dict[str, Any]) -> str:
         if value not in (None, "", [])
     ]
     return "; ".join(parts) if parts else MISSING
+
+
+def _join_values(values: tuple[str, ...]) -> str:
+    return ", ".join(values) if values else MISSING
 
 
 def _case_order(records: list[dict[str, Any]]) -> list[str]:

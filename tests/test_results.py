@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -509,6 +510,77 @@ def test_write_summary_includes_runtime_metadata_when_supplied(
     assert "quantization=Q4_K_M" in text
     assert "Operating conditions: thermal=not captured" in text
     assert "Notes: no intentional throttling setup" in text
+
+
+def test_write_summary_includes_external_agent_model_call_summary(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    model_calls = out / "task" / "capital" / "rep-001.model-calls.jsonl"
+    model_calls.parent.mkdir(parents=True)
+    model_calls.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sequence": 1,
+                "model": "test-model",
+                "ok": True,
+                "adapter": "example-local-http",
+                "endpoint": "local-http",
+                "duration_s": 0.25,
+                "prompt_tokens": 4,
+                "output_tokens": 6,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+
+    assert "## External-Agent Model Calls" in text
+    assert (
+        "| capital | 1 | 1 | 1 | 0 | 1 | 0 | 0 | test-model | "
+        "example-local-http | local-http | 0.250000 | 4 | 6 | — |"
+    ) in text
+
+
+def test_write_summary_model_call_error_uses_relative_path(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    model_calls = out / "task" / "capital" / "rep-001.model-calls.jsonl"
+    model_calls.parent.mkdir(parents=True)
+    model_calls.write_text("{}", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def unreadable(path: Path, *args, **kwargs):
+        if path == model_calls:
+            raise OSError("permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    with patch.object(Path, "read_text", unreadable):
+        reporter.write_summary({"hostname": "h", "platform": "darwin"})
+
+    text = (out / "summary.md").read_text()
+    assert "task/capital/rep-001.model-calls.jsonl" in text
+    assert str(out) not in text
 
 
 def test_write_summary_distinguishes_repetitions(tmp_path: Path) -> None:

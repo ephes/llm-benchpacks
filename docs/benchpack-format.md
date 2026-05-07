@@ -419,9 +419,11 @@ Rules:
   The generated external-agent context file is harness input and is not
   duplicated into `run.jsonl`. The context-provided
   `task/<case-id>/rep-NNN.model-calls.jsonl` path is optional and is not
-  required, pre-created, validated, parsed, summarized, reported, or added to
-  `run.jsonl` by the runner. Harness-owned model calls are runner/harness
-  concerns rather than normal adapter request fields.
+  required, pre-created, or added to `run.jsonl` by the runner. If the file
+  exists, the runner validates only allowlisted safe telemetry fields for
+  aggregate `summary.md` and `benchpack report` summaries. Harness-owned model
+  calls remain runner/harness concerns rather than normal adapter request
+  fields.
 - Existing task logs remain `task/<case-id>/rep-NNN.stdout.log` and
   `task/<case-id>/rep-NNN.stderr.log`.
 - Patch capture still happens after the selected task phase and reflects the
@@ -482,8 +484,9 @@ External harnesses may mutate only the prepared workspace. They may write the
 existing task stdout/stderr logs through runner-owned capture and may
 optionally write JSONL model-call telemetry to the context-provided
 `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not require,
-pre-create, validate, parse, summarize, report, or add that file to
-`run.jsonl`. The recommended minimal line is:
+pre-create, or add that file to `run.jsonl`. When it exists, the runner parses
+only the recommended safe telemetry shape for summaries; invalid or unsafe
+lines are counted but not echoed. The recommended minimal line is:
 
 ```json
 {"schema_version":1,"sequence":1,"model":"test-model","ok":true}
@@ -495,16 +498,21 @@ call sequence within the external-agent task phase, `model` is the model id
 when known, and `ok` records whether the call completed successfully. Optional
 fields may include `started_at`, `ended_at`, `duration_s`, `adapter`,
 `endpoint`, `prompt_tokens`, `output_tokens`, `cached_prompt_tokens`, and a
-short `error` string for failed calls. This is not a manifest schema and is not
-validated by the runner. Harnesses should not put full prompts, full responses,
-request bodies, headers, environment variables, API keys, bearer tokens, or
-credentials in the default telemetry shape. Other additional explicit harness
-artifacts under the run output directory require a later schema slice. They
-must not write pack-owned fixtures, prompts, verifier scripts, source docs,
-normal adapter `raw/` artifacts, `hardware.json`, `run-metadata.json`, or paths
-outside the prepared workspace and allowed run-output artifacts. Patch capture
-still compares the source fixture to the post-task workspace, and verifier
-execution still follows patch capture.
+short `error` string for failed calls. The summary allowlist is exactly those
+fields. Summary output reports aggregate counts, success/failure/error counts,
+unique model/adapter/endpoint labels, summed duration, and summed token fields;
+safe string fields must be short and must not contain control characters or
+Unicode separator characters other than plain spaces. `endpoint` is treated as
+a label rather than a URL. Values containing URL schemes, query strings, or
+userinfo markers are invalid for summaries. Summary output does not report
+full prompts, full responses, request bodies, headers, environment variables,
+API keys, bearer tokens, credentials, or short error text. Other additional
+explicit harness artifacts under the run output directory require a later
+schema slice. They must not write pack-owned fixtures, prompts, verifier
+scripts, source docs, normal adapter `raw/` artifacts, `hardware.json`,
+`run-metadata.json`, or paths outside the prepared workspace and allowed
+run-output artifacts. Patch capture still compares the source fixture to the
+post-task workspace, and verifier execution still follows patch capture.
 
 The source-controlled `examples/external-agent/reference-agent.py` script is a
 deterministic local reference for this handoff. It reads the appended context,
@@ -520,8 +528,9 @@ loopback host without credentials or query string, sends one tiny local HTTP
 JSON request containing only safe identifiers such as case id, repetition, and
 model, writes the deterministic response content inside the prepared workspace,
 and writes one safe JSONL telemetry line to the context-provided model-call
-path. It remains example guidance; the runner still treats the optional JSONL
-file as opaque.
+path. It remains example guidance; the runner summarizes only allowlisted safe
+fields from the optional JSONL file and keeps the full payload outside
+`run.jsonl`.
 
 Directory fixture semantics for repo-task cases:
 
@@ -594,9 +603,10 @@ Workspace and artifact layout:
 - External-agent model-call logs, when a public external harness chooses to
   write them, use the context-provided
   `task/<case-id>/rep-NNN.model-calls.jsonl` path. The runner does not create
-  or require the file, does not validate or parse it, and measured `run.jsonl`
-  rows do not reference it. Harness authors should prefer the recommended
-  per-call JSON object shape shown above, starting with
+  or require the file, and measured `run.jsonl` rows do not reference it. Safe
+  allowlisted telemetry is summarized in `summary.md` and `benchpack report`
+  when the file exists. Harness authors should prefer the recommended per-call
+  JSON object shape shown above, starting with
   `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}`.
 - Verifier execution for `scoring.mode = "verify-script"` writes artifacts at
   `verify/<case-id>/rep-NNN.json`,
