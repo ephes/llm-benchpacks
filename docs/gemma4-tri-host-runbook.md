@@ -168,6 +168,30 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   8 output tokens, and 0 cached prompt tokens. This resolves the local M5
   smoke-chat scoring blocker for this selected strict-GGUF candidate only; it
   is not M4, Hetzner, `runtime-sweep`, or four-pack matrix readiness.
+- Reasoning-off runtime-sweep status: a single local M5 `benchpack run
+  runtime-sweep --adapter openai-chat` passed with the same
+  `--reasoning off` server command. The run wrote 9 measured rows for
+  `short`, `medium`, and `long`, with all rows `ok=true`, scoring mode `none`,
+  TTFT and usage-derived timing/token fields present, and warmup artifacts
+  excluded from `run.jsonl`. Streaming requests kept
+  `stream_options.include_usage=true`, which the local server accepted. Sampled
+  raw responses had normal assistant content, no observed `reasoning_content`,
+  and no visible template, tool, or EOG leakage. This supports a future local
+  M5 four-pack matrix for this exact strict-GGUF `llama-server --reasoning off`
+  configuration, but it is not M4 or Hetzner readiness.
+- Reasoning-off four-pack matrix status: the local M5 default tmux matrix ran
+  once for `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure` with the same strict-GGUF server command. The first
+  three packs passed their expected scoring or unscored runtime criteria:
+  `smoke-chat` passed `contains`, `runtime-sweep` wrote 9/9 `ok=true` unscored
+  rows, and both `desktop-django-wrap` rows passed regex scoring.
+  `patch-from-failure` reached the endpoint and wrote one `ok=true` row, but
+  failed `verify-script`: the model returned a fenced diff that targeted a
+  class-based `greeter.py` shape that did not match the fixture, so
+  `git apply --check` rejected it and the verifier saw the unchanged
+  `Hello Ada.` output. Treat this as a local model/task-quality blocker for the
+  repo-task pack, not a serving or adapter blocker. The server was stopped
+  after the matrix. This is still not M4 or Hetzner readiness.
 - Memory note: this is a local M5 load observation only. With the settings
   above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
   and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and
@@ -504,9 +528,10 @@ that the result is runtime-and-format evidence.
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
   benchmark quality evidence.
-- Local M5 Gemma 4 thinking behavior is resolved for smoke-chat when
-  `llama-server` is started with `--reasoning off`; local `runtime-sweep`
-  remains the next explicit M5 performance gate before any four-pack matrix.
+- Local M5 Gemma 4 thinking behavior is resolved for the strict-GGUF
+  `llama-server --reasoning off` path, and the default four-pack matrix has
+  run once. The remaining local M5 blocker is `patch-from-failure`
+  `verify-script` failure caused by an inapplicable generated diff.
 - Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
   Hetzner CUDA host with comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified

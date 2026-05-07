@@ -343,12 +343,30 @@ Scope:
   passed with `ok=true`, `scoring.passed=true`, normal content containing
   `Paris`, no `reasoning_content`, and `finish_reason=stop`. This resolves the
   local M5 smoke-chat scoring blocker for the selected strict same-GGUF
-  candidate only; a local `runtime-sweep` remains a separate explicit slice,
-  and `--reasoning-budget 0` remains untested because `--reasoning off`
-  resolved the direct and pack smokes. M4/Hetzner checksum parity, strict
+  candidate only. **Local M5 reasoning-off runtime-sweep landed
+  2026-05-07.** One `benchpack run runtime-sweep` against the same local
+  `llama-server --reasoning off` endpoint completed with 9/9 measured rows
+  `ok=true`, scoring mode `none`, warmup artifacts excluded from `run.jsonl`,
+  TTFT and usage-derived token/timing fields present, normal assistant content,
+  no observed `reasoning_content`, and no visible template/tool/EOG leakage in
+  sampled raw responses. This supported moving on to the local M5 four-pack
+  matrix for the exact selected strict-GGUF configuration. **Local M5
+  reasoning-off four-pack matrix attempted 2026-05-07.** The default tmux
+  matrix ran once for `smoke-chat`,
+  `runtime-sweep`, `desktop-django-wrap`, and `patch-from-failure` against the
+  same local endpoint. `smoke-chat` passed `contains`, `runtime-sweep` wrote
+  9/9 `ok=true` unscored rows, and both `desktop-django-wrap` rows passed
+  regex scoring. `patch-from-failure` reached the endpoint and wrote one
+  `ok=true` row, but failed `verify-script` because the generated fenced diff
+  targeted a class-based `greeter.py` shape that did not match the fixture; the
+  patch was rejected and the verifier saw unchanged output. Treat that as a
+  local model/task-quality blocker for the tiny repo-task pack, not a serving
+  or adapter blocker. `--reasoning-budget 0` remains untested because
+  `--reasoning off` resolved the direct, smoke-chat, runtime-sweep, and
+  prompt-only wrap local M5 gates. M4/Hetzner checksum parity, strict
   same-GGUF `llama-server` load behavior, comparable runtime options, memory
   fit, token provisioning, SSH/inventory, and serving readiness remain
-  preflight blockers before any benchmark matrix.
+  preflight blockers before any cross-host benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Partly landed 2026-05-07.** An initial read-only SSH recheck and sibling
   `llm-node-bare` notes confirmed the live GEX44-class host, RTX 4000 SFF Ada

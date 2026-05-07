@@ -51,9 +51,80 @@ working history and open questions.
 - Authenticated public benchmark credentials remain a deployment-side procedure
   item even though `llm-benchpacks` already supports
   `--openai-api-key-env`.
-- Local M5 `runtime-sweep`, M4 checksum/load/smoke, and Hetzner full-card
-  serving preflight are now the next independent gates before any meaningful
-  M4/M5/Hetzner comparison matrix.
+- Local M5 `runtime-sweep` remained an independent gate at the time of this
+  Hetzner recheck; the follow-up same-day local M5 entry below records that
+  result. M4 checksum/load/smoke and Hetzner full-card serving preflight remain
+  independent gates before any meaningful M4/M5/Hetzner comparison matrix.
+
+## 2026-05-07 (Gemma 4 local M5 runtime-sweep with reasoning off)
+
+### Changed
+
+- Ran exactly one local M5 `benchpack run runtime-sweep` against
+  `gemma4-e2b-q4km` on `http://127.0.0.1:8081/v1`, using the selected
+  strict same-GGUF `llama-server` command with `--reasoning off` and ignored
+  `metadata/m5-gemma4-llama-server.json`.
+- The run completed successfully with 9 measured rows, matching the expected
+  3 cases x 3 repetitions. Warmup requests produced raw artifacts but no
+  measured rows, all measured rows had `ok=true`, scoring was `none`, TTFT and
+  usage-derived token/timing fields were present, and
+  `stream_options.include_usage=true` was accepted.
+- Sampled raw responses contained normal assistant content, no observed
+  `reasoning_content`, and no visible template, tool, or EOG leakage. The
+  stored streaming response aggregate does not expose `finish_reason`, but the
+  server logs showed HTTP 200 requests ending with `truncated=0` rather than a
+  length-stop pattern.
+- Recorded the compact result in ignored local metadata and left
+  `results/2026-05-07-m5-max-gemma4-llama-reasoning-off-runtime/` ignored and
+  uncommitted. No four-pack matrix, M4 work, Hetzner work, SSH command,
+  sibling-repo work, non-loopback endpoint call, or additional runtime was
+  performed.
+
+### Open Questions
+
+- The tested local M5 strict-GGUF `llama-server --reasoning off`
+  configuration supported proceeding to a local M5 four-pack matrix through the
+  normal metadata/tmux dry-run workflow; the follow-up same-day entry below
+  records that matrix result.
+- M4 strict-GGUF checksum/load/smoke parity remains the next Apple-lane gate,
+  while Hetzner remains blocked by deployment-side GPU-driver/service recovery,
+  exclusive-GPU Gemma 4 serving preflight, and authenticated benchmark access.
+
+## 2026-05-07 (Gemma 4 local M5 four-pack matrix)
+
+### Changed
+
+- Started the selected local M5 `gemma4-e2b-q4km` GGUF through
+  `/opt/homebrew/bin/llama-server` on `127.0.0.1:8081` with the validated
+  `--reasoning off` command, rendered the default four-pack tmux dry run, and
+  launched exactly one local M5 matrix for `smoke-chat`, `runtime-sweep`,
+  `desktop-django-wrap`, and `patch-from-failure`.
+- All four `benchpack run` commands exited 0 and wrote ignored result
+  directories under
+  `results/2026-05-07-m5-max-gemma4-llama-reasoning-off-4pack-20260507-1012-*`.
+  `smoke-chat` passed `contains`, `runtime-sweep` wrote 9/9 `ok=true`
+  unscored rows, and both `desktop-django-wrap` rows passed regex scoring.
+- `patch-from-failure` reached the endpoint and wrote one `ok=true` row, but
+  `verify-script` scoring failed. The model returned a fenced diff, but it
+  targeted a class-based `greeter.py` shape that did not match the fixture;
+  `git apply --check` rejected the patch, the workspace stayed unchanged, and
+  the verifier saw `Hello Ada.` instead of `Hello, Ada!`.
+- Recorded the compact matrix result in ignored local metadata, stopped the
+  server, and removed the tmux session. No M4 work, Hetzner work, SSH command,
+  sibling-repo work, endpoint outside loopback, second runtime, or generated
+  result curation was performed.
+
+### Open Questions
+
+- The selected local M5 strict-GGUF `llama-server --reasoning off`
+  configuration is runtime-ready for the four-pack workflow, but the tiny
+  repo-task pack is a local model/task-quality blocker for this artifact.
+- Decide whether the `patch-from-failure` failure is acceptable signal for the
+  campaign, should be retried under the same strict local M5 setup, or should
+  be compared against M4 after strict-GGUF M4 preflight.
+- M4 strict-GGUF checksum/load/smoke parity remains the next Apple-lane gate,
+  while Hetzner remains blocked by deployment-side GPU-driver/service recovery,
+  exclusive-GPU Gemma 4 serving preflight, and authenticated benchmark access.
 
 ## 2026-05-06 (Gemma 4 local M5 smoke-chat with reasoning off)
 
