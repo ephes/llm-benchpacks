@@ -612,20 +612,20 @@ that the result is runtime-and-format evidence.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.
-- Provision and test the Hetzner authenticated `/v1` token outside the repo.
 - Hetzner SSH/inventory, GPU-driver recovery, Qwen2.5 baseline restoration,
-  and the LNB-008 full-card local-only vLLM E2B load preflight are recorded as
-  landed in the sibling deployment repo. The preflight used the resident
-  Qwen2.5 service stopped for an exclusive-GPU window, reached local
-  `/v1/models`, measured about 17,600 MiB Gemma 4 GPU memory use, and restored
-  the Qwen2.5 baseline afterward. No benchmark or generation call was made in
-  that deployment-side item.
+  authenticated benchmark access, and the LNB-008 full-card local-only vLLM
+  E2B load preflight are recorded as landed in the sibling deployment repo. The
+  preflight used the resident Qwen2.5 service stopped for an exclusive-GPU
+  window, reached local `/v1/models`, measured about 17,600 MiB Gemma 4 GPU
+  memory use, and restored the Qwen2.5 baseline afterward. No benchmark or
+  generation call was made in that deployment-side item.
 - The Hetzner authenticated benchmark access contract has landed in sibling
-  LNB-005: use public TLS `/v1` through the Django Bearer-auth proxy with token
-  env var `BENCHPACK_HETZNER_OPENAI_TOKEN`; direct unauthenticated vLLM is not
-  the benchmark contract. Schedule public remote benchmark runs only after live
-  token provisioning, an authenticated smoke, and explicit operator approval
-  for the target service mode.
+  LNB-005 and the live smoke has landed in sibling LNB-010: use public TLS
+  `/v1` through the Django Bearer-auth proxy with token env var
+  `BENCHPACK_HETZNER_OPENAI_TOKEN`; direct unauthenticated vLLM is not the
+  benchmark contract. The LNB-010 `smoke-chat` result is smoke-only access
+  evidence, not approval for a remote benchmark matrix or a target service
+  mode.
 - On Hetzner, use the sibling readiness notes for the isolated Hugging Face
   cache layout; the complete pinned E2B weights are under the alternate
   `models--google--gemma-4-E2B-it/snapshots/...` layout, not the incomplete

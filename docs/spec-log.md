@@ -20,6 +20,14 @@ working history and open questions.
 
 ### Changed
 
+- Recorded the sibling LNB-010 outcome: benchmark-scoped authenticated public
+  Hetzner `/v1` access was provisioned, authenticated `/v1/models` returned one
+  model, and exactly one `smoke-chat` run passed through
+  `https://llm.django-cast.com/v1` with
+  `--openai-api-key-env BENCHPACK_HETZNER_OPENAI_TOKEN`. No token values,
+  benchmark matrix, load test, generated result artifact commit, or raw model
+  output were added to this repo.
+
 - Synced `llm-benchpacks` forward-looking Gemma 4 planning docs with the
   sibling `llm-node-bare` backlog after LNB-008 and LNB-009 landed there.
 - Updated the model target catalog, implementation plan, and tri-host runbook
@@ -34,10 +42,8 @@ working history and open questions.
 
 ### Open Questions
 
-- The sibling LNB-005 authenticated benchmark access contract has landed, with
-  `BENCHPACK_HETZNER_OPENAI_TOKEN` as the benchmark token environment variable.
-  Live token provisioning and an authenticated public `/v1` smoke remain the
-  next prerequisites before remote `benchpack` runtime-sweep runs.
+- Authenticated public `/v1` smoke is complete, but remote runtime-sweep or
+  matrix runs still need explicit operator scheduling and target-mode approval.
 - Strict same-GGUF Hetzner llama.cpp checksum/load/memory-fit parity remains
   unverified and should stay separate from the vLLM service-shaped path.
 

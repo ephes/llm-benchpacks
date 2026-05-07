@@ -87,28 +87,28 @@ Current blockers:
 - Authenticated OpenAI-compatible endpoint calls now use
   `benchpack run --adapter openai-chat --openai-api-key-env <ENV_NAME>`, which
   reads the bearer token from the named environment variable and sends the
-  Authorization header without writing token values to result artifacts. Token
-  provisioning for the public Hetzner `/v1` surface remains an operational
-  prerequisite for live runs. The tmux helper can pass the same option through
-  in dry-run matrices without reading the token value.
+  Authorization header without writing token values to result artifacts. The
+  public Hetzner `/v1` token has been provisioned and a single authenticated
+  `smoke-chat` passed on 2026-05-07 through the Django Bearer-auth proxy. The
+  tmux helper can pass the same option through in dry-run matrices without
+  reading the token value.
 - Live Hetzner SSH/inventory, GPU-driver recovery, Qwen2.5 baseline
-  restoration, Gemma-4-capable vLLM role support, and a local-only full-card
-  idle-load preflight for pinned `google/gemma-4-E2B-it` are now recorded as
-  landed in the sibling deployment repo's backlog. The proven service-shaped
-  Hetzner path is vLLM `0.20.1+cu129` with Torch `2.11.0+cu129`, BF16 Hugging
-  Face weights, 8K context, one sequence, `--gpu-memory-utilization 0.85`,
-  text-only multimodal limits, and `--enforce-eager`. That is not strict
-  same-GGUF parity with the Apple `llama-server` runs.
+  restoration, authenticated benchmark access, Gemma-4-capable vLLM role
+  support, and a local-only full-card idle-load preflight for pinned
+  `google/gemma-4-E2B-it` are now recorded as landed in the sibling deployment
+  repo's backlog. The proven service-shaped Hetzner path is vLLM
+  `0.20.1+cu129` with Torch `2.11.0+cu129`, BF16 Hugging Face weights, 8K
+  context, one sequence, `--gpu-memory-utilization 0.85`, text-only multimodal
+  limits, and `--enforce-eager`. That is not strict same-GGUF parity with the
+  Apple `llama-server` runs.
 - Hetzner strict same-GGUF `llama-server`/llama.cpp support, checksum parity,
   comparable runtime options, and memory fit remain separate unverified
   blockers. Use the vLLM route only as runtime-and-format evidence unless a
   later strict-GGUF preflight lands.
-- Token provisioning for authenticated public Hetzner `/v1` benchmark access
-  remains the next operational prerequisite before remote `benchpack` runs.
-  The sibling LNB-005 contract has landed: use public TLS `/v1` through the
-  Django Bearer-auth proxy with token env var
-  `BENCHPACK_HETZNER_OPENAI_TOKEN`. What remains is operator token
-  provisioning plus an authenticated live smoke before benchmark scheduling.
+- The sibling LNB-010 smoke has landed: authenticated public Hetzner `/v1`
+  benchmark access works through the Django Bearer-auth proxy with token env
+  var `BENCHPACK_HETZNER_OPENAI_TOKEN`. Treat that as smoke-only access
+  readiness, not benchmark campaign approval.
   On Hetzner, follow the sibling readiness notes for the isolated Hugging Face
   cache layout because the complete pinned E2B weights are in the alternate
   `models--google--gemma-4-E2B-it/snapshots/...` directory.
@@ -162,6 +162,5 @@ default answer to every new “current preferred model” question.
 - Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
   first tri-host campaign and keep its placeholder metadata examples aligned
   with verified artifacts when they are known.
-- Revisit the catalog when an authenticated public Hetzner `/v1` benchmark
-  smoke succeeds or when a strict same-GGUF Hetzner `llama-server` preflight
-  lands.
+- Revisit the catalog when a strict same-GGUF Hetzner `llama-server` preflight
+  lands or before scheduling the first authenticated remote benchmark matrix.
