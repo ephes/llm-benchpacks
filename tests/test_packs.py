@@ -39,6 +39,19 @@ def write_manifest(tmp_path: Path, body: str) -> Path:
     return pack_dir
 
 
+def assert_strict_fenced_diff_prompt(prompt: str) -> None:
+    assert "Your entire response must be one fenced code block" in prompt
+    assert "info string exactly\n  `diff`" in prompt
+    assert "first line of your response must be the literal fence marker" in prompt
+    assert "```diff" in prompt
+    assert "Do not include `<think>`, hidden reasoning, analysis, explanations" in prompt
+    assert "shell\n  commands, or markdown outside the fenced block" in prompt
+    assert "Use only exact repo-root paths listed above" in prompt
+    assert "Do not use placeholder `index` lines or invented paths" in prompt
+    assert "complete unified diff that applies with\n  `git apply`" in prompt
+    assert "Close the fenced block" in prompt
+
+
 def test_load_pack_minimal(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,
@@ -2197,11 +2210,13 @@ def test_bundled_patch_from_failure_pack_contract() -> None:
     assert case.raw["prompt_file"] == "prompts/fix-greeting.md"
     assert "prompt" not in case.raw
     assert case.prompt is not None
-    assert "```diff" in case.prompt
-    assert "info string exactly `diff`" in case.prompt
+    assert_strict_fenced_diff_prompt(case.prompt)
     assert "`greeter.py`" in case.prompt
+    assert "Current file: `greeter.py`" in case.prompt
+    assert 'return f"Hello {name}."' in case.prompt
+    assert "Relevant test: `tests/test_greeter.py`" in case.prompt
+    assert 'self.assertEqual(greet("Ada"), "Hello, Ada!")' in case.prompt
     assert "Hello, Ada!" in case.prompt
-    assert "Do not include shell commands" in case.prompt
 
     assert case.scoring is not None
     assert case.scoring.mode == "verify-script"
@@ -2250,13 +2265,16 @@ def test_bundled_python_regression_fix_pack_contract() -> None:
     assert case.raw["prompt_file"] == "prompts/fix-task-summary.md"
     assert "prompt" not in case.raw
     assert case.prompt is not None
-    assert "```diff" in case.prompt
-    assert "info string exactly `diff`" in case.prompt
+    assert_strict_fenced_diff_prompt(case.prompt)
     assert "`task_summary.py`" in case.prompt
+    assert "Current file: `task_summary.py`" in case.prompt
+    assert 'owner = task.setdefault("owner", "unassigned")' in case.prompt
+    assert 'if status != "done":' in case.prompt
+    assert "return sorted(overdue)" in case.prompt
+    assert '["Call vendor", "Renew certificate", "Back up database"]' in case.prompt
     assert "summarize_tasks(tasks)" in case.prompt
     assert "overdue_titles(tasks, today)" in case.prompt
     assert "must not mutate the input task dictionaries" in case.prompt
-    assert "Do not include shell commands" in case.prompt
 
     assert case.scoring is not None
     assert case.scoring.mode == "verify-script"
@@ -2322,13 +2340,21 @@ def test_bundled_django_dashboard_regression_fix_pack_contract() -> None:
     assert case.raw["prompt_file"] == "prompts/fix-dashboard-regressions.md"
     assert "prompt" not in case.raw
     assert case.prompt is not None
-    assert "```diff" in case.prompt
-    assert "info string exactly `diff`" in case.prompt
+    assert_strict_fenced_diff_prompt(case.prompt)
     assert "`dashboard/permissions.py`" in case.prompt
     assert "`dashboard/formatting.py`" in case.prompt
     assert "`dashboard/views.py`" in case.prompt
+    assert "Current file: `dashboard/permissions.py`" in case.prompt
+    assert 'if project.get("visibility") == "private":' in case.prompt
+    assert 'owner = project.setdefault("owner", {})' in case.prompt
+    assert 'return sorted(rows, key=lambda row: row["title"])' in case.prompt
+    assert "Useful existing helpers in `dashboard/models.py`" in case.prompt
+    assert "PRIORITY_RANK" in case.prompt
+    assert "FAR_FUTURE = date(9999, 12, 31)" in case.prompt
+    assert "due_sort_value" in case.prompt
+    assert "priority_rank" in case.prompt
+    assert '["Team rollout", "Public launch", "Untitled follow-up"]' in case.prompt
     assert "Rendering rows must not mutate" in case.prompt
-    assert "Do not include shell commands" in case.prompt
 
     assert case.scoring is not None
     assert case.scoring.mode == "verify-script"

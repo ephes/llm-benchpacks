@@ -1889,7 +1889,7 @@ def test_cli_bundled_patch_from_failure_runs_repo_task_flow(
 
     assert len(calls) == 1
     assert calls[0]["request_path"] == "fix-greeting.request.json"
-    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "Your entire response must be one fenced code block" in calls[0]["prompt"]
     assert "`greeter.py`" in calls[0]["prompt"]
 
     record = json.loads((out / "run.jsonl").read_text())
@@ -2027,7 +2027,7 @@ def test_cli_bundled_python_regression_fix_runs_repo_task_flow(
 
     assert len(calls) == 1
     assert calls[0]["request_path"] == "fix-task-summary.request.json"
-    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "Your entire response must be one fenced code block" in calls[0]["prompt"]
     assert "`task_summary.py`" in calls[0]["prompt"]
     assert "must not mutate the input task dictionaries" in calls[0]["prompt"]
 
@@ -2213,7 +2213,7 @@ def test_cli_bundled_django_dashboard_regression_fix_runs_repo_task_flow(
 
     assert len(calls) == 1
     assert calls[0]["request_path"] == "fix-dashboard-regressions.request.json"
-    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "Your entire response must be one fenced code block" in calls[0]["prompt"]
     assert "`dashboard/permissions.py`" in calls[0]["prompt"]
     assert "`dashboard/formatting.py`" in calls[0]["prompt"]
     assert "`dashboard/views.py`" in calls[0]["prompt"]

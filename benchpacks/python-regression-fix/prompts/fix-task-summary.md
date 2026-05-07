@@ -1,9 +1,81 @@
 Fix the small Python repository by editing only the file that contains the task
 summary regression.
 
-Repo path to edit:
+Allowed repo-root path to edit:
 
 - `task_summary.py`
+
+Current file: `task_summary.py`
+
+```python
+from __future__ import annotations
+
+from collections import Counter
+from datetime import date
+from typing import Any
+
+
+def summarize_tasks(tasks: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    by_status: Counter[str] = Counter()
+    by_owner: Counter[str] = Counter()
+
+    for task in tasks:
+        status = task.get("status", "todo")
+        owner = task.setdefault("owner", "unassigned")
+        by_status[status] += 1
+        if status != "done":
+            by_owner[owner] += 1
+
+    return {
+        "by_status": dict(by_status),
+        "by_owner": dict(by_owner),
+    }
+
+
+def overdue_titles(tasks: list[dict[str, Any]], today: date | str) -> list[str]:
+    if isinstance(today, date):
+        today_text = today.isoformat()
+    else:
+        today_text = today
+
+    overdue: list[str] = []
+    for task in tasks:
+        due = task.get("due")
+        if due and due < today_text:
+            overdue.append(str(task.get("title", "")))
+
+    return sorted(overdue)
+```
+
+Relevant test expectations from `tests/test_task_summary.py`:
+
+```python
+summary = summarize_tasks(tasks)
+
+self.assertEqual(
+    summary,
+    {
+        "by_status": {
+            "todo": 2,
+            "in-progress": 1,
+            "done": 1,
+            "blocked": 1,
+        },
+        "by_owner": {
+            "Dana": 2,
+            "Lee": 1,
+            "unassigned": 1,
+            "Rui": 1,
+        },
+    },
+)
+self.assertEqual(tasks, original)
+
+self.assertEqual(
+    overdue_titles(tasks, date(2026, 5, 5)),
+    ["Call vendor", "Renew certificate", "Back up database"],
+)
+```
 
 Observed failures:
 
@@ -27,8 +99,15 @@ Expected behavior:
 - `today` may be either a `datetime.date` or an ISO `YYYY-MM-DD` string.
 - Returned overdue titles must be sorted by due date, then title.
 
-Return only one fenced code block with info string exactly `diff`.
-The first line of your response must be the literal fence marker `` ```diff ``.
-Inside that block, return a unified diff that applies from the repository root.
-Do not include shell commands, explanations, markdown outside the fenced block,
-or unrelated file edits.
+Output contract:
+
+- Your entire response must be one fenced code block with info string exactly
+  `diff`.
+- The first line of your response must be the literal fence marker `` ```diff ``.
+- Do not include `<think>`, hidden reasoning, analysis, explanations, shell
+  commands, or markdown outside the fenced block.
+- Use only exact repo-root paths listed above.
+- Do not use placeholder `index` lines or invented paths.
+- Inside the block, return a complete unified diff that applies with
+  `git apply` from the repository root.
+- Close the fenced block.

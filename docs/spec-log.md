@@ -16,6 +16,38 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (repo-task prompt contract tightening)
+
+### Changed
+
+- Tightened the bundled fenced-patch repo-task prompts for
+  `patch-from-failure`, `python-regression-fix`, and
+  `django-dashboard-regression-fix` after M5-only exploratory coding-task runs
+  showed adapter success but deterministic verifier failure from missing,
+  unapplicable, unfinished, or analysis-prefaced model patches.
+- Added compact exact fixture context directly to those static prompt files:
+  the editable source files, relevant test expectations, exact allowed
+  repo-root paths, and the existing dashboard sorting helpers where useful.
+- Strengthened the prompt-level output contract to require the entire response
+  to be one complete fenced block whose info string is exactly `diff`, to start
+  on the first line with the literal diff fence, to close the fence, to use
+  exact repo-root paths, and to produce a `git apply`-applicable unified diff.
+  The prompts now explicitly forbid `<think>`, hidden reasoning, analysis,
+  explanations, shell commands, markdown outside the fence, placeholder
+  `index` lines, and invented paths.
+- Added focused prompt contract tests for the stricter format wording and
+  embedded source/test anchors. Runner semantics, result schemas, adapter APIs,
+  verifier behavior, pack manifests, tmux helper behavior, default matrices,
+  and artifact policy remain unchanged.
+
+### Open Questions
+
+- The next useful evidence is a new M5-only exploratory
+  `scripts/benchpack-tmux-matrix --pack-set coding-tasks` run after these
+  prompt changes, preferably first with `qwen3-coder:latest` through
+  `ollama-generate`, then optionally the local Qwen3.6 dense GGUF tag if time
+  allows.
+
 ## 2026-05-07 (tmux coding-task pack set)
 
 ### Changed
