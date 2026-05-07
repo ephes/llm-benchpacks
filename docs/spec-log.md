@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-06 (Gemma 4 local M5 smoke-chat with reasoning off)
+
+### Changed
+
+- Retried exactly one local M5 `benchpack run smoke-chat` against
+  `gemma4-e2b-q4km` on `http://127.0.0.1:8081/v1`, with the selected
+  `llama-server` GGUF command plus `--reasoning off` and ignored
+  `metadata/m5-gemma4-llama-server.json`.
+- The measured row passed: `ok=true`, `scoring.passed=true`,
+  `finish_reason=stop`, normal assistant content
+  `The capital of France is Paris.`, no `reasoning_content`, and token counts
+  of 21 prompt, 8 output, and 0 cached prompt tokens.
+- Recorded the compact result in ignored local metadata and left the generated
+  `results/2026-05-06-m5-max-gemma4-llama-reasoning-off-smoke-20260506-2124/`
+  directory ignored and uncommitted. No `runtime-sweep`, benchmark matrix, M4
+  work, Hetzner work, SSH command, sibling-repo work, or non-loopback endpoint
+  call was performed.
+
+### Open Questions
+
+- The local M5 smoke-chat scoring blocker is resolved for the selected strict
+  same-GGUF candidate when `llama-server` is started with `--reasoning off`.
+- A local M5 `runtime-sweep` remains a separate explicit next slice; do not
+  infer four-pack matrix readiness from this single-pack smoke.
+- M4 and Hetzner strict same-GGUF checksum parity, `llama-server` support,
+  comparable runtime options, memory fit, token provisioning, SSH/inventory,
+  and serving readiness remain unresolved.
+
 ## 2026-05-06 (Gemma 4 local M5 thinking-control smoke)
 
 ### Changed

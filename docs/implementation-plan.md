@@ -338,13 +338,17 @@ Scope:
   `--reasoning off` made the exact `smoke-chat` France prompt return normal
   assistant content containing `Paris`, no `reasoning_content`, and
   `finish_reason=stop` within the 64-token non-streaming direct HTTP request.
-  The next local M5 `benchpack smoke-chat` retry should use `--reasoning off`
-  before any `runtime-sweep` or four-pack matrix; `--reasoning-budget 0`
-  remains untested because the first serving control resolved the direct smoke
-  behavior. M4/Hetzner checksum parity, strict same-GGUF `llama-server` load
-  behavior, comparable runtime options, memory fit, token provisioning,
-  SSH/inventory, and serving readiness remain preflight blockers before any
-  benchmark matrix.
+  **Local M5 reasoning-off smoke-chat retry landed 2026-05-06.** The
+  subsequent `benchpack run smoke-chat` against that `--reasoning off` server
+  passed with `ok=true`, `scoring.passed=true`, normal content containing
+  `Paris`, no `reasoning_content`, and `finish_reason=stop`. This resolves the
+  local M5 smoke-chat scoring blocker for the selected strict same-GGUF
+  candidate only; a local `runtime-sweep` remains a separate explicit slice,
+  and `--reasoning-budget 0` remains untested because `--reasoning off`
+  resolved the direct and pack smokes. M4/Hetzner checksum parity, strict
+  same-GGUF `llama-server` load behavior, comparable runtime options, memory
+  fit, token provisioning, SSH/inventory, and serving readiness remain
+  preflight blockers before any benchmark matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Tracked elsewhere.** The sibling `llm-node-bare` repo now tracks the work
   in its `docs/backlog.md` for live SSH/inventory verification, LiteLLM removal

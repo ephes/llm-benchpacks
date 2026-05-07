@@ -160,6 +160,14 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   M5 `benchpack smoke-chat` retry should start `llama-server` with
   `--reasoning off`; `--reasoning-budget 0` remains untested because the first
   control resolved the direct smoke behavior.
+- Reasoning-off benchpack smoke status: the local M5 `benchpack run
+  smoke-chat --adapter openai-chat` retry passed with the same
+  `--reasoning off` server command. The measured row had `ok=true`,
+  `scoring.passed=true`, `finish_reason=stop`, normal assistant content
+  `The capital of France is Paris.`, no `reasoning_content`, 21 prompt tokens,
+  8 output tokens, and 0 cached prompt tokens. This resolves the local M5
+  smoke-chat scoring blocker for this selected strict-GGUF candidate only; it
+  is not M4, Hetzner, `runtime-sweep`, or four-pack matrix readiness.
 - Memory note: this is a local M5 load observation only. With the settings
   above, `llama-server` reported mapped model buffers of 3287.18 MiB on MTL0
   and 2152.50 MiB on CPU, process RSS was 3614048 KiB while idle-loaded, and
