@@ -1,0 +1,25 @@
+[pack]
+id = "patch-from-failure-external-agent"
+version = "0.1.0"
+description = "External-agent variant of patch-from-failure using the same fixture, prompt, and verifier"
+
+[defaults]
+temperature = 0
+max_tokens = 256
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Tiny Python greeting repo with one intentional bug"
+
+[[cases]]
+id = "fix-greeting"
+kind = "repo-task"
+prompt_file = "prompts/fix-greeting.md"
+fixture_refs = ["repo"]
+harness = { id = "external-agent", timeout_s = 900 }
+scoring = { mode = "verify-script", script = "verify/check.py" }

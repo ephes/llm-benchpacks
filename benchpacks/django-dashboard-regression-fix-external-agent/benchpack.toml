@@ -1,0 +1,25 @@
+[pack]
+id = "django-dashboard-regression-fix-external-agent"
+version = "0.1.0"
+description = "External-agent variant of django-dashboard-regression-fix using the same fixture, prompt, and verifier"
+
+[defaults]
+temperature = 0
+max_tokens = 1200
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Stdlib-only dashboard-shaped Python repo with intentional regressions"
+
+[[cases]]
+id = "fix-dashboard-regressions"
+kind = "repo-task"
+prompt_file = "prompts/fix-dashboard-regressions.md"
+fixture_refs = ["repo"]
+harness = { id = "external-agent", timeout_s = 900 }
+scoring = { mode = "verify-script", script = "verify/check.py" }

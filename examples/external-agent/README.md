@@ -71,3 +71,18 @@ pre-create, require, validate, parse, summarize, report, or add it to
 `run.jsonl`. Default harness telemetry should not include full prompts, full
 responses, request bodies beyond a tiny safe local payload, headers,
 environment variables, API keys, bearer tokens, or credentials.
+
+`codex-oss-agent.py` is a local live-evidence wrapper for Codex CLI when Codex
+is run in OSS/local-provider mode, for example against local Ollama. It reads
+the benchpack context, asks Codex to edit the prepared workspace directly, and
+writes one safe model-call telemetry line. Use it only when `codex exec --oss`
+and the selected local provider/model are already available locally:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/codex-oss-agent.py","--codex-model","qwen3-coder:latest","--local-provider","ollama"]' \
+  uv run benchpack run patch-from-failure-external-agent --adapter ollama-generate --model qwen3-coder:latest
+```
+
+The wrapper passes `--sandbox workspace-write`, `--skip-git-repo-check`, and
+`--ephemeral` to `codex exec`. It is intended for local OSS/provider evidence,
+not for cloud-backed runs or runs that require secrets.

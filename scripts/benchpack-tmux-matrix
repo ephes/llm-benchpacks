@@ -24,11 +24,18 @@ CODING_TASK_PACKS = (
     "python-regression-fix",
     "django-dashboard-regression-fix",
 )
+CODING_TASK_EXTERNAL_AGENT_PACKS = (
+    "patch-from-failure-external-agent",
+    "python-regression-fix-external-agent",
+    "django-dashboard-regression-fix-external-agent",
+)
 DEFAULT_PACK_SET = "default"
 CODING_TASK_PACK_SET = "coding-tasks"
+CODING_TASK_EXTERNAL_AGENT_PACK_SET = "coding-tasks-external-agent"
 PACK_SETS = {
     DEFAULT_PACK_SET: DEFAULT_PACKS,
     CODING_TASK_PACK_SET: CODING_TASK_PACKS,
+    CODING_TASK_EXTERNAL_AGENT_PACK_SET: CODING_TASK_EXTERNAL_AGENT_PACKS,
 }
 
 PACK_LABEL_SUFFIXES = {
@@ -36,8 +43,13 @@ PACK_LABEL_SUFFIXES = {
     "runtime-sweep": "runtime",
     "desktop-django-wrap": "wrap",
     "patch-from-failure": "patch",
+    "patch-from-failure-external-agent": "patch-external-agent",
     "python-regression-fix": "python-regression",
+    "python-regression-fix-external-agent": "python-regression-external-agent",
     "django-dashboard-regression-fix": "dashboard-regression",
+    "django-dashboard-regression-fix-external-agent": (
+        "dashboard-regression-external-agent"
+    ),
 }
 TMUX_FAILURE_ENV = "BENCHPACK_MATRIX_FAILED"
 
@@ -308,7 +320,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Named pack set to run. 'default' expands to the standard "
             "four-pack matrix; 'coding-tasks' expands to the optional "
-            "repo-task pack matrix."
+            "fenced-patch repo-task pack matrix; "
+            "'coding-tasks-external-agent' expands to the external-agent "
+            "variants of those repo-task packs."
         ),
     )
     parser.add_argument(

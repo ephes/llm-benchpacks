@@ -208,6 +208,65 @@ def test_dry_run_pack_set_coding_tasks_generates_repo_task_commands() -> None:
     assert "'/bin/sh -c " in result.stdout
 
 
+def test_dry_run_pack_set_coding_tasks_external_agent_is_explicit() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--pack-set",
+        "coding-tasks-external-agent",
+        "--session-name",
+        "bench-coding-agent",
+        "--adapter",
+        "ollama-generate",
+        "--model",
+        "<model>",
+        "--host-label-prefix",
+        "m5-max-coding-agent-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "# pack-set: coding-tasks-external-agent" in result.stdout
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert [line.split()[5] for line in benchpack_lines] == [
+        "patch-from-failure-external-agent",
+        "python-regression-fix-external-agent",
+        "django-dashboard-regression-fix-external-agent",
+    ]
+    assert "benchpack run patch-from-failure " not in result.stdout
+    assert "benchpack run python-regression-fix " not in result.stdout
+    assert "benchpack run django-dashboard-regression-fix " not in result.stdout
+    assert (
+        "tmux new-session -d -s bench-coding-agent -n patch-external-agent"
+        in result.stdout
+    )
+    assert (
+        "tmux new-window -t bench-coding-agent -n "
+        "python-regression-external-agent"
+        in result.stdout
+    )
+    assert (
+        "tmux new-window -t bench-coding-agent -n "
+        "dashboard-regression-external-agent"
+        in result.stdout
+    )
+    assert (
+        "--host-label 'm5-max-coding-agent-<stamp>-patch-external-agent'"
+        in result.stdout
+    )
+    assert (
+        "--host-label 'm5-max-coding-agent-<stamp>-python-regression-external-agent'"
+        in result.stdout
+    )
+    assert (
+        "--host-label 'm5-max-coding-agent-<stamp>-dashboard-regression-external-agent'"
+        in result.stdout
+    )
+
+
 def test_dry_run_pack_set_coding_tasks_uses_stable_host_label_suffixes() -> None:
     result = _run_script(
         "--dry-run",

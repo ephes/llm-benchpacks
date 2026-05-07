@@ -522,6 +522,58 @@ def test_known_public_harness_ids_include_external_agent() -> None:
     )
 
 
+def test_bundled_coding_task_packs_keep_default_fenced_patch_behavior() -> None:
+    for pack_name, case_id in [
+        ("patch-from-failure", "fix-greeting"),
+        ("python-regression-fix", "fix-task-summary"),
+        ("django-dashboard-regression-fix", "fix-dashboard-regressions"),
+    ]:
+        pack = load_pack(Path("benchpacks") / pack_name)
+
+        assert pack.id == pack_name
+        assert len(pack.cases) == 1
+        assert pack.cases[0].id == case_id
+        assert pack.cases[0].kind == "repo-task"
+        assert pack.cases[0].harness is None
+
+
+def test_bundled_external_agent_coding_task_variants_select_public_harness() -> None:
+    for pack_name, source_pack_name, case_id in [
+        (
+            "patch-from-failure-external-agent",
+            "patch-from-failure",
+            "fix-greeting",
+        ),
+        (
+            "python-regression-fix-external-agent",
+            "python-regression-fix",
+            "fix-task-summary",
+        ),
+        (
+            "django-dashboard-regression-fix-external-agent",
+            "django-dashboard-regression-fix",
+            "fix-dashboard-regressions",
+        ),
+    ]:
+        source_pack = load_pack(Path("benchpacks") / source_pack_name)
+        pack = load_pack(Path("benchpacks") / pack_name)
+        case = pack.cases[0]
+
+        assert pack.id == pack_name
+        assert len(pack.cases) == 1
+        assert case.id == case_id
+        assert case.kind == "repo-task"
+        assert case.prompt == source_pack.cases[0].prompt
+        assert case.fixture_refs == source_pack.cases[0].fixture_refs
+        assert case.harness is not None
+        assert case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT
+        assert case.harness.timeout_s == 900.0
+        assert case.scoring is not None
+        assert source_pack.cases[0].scoring is not None
+        assert case.scoring.mode == source_pack.cases[0].scoring.mode
+        assert case.scoring.script == source_pack.cases[0].scoring.script
+
+
 def test_load_pack_rejects_unknown_harness_id(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,

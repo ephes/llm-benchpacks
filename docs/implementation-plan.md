@@ -227,6 +227,21 @@ Scope:
   matrix unchanged and rejecting mixed positional packs plus `--pack-set`.
   This is helper ergonomics for exploratory fenced-patch repo-task evidence,
   not broad production external-agent proof.
+- Add explicit external-agent coding-task variants and a helper pack set.
+  **Landed 2026-05-07** as
+  `scripts/benchpack-tmux-matrix --pack-set coding-tasks-external-agent`,
+  expanding to `patch-from-failure-external-agent`,
+  `python-regression-fix-external-agent`, and
+  `django-dashboard-regression-fix-external-agent`. Each variant copies the
+  same fixture, prompt, and verifier as its fenced-patch source pack, but
+  declares `harness = { id = "external-agent", timeout_s = 900 }` on the
+  measured repo-task case. The original packs, default four-pack matrix, and
+  fenced-patch `coding-tasks` set remain unchanged.
+- Add a local Codex OSS external-agent wrapper. **Landed 2026-05-07** as
+  `examples/external-agent/codex-oss-agent.py`, adapting the public
+  external-agent context to `codex exec --oss --local-provider <provider>` for
+  already-available local providers such as Ollama. It is a local live-evidence
+  adapter, not a cloud-backed or credential-injecting harness.
 - Add a compact durable summary for the completed Qwen3.6 M4/M5 benchmark
   sweep. **Landed 2026-05-05** as
   `docs/qwen36-m4-m5-benchmark-summary.md`, which summarizes the host/runtime/
@@ -872,6 +887,20 @@ Scope:
   `benchpack report`, and keeps model-call paths, full prompts, full
   responses, request bodies, headers, credentials, and all model-call payloads
   out of `run.jsonl`.
+- Add explicit external-agent variants for the bundled coding-task workloads.
+  **Landed 2026-05-07** as `patch-from-failure-external-agent`,
+  `python-regression-fix-external-agent`, and
+  `django-dashboard-regression-fix-external-agent`. The variants copy the same
+  fixture, prompt, and verifier as their fenced-patch source packs but select
+  the public `external-agent` harness with a 900 second task timeout. They are
+  exposed through the separate tmux helper pack set
+  `coding-tasks-external-agent`; default fenced-patch pack behavior remains
+  unchanged.
+- Add a local Codex OSS wrapper for public external-agent live evidence.
+  **Landed 2026-05-07** as `examples/external-agent/codex-oss-agent.py`. The
+  wrapper validates the runner context, asks `codex exec --oss` to edit the
+  prepared workspace directly through a local provider such as Ollama, and
+  writes one safe model-call telemetry line without adding result fields.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,

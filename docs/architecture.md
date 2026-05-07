@@ -614,8 +614,12 @@ tmux or contacting an endpoint.
 The helper's default pack list remains the standard four-pack matrix. Named
 pack sets are explicit operator shortcuts, currently including
 `--pack-set coding-tasks` for `patch-from-failure`, `python-regression-fix`,
-and `django-dashboard-regression-fix`; named pack sets cannot be combined with
-positional custom packs.
+and `django-dashboard-regression-fix`, and
+`--pack-set coding-tasks-external-agent` for the three explicit external-agent
+variants of those workloads. The external-agent set is a separate opt-in path;
+it does not change the default four-pack matrix or the fenced-patch
+`coding-tasks` expansion. Named pack sets cannot be combined with positional
+custom packs.
 
 The helper preserves the existing execution boundary: `benchpack run` still
 loads packs, adapters, hardware metadata, run metadata, and result writers.

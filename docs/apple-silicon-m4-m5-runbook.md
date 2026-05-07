@@ -169,7 +169,8 @@ OpenAI-compatible endpoints. The helper passes the environment variable name to
 `benchpack run` but does not read or print the token value.
 
 For optional exploratory repo-task evidence, dry-run a separate coding-task
-matrix instead of changing the default four-pack workflow:
+matrix instead of changing the default four-pack workflow. The existing
+`coding-tasks` set stays on the default fenced-patch repo-task harness:
 
 ```sh
 scripts/benchpack-tmux-matrix \
@@ -187,6 +188,37 @@ scripts/benchpack-tmux-matrix \
 `python-regression-fix`, and `django-dashboard-regression-fix`, in that order.
 Do not combine `--pack-set` with positional custom packs; the helper rejects
 that mix before generating commands.
+
+For external-agent evidence over the same three workloads, use the separate
+external-agent pack set and configure a real non-interactive agent command with
+`BENCHPACK_EXTERNAL_AGENT_ARGV`:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/path/to/agent"]' \
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --pack-set coding-tasks-external-agent \
+  --session-name 'bench-m5-coding-agent-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-coding-agent-<stamp>' \
+  --run-metadata metadata/m5-llama-server.json
+```
+
+`--pack-set coding-tasks-external-agent` expands to
+`patch-from-failure-external-agent`,
+`python-regression-fix-external-agent`, and
+`django-dashboard-regression-fix-external-agent`, in that order. Those variants
+copy the same fixtures, prompts, and verifiers as the fenced-patch packs but
+select `harness = { id = "external-agent", timeout_s = 900 }`. The
+deterministic example harnesses under `examples/external-agent/` are for
+contract checks only; do not use them as live coding-agent evidence. For local
+Codex OSS/Ollama evidence, the source-controlled wrapper shape is:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["python3","examples/external-agent/codex-oss-agent.py","--codex-model","qwen3-coder:latest","--local-provider","ollama"]'
+```
 
 After inspecting the dry run, launch the tmux session:
 

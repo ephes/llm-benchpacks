@@ -16,6 +16,36 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (external-agent coding-task variants)
+
+### Changed
+
+- Added explicit external-agent variants for the three bundled coding-task
+  workloads: `patch-from-failure-external-agent`,
+  `python-regression-fix-external-agent`, and
+  `django-dashboard-regression-fix-external-agent`.
+- Each variant copies the same fixture, prompt, and verifier as its
+  fenced-patch source pack, but declares
+  `harness = { id = "external-agent", timeout_s = 900 }` on the measured
+  `repo-task` case.
+- Added `scripts/benchpack-tmux-matrix --pack-set
+  coding-tasks-external-agent`, expanding to those three variants with stable
+  `*-external-agent` host-label suffixes. The existing default four-pack matrix
+  and `--pack-set coding-tasks` fenced-patch expansion remain unchanged.
+- Added `examples/external-agent/codex-oss-agent.py`, a local live-evidence
+  wrapper that adapts the public external-agent context to
+  `codex exec --oss --local-provider <provider>` for already-installed local
+  providers such as Ollama.
+- Added focused pack and helper tests for the external-agent selection path and
+  for preserving the existing fenced-patch coding-task behavior.
+
+### Open Questions
+
+- The next useful evidence is an M5-only live run of
+  `--pack-set coding-tasks-external-agent` with a real non-interactive coding
+  agent command in `BENCHPACK_EXTERNAL_AGENT_ARGV`. Deterministic example
+  harnesses remain contract tests only, not coding-agent evidence.
+
 ## 2026-05-07 (repo-task prompt contract tightening)
 
 ### Changed

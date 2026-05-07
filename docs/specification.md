@@ -69,6 +69,12 @@ Initial packs:
   `Hello, Ada!`. The pack sets `defaults.warmup = 0`,
   `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
+- `patch-from-failure-external-agent`: explicit external-agent variant of the
+  same workload. Version `0.1.0` copies the same fixture, prompt, and verifier
+  as `patch-from-failure`, but the measured case declares
+  `harness = { id = "external-agent", timeout_s = 900 }`. It exists for
+  opt-in agent-shaped evidence and does not change the default fenced-patch
+  pack.
 - `python-regression-fix`: second bundled measured repo-mutating `repo-task`
   pack. Version `0.1.0` has one small stdlib-only Python repo fixture and one
   `fix-task-summary` measured case. The prompt asks the model to return only a
@@ -81,6 +87,11 @@ Initial packs:
   `defaults.warmup = 0`, `defaults.repetitions = 1`,
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
+- `python-regression-fix-external-agent`: explicit external-agent variant of
+  the same workload. Version `0.1.0` copies the same fixture, prompt, and
+  verifier as `python-regression-fix`, but the measured case declares
+  `harness = { id = "external-agent", timeout_s = 900 }`. It is separate from
+  the default fenced-patch pack.
 - `django-dashboard-regression-fix`: bundled measured repo-mutating
   `repo-task` pack with a compact multi-file stdlib dashboard-shaped fixture.
   Version `0.1.0` has one `fix-dashboard-regressions` measured case. The
@@ -97,6 +108,11 @@ Initial packs:
   `scoring.mode = "verify-script"`. It is a stronger bundled fenced-patch
   signal than the tiny patch smoke pack, not broad production coding-agent
   proof.
+- `django-dashboard-regression-fix-external-agent`: explicit external-agent
+  variant of the same workload. Version `0.1.0` copies the same fixture,
+  prompt, and verifier as `django-dashboard-regression-fix`, but the measured
+  case declares `harness = { id = "external-agent", timeout_s = 900 }`. It is
+  separate from the default fenced-patch pack.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains
@@ -342,6 +358,14 @@ strings in that URL, writes only the deterministic response content into the
 prepared workspace, and writes one safe JSONL telemetry line to the
 context-provided model-call path. The example does not call live model services
 by itself and does not make the model-call log a runner schema.
+
+A local live-evidence wrapper is available at
+`examples/external-agent/codex-oss-agent.py`. It uses the same public argv and
+context handoff, then runs `codex exec --oss --local-provider <provider>` in
+the prepared workspace with `--sandbox workspace-write` and `--ephemeral`.
+This wrapper is intended only when Codex CLI and the selected local provider
+and model are already available locally, such as a local Ollama model; it is
+not a cloud-backed or credential-injecting harness.
 
 Other richer harness artifacts must be explicitly named by a later
 artifact/schema slice before they are allowed. It must not mutate pack-owned
