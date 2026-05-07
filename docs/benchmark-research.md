@@ -3,10 +3,12 @@
 Status date: 2026-05-07.
 
 This is a research backlog, not an implemented benchmark contract. It records
-candidate directions for stronger coding-agent benchmarks after the current live
-evidence showed that the public external-agent path works mechanically but the
-copied fenced-diff task prompts are the wrong benchmark surface for direct
-workspace-editing agents.
+candidate directions for stronger coding-agent benchmarks after live evidence
+showed that the public external-agent path works mechanically but copied
+fenced-diff task prompts were the wrong benchmark surface for direct
+workspace-editing agents. The first direct-edit prompt slice for the existing
+external-agent coding-task packs has now landed; real-agent validation remains
+the next evidence step.
 
 No live benchmarks were run for this note. No datasets were downloaded. No
 generated `results/*`, metadata, raw payloads, workspaces, task logs, model-call
@@ -24,18 +26,18 @@ logs, or secrets should be committed for this research track.
 - The external-agent verifiers failed because the reused fenced-diff prompts
   caused Codex to emit unified diffs to stdout instead of editing the prepared
   workspace. Captured workspace diffs were empty.
-- The next useful work is benchmark design, then an external-agent-specific
-  direct-edit slice. More broad M4/M5/Hetzner live rows should wait until the
-  benchmark surface is more meaningful.
+- The external-agent coding-task packs now have direct-edit prompts that ask
+  the agent to edit the prepared workspace directly while preserving existing
+  verifier semantics.
+- The next useful work is local real-agent validation of that direct-edit slice.
+  More broad M4/M5/Hetzner live rows should wait until the benchmark surface
+  produces meaningful deterministic task outcomes.
 
 ## Next Work Ordering
 
 1. Keep this research backlog and implementation plan current.
-2. Design direct-edit external-agent task variants that remove fenced-diff
-   output instructions while preserving existing fenced-patch packs, result
-   schemas, verifier behavior, adapter APIs, and default matrices.
-3. Validate the direct-edit slice locally on M5 with a real external agent.
-4. Broaden to M4/M5/NVIDIA comparison only after the direct-edit benchmark
+2. Validate the direct-edit slice locally on M5 with a real external agent.
+3. Broaden to M4/M5/NVIDIA comparison only after the direct-edit benchmark
    surface produces meaningful deterministic task outcomes.
 
 ## Candidate Benchmark Tracks
@@ -59,10 +61,11 @@ LLM-as-judge default.
 
 ### Direct-Edit External-Agent Tasks
 
-Backlog item: create external-agent-specific variants of the bundled repo-task
-fixtures whose prompts tell the agent to edit files in the prepared workspace
-and stop, not to produce a fenced unified diff. Keep the existing fenced-patch
-packs as compatibility/default evidence and do not promote the new slice into
+Backlog item: the first slice has landed by updating the existing
+external-agent-specific variants of the bundled repo-task fixtures so their
+prompts tell the agent to edit files in the prepared workspace and stop, not to
+produce a fenced patch. Keep the existing fenced-patch packs as
+compatibility/default evidence and do not promote the direct-edit slice into
 the default matrix until it has local M5 evidence.
 
 Design questions:

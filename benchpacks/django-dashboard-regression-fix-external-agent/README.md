@@ -4,13 +4,16 @@ Bundled `repo-task` pack variant that runs the
 `django-dashboard-regression-fix` workload through the public `external-agent`
 harness.
 
-Pack version: `0.1.0`.
+Pack version: `0.1.1`.
 
-This variant intentionally copies the same fixture, prompt, and verifier as
-`django-dashboard-regression-fix`. It differs only by declaring
+This variant uses the same fixture and verifier as
+`django-dashboard-regression-fix`, but its prompt is direct-edit-specific: the
+external agent is told to modify the prepared workspace files directly instead
+of returning a fenced patch. It declares
 `harness = { id = "external-agent", timeout_s = 900 }` on the measured
 `repo-task` case. The default `django-dashboard-regression-fix` pack remains
-the fenced-patch compatibility workload.
+the fenced-patch compatibility workload, and this pack remains opt-in rather
+than part of the default matrix.
 
 ## Case
 
@@ -18,11 +21,13 @@ the fenced-patch compatibility workload.
   fixture so project visibility, archived filtering, row formatting, sorting,
   and input immutability match the included `unittest` cases.
 
-The prompt lives in `prompts/fix-dashboard-regressions.md` and is copied from
-the fenced-patch pack. For this variant, the runner still performs the normal
-pre-task adapter call, then invokes the configured external-agent subprocess
-inside the prepared workspace before capturing
-`patch/fix-dashboard-regressions/rep-001.diff` and running the verifier.
+The prompt lives in `prompts/fix-dashboard-regressions.md` and tells the
+external agent that it is running inside the prepared repository workspace. For
+this variant, the runner still performs the normal pre-task adapter call, then
+invokes the configured external-agent subprocess inside the prepared workspace.
+Patch capture happens after the external-agent task phase at
+`patch/fix-dashboard-regressions/rep-001.diff`, and the verifier remains
+deterministic.
 
 ## Fixture
 

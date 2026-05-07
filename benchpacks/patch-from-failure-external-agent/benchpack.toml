@@ -1,7 +1,7 @@
 [pack]
 id = "patch-from-failure-external-agent"
-version = "0.1.0"
-description = "External-agent variant of patch-from-failure using the same fixture, prompt, and verifier"
+version = "0.1.1"
+description = "Direct-edit external-agent variant of patch-from-failure using the same fixture and verifier"
 
 [defaults]
 temperature = 0

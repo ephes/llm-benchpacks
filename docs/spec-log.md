@@ -16,7 +16,44 @@ working history and open questions.
 - ...
 ```
 
-## 2026-05-07 (external-agent coding-task variants)
+## 2026-05-07 (direct-edit external-agent prompts)
+
+### Changed
+
+- Updated the three bundled external-agent coding-task packs to direct-edit
+  prompts: `patch-from-failure-external-agent`,
+  `python-regression-fix-external-agent`, and
+  `django-dashboard-regression-fix-external-agent`.
+- Bumped those pack versions to `0.1.1` and changed descriptions so they no
+  longer describe copied fenced-patch prompts. Fixtures, fixture refs,
+  verifier scripts, `harness = { id = "external-agent", timeout_s = 900 }`,
+  runner semantics, adapter APIs, result schemas, verifier behavior, tmux
+  helper behavior, and default matrix behavior remain unchanged.
+- The direct-edit prompts tell the external agent it is running inside the
+  prepared repository workspace, restrict edits to the allowed repo-root source
+  paths, forbid writing outside the workspace or editing tests, verifier files,
+  prompts, README files, generated artifacts, task logs, raw payloads, patch
+  artifacts, or metadata, and explain that the runner captures workspace
+  changes after the external-agent task phase.
+- Updated pack READMEs and source docs to preserve the evidence boundary: the
+  external-agent set is opt-in, the runner still performs the normal pre-task
+  adapter call, patch capture still happens after the external-agent task
+  phase, and verifiers remain deterministic.
+
+### Validation
+
+- No live benchmarks were run for this implementation slice. No datasets were
+  downloaded and no generated `results/*`, metadata, raw payloads, workspaces,
+  task logs, model-call logs, secrets, or tokens were added.
+
+### Open Questions
+
+- The next useful evidence is a local M5 real-agent validation run against the
+  direct-edit prompts. Use that evidence to decide whether existing task logs
+  and `repo_task.status` are enough or whether a later richer task-status field
+  is justified.
+
+## 2026-05-07 (external-agent coding-task variants, initial fenced-prompt form)
 
 ### Changed
 

@@ -210,9 +210,10 @@ scripts/benchpack-tmux-matrix \
 `patch-from-failure-external-agent`,
 `python-regression-fix-external-agent`, and
 `django-dashboard-regression-fix-external-agent`, in that order. Those variants
-copy the same fixtures, prompts, and verifiers as the fenced-patch packs but
-select `harness = { id = "external-agent", timeout_s = 900 }`. The
-deterministic example harnesses under `examples/external-agent/` are for
+use the same fixtures and deterministic verifiers as the fenced-patch packs,
+but their prompts tell the external agent to edit the prepared workspace
+directly and select `harness = { id = "external-agent", timeout_s = 900 }`.
+The deterministic example harnesses under `examples/external-agent/` are for
 contract checks only; do not use them as live coding-agent evidence. For local
 Codex OSS/Ollama evidence, the source-controlled wrapper shape is:
 

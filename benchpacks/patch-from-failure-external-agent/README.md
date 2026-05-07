@@ -3,24 +3,28 @@
 Tiny bundled `repo-task` pack variant that runs the `patch-from-failure`
 workload through the public `external-agent` harness.
 
-Pack version: `0.1.0`.
+Pack version: `0.1.1`.
 
-This variant intentionally copies the same fixture, prompt, and verifier as
-`patch-from-failure`. It differs only by declaring
+This variant uses the same fixture and verifier as `patch-from-failure`, but
+its prompt is direct-edit-specific: the external agent is told to modify the
+prepared workspace files directly instead of returning a fenced patch. It
+declares
 `harness = { id = "external-agent", timeout_s = 900 }` on the measured
 `repo-task` case. The default `patch-from-failure` pack remains the
-fenced-patch compatibility workload.
+fenced-patch compatibility workload, and this pack remains opt-in rather than
+part of the default matrix.
 
 ## Case
 
 - `fix-greeting`: asks the model to patch a small Python repo so
   `greet("Ada")` returns exactly `Hello, Ada!`.
 
-The prompt lives in `prompts/fix-greeting.md` and is copied from the
-fenced-patch pack. For this variant, the runner still performs the normal
-pre-task adapter call, then invokes the configured external-agent subprocess
-inside the prepared workspace before capturing
-`patch/fix-greeting/rep-001.diff` and running the verifier.
+The prompt lives in `prompts/fix-greeting.md` and tells the external agent that
+it is running inside the prepared repository workspace. For this variant, the
+runner still performs the normal pre-task adapter call, then invokes the
+configured external-agent subprocess inside the prepared workspace. Patch
+capture happens after the external-agent task phase at
+`patch/fix-greeting/rep-001.diff`, and the verifier remains deterministic.
 
 ## Fixture
 

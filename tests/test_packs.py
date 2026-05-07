@@ -57,6 +57,27 @@ def assert_strict_fenced_diff_prompt(prompt: str) -> None:
     assert "Close the fenced block" in normalized
 
 
+def assert_direct_edit_external_agent_prompt(prompt: str) -> None:
+    normalized = " ".join(prompt.split())
+    lower_prompt = prompt.lower()
+
+    assert "prepared repository workspace" in normalized
+    assert "editing the workspace files directly" in normalized
+    assert "Workspace editing contract:" in prompt
+    assert "Edit only the allowed repo-root" in normalized
+    assert "Do not write outside the prepared workspace" in normalized
+    assert "Do not edit tests, verifier files, prompts, README files" in normalized
+    assert "generated result artifacts" in normalized
+    assert "No patch needs to be printed" in normalized
+    assert "runner captures workspace changes after the external-agent task phase" in normalized
+    assert "deterministic verifier" in normalized
+    assert "```diff" not in prompt
+    assert "unified diff" not in lower_prompt
+    assert "git apply" not in lower_prompt
+    assert "fenced code block" not in lower_prompt
+    assert "info string exactly" not in lower_prompt
+
+
 def test_load_pack_minimal(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,
@@ -538,21 +559,24 @@ def test_bundled_coding_task_packs_keep_default_fenced_patch_behavior() -> None:
 
 
 def test_bundled_external_agent_coding_task_variants_select_public_harness() -> None:
-    for pack_name, source_pack_name, case_id in [
+    for pack_name, source_pack_name, case_id, expected_version in [
         (
             "patch-from-failure-external-agent",
             "patch-from-failure",
             "fix-greeting",
+            "0.1.1",
         ),
         (
             "python-regression-fix-external-agent",
             "python-regression-fix",
             "fix-task-summary",
+            "0.1.1",
         ),
         (
             "django-dashboard-regression-fix-external-agent",
             "django-dashboard-regression-fix",
             "fix-dashboard-regressions",
+            "0.1.1",
         ),
     ]:
         source_pack = load_pack(Path("benchpacks") / source_pack_name)
@@ -560,10 +584,14 @@ def test_bundled_external_agent_coding_task_variants_select_public_harness() -> 
         case = pack.cases[0]
 
         assert pack.id == pack_name
+        assert pack.version == expected_version
         assert len(pack.cases) == 1
         assert case.id == case_id
         assert case.kind == "repo-task"
-        assert case.prompt == source_pack.cases[0].prompt
+        assert case.prompt is not None
+        assert source_pack.cases[0].prompt is not None
+        assert case.prompt != source_pack.cases[0].prompt
+        assert_direct_edit_external_agent_prompt(case.prompt)
         assert case.fixture_refs == source_pack.cases[0].fixture_refs
         assert case.harness is not None
         assert case.harness.id == PUBLIC_HARNESS_EXTERNAL_AGENT

@@ -70,11 +70,12 @@ Initial packs:
   `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
 - `patch-from-failure-external-agent`: explicit external-agent variant of the
-  same workload. Version `0.1.0` copies the same fixture, prompt, and verifier
-  as `patch-from-failure`, but the measured case declares
-  `harness = { id = "external-agent", timeout_s = 900 }`. It exists for
-  opt-in agent-shaped evidence and does not change the default fenced-patch
-  pack.
+  same workload. Version `0.1.1` uses the same fixture and verifier as
+  `patch-from-failure`, but the prompt tells the external agent to edit the
+  prepared workspace directly instead of returning a fenced patch. The measured
+  case declares `harness = { id = "external-agent", timeout_s = 900 }`. It
+  exists for opt-in agent-shaped evidence and does not change the default
+  fenced-patch pack.
 - `python-regression-fix`: second bundled measured repo-mutating `repo-task`
   pack. Version `0.1.0` has one small stdlib-only Python repo fixture and one
   `fix-task-summary` measured case. The prompt asks the model to return only a
@@ -88,10 +89,11 @@ Initial packs:
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
 - `python-regression-fix-external-agent`: explicit external-agent variant of
-  the same workload. Version `0.1.0` copies the same fixture, prompt, and
-  verifier as `python-regression-fix`, but the measured case declares
-  `harness = { id = "external-agent", timeout_s = 900 }`. It is separate from
-  the default fenced-patch pack.
+  the same workload. Version `0.1.1` uses the same fixture and verifier as
+  `python-regression-fix`, but the prompt tells the external agent to edit the
+  prepared workspace directly instead of returning a fenced patch. The measured
+  case declares `harness = { id = "external-agent", timeout_s = 900 }`. It is
+  separate from the default fenced-patch pack.
 - `django-dashboard-regression-fix`: bundled measured repo-mutating
   `repo-task` pack with a compact multi-file stdlib dashboard-shaped fixture.
   Version `0.1.0` has one `fix-dashboard-regressions` measured case. The
@@ -109,10 +111,12 @@ Initial packs:
   signal than the tiny patch smoke pack, not broad production coding-agent
   proof.
 - `django-dashboard-regression-fix-external-agent`: explicit external-agent
-  variant of the same workload. Version `0.1.0` copies the same fixture,
-  prompt, and verifier as `django-dashboard-regression-fix`, but the measured
-  case declares `harness = { id = "external-agent", timeout_s = 900 }`. It is
-  separate from the default fenced-patch pack.
+  variant of the same workload. Version `0.1.1` uses the same fixture and
+  verifier as `django-dashboard-regression-fix`, but the prompt tells the
+  external agent to edit the prepared workspace directly instead of returning a
+  fenced patch. The measured case declares
+  `harness = { id = "external-agent", timeout_s = 900 }`. It is separate from
+  the default fenced-patch pack.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains

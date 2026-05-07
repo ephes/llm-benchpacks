@@ -139,6 +139,32 @@ evidence; it is optional exploratory signal, not part of the default matrix and
 not broad production external-agent proof. Positional custom packs still work,
 but they cannot be combined with `--pack-set`.
 
+For opt-in direct-edit external-agent evidence, use the separate
+`coding-tasks-external-agent` pack set with `BENCHPACK_EXTERNAL_AGENT_ARGV`
+configured in the operator environment:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/path/to/agent"]' \
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --pack-set coding-tasks-external-agent \
+  --session-name 'bench-coding-agent-<stamp>' \
+  --adapter openai-chat \
+  --model '<model>' \
+  --endpoint '<endpoint>' \
+  --host-label-prefix 'm5-max-coding-agent-<stamp>' \
+  --run-metadata metadata/example.json
+```
+
+That set expands to `patch-from-failure-external-agent`,
+`python-regression-fix-external-agent`, and
+`django-dashboard-regression-fix-external-agent`. Those packs keep the same
+fixtures and deterministic verifiers as the fenced-patch packs, but their
+prompts tell the external agent to edit the prepared workspace directly. The
+runner still performs the normal pre-task adapter call, captures the workspace
+patch after the external-agent task phase, and runs deterministic verifiers.
+This set is explicit opt-in evidence and is not part of the default matrix.
+
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
 `--run-metadata <json-file>` is supplied, the runner also validates that JSON
@@ -240,6 +266,12 @@ Bundled packs:
   `dashboard/views.py`; verification remains deterministic and stdlib-only.
   This is a stronger bundled fenced-patch repo-task signal than the tiny patch
   smoke pack, not broad production coding-agent proof.
+- `patch-from-failure-external-agent`, `python-regression-fix-external-agent`,
+  and `django-dashboard-regression-fix-external-agent`: opt-in direct-edit
+  external-agent variants of the bundled repo-task fixtures. They select
+  `harness = { id = "external-agent", timeout_s = 900 }`, instruct the external
+  agent to edit the prepared workspace directly, then rely on normal workspace
+  patch capture and deterministic verifiers. They are not default matrix packs.
 
 ## Initial Shape
 

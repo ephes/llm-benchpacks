@@ -232,13 +232,14 @@ Scope:
   `scripts/benchpack-tmux-matrix --pack-set coding-tasks-external-agent`,
   expanding to `patch-from-failure-external-agent`,
   `python-regression-fix-external-agent`, and
-  `django-dashboard-regression-fix-external-agent`. Each variant copies the
-  same fixture, prompt, and verifier as its fenced-patch source pack, but
-  declares `harness = { id = "external-agent", timeout_s = 900 }` on the
-  measured repo-task case. The original packs, default four-pack matrix, and
-  fenced-patch `coding-tasks` set remain unchanged. The helper launch path
-  requires `BENCHPACK_EXTERNAL_AGENT_ARGV` for this pack set and injects it
-  into tmux windows without printing its value in dry-run output.
+  `django-dashboard-regression-fix-external-agent`. Each variant declares
+  `harness = { id = "external-agent", timeout_s = 900 }` on the measured
+  repo-task case. The variants initially reused the fenced-patch prompts, then
+  were updated later on 2026-05-07 to direct-edit prompts. The original packs,
+  default four-pack matrix, and fenced-patch `coding-tasks` set remain
+  unchanged. The helper launch path requires `BENCHPACK_EXTERNAL_AGENT_ARGV`
+  for this pack set and injects it into tmux windows without printing its value
+  in dry-run output.
 - Add a local Codex OSS external-agent wrapper. **Landed 2026-05-07** as
   `examples/external-agent/codex-oss-agent.py`, adapting the public
   external-agent context to `codex exec --oss --local-provider <provider>` for
@@ -897,10 +898,12 @@ Scope:
 - Add explicit external-agent variants for the bundled coding-task workloads.
   **Landed 2026-05-07** as `patch-from-failure-external-agent`,
   `python-regression-fix-external-agent`, and
-  `django-dashboard-regression-fix-external-agent`. The variants copy the same
-  fixture, prompt, and verifier as their fenced-patch source packs but select
-  the public `external-agent` harness with a 900 second task timeout. They are
-  exposed through the separate tmux helper pack set
+  `django-dashboard-regression-fix-external-agent`. The variants use the same
+  fixtures and deterministic verifiers as their fenced-patch source packs but
+  select the public `external-agent` harness with a 900 second task timeout.
+  Their prompts now tell the external agent to edit the prepared workspace
+  directly instead of emitting fenced patch output. They are exposed through
+  the separate tmux helper pack set
   `coding-tasks-external-agent`; default fenced-patch pack behavior remains
   unchanged.
 - Add a local Codex OSS wrapper for public external-agent live evidence.
@@ -941,9 +944,10 @@ Scope:
   log artifact path, a recommended model-call JSONL line shape, and safe
   aggregate model-call summaries. The first local live external-agent evidence
   mechanically validated the public path but failed deterministically under
-  copied fenced-diff prompts. External-agent-specific direct-edit benchmark
-  design, required model-call logging beyond the optional summary artifact, and
-  richer harness configuration remain planned later.
+  copied fenced-diff prompts. External-agent-specific direct-edit prompts have
+  now landed for the bundled variants; required model-call logging beyond the
+  optional summary artifact and richer harness configuration remain planned
+  later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
@@ -962,16 +966,19 @@ Improve the coding-agent benchmark surface before launching broader live
 campaigns. See `docs/benchmark-research.md` for research notes, source leads,
 and caveats.
 
-**Status:** opened 2026-05-07 as documentation/backlog only. No live benchmarks
-were run, no datasets were downloaded, and no generated artifacts were added in
-this grooming slice.
+**Status:** opened 2026-05-07 as documentation/backlog only; the first
+direct-edit external-agent prompt slice landed later the same day. No live
+benchmarks were run, no datasets were downloaded, and no generated artifacts
+were added in that implementation slice.
 
 Scope:
 
 - Design external-agent-specific direct-edit task variants that remove
   fenced-diff output instructions while preserving the current default
   fenced-patch packs, result schemas, verifier behavior, adapter APIs, and
-  tmux defaults.
+  tmux defaults. **Landed 2026-05-07** for the three existing external-agent
+  coding-task packs by changing only their prompts, pack versions,
+  descriptions, docs, and prompt-contract tests.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1025,8 +1032,10 @@ Scope:
 - Public external-agent harness plumbing. **Landed mechanically** through the
   public `external-agent` path and M5 Codex OSS/Ollama evidence, but current
   copied prompts failed to produce workspace edits.
-- Direct-edit external-agent benchmark variants. **Planned next** after the
-  research/backlog grooming slice.
+- Direct-edit external-agent benchmark variants. **Landed 2026-05-07** by
+  updating the existing external-agent coding-task packs to instruct real
+  agents to edit the prepared workspace directly while preserving the default
+  fenced-patch packs and runner semantics.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.

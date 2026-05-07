@@ -1,5 +1,5 @@
-Fix the small Python repository by editing only the file that contains the task
-summary regression.
+You are running inside the prepared repository workspace for this benchmark
+case. Fix the small Python repository by editing the workspace files directly.
 
 Allowed repo-root path to edit:
 
@@ -99,15 +99,14 @@ Expected behavior:
 - `today` may be either a `datetime.date` or an ISO `YYYY-MM-DD` string.
 - Returned overdue titles must be sorted by due date, then title.
 
-Output contract:
+Workspace editing contract:
 
-- Your entire response must be one fenced code block with info string exactly
-  `diff`.
-- The first line of your response must be the literal fence marker `` ```diff ``.
-- Do not include `<think>`, hidden reasoning, analysis, explanations, shell
-  commands, or markdown outside the fenced block.
-- Use only exact repo-root paths listed above.
-- Omit `index` lines and do not invent paths.
-- Inside the block, return a complete unified diff that applies with
-  `git apply` from the repository root.
-- Close the fenced block.
+- Edit only the allowed repo-root path listed above.
+- Do not write outside the prepared workspace.
+- Do not edit tests, verifier files, prompts, README files, generated result
+  artifacts, task logs, raw payloads, patch artifacts, or metadata files.
+- Make the smallest source changes needed for the stated verifier expectations.
+- No patch needs to be printed. The runner captures workspace changes after the
+  external-agent task phase exits.
+- A short stdout summary is fine, but scoring depends on workspace state and the
+  deterministic verifier, not prose.
