@@ -50,6 +50,7 @@ uv run benchpack run smoke-chat --adapter openai-chat --model '<model>' --endpoi
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
 uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
+uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-dashboard-regression --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
@@ -207,6 +208,14 @@ Bundled packs:
   and ordering, and input immutability; verification remains deterministic and
   stdlib-only. This is a narrow fenced-patch repo-task signal, not production
   external agent-harness coverage.
+- `django-dashboard-regression-fix`: non-streaming single-case `repo-task` pack
+  with a compact multi-file stdlib dashboard-shaped fixture. The case asks for
+  a fenced unified diff to fix project visibility, archived filtering, row
+  formatting, deterministic sorting, and input immutability across
+  `dashboard/permissions.py`, `dashboard/formatting.py`, and
+  `dashboard/views.py`; verification remains deterministic and stdlib-only.
+  This is a stronger bundled fenced-patch repo-task signal than the tiny patch
+  smoke pack, not broad production coding-agent proof.
 
 ## Initial Shape
 
@@ -218,7 +227,8 @@ The first implementation stays small:
 4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
    the prompt-only `desktop-django-wrap` starter pack and measured
    repo-mutating fenced unified-diff packs such as `patch-from-failure` and
-   `python-regression-fix`. `desktop-django-wrap` still treats directory
+   `python-regression-fix` and `django-dashboard-regression-fix`.
+   `desktop-django-wrap` still treats directory
    fixtures as metadata-only; repo-task packs copy their repo fixtures into
    run-owned workspaces, apply the model diff there, and verify the result.
 5. JSONL result artifacts plus a small Markdown summary.

@@ -136,10 +136,11 @@ workflow for local M5 runs, SSH-driven M4 Studio runs, result pullback, compare
 commands, fairness checks, interpretation boundaries, and troubleshooting. The
 runner can already execute useful first-pass benchmarks for this goal with
 `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
-`patch-from-failure`. The optional bundled `python-regression-fix` repo-task
-pack is now available for deeper fenced-patch signal, but it is not part of the
-default four-pack matrix. Apple host model metadata and report-ready matrix
-guidance have also landed. A read-only Markdown report generator also landed to
+`patch-from-failure`. The optional bundled `python-regression-fix` and
+`django-dashboard-regression-fix` repo-task packs are now available for deeper
+fenced-patch signal, but they are not part of the default four-pack matrix.
+Apple host model metadata and report-ready matrix guidance have also landed. A
+read-only Markdown report generator also landed to
 assemble run-log and comparison-note skeletons from existing result
 directories while reusing compare median, warning, cache-row, and
 `prefill parity` semantics. A narrow user-supplied runtime metadata slice also
@@ -148,8 +149,8 @@ landed: `benchpack run --run-metadata <json-file>` persists a small
 The narrow report-set manifest follow-up also landed: `benchpack report --set
 <manifest.toml>` expands a source-only TOML list of existing result directories
 into the same read-only report pipeline. Remaining work is deeper live
-benchmark interpretation, production external harness execution, and larger
-repo-task packs, not benchmark semantics.
+benchmark interpretation, production external harness execution, and further
+larger repo-task packs, not benchmark semantics.
 
 Scope:
 
@@ -185,11 +186,12 @@ Scope:
   responsibilities for now rather than broad runtime discovery.
 - Document result interpretation boundaries: `runtime-sweep` is ready for
   performance comparison now; `desktop-django-wrap` is prompt-only;
-  `patch-from-failure` is useful as a tiny repo-task smoke benchmark; and
-  `python-regression-fix` is an optional deeper fenced-patch repo-task pack.
-  Larger coding-agent conclusions should wait for production external harness
-  support and more curated repo-task evidence. **Updated 2026-05-05** in the
-  runbook.
+  `patch-from-failure` is useful as a tiny repo-task smoke benchmark;
+  `python-regression-fix` is an optional deeper single-file fenced-patch
+  repo-task pack; and `django-dashboard-regression-fix` is an optional
+  stronger multi-file fenced-patch repo-task pack. Larger coding-agent
+  conclusions should wait for production external harness support and more
+  curated repo-task evidence. **Updated 2026-05-07** in the source docs.
 - Add benchmark matrix and reporting polish before live M4/M5 runs.
   **Landed 2026-05-03** in the runbook as a comparison report checklist and
   compact report skeleton that separates `hardware.json` host identity from
@@ -865,6 +867,10 @@ Scope:
   workspace. A second bundled fenced-patch repo-task pack,
   `python-regression-fix`, landed 2026-05-05 with a small stdlib Python
   task-summary fixture, multiple edge cases, and deterministic
+  `verify-script` scoring. A stronger multi-file bundled fenced-patch
+  repo-task pack, `django-dashboard-regression-fix`, landed 2026-05-07 with a
+  stdlib dashboard-shaped fixture, visibility and archived-filtering
+  regressions, deterministic sorting, input immutability checks, and
   `verify-script` scoring.
 - Integrate a production agent-session harness after disposable workspace,
   verifier, patch artifacts, public compatibility selection, and the
@@ -882,7 +888,7 @@ Scope:
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
   environment support if needed, broader timeout/reporting policy if needed,
-  and additional larger repo-task packs if current bundled fixtures remain too
+  and further larger repo-task packs if current bundled fixtures remain too
   small. **Planned later.**
 - Add optional full agent-session replay later.
 
@@ -902,6 +908,10 @@ Scope:
   measured repo-mutating repo-task pack with a small stdlib Python regression,
   multiple deterministic edge cases, and the existing fenced unified-diff
   executor.
+- `django-dashboard-regression-fix` pack. **Landed 2026-05-07** as a stronger
+  bundled measured repo-mutating repo-task pack with a compact multi-file
+  stdlib dashboard fixture, deterministic verifier checks, and the existing
+  fenced unified-diff executor.
 - Disposable worktree setup.
 - Model output to patch extraction or agent-harness integration.
 - Deterministic scoring by tests passing, diff size, and timeout.

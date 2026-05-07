@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -2288,3 +2291,139 @@ def test_bundled_python_regression_fix_pack_contract() -> None:
             contents = source_file.read_text(encoding="utf-8")
             for fragment in forbidden_path_fragments:
                 assert fragment not in contents
+
+
+def test_bundled_django_dashboard_regression_fix_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "django-dashboard-regression-fix")
+    pack_dir = repo_root / "benchpacks" / "django-dashboard-regression-fix"
+
+    assert pack.id == "django-dashboard-regression-fix"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 1200
+    assert pack.defaults["stream"] is False
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert pack.scoring is None
+
+    assert [fixture.id for fixture in pack.fixtures] == ["repo"]
+    fixture = pack.fixtures[0]
+    assert fixture.kind == "repo"
+    assert fixture.raw["path"] == "fixtures/repo"
+    assert fixture.path.is_relative_to(pack_dir.resolve())
+    assert fixture.path.is_dir()
+
+    assert len(pack.cases) == 1
+    case = pack.cases[0]
+    assert case.id == "fix-dashboard-regressions"
+    assert case.kind == "repo-task"
+    assert case.fixture_refs == ["repo"]
+    assert case.raw["prompt_file"] == "prompts/fix-dashboard-regressions.md"
+    assert "prompt" not in case.raw
+    assert case.prompt is not None
+    assert "```diff" in case.prompt
+    assert "info string exactly `diff`" in case.prompt
+    assert "`dashboard/permissions.py`" in case.prompt
+    assert "`dashboard/formatting.py`" in case.prompt
+    assert "`dashboard/views.py`" in case.prompt
+    assert "Rendering rows must not mutate" in case.prompt
+    assert "Do not include shell commands" in case.prompt
+
+    assert case.scoring is not None
+    assert case.scoring.mode == "verify-script"
+    assert case.scoring.script == "verify/check.py"
+    assert validate_repo_task_case(pack, case).id == "repo"
+
+    fixture_files = {
+        path.relative_to(fixture.path).as_posix()
+        for path in fixture.path.rglob("*")
+        if path.is_file()
+    }
+    assert fixture_files == {
+        "README.md",
+        "dashboard/__init__.py",
+        "dashboard/models.py",
+        "dashboard/permissions.py",
+        "dashboard/formatting.py",
+        "dashboard/views.py",
+        "tests/test_dashboard.py",
+    }
+    permissions = fixture.path.joinpath("dashboard/permissions.py").read_text(
+        encoding="utf-8",
+    )
+    formatting = fixture.path.joinpath("dashboard/formatting.py").read_text(
+        encoding="utf-8",
+    )
+    views = fixture.path.joinpath("dashboard/views.py").read_text(encoding="utf-8")
+    assert 'project.get("visibility") == "private"' in permissions
+    assert "return user is not None" in permissions
+    assert 'project.setdefault("owner", {})' in formatting
+    assert 'project.setdefault("status", "unknown")' in formatting
+    assert 'return sorted(rows, key=lambda row: row["title"])' in views
+    assert pack_dir.joinpath("verify/check.py").is_file()
+
+    forbidden_path_fragments = ("/Users/", "~/", "C:\\")
+    for source_file in [
+        pack_dir / "README.md",
+        pack_dir / "benchpack.toml",
+        pack_dir / "prompts" / "fix-dashboard-regressions.md",
+        pack_dir / "verify" / "check.py",
+        *fixture.path.rglob("*"),
+    ]:
+        resolved_source_file = source_file.resolve()
+        assert resolved_source_file.is_relative_to(pack_dir.resolve())
+        if source_file.is_file():
+            contents = source_file.read_text(encoding="utf-8")
+            for fragment in forbidden_path_fragments:
+                assert fragment not in contents
+
+
+def test_bundled_django_dashboard_regression_fix_verifier_fails_unpatched_fixture(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack_dir = repo_root / "benchpacks" / "django-dashboard-regression-fix"
+    fixture = pack_dir / "fixtures" / "repo"
+    patch_path = tmp_path / "empty.diff"
+    output_path = tmp_path / "verify.json"
+    patch_path.write_text("", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(pack_dir / "verify" / "check.py"),
+            "--workspace",
+            str(fixture),
+            "--case",
+            "fix-dashboard-regressions",
+            "--pack-id",
+            "django-dashboard-regression-fix",
+            "--pack-version",
+            "0.1.0",
+            "--source-fixture-id",
+            "repo",
+            "--patch",
+            str(patch_path),
+            "--output",
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["passed"] is False
+    assert payload["patch_exists"] is True
+    assert payload["patch_bytes"] == 0
+    failed_checks = {
+        check["name"] for check in payload["checks"] if not check["passed"]
+    }
+    assert failed_checks >= {
+        "dashboard_rows_filters_private_and_draft",
+        "can_view_project_enforces_visibility_rules",
+        "dashboard_rows_excludes_archived_by_default",
+        "dashboard_rows_sorting_missing_values_and_no_mutation",
+    }

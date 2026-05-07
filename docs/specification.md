@@ -81,6 +81,22 @@ Initial packs:
   `defaults.warmup = 0`, `defaults.repetitions = 1`,
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
+- `django-dashboard-regression-fix`: bundled measured repo-mutating
+  `repo-task` pack with a compact multi-file stdlib dashboard-shaped fixture.
+  Version `0.1.0` has one `fix-dashboard-regressions` measured case. The
+  prompt asks the model to return only a fenced `diff` unified diff that fixes
+  project visibility, archived filtering, row formatting, deterministic
+  sorting, and input immutability across `dashboard/permissions.py`,
+  `dashboard/formatting.py`, and `dashboard/views.py`; the runner copies the
+  repo fixture into `workspace/fix-dashboard-regressions/rep-001/`, applies the
+  model patch inside that workspace, captures
+  `patch/fix-dashboard-regressions/rep-001.diff`, and runs a stdlib
+  `verify-script` with named deterministic checks. The pack sets
+  `defaults.warmup = 0`, `defaults.repetitions = 1`,
+  `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`. It is a stronger bundled fenced-patch
+  signal than the tiny patch smoke pack, not broad production coding-agent
+  proof.
 - `tool-json`: strict JSON and tool-call formatting checks.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains

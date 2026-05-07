@@ -438,6 +438,24 @@ def _python_regression_fix_argv(extra: list[str] | None = None) -> list[str]:
     ]
 
 
+def _django_dashboard_regression_fix_argv(
+    extra: list[str] | None = None,
+) -> list[str]:
+    return [
+        "run",
+        "django-dashboard-regression-fix",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "test-model",
+        "--endpoint",
+        "http://example.test/v1",
+        "--host-label",
+        "unit-test",
+        *(extra or []),
+    ]
+
+
 def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> None:
     _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -2065,6 +2083,201 @@ def test_cli_bundled_python_regression_fix_runs_repo_task_flow(
         "summarize_tasks_counts_and_no_mutation",
         "overdue_titles_date_input",
         "overdue_titles_string_input",
+    }
+    assert all(check["passed"] for check in verify_json["checks"])
+
+
+def test_cli_bundled_django_dashboard_regression_fix_runs_repo_task_flow(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = "\n".join(
+        [
+            "```diff",
+            "--- a/dashboard/permissions.py",
+            "+++ b/dashboard/permissions.py",
+            "@@ -6,16 +6,18 @@ from typing import Any",
+            " def can_view_project(project: dict[str, Any], user: dict[str, Any] | None) -> bool:",
+            "     \"\"\"Return whether a user can see a dashboard project.\"\"\"",
+            " ",
+            "-    if project.get(\"visibility\") == \"public\":",
+            "-        return True",
+            "-    if project.get(\"visibility\") == \"private\":",
+            "-        return user is not None",
+            "+    if user is not None and user.get(\"role\") == \"admin\":",
+            "+        return True",
+            "+    if project.get(\"status\") == \"draft\":",
+            "+        return user is not None and project.get(\"owner_id\") == user.get(\"id\")",
+            "+",
+            "+    visibility = project.get(\"visibility\", \"private\")",
+            "+    if visibility == \"public\":",
+            "+        return True",
+            "     if user is None:",
+            "         return False",
+            "-    if user.get(\"role\") == \"admin\":",
+            "-        return True",
+            "     if project.get(\"owner_id\") == user.get(\"id\"):",
+            "         return True",
+            "-    if user.get(\"id\") in project.get(\"member_ids\", []):",
+            "+    if visibility == \"team\" and user.get(\"id\") in project.get(\"member_ids\", []):",
+            "         return True",
+            "     return False",
+            "--- a/dashboard/formatting.py",
+            "+++ b/dashboard/formatting.py",
+            "@@ -6,15 +6,15 @@ from typing import Any",
+            " def format_project_row(project: dict[str, Any]) -> dict[str, str]:",
+            "     \"\"\"Return the compact row shape rendered by the dashboard.\"\"\"",
+            " ",
+            "-    owner = project.setdefault(\"owner\", {})",
+            "+    owner = project.get(\"owner\") or {}",
+            "     if isinstance(owner, dict):",
+            "         owner_name = owner.get(\"name\") or \"Unassigned\"",
+            "     else:",
+            "         owner_name = str(owner)",
+            " ",
+            "-    status = project.setdefault(\"status\", \"unknown\")",
+            "+    status = project.get(\"status\") or \"unknown\"",
+            "     due = project.get(\"due\") or \"\"",
+            "-    priority = project.get(\"priority\", \"normal\")",
+            "+    priority = project.get(\"priority\") or \"normal\"",
+            "     title = str(project.get(\"title\", \"\"))",
+            " ",
+            "     return {",
+            "--- a/dashboard/views.py",
+            "+++ b/dashboard/views.py",
+            "@@ -3,6 +3,7 @@ from __future__ import annotations",
+            " from typing import Any",
+            " ",
+            " from .formatting import format_project_row",
+            "+from .models import due_sort_value, priority_rank",
+            " from .permissions import can_view_project",
+            " ",
+            " ",
+            "@@ -17,8 +18,15 @@ def dashboard_rows(",
+            "     rows: list[dict[str, str]] = []",
+            "     for project in projects:",
+            "         if project.get(\"archived\") and not include_archived:",
+            "-            rows.append(format_project_row(project))",
+            "-        elif can_view_project(project, user):",
+            "+            continue",
+            "+        if can_view_project(project, user):",
+            "             rows.append(format_project_row(project))",
+            " ",
+            "-    return sorted(rows, key=lambda row: row[\"title\"])",
+            "+    return sorted(",
+            "+        rows,",
+            "+        key=lambda row: (",
+            "+            due_sort_value(row[\"due\"]),",
+            "+            priority_rank(row[\"priority\"]),",
+            "+            row[\"title\"].casefold(),",
+            "+        ),",
+            "+    )",
+            "```",
+            "",
+        ]
+    )
+    calls = _install_output_adapter(monkeypatch, output)
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    out = tmp_path / "run"
+
+    pack_dir = repo_root / "benchpacks" / "django-dashboard-regression-fix"
+    source_files = [
+        pack_dir / "fixtures" / "repo" / "dashboard" / "permissions.py",
+        pack_dir / "fixtures" / "repo" / "dashboard" / "formatting.py",
+        pack_dir / "fixtures" / "repo" / "dashboard" / "views.py",
+    ]
+    source_before = {
+        path.relative_to(pack_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in source_files
+    }
+
+    assert main(_django_dashboard_regression_fix_argv(["--out", str(out)])) == 0
+
+    workspace = out / "workspace" / "fix-dashboard-regressions" / "rep-001"
+    permissions_text = (workspace / "dashboard" / "permissions.py").read_text(
+        encoding="utf-8",
+    )
+    formatting_text = (workspace / "dashboard" / "formatting.py").read_text(
+        encoding="utf-8",
+    )
+    views_text = (workspace / "dashboard" / "views.py").read_text(encoding="utf-8")
+    assert "visibility = project.get(\"visibility\", \"private\")" in permissions_text
+    assert "project.setdefault" not in formatting_text
+    assert "due_sort_value(row[\"due\"])" in views_text
+    assert "priority_rank(row[\"priority\"])" in views_text
+    assert {
+        path.relative_to(pack_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in source_files
+    } == source_before
+
+    assert len(calls) == 1
+    assert calls[0]["request_path"] == "fix-dashboard-regressions.request.json"
+    assert "Return only one fenced code block" in calls[0]["prompt"]
+    assert "`dashboard/permissions.py`" in calls[0]["prompt"]
+    assert "`dashboard/formatting.py`" in calls[0]["prompt"]
+    assert "`dashboard/views.py`" in calls[0]["prompt"]
+    assert "Rendering rows must not mutate" in calls[0]["prompt"]
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {
+        "id": "django-dashboard-regression-fix",
+        "version": "0.1.0",
+    }
+    assert record["case"] == "fix-dashboard-regressions"
+    assert record["adapter"] == "openai-chat"
+    assert record["raw"] == {
+        "request_path": "raw/fix-dashboard-regressions.request.json",
+        "response_path": "raw/fix-dashboard-regressions.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/fix-dashboard-regressions/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {
+        "path": "patch/fix-dashboard-regressions/rep-001.diff",
+    }
+    assert record["task"] == {
+        "stdout_path": "task/fix-dashboard-regressions/rep-001.stdout.log",
+        "stderr_path": "task/fix-dashboard-regressions/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/fix-dashboard-regressions/rep-001.json",
+        "stdout_path": "verify/fix-dashboard-regressions/rep-001.stdout.log",
+        "stderr_path": "verify/fix-dashboard-regressions/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert patch
+    assert "--- a/dashboard/permissions.py" in patch
+    assert "--- a/dashboard/formatting.py" in patch
+    assert "--- a/dashboard/views.py" in patch
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["case"] == "fix-dashboard-regressions"
+    assert verify_json["pack_id"] == "django-dashboard-regression-fix"
+    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["source_fixture_id"] == "repo"
+    assert verify_json["patch_exists"] is True
+    assert verify_json["patch_bytes"] > 0
+    assert verify_json["exit_code"] == 0
+    assert verify_json["passed"] is True
+    assert {check["name"] for check in verify_json["checks"]} == {
+        "dashboard_rows_filters_private_and_draft",
+        "can_view_project_enforces_visibility_rules",
+        "dashboard_rows_excludes_archived_by_default",
+        "dashboard_rows_include_archived_when_requested",
+        "dashboard_rows_sorting_missing_values_and_no_mutation",
     }
     assert all(check["passed"] for check in verify_json["checks"])
 

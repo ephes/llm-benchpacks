@@ -16,6 +16,35 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (dashboard repo-task pack)
+
+### Changed
+
+- Added `django-dashboard-regression-fix` as a bundled measured `repo-task`
+  pack over the existing fenced unified-diff contract. The pack has one
+  `fix-dashboard-regressions` case, one stdlib-only repo fixture, no warmups,
+  one measured repetition, non-streaming defaults, and deterministic
+  `verify-script` scoring.
+- The fixture is compact but multi-file and dashboard-shaped:
+  `dashboard/permissions.py`, `dashboard/formatting.py`,
+  `dashboard/views.py`, `dashboard/models.py`, and `tests/test_dashboard.py`.
+  Intentional regressions cover unauthorized private/draft visibility,
+  archived filtering, deterministic due/priority/title ordering, missing
+  owner/status formatting, and input mutation.
+- Added bundled-pack contract coverage, a fake-adapter CLI success path that
+  confirms source fixture immutability plus workspace/patch/task/verify/
+  `repo_task`/scoring fields, and a deterministic unpatched verifier failure
+  check. No runner semantics, result schemas, adapter APIs, remote
+  orchestration behavior, live benchmark workflows, or generated result
+  artifacts changed.
+
+### Open Questions
+
+- Whether `django-dashboard-regression-fix` should join future default
+  benchmark matrices remains an operator choice. It is a stronger bundled
+  fenced-patch repo-task signal than `patch-from-failure`, but it is still not
+  broad production external-agent proof.
+
 ## 2026-05-07 (Hetzner backlog sync)
 
 ### Changed

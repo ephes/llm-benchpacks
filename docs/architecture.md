@@ -71,6 +71,7 @@ benchpacks/
   desktop-django-wrap/
   patch-from-failure/
   python-regression-fix/
+  django-dashboard-regression-fix/
 src/
   benchpack/
     cli.py
