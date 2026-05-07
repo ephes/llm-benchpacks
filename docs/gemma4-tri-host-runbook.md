@@ -40,8 +40,8 @@ Complete these checks before any live run:
 - Gemma 4 artifacts: exact model IDs, revisions, artifact filenames,
   quantization, license gates, and authentication requirements are recorded in
   `docs/model-targets.md`. Artifact checksums and memory-fit notes are
-  host-local preflight fields; the local M5 E2B Q4_K_M checksum/load note is
-  recorded below, while M4 and Hetzner remain placeholders.
+  host-local preflight fields; the local M5 and M4 E2B Q4_K_M checksum/load
+  notes are recorded below, while Hetzner remains a placeholder.
 - Strict-parity runtime: the same GGUF artifact loads through `llama-server` on
   Apple Silicon and on the CUDA host, with comparable context, cache, batch,
   and GPU-offload settings.
@@ -83,9 +83,10 @@ Primary mode:
   `google_gemma-4-E2B-it-Q4_K_M.gguf`, base model
   `google/gemma-4-E2B-it`. The optional multimodal projector files in that
   repo are verified but are not needed for the current text-only four-pack
-  matrix unless a future multimodal pack is added. The local M5 preflight below
-  confirms checksum and a conservative load command for this artifact only;
-  M4 and Hetzner checksum/load/fit still need their own preflights.
+  matrix unless a future multimodal pack is added. The local M5 and M4
+  preflight notes below confirm checksum and a conservative load command for
+  this artifact on Apple Silicon; Hetzner checksum/load/fit still needs its own
+  preflight.
 - Alternative verified GGUF sources, to use only if the first candidate is
   rejected during preflight:
   `ggml-org/gemma-4-E2B-it-GGUF` has Q8_0/BF16 files but no Q4_K_M file in
@@ -201,6 +202,63 @@ Status as of 2026-05-06 for the first strict same-GGUF candidate only:
   machine-local path, command, checksum, load notes, direct chat-completions
   smoke observations, benchpack smoke result, and dry-run status. The file is
   ignored and should not be committed by default.
+
+## M4 Studio Preflight Status
+
+Status as of 2026-05-07 for the same strict same-GGUF candidate:
+
+- Repo state: the M4 Studio repo at `/Users/jochen/projects/llm-benchpacks`
+  was synced to `a82fb3f` (`Record Gemma 4 M5 four-pack matrix`) after its
+  previous dirty working tree was preserved in a named git stash. The M4
+  benchmark runs therefore used the same source commit as the local M5
+  checkpoint.
+- Artifact:
+  `bartowski/google_gemma-4-E2B-it-GGUF` revision
+  `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
+  `google_gemma-4-E2B-it-Q4_K_M.gguf`.
+- M4 SHA-256:
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`.
+- Runtime: `/opt/homebrew/bin/llama-server`, llama.cpp version
+  `9030 (a09a00e50)`, built with AppleClang
+  `21.0.0.21000099` for Darwin arm64.
+- Load command:
+  `llama-server --model <downloaded-gguf> --alias gemma4-e2b-q4km --host 127.0.0.1 --port 8081 --ctx-size 8192 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui --reasoning off`.
+- Load result: succeeded on the M4 Studio with Metal, offloading 36/36 layers,
+  `n_ctx=8192`, `n_batch=1024`, `n_ubatch=512`, f16 KV caches, prompt cache
+  enabled, and the server listening only on `http://127.0.0.1:8081`. Startup
+  logged the expected Gemma chat template with `thinking=0`, the same
+  `<|tool_response>`/EOG warnings seen on M5, and a harmless
+  `--cache-idle-slots requires --kv-unified` disable note.
+- `smoke-chat` status: exactly one M4 `benchpack run smoke-chat --adapter
+  openai-chat` passed against `gemma4-e2b-q4km` on
+  `http://127.0.0.1:8081/v1`. The measured row had `ok=true`,
+  `scoring.passed=true`, `finish_reason=stop`, normal assistant content
+  `The capital of France is Paris.`, no `reasoning_content`, 21 prompt tokens,
+  8 output tokens, 0 cached prompt tokens, and no visible template, tool, or
+  EOG leakage.
+- `runtime-sweep` status: because smoke passed, exactly one M4
+  `benchpack run runtime-sweep --adapter openai-chat` was run. It wrote 9
+  measured rows for `short`, `medium`, and `long`, with all rows `ok=true`,
+  scoring mode `none`, TTFT and usage-derived timing/token fields present, and
+  warmup artifacts excluded from `run.jsonl`. Streaming requests kept
+  `stream_options.include_usage=true`, which the M4 server accepted. Sampled
+  raw responses had normal assistant content, no observed `reasoning_content`,
+  and no visible template, tool, or EOG leakage; server logs showed
+  `truncated = 0` for the measured requests. Median total TPS was 135.58
+  (`short`), 136.38 (`medium`), and 138.35 (`long`). Median TTFT was 24.5 ms,
+  25.8 ms, and 13.9 ms respectively. Prompt/output/cached-token patterns were
+  84/83/79, 356/121/351, and 799/93/798.
+- Result artifacts: compact M4 `run.jsonl`, `summary.md`, `hardware.json`, and
+  `run-metadata.json` files were pulled back locally for the smoke and runtime
+  result directories. Remote `raw/` payloads stayed on the M4 Studio and
+  generated results remain ignored. No M4 four-pack matrix was run.
+- Runtime cleanup: the M4 `llama-server` was stopped after the preflight, and
+  post-run checks found no listener on TCP port 8081 and no matching
+  `llama-server.*gemma4-e2b-q4km` process.
+- Local metadata: `metadata/m4-gemma4-llama-server.json` records the full
+  machine-local path, command, checksum, load notes, smoke result, runtime-sweep
+  rows, cleanup status, and result directory names. The file is ignored and
+  should not be committed by default.
 
 ## Metadata Examples
 
@@ -519,11 +577,13 @@ that the result is runtime-and-format evidence.
 ## Remaining Blockers
 
 - Post-download checksum and conservative `llama-server` load behavior are now
-  captured for the local M5 first candidate only. Equivalent checksum,
-  strict same-GGUF `llama-server` load behavior, and memory fit remain
-  unverified on M4 and Hetzner. The Hetzner deployment-side repo has verified
-  SSH/inventory and an isolated Gemma-4-capable vLLM candidate, but not
-  same-GGUF llama.cpp parity or full-card Gemma 4 memory fit.
+  captured for the local M5 and M4 Studio first candidate. M4 `smoke-chat` and
+  `runtime-sweep` also passed with `--reasoning off`, but the M4 four-pack
+  matrix has not run. Equivalent checksum, strict same-GGUF `llama-server` load
+  behavior, and memory fit remain unverified on Hetzner. The Hetzner
+  deployment-side repo has verified SSH/inventory and an isolated
+  Gemma-4-capable vLLM candidate, but not same-GGUF llama.cpp parity or
+  full-card Gemma 4 memory fit.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the local M5 load and minimal smoke checks are not
@@ -532,8 +592,10 @@ that the result is runtime-and-format evidence.
   `llama-server --reasoning off` path, and the default four-pack matrix has
   run once. The remaining local M5 blocker is `patch-from-failure`
   `verify-script` failure caused by an inapplicable generated diff.
-- Confirm strict same-GGUF llama.cpp support and memory fit on M4 and the
-  Hetzner CUDA host with comparable runtime options.
+- Decide whether to proceed to the M4 four-pack matrix now that M4 checksum,
+  load, smoke, and runtime-sweep have passed. Separately confirm strict
+  same-GGUF llama.cpp support and memory fit on the Hetzner CUDA host with
+  comparable runtime options.
 - Confirm Apple MLX OpenAI-compatible serving path for the verified
   `mlx-community/gemma-4-*-it-4bit` conversions, or document that service-shaped
   Apple runs should use GGUF instead.

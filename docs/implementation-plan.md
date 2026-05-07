@@ -363,10 +363,23 @@ Scope:
   local model/task-quality blocker for the tiny repo-task pack, not a serving
   or adapter blocker. `--reasoning-budget 0` remains untested because
   `--reasoning off` resolved the direct, smoke-chat, runtime-sweep, and
-  prompt-only wrap local M5 gates. M4/Hetzner checksum parity, strict
-  same-GGUF `llama-server` load behavior, comparable runtime options, memory
-  fit, token provisioning, SSH/inventory, and serving readiness remain
-  preflight blockers before any cross-host benchmark matrix.
+  prompt-only wrap local M5 gates. **M4 strict-GGUF preflight landed
+  2026-05-07.** The M4 Studio repo was synced to the same `a82fb3f` commit
+  after preserving its previous dirty tree in a named stash. The same pinned
+  `bartowski/google_gemma-4-E2B-it-GGUF` Q4_K_M artifact was downloaded and
+  matched SHA-256
+  `b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705`.
+  `/opt/homebrew/bin/llama-server` version `9030 (a09a00e50)` loaded it on
+  `127.0.0.1:8081` with alias `gemma4-e2b-q4km`, the same context/cache/batch
+  settings, and `--reasoning off`. Exactly one M4 `smoke-chat` passed with
+  normal Paris content and no `reasoning_content`; exactly one follow-up
+  `runtime-sweep` wrote 9/9 `ok=true` unscored measured rows with usage-derived
+  timing/token fields present and no observed template/tool/EOG leakage. The
+  M4 server was stopped afterward. M4 four-pack matrix work remains separate.
+  Hetzner checksum parity, strict same-GGUF `llama-server` load behavior,
+  comparable runtime options, memory fit, token provisioning, SSH/inventory,
+  and serving readiness remain preflight blockers before any tri-host benchmark
+  matrix.
 - Restore live Hetzner inventory access through the sibling deployment repo.
   **Partly landed 2026-05-07.** An initial read-only SSH recheck and sibling
   `llm-node-bare` notes confirmed the live GEX44-class host, RTX 4000 SFF Ada
