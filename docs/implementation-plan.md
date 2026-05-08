@@ -468,9 +468,13 @@ Scope:
   Lightweight report/status polish landed on 2026-05-08, so empty workspace
   diffs and no-mutation failures are now visible without manual artifact
   inspection. A simpler endpoint-only deterministic verifier-backed repo-task
-  pack has now landed as `endpoint-python-correctness` before any default
-  four-pack matrix change; treat `desktop-django-wrap` as prompt/format
-  coverage rather than the primary cross-host correctness signal.
+  pack has now landed as `endpoint-python-correctness`, and the first local M5
+  Ollama validation reached the adapter but failed the patch-output contract:
+  `qwen3-coder:latest` returned replacement Python content inside a `diff`
+  fence rather than an applicable unified diff. Treat `desktop-django-wrap` as
+  prompt/format coverage rather than the primary cross-host correctness signal,
+  and keep endpoint-correctness helper/default-matrix promotion deferred until
+  a later successful or deliberately revised endpoint-only slice.
 
 Validation:
 
@@ -1026,8 +1030,9 @@ Scope:
   scoring, and a verifier-only edge dataset. It requires no `external-agent`,
   avoids output-skeleton scoring, and is documented as the generic
   endpoint-only correctness signal. Adding it to tmux helper matrices or
-  changing the recommended default matrix remains a later post-validation
-  decision.
+  changing the recommended default matrix remains deferred after the first
+  local M5 validation attempt failed from model output format rather than
+  endpoint reachability.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1061,10 +1066,14 @@ the new `endpoint-python-correctness` endpoint-only pack for a small generic
 correctness signal. Recent live evidence shows that fenced-diff prompts are too
 prompt-contract-sensitive for broad coding-agent conclusions. The direct-edit
 external-agent variants now have local M5 real-agent evidence with 2/3 verifier
-passes, and lightweight task-outcome reporting polish has landed. The next
-useful live slice is broader direct-edit comparison as exploratory evidence,
-plus local validation of `endpoint-python-correctness` before any matrix
-promotion.
+passes, and lightweight task-outcome reporting polish has landed. The first
+local M5 validation of `endpoint-python-correctness` reached Ollama but failed
+because the model emitted replacement-file content instead of an applicable
+unified diff, so it proves meaningful deterministic failure classification but
+not endpoint-only correctness success. The next useful live slice is broader
+direct-edit comparison as exploratory evidence; endpoint-only helper/default
+matrix promotion remains deferred until a later successful or revised
+endpoint-correctness slice.
 
 Scope:
 
@@ -1108,8 +1117,13 @@ Scope:
   applicable correct fix" from "an external agent stack is installed and
   operating." Keep `desktop-django-wrap` available as prompt-only
   coding-agent-shaped coverage rather than treating its regex skeleton as the
-  main correctness benchmark. Post-validation tmux-helper or default-matrix
-  changes remain open.
+  main correctness benchmark. **Local M5 validation attempted 2026-05-08**
+  with `qwen3-coder:latest` through Ollama: the endpoint and adapter worked,
+  but the model returned replacement Python content inside a `diff` fence, the
+  runner rejected it as a non-unified diff with no file paths, captured
+  `patch_bytes=0`, and the verifier failed all visible and hidden checks
+  against the unchanged fixture. Tmux-helper or default-matrix changes remain
+  premature from this evidence.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.
@@ -1119,6 +1133,12 @@ Validation:
 - A baseline real external-agent/runtime pair can solve at least one
   direct-edit fixture end to end without relying on fenced-diff stdout.
   **Validated 2026-05-07** on local M5 with Codex OSS through Ollama.
+- A baseline endpoint-only runtime should produce one applicable correct fenced
+  patch for `endpoint-python-correctness` before the pack is promoted into
+  helper/default matrices. **Attempted 2026-05-08** on local M5 with
+  `qwen3-coder:latest` through Ollama; this failed as a model-output format
+  issue with a meaningful deterministic verifier failure, not as an
+  infrastructure blocker.
 
 ## Phase 5: Remote Host Orchestration
 

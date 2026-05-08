@@ -16,6 +16,43 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (endpoint-python-correctness local validation)
+
+### Changed
+
+- Ran the first local M5 live validation attempt for
+  `endpoint-python-correctness` against the already-installed
+  `qwen3-coder:latest` Ollama model through `ollama-generate`.
+- Classified the outcome as an endpoint apply/format failure, not a runtime
+  blocker: the adapter row was `ok=true`, but the model returned replacement
+  Python content inside a `diff` fence instead of an applicable unified diff
+  with file paths, so the default fenced-patch executor rejected the patch and
+  left the workspace unchanged.
+- Recorded the outcome in `docs/run-log.md`,
+  `docs/benchmark-research.md`, and `docs/implementation-plan.md` while
+  keeping generated results, metadata, raw responses, workspace, patch, task,
+  and verifier artifacts local and ignored.
+
+### Outcome
+
+- Local result directory:
+  `results/2026-05-08-m5-max-qwen3-coder-endpoint-correctness-20260508-141233`.
+- The deterministic verifier produced a meaningful fail signal:
+  `patch_exists=true`, `patch_bytes=0`, all visible and hidden checks failed
+  against the unchanged fixture, and `scoring.passed=false`.
+
+### Validation
+
+- `git diff --check` and the focused bundled-pack/CLI tests passed for this
+  documentation-only outcome update.
+
+### Open Questions
+
+- Whether prompt wording, executor support for full-file replacement blocks, or
+  a different local endpoint can elicit an apply-clean patch remains a later
+  slice. Tmux-helper and default-matrix promotion remain premature after this
+  single failed local endpoint attempt.
+
 ## 2026-05-08 (backlog grooming after endpoint validation)
 
 ### Changed
