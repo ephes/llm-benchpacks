@@ -621,16 +621,26 @@ writing SQLite rows. Optional `hardware.json` and `run-metadata.json` are read
 only when present; malformed optional metadata fails clearly because the
 registry is being asked to index it.
 
-The local registry starts with schema version `1`. The `runs` table stores one
+The local registry is currently schema version `2`. The `runs` table stores one
 row per canonical result directory path, import timestamp, row count,
 `run.jsonl` SHA-256, compact JSON lists for pack ids/versions, adapters,
 models, and endpoints, optional hardware/run-metadata JSON, and selected host,
-runtime, and model metadata columns. The `result_rows` table stores one row per
+runtime, model, and comparability-anchor metadata columns. Those anchors come
+only from explicit `run-metadata.json` fields such as `comparison_mode`,
+runtime options, model artifact repo/file/revision/checksum, quantization, host
+repo commit, and operating-condition notes; the registry does not infer
+artifact parity or cache parity from missing metadata. Host identity columns
+are split by source: `host_hostname` and `host_platform` come from
+`hardware.json`, while run-label and repo-commit host filters come from
+`run-metadata.json`. The `result_rows` table stores one row per
 measured `run.jsonl` record with normalized pack/case/repetition, adapter,
 model, endpoint, `ok`, timing metrics, token metrics, scoring state, repo-task
 verifier status, and compact sort-keyed JSON re-encoding of the normalized row.
-Re-importing the same result directory updates the run row and replaces its
-child rows.
+The `result_case_stats` table stores one row per run/pack-version/case with
+row counts, ok counts, prompt-token coverage and median, cached-prompt-token
+coverage and median, and prefill-TPS coverage and median. Re-importing the
+same result directory updates the run row and replaces its child rows and case
+stats.
 
 The importer writes only the configured SQLite database. It does not execute
 packs, load adapters, start runtimes, collect hardware, contact endpoints, read

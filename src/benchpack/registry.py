@@ -11,6 +11,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from .compare import CompareError, ResultRun, load_result_run
@@ -22,7 +23,7 @@ from .external_agent_model_calls import (
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
-REGISTRY_SCHEMA_VERSION = 1
+REGISTRY_SCHEMA_VERSION = 2
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 BUNDLE_PROVENANCE_LABELS = frozenset(
@@ -36,6 +37,40 @@ _SECRET_PATTERNS = (
     re.compile(
         r"(?i)\"(?:api[_-]?key|token|secret|password|authorization)\"\s*:\s*\"[^\"]{8,}\""
     ),
+)
+_RUN_COLUMN_DEFINITIONS = (
+    ("id", "INTEGER PRIMARY KEY"),
+    ("result_dir", "TEXT NOT NULL UNIQUE"),
+    ("label", "TEXT NOT NULL"),
+    ("imported_at", "TEXT NOT NULL"),
+    ("row_count", "INTEGER NOT NULL"),
+    ("run_jsonl_sha256", "TEXT NOT NULL"),
+    ("pack_ids_json", "TEXT NOT NULL"),
+    ("pack_versions_json", "TEXT NOT NULL"),
+    ("adapters_json", "TEXT NOT NULL"),
+    ("models_json", "TEXT NOT NULL"),
+    ("endpoints_json", "TEXT NOT NULL"),
+    ("hardware_json", "TEXT"),
+    ("run_metadata_json", "TEXT"),
+    ("host_hostname", "TEXT"),
+    ("host_platform", "TEXT"),
+    ("host_label", "TEXT"),
+    ("host_repo_commit", "TEXT"),
+    ("comparison_mode", "TEXT"),
+    ("comparison_boundary", "TEXT"),
+    ("runtime_name", "TEXT"),
+    ("runtime_version", "TEXT"),
+    ("runtime_endpoint", "TEXT"),
+    ("runtime_options_json", "TEXT"),
+    ("model_metadata_id", "TEXT"),
+    ("model_quantization", "TEXT"),
+    ("model_artifact_repo", "TEXT"),
+    ("model_artifact_file", "TEXT"),
+    ("model_revision", "TEXT"),
+    ("model_sha256", "TEXT"),
+    ("operating_power", "TEXT"),
+    ("operating_thermal", "TEXT"),
+    ("operating_background_load", "TEXT"),
 )
 
 
@@ -83,6 +118,8 @@ def import_result_dirs(
 
     try:
         with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("BEGIN")
             _ensure_schema(conn)
             summaries = [_import_run(conn, run) for run in loaded_runs]
     except sqlite3.Error as exc:
@@ -522,37 +559,17 @@ def _slug(value: str) -> str:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+    conn.execute(
         """
-        PRAGMA foreign_keys = ON;
-
         CREATE TABLE IF NOT EXISTS registry_meta (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS runs (
-          id INTEGER PRIMARY KEY,
-          result_dir TEXT NOT NULL UNIQUE,
-          label TEXT NOT NULL,
-          imported_at TEXT NOT NULL,
-          row_count INTEGER NOT NULL,
-          run_jsonl_sha256 TEXT NOT NULL,
-          pack_ids_json TEXT NOT NULL,
-          pack_versions_json TEXT NOT NULL,
-          adapters_json TEXT NOT NULL,
-          models_json TEXT NOT NULL,
-          endpoints_json TEXT NOT NULL,
-          hardware_json TEXT,
-          run_metadata_json TEXT,
-          host_hostname TEXT,
-          host_platform TEXT,
-          runtime_name TEXT,
-          runtime_version TEXT,
-          model_metadata_id TEXT,
-          model_quantization TEXT
-        );
-
+        )
+        """
+    )
+    conn.execute(_create_runs_table_sql())
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS result_rows (
           id INTEGER PRIMARY KEY,
           run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -579,14 +596,53 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           verify_exit_code INTEGER,
           raw_json TEXT NOT NULL,
           UNIQUE(run_id, row_index)
-        );
+        )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS result_case_stats (
+          id INTEGER PRIMARY KEY,
+          run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          pack_id TEXT NOT NULL,
+          pack_version TEXT NOT NULL,
+          case_id TEXT NOT NULL,
+          row_count INTEGER NOT NULL,
+          ok_count INTEGER NOT NULL,
+          prompt_token_rows INTEGER NOT NULL,
+          prompt_token_median REAL,
+          cached_prompt_token_rows INTEGER NOT NULL,
+          cached_prompt_token_median REAL,
+          prefill_tps_rows INTEGER NOT NULL,
+          prefill_tps_median REAL,
+          UNIQUE(run_id, pack_id, pack_version, case_id)
+        )
+        """
+    )
+    _ensure_run_columns(conn)
     conn.execute(
         "INSERT OR REPLACE INTO registry_meta(key, value) VALUES (?, ?)",
         ("schema_version", str(REGISTRY_SCHEMA_VERSION)),
     )
     conn.execute(f"PRAGMA user_version = {REGISTRY_SCHEMA_VERSION}")
+
+
+def _create_runs_table_sql() -> str:
+    columns = ",\n          ".join(
+        f"{name} {declaration}"
+        for name, declaration in _RUN_COLUMN_DEFINITIONS
+    )
+    return f"CREATE TABLE IF NOT EXISTS runs (\n          {columns}\n        )"
+
+
+def _ensure_run_columns(conn: sqlite3.Connection) -> None:
+    existing = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+    }
+    for column, declaration in _RUN_COLUMN_DEFINITIONS:
+        if column not in existing:
+            conn.execute(f"ALTER TABLE runs ADD COLUMN {column} {declaration}")
 
 
 def _import_run(
@@ -606,15 +662,21 @@ def _import_run(
           result_dir, label, imported_at, row_count, run_jsonl_sha256,
           pack_ids_json, pack_versions_json, adapters_json, models_json,
           endpoints_json, hardware_json, run_metadata_json, host_hostname,
-          host_platform, runtime_name, runtime_version, model_metadata_id,
-          model_quantization
+          host_platform, host_label, host_repo_commit, comparison_mode,
+          comparison_boundary, runtime_name, runtime_version, runtime_endpoint,
+          runtime_options_json, model_metadata_id, model_quantization,
+          model_artifact_repo, model_artifact_file, model_revision, model_sha256,
+          operating_power, operating_thermal, operating_background_load
         )
         VALUES (
           :result_dir, :label, :imported_at, :row_count, :run_jsonl_sha256,
           :pack_ids_json, :pack_versions_json, :adapters_json, :models_json,
           :endpoints_json, :hardware_json, :run_metadata_json, :host_hostname,
-          :host_platform, :runtime_name, :runtime_version, :model_metadata_id,
-          :model_quantization
+          :host_platform, :host_label, :host_repo_commit, :comparison_mode,
+          :comparison_boundary, :runtime_name, :runtime_version, :runtime_endpoint,
+          :runtime_options_json, :model_metadata_id, :model_quantization,
+          :model_artifact_repo, :model_artifact_file, :model_revision, :model_sha256,
+          :operating_power, :operating_thermal, :operating_background_load
         )
         ON CONFLICT(result_dir) DO UPDATE SET
           label = excluded.label,
@@ -630,10 +692,23 @@ def _import_run(
           run_metadata_json = excluded.run_metadata_json,
           host_hostname = excluded.host_hostname,
           host_platform = excluded.host_platform,
+          host_label = excluded.host_label,
+          host_repo_commit = excluded.host_repo_commit,
+          comparison_mode = excluded.comparison_mode,
+          comparison_boundary = excluded.comparison_boundary,
           runtime_name = excluded.runtime_name,
           runtime_version = excluded.runtime_version,
+          runtime_endpoint = excluded.runtime_endpoint,
+          runtime_options_json = excluded.runtime_options_json,
           model_metadata_id = excluded.model_metadata_id,
-          model_quantization = excluded.model_quantization
+          model_quantization = excluded.model_quantization,
+          model_artifact_repo = excluded.model_artifact_repo,
+          model_artifact_file = excluded.model_artifact_file,
+          model_revision = excluded.model_revision,
+          model_sha256 = excluded.model_sha256,
+          operating_power = excluded.operating_power,
+          operating_thermal = excluded.operating_thermal,
+          operating_background_load = excluded.operating_background_load
         """,
         inserted,
     )
@@ -645,6 +720,7 @@ def _import_run(
         raise RegistryError(f"could not read imported run id for {run.path}")
     run_id = int(row[0])
     conn.execute("DELETE FROM result_rows WHERE run_id = ?", (run_id,))
+    conn.execute("DELETE FROM result_case_stats WHERE run_id = ?", (run_id,))
     conn.executemany(
         """
         INSERT INTO result_rows(
@@ -667,6 +743,21 @@ def _import_run(
             for index, record in enumerate(run.records, start=1)
         ],
     )
+    conn.executemany(
+        """
+        INSERT INTO result_case_stats(
+          run_id, pack_id, pack_version, case_id, row_count, ok_count,
+          prompt_token_rows, prompt_token_median, cached_prompt_token_rows,
+          cached_prompt_token_median, prefill_tps_rows, prefill_tps_median
+        )
+        VALUES (
+          :run_id, :pack_id, :pack_version, :case_id, :row_count, :ok_count,
+          :prompt_token_rows, :prompt_token_median, :cached_prompt_token_rows,
+          :cached_prompt_token_median, :prefill_tps_rows, :prefill_tps_median
+        )
+        """,
+        _case_stat_values(run_id, run.records),
+    )
     return RegistryImportSummary(
         result_dir=run.path,
         run_id=run_id,
@@ -682,6 +773,14 @@ def _run_row_values(
 ) -> dict[str, Any]:
     runtime = run_metadata.get("runtime") if isinstance(run_metadata, dict) else None
     model_metadata = run_metadata.get("model") if isinstance(run_metadata, dict) else None
+    host = run_metadata.get("host") if isinstance(run_metadata, dict) else None
+    repo = run_metadata.get("repo") if isinstance(run_metadata, dict) else None
+    operating = (
+        run_metadata.get("operating_conditions")
+        if isinstance(run_metadata, dict)
+        else None
+    )
+    runtime_options = runtime.get("options") if isinstance(runtime, dict) else None
     return {
         "result_dir": result_dir,
         "label": run.label,
@@ -699,10 +798,29 @@ def _run_row_values(
         ),
         "host_hostname": _string_or_none(hardware, "hostname"),
         "host_platform": _string_or_none(hardware, "platform"),
+        "host_label": _string_or_none(host, "label"),
+        "host_repo_commit": _string_or_none(host, "repo_commit")
+        or _string_or_none(repo, "commit"),
+        "comparison_mode": _string_or_none(run_metadata, "comparison_mode"),
+        "comparison_boundary": _string_or_none(run_metadata, "comparison_boundary"),
         "runtime_name": _string_or_none(runtime, "name"),
         "runtime_version": _string_or_none(runtime, "version"),
+        "runtime_endpoint": _string_or_none(runtime, "endpoint"),
+        "runtime_options_json": (
+            _json_dumps(runtime_options) if isinstance(runtime_options, dict) else None
+        ),
         "model_metadata_id": _string_or_none(model_metadata, "id"),
         "model_quantization": _string_or_none(model_metadata, "quantization"),
+        "model_artifact_repo": _string_or_none(model_metadata, "artifact_repo"),
+        "model_artifact_file": _string_or_none(model_metadata, "artifact_file"),
+        "model_revision": _string_or_none(model_metadata, "revision"),
+        "model_sha256": _string_or_none(model_metadata, "sha256"),
+        "operating_power": _string_or_none(operating, "power"),
+        "operating_thermal": _string_or_none(operating, "thermal"),
+        "operating_background_load": _string_or_none(
+            operating,
+            "background_load",
+        ),
     }
 
 
@@ -753,6 +871,65 @@ def _result_row_values(
         ),
         "raw_json": _json_dumps(record),
     }
+
+
+def _case_stat_values(
+    run_id: int,
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for record in records:
+        pack = record["pack"]
+        key = (pack["id"], pack["version"], record["case"])
+        grouped.setdefault(key, []).append(record)
+
+    rows: list[dict[str, Any]] = []
+    for (pack_id, pack_version, case_id), case_records in sorted(grouped.items()):
+        prompt_values = _record_metric_values(case_records, ("tokens", "prompt"))
+        cached_prompt_values = _record_metric_values(
+            case_records,
+            ("tokens", "cached_prompt"),
+        )
+        prefill_values = _record_metric_values(case_records, ("timing", "prefill_tps"))
+        rows.append(
+            {
+                "run_id": run_id,
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "case_id": case_id,
+                "row_count": len(case_records),
+                "ok_count": sum(1 for record in case_records if record["ok"] is True),
+                "prompt_token_rows": len(prompt_values),
+                "prompt_token_median": _median_or_none(prompt_values),
+                "cached_prompt_token_rows": len(cached_prompt_values),
+                "cached_prompt_token_median": _median_or_none(cached_prompt_values),
+                "prefill_tps_rows": len(prefill_values),
+                "prefill_tps_median": _median_or_none(prefill_values),
+            }
+        )
+    return rows
+
+
+def _record_metric_values(
+    records: list[dict[str, Any]],
+    path: tuple[str, str],
+) -> list[float]:
+    values: list[float] = []
+    section, key = path
+    for record in records:
+        nested = record.get(section)
+        if not isinstance(nested, dict):
+            continue
+        value = _optional_number(nested.get(key))
+        if value is not None:
+            values.append(value)
+    return values
+
+
+def _median_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return float(median(values))
 
 
 def _validate_record(record: dict[str, Any], jsonl_path: Path, row_index: int) -> None:

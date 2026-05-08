@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import benchpack.registry as registry
 from benchpack.registry import (
     BUNDLE_MANIFEST_FILENAME,
     RegistryError,
@@ -66,8 +67,22 @@ def test_registry_import_indexes_result_rows_and_metadata(tmp_path: Path) -> Non
     (result_dir / "run-metadata.json").write_text(
         json.dumps(
             {
+                "comparison_mode": "strict-same-gguf-llama-server",
+                "host": {"label": "m5-max", "repo_commit": "abc1234"},
                 "runtime": {"name": "llama-server", "version": "9030"},
-                "model": {"id": "gemma4-e2b-q4km", "quantization": "Q4_K_M"},
+                "model": {
+                    "id": "gemma4-e2b-q4km",
+                    "artifact_repo": "bartowski/google_gemma-4-E2B-it-GGUF",
+                    "artifact_file": "google_gemma-4-E2B-it-Q4_K_M.gguf",
+                    "revision": "b5e99bd",
+                    "quantization": "Q4_K_M",
+                    "sha256": "b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705",
+                },
+                "operating_conditions": {
+                    "power": "plugged in",
+                    "thermal": "cool",
+                    "background_load": "idle",
+                },
                 "notes": "unit",
             }
         )
@@ -85,8 +100,12 @@ def test_registry_import_indexes_result_rows_and_metadata(tmp_path: Path) -> Non
     with sqlite3.connect(db_path) as conn:
         run = conn.execute(
             """
-            SELECT label, row_count, host_hostname, host_platform, runtime_name,
-                   runtime_version, model_metadata_id, model_quantization
+            SELECT label, row_count, host_hostname, host_platform, host_label,
+                   host_repo_commit, comparison_mode, runtime_name,
+                   runtime_version, model_metadata_id, model_quantization,
+                   model_artifact_repo, model_artifact_file, model_revision,
+                   model_sha256, operating_power, operating_thermal,
+                   operating_background_load
             FROM runs
             """
         ).fetchone()
@@ -95,10 +114,20 @@ def test_registry_import_indexes_result_rows_and_metadata(tmp_path: Path) -> Non
             1,
             "atlas",
             "Darwin",
+            "m5-max",
+            "abc1234",
+            "strict-same-gguf-llama-server",
             "llama-server",
             "9030",
             "gemma4-e2b-q4km",
             "Q4_K_M",
+            "bartowski/google_gemma-4-E2B-it-GGUF",
+            "google_gemma-4-E2B-it-Q4_K_M.gguf",
+            "b5e99bd",
+            "b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705",
+            "plugged in",
+            "cool",
+            "idle",
         )
         row = conn.execute(
             """
@@ -126,6 +155,28 @@ def test_registry_import_indexes_result_rows_and_metadata(tmp_path: Path) -> Non
             "passed",
             0,
         )
+        stats = conn.execute(
+            """
+            SELECT pack_id, pack_version, case_id, row_count, ok_count,
+                   prompt_token_rows, prompt_token_median,
+                   cached_prompt_token_rows, cached_prompt_token_median,
+                   prefill_tps_rows, prefill_tps_median
+            FROM result_case_stats
+            """
+        ).fetchone()
+        assert stats == (
+            "runtime-sweep",
+            "0.1.0",
+            "short",
+            1,
+            1,
+            1,
+            10.0,
+            1,
+            0.0,
+            1,
+            100.0,
+        )
 
 
 def test_registry_import_replaces_rows_for_same_result_dir(tmp_path: Path) -> None:
@@ -144,6 +195,7 @@ def test_registry_import_replaces_rows_for_same_result_dir(tmp_path: Path) -> No
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM result_rows").fetchone()[0] == 1
         assert conn.execute("SELECT row_count FROM runs").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM result_case_stats").fetchone()[0] == 1
 
 
 def test_registry_import_treats_optional_metadata_as_absent(
@@ -166,6 +218,238 @@ def test_registry_import_treats_optional_metadata_as_absent(
         ).fetchone()
 
     assert run == (None, None, None, None, None, None, None, None)
+
+
+def test_registry_import_indexes_repo_commit_fallback_and_nullable_anchors(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "comparison_mode": "",
+                "repo": {"commit": "def5678"},
+                "runtime": {"name": "llama-server", "options": ["not", "an", "object"]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+
+    import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        run = conn.execute(
+            """
+            SELECT host_repo_commit, comparison_mode, runtime_options_json
+            FROM runs
+            """
+        ).fetchone()
+
+    assert run == ("def5678", None, None)
+
+
+def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "comparison_mode": "runtime-and-format",
+                "runtime": {
+                    "name": "vllm",
+                    "endpoint": "https://example.test/v1",
+                    "options": {"tensor_parallel_size": 1},
+                },
+                "model": {
+                    "id": "google/gemma-4-E2B-it",
+                    "artifact_repo": "google/gemma-4-E2B-it",
+                    "revision": "main",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE registry_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            INSERT INTO registry_meta(key, value) VALUES ('schema_version', '1');
+            CREATE TABLE runs (
+              id INTEGER PRIMARY KEY,
+              result_dir TEXT NOT NULL UNIQUE,
+              label TEXT NOT NULL,
+              imported_at TEXT NOT NULL,
+              row_count INTEGER NOT NULL,
+              run_jsonl_sha256 TEXT NOT NULL,
+              pack_ids_json TEXT NOT NULL,
+              pack_versions_json TEXT NOT NULL,
+              adapters_json TEXT NOT NULL,
+              models_json TEXT NOT NULL,
+              endpoints_json TEXT NOT NULL,
+              hardware_json TEXT,
+              run_metadata_json TEXT,
+              host_hostname TEXT,
+              host_platform TEXT,
+              runtime_name TEXT,
+              runtime_version TEXT,
+              model_metadata_id TEXT,
+              model_quantization TEXT
+            );
+            CREATE TABLE result_rows (
+              id INTEGER PRIMARY KEY,
+              run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+              row_index INTEGER NOT NULL,
+              pack_id TEXT NOT NULL,
+              pack_version TEXT NOT NULL,
+              case_id TEXT NOT NULL,
+              repetition INTEGER,
+              adapter TEXT NOT NULL,
+              model TEXT NOT NULL,
+              endpoint TEXT NOT NULL,
+              ok INTEGER NOT NULL,
+              wall_s REAL,
+              ttft_s REAL,
+              prefill_tps REAL,
+              decode_tps REAL,
+              total_tps REAL,
+              prompt_tokens INTEGER,
+              output_tokens INTEGER,
+              cached_prompt_tokens INTEGER,
+              scoring_mode TEXT,
+              scoring_passed INTEGER,
+              repo_task_status TEXT,
+              verify_exit_code INTEGER,
+              raw_json TEXT NOT NULL,
+              UNIQUE(run_id, row_index)
+            );
+            PRAGMA user_version = 1;
+            """
+        )
+
+    import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        run = conn.execute(
+            """
+            SELECT comparison_mode, runtime_endpoint, runtime_options_json,
+                   model_artifact_repo, model_revision
+            FROM runs
+            """
+        ).fetchone()
+        stats_count = conn.execute(
+            "SELECT COUNT(*) FROM result_case_stats"
+        ).fetchone()[0]
+    assert run == (
+        "runtime-and-format",
+        "https://example.test/v1",
+        '{"tensor_parallel_size":1}',
+        "google/gemma-4-E2B-it",
+        "main",
+    )
+    assert stats_count == 1
+
+
+def test_registry_import_rolls_back_schema_upgrade_on_sqlite_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE registry_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            INSERT INTO registry_meta(key, value) VALUES ('schema_version', '1');
+            CREATE TABLE runs (
+              id INTEGER PRIMARY KEY,
+              result_dir TEXT NOT NULL UNIQUE,
+              label TEXT NOT NULL,
+              imported_at TEXT NOT NULL,
+              row_count INTEGER NOT NULL,
+              run_jsonl_sha256 TEXT NOT NULL,
+              pack_ids_json TEXT NOT NULL,
+              pack_versions_json TEXT NOT NULL,
+              adapters_json TEXT NOT NULL,
+              models_json TEXT NOT NULL,
+              endpoints_json TEXT NOT NULL,
+              hardware_json TEXT,
+              run_metadata_json TEXT,
+              host_hostname TEXT,
+              host_platform TEXT,
+              runtime_name TEXT,
+              runtime_version TEXT,
+              model_metadata_id TEXT,
+              model_quantization TEXT
+            );
+            CREATE TABLE result_rows (
+              id INTEGER PRIMARY KEY,
+              run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+              row_index INTEGER NOT NULL,
+              pack_id TEXT NOT NULL,
+              pack_version TEXT NOT NULL,
+              case_id TEXT NOT NULL,
+              repetition INTEGER,
+              adapter TEXT NOT NULL,
+              model TEXT NOT NULL,
+              endpoint TEXT NOT NULL,
+              ok INTEGER NOT NULL,
+              wall_s REAL,
+              ttft_s REAL,
+              prefill_tps REAL,
+              decode_tps REAL,
+              total_tps REAL,
+              prompt_tokens INTEGER,
+              output_tokens INTEGER,
+              cached_prompt_tokens INTEGER,
+              scoring_mode TEXT,
+              scoring_passed INTEGER,
+              repo_task_status TEXT,
+              verify_exit_code INTEGER,
+              raw_json TEXT NOT NULL,
+              UNIQUE(run_id, row_index)
+            );
+            PRAGMA user_version = 1;
+            """
+        )
+
+    def fail_import(*args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("forced import failure")
+
+    monkeypatch.setattr(registry, "_import_run", fail_import)
+
+    with pytest.raises(RegistryError, match="forced import failure"):
+        import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute(
+            "SELECT value FROM registry_meta WHERE key = 'schema_version'"
+        ).fetchone()[0] == "1"
+        columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+        }
+        case_stats = conn.execute(
+            """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name = 'result_case_stats'
+            """
+        ).fetchone()
+    assert "comparison_mode" not in columns
+    assert case_stats is None
 
 
 def test_registry_import_rejects_malformed_result_row(tmp_path: Path) -> None:

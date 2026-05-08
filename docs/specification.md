@@ -910,8 +910,8 @@ boolean `ok`, `timing` object, `tokens` object, optional positive integer
 when present. Optional `run-metadata.json` uses the same permissive validation
 as `benchpack run --run-metadata` and `benchpack report`.
 
-The SQLite schema version is `1`, recorded in `PRAGMA user_version` and a
-`registry_meta` row. The first schema stores:
+The SQLite schema version is `2`, recorded in `PRAGMA user_version` and a
+`registry_meta` row. The schema stores:
 
 - one `runs` row per canonical result-directory path, with import time,
   `run.jsonl` SHA-256, row count, compact JSON lists of pack ids/versions,
@@ -921,18 +921,38 @@ The SQLite schema version is `1`, recorded in `PRAGMA user_version` and a
   repetition, adapter/model/endpoint, `ok`, timing metrics, token metrics,
   scoring mode/pass state, repo-task verifier status, and a compact
   sort-keyed JSON re-encoding of the normalized row.
+- one `result_case_stats` row per imported run/pack-version/case, with row
+  counts, ok counts, prompt-token coverage and median, cached-prompt-token
+  coverage and median, and prefill-TPS coverage and median.
+
+Schema version `2` also promotes registry-facing comparability anchors from
+optional `run-metadata.json` into nullable `runs` columns: `comparison_mode`,
+`comparison_boundary`, host label and repo commit, runtime endpoint and
+options, model artifact repo/file/revision/checksum, quantization, and
+operating-condition notes for power, thermal state, and background load. These
+fields are indexing aids for future comparison views. They do not change
+`run.jsonl`, infer parity that was not recorded, or replace compare's
+case-level prompt/cache parity checks. Empty strings in these optional string
+anchors are indexed as absent (`NULL`), matching the registry's nullable-field
+semantics for missing metadata.
+
+The `runs.host_hostname` and `runs.host_platform` filter columns come from
+`hardware.json`. The run-label and repo-commit host filters come from
+`run-metadata.json` (`host.label`, `host.repo_commit`, or the legacy
+`repo.commit` fallback) because they describe the benchmark campaign rather
+than the machine probe.
 
 Re-importing the same result directory updates the `runs` row and replaces its
-indexed `result_rows`. This keeps the database aligned with the current
-artifact contents without appending duplicate rows.
+indexed `result_rows` and `result_case_stats`. This keeps the database aligned
+with the current artifact contents without appending duplicate rows.
 
 The command writes only the requested SQLite database. It does not mutate result
 directories, write report artifacts, copy raw payloads, inspect `raw/`,
 workspace, task, patch, verify, or model-call artifacts, execute packs, contact
 endpoints, collect hardware, run compare/report, perform SSH, or create a public
 submission bundle. The local registry may store the canonical local result
-directory path for idempotent re-imports; public bundle/export privacy rules are
-left to a later explicit slice.
+directory path for idempotent re-imports; public bundle/export privacy rules
+are handled by the separate bundle command below.
 
 ### `benchpack registry bundle`
 

@@ -242,10 +242,13 @@ servers, copy artifacts, or write report files.
 `benchpack registry import --db <sqlite> <result-dir>...` creates or updates a
 local SQLite index over existing result directories. It validates `run.jsonl`,
 optionally reads `hardware.json` and `run-metadata.json`, stores compact run and
-row metadata plus normalized timing/token/scoring fields, and leaves benchmark
-outputs untouched. The result directory remains canonical evidence; the
-registry is a local search/index aid, not a submission bundle or replacement
-artifact format.
+row metadata plus normalized timing/token/scoring fields, indexes explicit
+comparability anchors from run metadata such as comparison mode, model artifact
+revision/checksum, runtime options, and operating-condition notes, and stores
+per-case prompt/cache coverage medians for later comparison views. It leaves
+benchmark outputs untouched. The result directory remains canonical evidence;
+the registry is a local search/index aid, not a submission bundle or
+replacement artifact format.
 
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
 compact public-sharing bundle from existing result directories. The bundle

@@ -493,7 +493,8 @@ The first result-registry implementation is a local SQLite index created by
 `benchpack registry import --db <sqlite> <result-dir>...`. Existing result
 directories remain canonical evidence. The importer validates normalized
 `run.jsonl` rows plus optional `hardware.json` and `run-metadata.json`, records
-schema version `1`, and stores compact run and row metadata for local querying.
+the current schema version, and stores compact run, row, and case-stat metadata
+for local querying.
 It writes only the requested SQLite database and does not mutate benchmark
 outputs, read `raw/`, inspect workspaces or task artifacts, generate reports,
 contact endpoints, or create public submission bundles.
@@ -503,10 +504,13 @@ same result directory updates the run row and replaces its child rows, using the
 canonical local result directory path as the identity key. The first schema
 stores enough normalized fields for local filtering over pack/version, case,
 adapter, model, endpoint, host/runtime/model metadata, timing/token metrics,
-scoring, and repo-task verifier state. Public upload, bundles, secret scanning,
-object storage for large artifacts, provenance labels, hosted databases,
-registry-backed report reproduction, and website comparison views remain later
-explicit slices.
+scoring, and repo-task verifier state. Schema version `2` adds nullable
+comparability anchors from explicit run metadata plus per-run/case prompt/cache
+coverage medians so future views can show artifact/runtime mode, pack version,
+prompt-token, and cache-token caveats without parsing every source artifact.
+Public upload, deeper secret scanning, object storage for large artifacts,
+hosted databases, registry-backed report reproduction, and website comparison
+views remain later explicit slices.
 
 Reason: a local registry is useful for searching and grouping accumulated
 benchmark artifacts, but replacing the artifact-first workflow would weaken

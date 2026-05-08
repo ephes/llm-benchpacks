@@ -1146,26 +1146,29 @@ Make benchmark results searchable and shareable without weakening provenance or
 comparability.
 
 **Status:** started 2026-05-08. The first local SQLite registry import slice has
-landed as `benchpack registry import --db <sqlite> <result-dir>...`, and the
-first compact public bundle slice has landed as
-`benchpack registry bundle create/validate`. This keeps the artifact-first
-workflow: local `results/<date>-<host-label>/` directories, `run.jsonl`,
-`hardware.json`, `run-metadata.json`, and pack manifests remain the canonical
-evidence. The database is an index over validated result artifacts, and public
-bundles are compact exports for sharing, not the only copy of benchmark truth.
+landed as `benchpack registry import --db <sqlite> <result-dir>...`, the first
+compact public bundle slice has landed as
+`benchpack registry bundle create/validate`, and the first comparability
+indexing slice has landed as SQLite schema version `2`. This keeps the
+artifact-first workflow: local `results/<date>-<host-label>/` directories,
+`run.jsonl`, `hardware.json`, `run-metadata.json`, and pack manifests remain
+the canonical evidence. The database is an index over validated result
+artifacts, and public bundles are compact exports for sharing, not the only
+copy of benchmark truth.
 
 Scope:
 
 - Define a result-registry data model before choosing a hosted implementation.
-  **Partially landed 2026-05-08** as local SQLite schema version `1`, with
-  `runs`, `result_rows`, and `registry_meta` tables. The first schema captures
-  result-directory identity, row count, `run.jsonl` SHA-256, pack ids/versions,
-  adapters, models, endpoints, optional hardware/run-metadata JSON, selected
-  host/runtime/model fields, normalized row timing/token/scoring/repo-task
-  fields, and compact sort-keyed row JSON. Hosted submitter/provenance
-  metadata, artifact references beyond the canonical local result path, richer
-  comparability fields, runner version, repo commit, and endpoint-class
-  normalization remain later work.
+  **Partially landed 2026-05-08** as local SQLite schema version `2`, with
+  `runs`, `result_rows`, `result_case_stats`, and `registry_meta` tables. The
+  schema captures result-directory identity, row count, `run.jsonl` SHA-256,
+  pack ids/versions, adapters, models, endpoints, optional hardware/
+  run-metadata JSON, selected host/runtime/model fields, normalized row timing/
+  token/scoring/repo-task fields, compact sort-keyed row JSON, explicit
+  comparability anchors from `run-metadata.json`, and per-run/case prompt/
+  cached-token coverage medians. Hosted submitter/provenance metadata,
+  artifact references beyond the canonical local result path, runner version,
+  and endpoint-class normalization remain later work.
 - Preserve raw and large artifacts outside the relational core. Store compact
   normalized rows in the database, keep optional `raw/`, `workspace/`,
   `patch/`, `task/`, `verify/`, and model-call artifacts in object storage or
@@ -1173,11 +1176,11 @@ Scope:
   artifact id.
 - Add a local import/index command before adding public submission. **Landed
   2026-05-08** as `benchpack registry import --db <sqlite> <result-dir>...`,
-  which validates existing result directories and normalized rows, records
-  schema version `1`, indexes optional hardware and run metadata when present,
-  rejects malformed rows or malformed optional metadata, replaces indexed rows
-  on re-import of the same result directory, and avoids mutating benchmark
-  outputs.
+  which validates existing result directories and normalized rows, records the
+  current registry schema version, indexes optional hardware and run metadata
+  when present, rejects malformed rows or malformed optional metadata, replaces
+  indexed rows on re-import of the same result directory, and avoids mutating
+  benchmark outputs.
 - Add an export/bundle format for public sharing. **Landed 2026-05-08** as
   `benchpack registry bundle create --out <bundle-dir> <result-dir>...` plus
   `benchpack registry bundle validate <bundle-dir>`. Version `1` bundles copy
@@ -1192,9 +1195,14 @@ Scope:
   rejection, and a conservative secret scan. This is not yet public upload,
   moderation, object storage, or website ingestion.
 - Design comparability rules as first-class database fields, not ad hoc UI
-  filters. The registry should make artifact parity, runtime-and-format
-  comparisons, cache parity, prompt-token parity, pack version parity, and
-  hardware/operating-condition caveats visible in every comparison view.
+  filters. **First slice landed 2026-05-08** as nullable `runs` columns for
+  explicit comparison mode, comparison boundary, host label/repo commit,
+  runtime endpoint/options, model artifact repo/file/revision/checksum/
+  quantization, and operating-condition notes, plus `result_case_stats` rows
+  for prompt-token and cached-prompt-token coverage/median data. The registry
+  now has structured inputs for artifact parity, runtime-and-format labeling,
+  prompt/cache parity checks, pack-version filtering, and hardware/operating
+  caveats without inferring missing metadata.
 - Treat community submission as untrusted input. Public uploads should go
   through schema validation, size limits, secret scanning, content-type checks,
   duplicate detection, provenance labels, and moderation or review states
@@ -1220,10 +1228,12 @@ Validation:
 
 - A local registry import can round-trip existing result directories into a
   database and reproduce `benchpack report` medians and warnings. **Partially
-  landed 2026-05-08** for local import/indexing: focused tests cover metadata
-  indexing, row normalization, idempotent re-import, malformed row rejection,
-  malformed optional metadata rejection, and CLI dispatch. Report-median
-  reproduction from registry data remains future work.
+  landed 2026-05-08** for local import/indexing and comparability stats:
+  focused tests cover metadata indexing, row normalization, idempotent
+  re-import, malformed row rejection, malformed optional metadata rejection,
+  CLI dispatch, schema-v1 upgrade, comparability-anchor indexing, and per-case
+  prompt/cache/prefill median stats. Full report rendering from registry data
+  remains future work.
 - Imported rows retain enough provenance to explain whether two runs are
   comparable, partially comparable, or only useful as separate observations.
 - A sample public bundle can be validated without network access and without

@@ -170,6 +170,45 @@ working history and open questions.
   detection, hosted storage, website ingestion, and registry-backed report
   reproduction remain later result-registry slices.
 
+## 2026-05-08 (registry comparability indexing)
+
+### Changed
+
+- Added the first result-registry comparability indexing slice as SQLite schema
+  version `2`.
+- `benchpack registry import` now migrates schema-v1 databases in place and
+  indexes nullable run-level comparability anchors from explicit
+  `run-metadata.json`: comparison mode, comparison boundary, host label/repo
+  commit, runtime endpoint/options, model artifact repo/file/revision/checksum/
+  quantization, and operating-condition notes.
+- Added `result_case_stats` rows for each imported run/pack-version/case with
+  row counts, ok counts, prompt-token coverage/median, cached-prompt-token
+  coverage/median, and prefill-TPS coverage/median.
+- Follow-up review fixes keep `runs` table creation and migration on one
+  declarative column list, run schema setup inside the import transaction, and
+  document that empty-string comparability anchors are indexed as absent.
+- Kept result directories and `run.jsonl` unchanged. The registry still writes
+  only the requested SQLite database and does not infer parity from missing
+  metadata, inspect raw/workspace/task/verify/model-call artifacts, contact
+  endpoints, or generate reports.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document schema version `2` and the comparability-indexing
+  boundary.
+
+### Validation
+
+- Focused registry tests cover schema-v1 migration, schema-upgrade rollback on
+  import failure, comparability-anchor indexing, repo-commit fallback,
+  non-object runtime option handling, nullable empty-string anchors, per-case
+  prompt/cache/prefill stats, idempotent replacement, and existing bundle
+  behavior.
+
+### Open Questions
+
+- Registry-backed report reproduction, pairwise/group comparability views,
+  endpoint-class normalization, hosted ingestion, and public browse UI remain
+  later slices.
+
 ## 2026-05-08
 
 ### Changed
