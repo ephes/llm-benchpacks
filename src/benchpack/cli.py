@@ -44,7 +44,13 @@ from .report import (
     load_report_set,
     render_report,
 )
-from .registry import RegistryError, import_result_dirs
+from .registry import (
+    BUNDLE_PROVENANCE_LABELS,
+    RegistryError,
+    create_result_bundle,
+    import_result_dirs,
+    validate_result_bundle,
+)
 from .results import RunReporter
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, load_run_metadata
 from .tasks import (
@@ -468,6 +474,56 @@ def _cmd_registry_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
+    try:
+        summary = create_result_bundle(
+            args.result_dirs,
+            args.out,
+            provenance=args.provenance,
+            force=args.force,
+        )
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    run_word = "run" if summary.runs == 1 else "runs"
+    file_word = "file" if summary.files == 1 else "files"
+    artifact_word = "artifact" if summary.omitted_artifacts == 1 else "artifacts"
+    print(
+        "created bundle {bundle_dir} with {runs} {run_word}, {files} {file_word}, "
+        "{omitted} omitted {artifact_word} ({provenance})".format(
+            bundle_dir=summary.bundle_dir,
+            runs=summary.runs,
+            run_word=run_word,
+            files=summary.files,
+            file_word=file_word,
+            omitted=summary.omitted_artifacts,
+            artifact_word=artifact_word,
+            provenance=summary.provenance,
+        )
+    )
+    return 0
+
+
+def _cmd_registry_bundle_validate(args: argparse.Namespace) -> int:
+    try:
+        summary = validate_result_bundle(args.bundle_dir)
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    run_word = "run" if summary.runs == 1 else "runs"
+    file_word = "file" if summary.files == 1 else "files"
+    print(
+        "validated bundle {bundle_dir}: {runs} {run_word}, {files} {file_word}, "
+        "provenance {provenance}".format(
+            bundle_dir=summary.bundle_dir,
+            runs=summary.runs,
+            run_word=run_word,
+            files=summary.files,
+            file_word=file_word,
+            provenance=summary.provenance,
+        )
+    )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchpack")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -550,6 +606,47 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Result directories containing run.jsonl",
     )
+    registry_bundle = registry_sub.add_parser(
+        "bundle",
+        help="Create or validate compact public result bundles",
+    )
+    registry_bundle_sub = registry_bundle.add_subparsers(
+        dest="registry_bundle_command",
+        required=True,
+    )
+    registry_bundle_create = registry_bundle_sub.add_parser(
+        "create",
+        help="Create a compact public bundle from result directories",
+    )
+    registry_bundle_create.add_argument(
+        "--out",
+        required=True,
+        help="Bundle output directory to create",
+    )
+    registry_bundle_create.add_argument(
+        "--provenance",
+        choices=tuple(sorted(BUNDLE_PROVENANCE_LABELS)),
+        default="self-reported",
+        help="Public provenance label for the bundled results",
+    )
+    registry_bundle_create.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing bundle output path",
+    )
+    registry_bundle_create.add_argument(
+        "result_dirs",
+        nargs="+",
+        help="Result directories containing run.jsonl",
+    )
+    registry_bundle_validate = registry_bundle_sub.add_parser(
+        "validate",
+        help="Validate a compact public result bundle offline",
+    )
+    registry_bundle_validate.add_argument(
+        "bundle_dir",
+        help="Bundle directory containing benchpack-bundle.json",
+    )
     return parser
 
 
@@ -565,6 +662,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "registry":
         if args.registry_command == "import":
             return _cmd_registry_import(args)
+        if args.registry_command == "bundle":
+            if args.registry_bundle_command == "create":
+                return _cmd_registry_bundle_create(args)
+            if args.registry_bundle_command == "validate":
+                return _cmd_registry_bundle_validate(args)
+            parser.error(f"unknown registry bundle command: {args.registry_bundle_command}")
         parser.error(f"unknown registry command: {args.registry_command}")
     parser.error(f"unknown command: {args.command}")
     return 2

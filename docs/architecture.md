@@ -16,9 +16,10 @@
 - **Compare/report utilities**: read-only reporting over existing `run.jsonl`
   result directories plus optional per-run `hardware.json` and
   `run-metadata.json` files.
-- **Local registry importer**: SQLite-backed index over existing result
-  directories. It validates normalized rows, records compact run and row
-  metadata, and leaves benchmark outputs as the canonical evidence.
+- **Local registry tools**: SQLite-backed indexing plus compact public bundle
+  creation/validation over existing result directories. They validate
+  normalized rows, record compact metadata, and leave benchmark outputs as the
+  canonical evidence.
 
 Repo-task execution adds responsibilities around the existing concepts rather
 than changing the adapter boundary:
@@ -635,9 +636,25 @@ The importer writes only the configured SQLite database. It does not execute
 packs, load adapters, start runtimes, collect hardware, contact endpoints, read
 `raw/`, inspect workspace/task/patch/verify/model-call artifacts, write result
 artifacts, mutate result directories, generate reports, perform SSH, or create
-public submission bundles. Public export, upload review, secret scanning,
-object storage for large artifacts, and comparison-explorer views remain later
-components.
+public submission bundles.
+
+`benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
+separate export path over existing result directories, not over the SQLite
+database. It copies only compact report-facing files into a new directory:
+`run.jsonl`, optional `hardware.json`, optional `run-metadata.json`, referenced
+patch diffs, and safe model-call JSONL logs when every non-empty line matches
+the allowlisted telemetry shape. Raw payloads, workspaces, normal task logs,
+verifier artifacts, and unsafe model-call logs are omitted by default; file
+omissions include hashes and byte counts when the omitted artifact is an
+existing regular file below the source result directory. Bundle manifests store
+bundle-relative paths and source directory names, not canonical local absolute
+paths. Bundle output paths must be disjoint from source result directories so
+`--force` cannot delete source evidence. `benchpack registry bundle validate
+<bundle-dir>` verifies the manifest, file hashes, row and metadata shape,
+absence of unlisted files, expected role/path shapes, UTF-8 decodability for
+copied compact artifacts, and a conservative secret scan entirely offline.
+Authenticated upload review, deeper secret scanning, object storage for large
+artifacts, and comparison-explorer views remain later components.
 
 ## Operational Helper Flow
 

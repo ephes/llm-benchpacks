@@ -513,3 +513,31 @@ benchmark artifacts, but replacing the artifact-first workflow would weaken
 provenance too early. SQLite keeps the first index portable and testable without
 introducing hosted infrastructure, submission trust policy, or broad privacy
 surface before import semantics are stable.
+
+## D-030: Public Result Bundles Are Compact, Directory-Based, And Validated Offline
+
+The first public-sharing export is a directory bundle created by
+`benchpack registry bundle create --out <bundle-dir> <result-dir>...` and
+validated by `benchpack registry bundle validate <bundle-dir>`. The bundle
+copies only compact report-facing artifacts: `run.jsonl`, optional
+`hardware.json`, optional `run-metadata.json`, patch diffs referenced by result
+rows, and safe external-agent model-call JSONL logs when every non-empty line
+uses the allowlisted telemetry shape. It omits raw payloads, workspaces, normal
+task logs, verifier artifacts, and unsafe model-call logs by default while
+recording hashes and byte counts for omitted regular files when available.
+
+Bundles carry a required provenance label:
+`self-reported`, `operator-curated`, or `independently-reproduced`. The bundle
+manifest stores bundle-relative paths and source directory names, not canonical
+local absolute result-directory paths. Creation and validation apply a
+conservative text secret scan and fail on obvious bearer tokens, credentialed
+URLs, tokenized query strings, secret-looking JSON fields, or non-UTF-8 copied
+compact artifacts. Bundle output paths must be disjoint from source result
+directories so `--force` cannot delete source evidence.
+
+Reason: directory bundles are easy to inspect, diff, validate, and test without
+network access or hosted infrastructure. Keeping the export compact avoids
+turning public sharing into a raw-artifact leak, while hashes preserve useful
+provenance for omitted files. This is still not a full community upload policy:
+moderation, deeper secret scanning, size limits, duplicate detection, object
+storage, and website ingestion remain explicit later slices.

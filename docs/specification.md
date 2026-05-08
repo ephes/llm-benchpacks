@@ -934,6 +934,62 @@ submission bundle. The local registry may store the canonical local result
 directory path for idempotent re-imports; public bundle/export privacy rules are
 left to a later explicit slice.
 
+### `benchpack registry bundle`
+
+```text
+benchpack registry bundle create --out <bundle-dir> [--provenance <label>] [--force] <result-dir> [<result-dir> ...]
+benchpack registry bundle validate <bundle-dir>
+```
+
+`benchpack registry bundle create` builds a compact directory bundle for
+offline public sharing. It reads and validates the supplied result directories
+with the same row and optional metadata checks used by registry import, then
+writes a new bundle directory containing `benchpack-bundle.json` plus one
+`runs/run-NNN-<label>/` directory per input. The bundle manifest schema version
+is `1`. The output path must be disjoint from all source result directories:
+the runner rejects both "bundle inside source" and "source inside bundle"
+layouts before honoring `--force`.
+
+The copied files are limited to compact report-facing artifacts:
+
+- `run.jsonl`;
+- optional `hardware.json`;
+- optional `run-metadata.json`;
+- referenced `patch/.../*.diff` files, so repo-task outcome summaries can
+  still distinguish empty and non-empty workspace diffs;
+- optional `task/.../*.model-calls.jsonl` files only when every non-empty line
+  uses the documented allowlisted safe model-call telemetry shape.
+
+The bundle omits raw request/response payloads, workspaces, normal task logs,
+verifier artifacts, and unsafe model-call logs by default. When an omitted
+artifact is an existing regular file safely below the result directory, the
+manifest records its relative path, omission reason, byte count, and SHA-256.
+Workspace directories are omitted without reading their contents. The manifest
+does not store canonical local absolute result-directory paths; it stores only
+the input directory name as a source label, bundle-relative file paths, file
+sizes, hashes, row counts, and the `run.jsonl` hash.
+
+`--provenance` must be one of `self-reported`, `operator-curated`, or
+`independently-reproduced`; the default is `self-reported`. The label is
+informational but mandatory in the manifest so public review and website
+staging can distinguish untrusted self-reports from curated or independently
+reproduced evidence.
+
+Bundle creation performs a conservative text secret scan over files it is about
+to copy and over the generated manifest. It fails before leaving a partial
+bundle when obvious bearer tokens, secret-looking JSON fields, credentialed
+URLs, tokenized query strings, or non-UTF-8 text in copied compact artifacts are
+detected. This is not a complete public upload trust policy; authenticated
+upload, deeper secret scanning, moderation, and object-storage handling remain
+later work.
+
+`benchpack registry bundle validate` checks the manifest offline, verifies all
+listed file hashes and sizes, revalidates bundled `run.jsonl` rows and optional
+metadata, rejects unlisted files, rejects bundled `raw/`, `workspace/`, or
+`verify/` files, and applies the same conservative decode and secret scan. It
+does not contact endpoints, run packs, import SQLite, mutate benchmark result
+directories, or require network access.
+
 ## Result Artifacts
 
 Results are easy to inspect and follow a fixed layout per run:

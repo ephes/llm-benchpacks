@@ -3448,3 +3448,36 @@ def test_cli_registry_import_rejects_missing_run_jsonl(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="missing run.jsonl"):
         main(["registry", "import", "--db", str(tmp_path / "registry.sqlite"), str(run_a)])
+
+
+def test_cli_registry_bundle_create_and_validate(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    bundle_dir = tmp_path / "bundle"
+
+    assert (
+        main(
+            [
+                "registry",
+                "bundle",
+                "create",
+                "--out",
+                str(bundle_dir),
+                "--provenance",
+                "operator-curated",
+                str(run_a),
+            ]
+        )
+        == 0
+    )
+    create_output = capsys.readouterr().out
+    assert f"created bundle {bundle_dir}" in create_output
+    assert "operator-curated" in create_output
+
+    assert main(["registry", "bundle", "validate", str(bundle_dir)]) == 0
+    validate_output = capsys.readouterr().out
+    assert f"validated bundle {bundle_dir}" in validate_output
+    assert "1 run" in validate_output

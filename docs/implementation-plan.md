@@ -1120,11 +1120,13 @@ Make benchmark results searchable and shareable without weakening provenance or
 comparability.
 
 **Status:** started 2026-05-08. The first local SQLite registry import slice has
-landed as `benchpack registry import --db <sqlite> <result-dir>...`. It keeps
-the artifact-first workflow: local `results/<date>-<host-label>/` directories,
-`run.jsonl`, `hardware.json`, `run-metadata.json`, and pack manifests remain
-the canonical evidence. The database is an index over validated result
-artifacts, not the only copy of benchmark truth.
+landed as `benchpack registry import --db <sqlite> <result-dir>...`, and the
+first compact public bundle slice has landed as
+`benchpack registry bundle create/validate`. This keeps the artifact-first
+workflow: local `results/<date>-<host-label>/` directories, `run.jsonl`,
+`hardware.json`, `run-metadata.json`, and pack manifests remain the canonical
+evidence. The database is an index over validated result artifacts, and public
+bundles are compact exports for sharing, not the only copy of benchmark truth.
 
 Scope:
 
@@ -1150,11 +1152,19 @@ Scope:
   rejects malformed rows or malformed optional metadata, replaces indexed rows
   on re-import of the same result directory, and avoids mutating benchmark
   outputs.
-- Add an export/bundle format for public sharing. A bundle should include
-  compact artifacts needed to reproduce reports, omit secrets and large raw
-  payloads by default, include hashes for omitted artifacts when useful, and
-  clearly mark whether the result is self-reported, operator-curated, or
-  independently reproduced.
+- Add an export/bundle format for public sharing. **Landed 2026-05-08** as
+  `benchpack registry bundle create --out <bundle-dir> <result-dir>...` plus
+  `benchpack registry bundle validate <bundle-dir>`. Version `1` bundles copy
+  compact report-facing files only: `run.jsonl`, optional `hardware.json`,
+  optional `run-metadata.json`, referenced patch diffs, and safe model-call
+  JSONL logs only when every non-empty line is allowlisted telemetry. Raw
+  payloads, workspaces, normal task logs, verifier artifacts, and unsafe
+  model-call logs are omitted by default, with hashes and byte counts recorded
+  for omitted regular files when available. Bundles require a provenance label
+  (`self-reported`, `operator-curated`, or `independently-reproduced`) and
+  validate offline with file hash checks, row/metadata validation, unlisted-file
+  rejection, and a conservative secret scan. This is not yet public upload,
+  moderation, object storage, or website ingestion.
 - Design comparability rules as first-class database fields, not ad hoc UI
   filters. The registry should make artifact parity, runtime-and-format
   comparisons, cache parity, prompt-token parity, pack version parity, and
@@ -1191,7 +1201,9 @@ Validation:
 - Imported rows retain enough provenance to explain whether two runs are
   comparable, partially comparable, or only useful as separate observations.
 - A sample public bundle can be validated without network access and without
-  leaking secrets.
+  leaking secrets. **Landed 2026-05-08** for directory bundles through
+  `benchpack registry bundle validate`, focused tests for copied compact files,
+  omitted raw hashes, unlisted-file rejection, and obvious secret rejection.
 - The first web view can answer a concrete question such as "compare this
   model artifact across M4, M5, and RTX 4000 SFF Ada using the same pack and
   runtime family" without manual spreadsheet work.

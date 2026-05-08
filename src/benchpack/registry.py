@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,10 +14,29 @@ from pathlib import Path
 from typing import Any
 
 from .compare import CompareError, ResultRun, load_result_run
+from .external_agent_model_calls import (
+    MODEL_CALL_LOG_PATTERN,
+    ModelCallLogError,
+    summarize_model_call_logs,
+)
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
 REGISTRY_SCHEMA_VERSION = 1
+BUNDLE_SCHEMA_VERSION = 1
+BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
+BUNDLE_PROVENANCE_LABELS = frozenset(
+    {"self-reported", "operator-curated", "independently-reproduced"}
+)
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+\S+"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    re.compile(r"(?i)[?&](?:api[_-]?key|access[_-]?token|token|secret|password)="),
+    re.compile(r"://[^/\s:@]+:[^/\s@]+@"),
+    re.compile(
+        r"(?i)\"(?:api[_-]?key|token|secret|password|authorization)\"\s*:\s*\"[^\"]{8,}\""
+    ),
+)
 
 
 class RegistryError(ValueError):
@@ -29,6 +50,17 @@ class RegistryImportSummary:
     result_dir: Path
     run_id: int
     rows_imported: int
+
+
+@dataclass(frozen=True)
+class RegistryBundleSummary:
+    """Summary for a created or validated public result bundle."""
+
+    bundle_dir: Path
+    runs: int
+    files: int
+    omitted_artifacts: int
+    provenance: str
 
 
 def import_result_dirs(
@@ -58,6 +90,152 @@ def import_result_dirs(
     return summaries
 
 
+def create_result_bundle(
+    result_dirs: list[Path | str],
+    bundle_dir: Path | str,
+    *,
+    provenance: str = "self-reported",
+    force: bool = False,
+) -> RegistryBundleSummary:
+    """Create a compact shareable bundle from existing result directories."""
+
+    if provenance not in BUNDLE_PROVENANCE_LABELS:
+        raise RegistryError(
+            "bundle provenance must be one of: "
+            + ", ".join(sorted(BUNDLE_PROVENANCE_LABELS))
+        )
+    if not result_dirs:
+        raise RegistryError("benchpack registry bundle create requires result directories")
+    runs = [_load_and_validate_result_dir(path) for path in result_dirs]
+
+    bundle_root = Path(bundle_dir)
+    if str(bundle_root) == "":
+        raise RegistryError("bundle output path must not be empty")
+    _assert_bundle_output_disjoint_from_sources(bundle_root, runs)
+    if bundle_root.exists():
+        if not force:
+            raise RegistryError(
+                f"bundle output already exists: {bundle_root}; pass --force to replace it"
+            )
+        if bundle_root.is_dir():
+            shutil.rmtree(bundle_root)
+        else:
+            bundle_root.unlink()
+    bundle_root.mkdir(parents=True, exist_ok=True)
+
+    manifest: dict[str, Any] = {
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "provenance": provenance,
+        "runs": [],
+    }
+    files_copied = 0
+    omitted_count = 0
+
+    try:
+        for index, run in enumerate(runs, start=1):
+            run_dir_name = f"run-{index:03d}-{_slug(run.label)}"
+            run_bundle_dir = bundle_root / "runs" / run_dir_name
+            run_bundle_dir.mkdir(parents=True)
+            run_manifest, run_files, run_omitted = _copy_run_into_bundle(
+                run=run,
+                bundle_root=bundle_root,
+                run_bundle_dir=run_bundle_dir,
+                run_bundle_path=Path("runs") / run_dir_name,
+            )
+            manifest["runs"].append(run_manifest)
+            files_copied += run_files
+            omitted_count += run_omitted
+        _write_bundle_manifest(bundle_root, manifest)
+    except Exception:
+        if bundle_root.exists():
+            shutil.rmtree(bundle_root)
+        raise
+
+    return RegistryBundleSummary(
+        bundle_dir=bundle_root,
+        runs=len(runs),
+        files=files_copied + 1,
+        omitted_artifacts=omitted_count,
+        provenance=provenance,
+    )
+
+
+def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
+    """Validate a compact public result bundle without network access."""
+
+    bundle_root = Path(bundle_dir)
+    manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
+    try:
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        _assert_no_public_secret(manifest_text, BUNDLE_MANIFEST_FILENAME)
+        manifest = json.loads(manifest_text)
+    except json.JSONDecodeError as exc:
+        raise RegistryError(f"could not parse {manifest_path}: {exc.msg}") from exc
+    except OSError as exc:
+        raise RegistryError(f"could not read {manifest_path}: {exc.strerror}") from exc
+    if not isinstance(manifest, dict):
+        raise RegistryError(f"expected JSON object in {manifest_path}")
+    if manifest.get("schema_version") != BUNDLE_SCHEMA_VERSION:
+        raise RegistryError(
+            f"bundle schema_version must be {BUNDLE_SCHEMA_VERSION}: {manifest_path}"
+        )
+    provenance = manifest.get("provenance")
+    if not isinstance(provenance, str) or provenance not in BUNDLE_PROVENANCE_LABELS:
+        raise RegistryError(
+            "bundle provenance must be one of: "
+            + ", ".join(sorted(BUNDLE_PROVENANCE_LABELS))
+        )
+    runs = manifest.get("runs")
+    if not isinstance(runs, list) or not runs:
+        raise RegistryError(f"bundle manifest requires a non-empty runs list: {manifest_path}")
+
+    expected_files = {BUNDLE_MANIFEST_FILENAME}
+    file_count = 1
+    omitted_count = 0
+    for run_index, run_manifest in enumerate(runs, start=1):
+        if not isinstance(run_manifest, dict):
+            raise RegistryError(f"bundle run entry {run_index} must be an object")
+        bundle_path = _manifest_string(run_manifest, "bundle_path", f"run {run_index}")
+        run_dir = _resolve_bundle_relative(bundle_root, bundle_path)
+        _load_and_validate_result_dir(run_dir)
+        files = run_manifest.get("files")
+        if not isinstance(files, list) or not files:
+            raise RegistryError(f"bundle run {run_index} requires non-empty files")
+        for file_entry in files:
+            if not isinstance(file_entry, dict):
+                raise RegistryError(f"bundle run {run_index} file entries must be objects")
+            rel_path = _manifest_string(file_entry, "path", f"run {run_index} file")
+            role = _manifest_string(file_entry, "role", f"run {run_index} file")
+            _validate_bundle_file_role(rel_path, role)
+            file_path = _resolve_bundle_relative(bundle_root, rel_path)
+            expected_files.add(rel_path)
+            _assert_file_digest(file_path, file_entry, rel_path)
+            _assert_file_has_no_public_secret(file_path, rel_path)
+            file_count += 1
+        omitted = run_manifest.get("omitted_artifacts", [])
+        if not isinstance(omitted, list):
+            raise RegistryError(f"bundle run {run_index} omitted_artifacts must be a list")
+        omitted_count += len(omitted)
+
+    actual_files = {
+        path.relative_to(bundle_root).as_posix()
+        for path in bundle_root.rglob("*")
+        if path.is_file()
+    }
+    extra_files = sorted(actual_files - expected_files)
+    if extra_files:
+        raise RegistryError(f"bundle contains unlisted file: {extra_files[0]}")
+
+    return RegistryBundleSummary(
+        bundle_dir=bundle_root,
+        runs=len(runs),
+        files=file_count,
+        omitted_artifacts=omitted_count,
+        provenance=provenance,
+    )
+
+
 def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
     try:
         run = load_result_run(path)
@@ -71,6 +249,276 @@ def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
     except (RegistryError, RunMetadataError) as exc:
         raise RegistryError(str(exc)) from exc
     return run
+
+
+def _copy_run_into_bundle(
+    *,
+    run: ResultRun,
+    bundle_root: Path,
+    run_bundle_dir: Path,
+    run_bundle_path: Path,
+) -> tuple[dict[str, Any], int, int]:
+    included: list[dict[str, Any]] = []
+    omitted: list[dict[str, Any]] = []
+    files_copied = 0
+
+    for relative_path, role in _included_artifacts(run):
+        source = _safe_existing_file(run.path, relative_path)
+        if source is None:
+            omitted.append(_omitted_artifact(run.path, relative_path, "missing-or-unsafe"))
+            continue
+        _assert_file_has_no_public_secret(source, relative_path)
+        destination = run_bundle_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        included.append(
+            _file_manifest_entry(
+                bundle_root,
+                run_bundle_path / relative_path,
+                role,
+            )
+        )
+        files_copied += 1
+
+    for relative_path, reason in _omitted_artifacts(run):
+        omitted.append(_omitted_artifact(run.path, relative_path, reason))
+
+    run_manifest = {
+        "label": run.label,
+        "source_result_name": run.path.name,
+        "bundle_path": run_bundle_path.as_posix(),
+        "row_count": len(run.records),
+        "run_jsonl_sha256": _sha256(run.path / "run.jsonl"),
+        "files": included,
+        "omitted_artifacts": omitted,
+    }
+    return run_manifest, files_copied, len(omitted)
+
+
+def _assert_bundle_output_disjoint_from_sources(
+    bundle_root: Path,
+    runs: list[ResultRun],
+) -> None:
+    bundle_resolved = bundle_root.resolve(strict=False)
+    for run in runs:
+        source = run.path.resolve()
+        try:
+            bundle_resolved.relative_to(source)
+        except ValueError:
+            pass
+        else:
+            raise RegistryError(
+                "bundle output must be disjoint from source result directories: "
+                f"{bundle_root}"
+            )
+        try:
+            source.relative_to(bundle_resolved)
+        except ValueError:
+            pass
+        else:
+            raise RegistryError(
+                "bundle output must be disjoint from source result directories: "
+                f"{bundle_root}"
+            )
+
+
+def _included_artifacts(run: ResultRun) -> list[tuple[str, str]]:
+    artifacts: list[tuple[str, str]] = [("run.jsonl", "run-jsonl")]
+    for filename, role in (("hardware.json", "hardware"), ("run-metadata.json", "run-metadata")):
+        if (run.path / filename).is_file():
+            artifacts.append((filename, role))
+    for record in run.records:
+        patch = record.get("patch")
+        if isinstance(patch, dict) and isinstance(patch.get("path"), str):
+            artifacts.append((patch["path"], "patch"))
+    try:
+        model_call_summaries = summarize_model_call_logs(run.path)
+    except ModelCallLogError as exc:
+        raise RegistryError(str(exc)) from exc
+    for summary in model_call_summaries:
+        if summary.invalid == 0:
+            artifacts.append((summary.relative_path, "model-call-log"))
+    return _dedupe_artifacts(artifacts)
+
+
+def _omitted_artifacts(run: ResultRun) -> list[tuple[str, str]]:
+    omitted: list[tuple[str, str]] = []
+    for record in run.records:
+        raw = record.get("raw")
+        if isinstance(raw, dict):
+            for key in ("request_path", "response_path"):
+                if isinstance(raw.get(key), str):
+                    omitted.append((raw[key], "raw-payload-omitted"))
+        workspace = record.get("workspace")
+        if isinstance(workspace, dict) and isinstance(workspace.get("path"), str):
+            omitted.append((workspace["path"], "workspace-omitted"))
+        task = record.get("task")
+        if isinstance(task, dict):
+            for key in ("stdout_path", "stderr_path"):
+                if isinstance(task.get(key), str):
+                    omitted.append((task[key], "task-log-omitted"))
+        verify = record.get("verify")
+        if isinstance(verify, dict):
+            for value in verify.values():
+                if isinstance(value, str):
+                    omitted.append((value, "verify-artifact-omitted"))
+    try:
+        summaries = summarize_model_call_logs(run.path)
+    except ModelCallLogError as exc:
+        raise RegistryError(str(exc)) from exc
+    invalid_paths = {
+        summary.relative_path for summary in summaries if summary.invalid != 0
+    }
+    safe_paths = {summary.relative_path for summary in summaries}
+    for path in sorted(run.path.glob(MODEL_CALL_LOG_PATTERN)):
+        try:
+            relative_path = path.relative_to(run.path).as_posix()
+        except ValueError:
+            continue
+        if relative_path in invalid_paths or relative_path not in safe_paths:
+            omitted.append((relative_path, "unsafe-model-call-log-omitted"))
+    return _dedupe_artifacts(omitted)
+
+
+def _dedupe_artifacts(artifacts: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[tuple[str, str]] = []
+    for path, role in artifacts:
+        key = (path, role)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(key)
+    return deduped
+
+
+def _omitted_artifact(root: Path, relative_path: str, reason: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {"path": relative_path, "reason": reason}
+    source = _safe_existing_file(root, relative_path)
+    if source is not None:
+        entry["sha256"] = _sha256(source)
+        entry["bytes"] = source.stat().st_size
+    return entry
+
+
+def _file_manifest_entry(bundle_root: Path, relative_path: Path, role: str) -> dict[str, Any]:
+    bundle_relative = relative_path.as_posix()
+    path = bundle_root / bundle_relative
+    return {
+        "path": bundle_relative,
+        "role": role,
+        "sha256": _sha256(path),
+        "bytes": path.stat().st_size,
+    }
+
+
+def _write_bundle_manifest(bundle_root: Path, manifest: dict[str, Any]) -> None:
+    manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
+    manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    _assert_no_public_secret(manifest_text, BUNDLE_MANIFEST_FILENAME)
+    manifest_path.write_text(manifest_text, encoding="utf-8")
+
+
+def _safe_existing_file(root: Path, relative_path: str) -> Path | None:
+    if relative_path == "" or Path(relative_path).is_absolute():
+        return None
+    root_resolved = root.resolve()
+    candidate = (root_resolved / relative_path).resolve(strict=False)
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+def _resolve_bundle_relative(bundle_root: Path, relative_path: str) -> Path:
+    candidate = Path(relative_path)
+    if (
+        relative_path == ""
+        or candidate.is_absolute()
+        or any(part in ("", ".", "..") for part in candidate.parts)
+    ):
+        raise RegistryError(f"bundle path must be relative and non-empty: {relative_path!r}")
+    root = bundle_root.resolve()
+    path = (root / relative_path).resolve(strict=False)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise RegistryError(f"bundle path escapes bundle root: {relative_path}") from exc
+    return path
+
+
+def _manifest_string(record: dict[str, Any], field: str, source: str) -> str:
+    value = record.get(field)
+    if not isinstance(value, str) or value == "":
+        raise RegistryError(f"bundle {source} field {field!r} must be a non-empty string")
+    return value
+
+
+def _assert_file_digest(path: Path, entry: dict[str, Any], relative_path: str) -> None:
+    if not path.is_file():
+        raise RegistryError(f"bundle file missing: {relative_path}")
+    expected_sha = entry.get("sha256")
+    expected_bytes = entry.get("bytes")
+    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+        raise RegistryError(f"bundle file {relative_path} has invalid sha256 metadata")
+    if not isinstance(expected_bytes, int) or isinstance(expected_bytes, bool):
+        raise RegistryError(f"bundle file {relative_path} has invalid byte metadata")
+    if _sha256(path) != expected_sha:
+        raise RegistryError(f"bundle file hash mismatch: {relative_path}")
+    if path.stat().st_size != expected_bytes:
+        raise RegistryError(f"bundle file size mismatch: {relative_path}")
+
+
+def _validate_bundle_file_role(relative_path: str, role: str) -> None:
+    path = Path(relative_path)
+    parts = path.parts
+    if len(parts) < 3 or parts[0] != "runs":
+        raise RegistryError(f"bundle file path has unexpected shape: {relative_path}")
+    run_relative = parts[2:]
+    if role == "run-jsonl" and run_relative != ("run.jsonl",):
+        raise RegistryError(f"run-jsonl bundle file has unexpected path: {relative_path}")
+    if role == "hardware" and run_relative != ("hardware.json",):
+        raise RegistryError(f"hardware bundle file has unexpected path: {relative_path}")
+    if role == "run-metadata" and run_relative != ("run-metadata.json",):
+        raise RegistryError(f"run-metadata bundle file has unexpected path: {relative_path}")
+    if role == "patch" and (
+        len(run_relative) < 3
+        or run_relative[0] != "patch"
+        or Path(run_relative[-1]).suffix != ".diff"
+    ):
+        raise RegistryError(f"patch bundle file has unexpected path: {relative_path}")
+    if role == "model-call-log" and (
+        len(run_relative) != 3
+        or run_relative[0] != "task"
+        or not run_relative[-1].endswith(".model-calls.jsonl")
+    ):
+        raise RegistryError(f"model-call-log bundle file has unexpected name: {relative_path}")
+    if role not in {"run-jsonl", "hardware", "run-metadata", "patch", "model-call-log"}:
+        raise RegistryError(f"unknown bundle file role: {role}")
+
+
+def _assert_no_public_secret(text: str, source: str) -> None:
+    for pattern in _SECRET_PATTERNS:
+        if pattern.search(text):
+            raise RegistryError(f"possible secret detected in bundle file {source}")
+
+
+def _assert_file_has_no_public_secret(path: Path, source: str) -> None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise RegistryError(f"could not decode bundle file {source}") from exc
+    except OSError as exc:
+        raise RegistryError(f"could not read bundle file {source}: {exc.strerror}") from exc
+    _assert_no_public_secret(text, source)
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", value).strip("-._").lower()
+    return slug or "run"
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:

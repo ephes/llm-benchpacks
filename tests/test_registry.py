@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from benchpack.registry import RegistryError, import_result_dirs
+from benchpack.registry import (
+    BUNDLE_MANIFEST_FILENAME,
+    RegistryError,
+    create_result_bundle,
+    import_result_dirs,
+    validate_result_bundle,
+)
 
 
 def _record(case: str = "short") -> dict:
@@ -197,3 +204,204 @@ def test_registry_import_rejects_malformed_optional_metadata(tmp_path: Path) -> 
 
     with pytest.raises(RegistryError, match="could not parse"):
         import_result_dirs([result_dir], tmp_path / "registry.sqlite")
+
+
+def test_registry_bundle_create_copies_compact_public_artifacts(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    record = _record()
+    record["patch"] = {"path": "patch/short/rep-001.diff"}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas", "platform": "Darwin"}) + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps({"runtime": {"name": "llama-server"}, "notes": "shareable"}) + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "raw").mkdir()
+    (result_dir / "raw" / "short.request.json").write_text(
+        '{"prompt":"private prompt omitted"}\n',
+        encoding="utf-8",
+    )
+    (result_dir / "raw" / "short.response.json").write_text(
+        '{"content":"private response omitted"}\n',
+        encoding="utf-8",
+    )
+    (result_dir / "patch" / "short").mkdir(parents=True)
+    (result_dir / "patch" / "short" / "rep-001.diff").write_text(
+        "--- a/app.py\n+++ b/app.py\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    summary = create_result_bundle(
+        [result_dir],
+        bundle_dir,
+        provenance="operator-curated",
+    )
+    validated = validate_result_bundle(bundle_dir)
+
+    assert summary.runs == 1
+    assert summary.provenance == "operator-curated"
+    assert validated.files == summary.files
+    manifest = json.loads((bundle_dir / BUNDLE_MANIFEST_FILENAME).read_text())
+    run = manifest["runs"][0]
+    assert run["source_result_name"] == "run-a"
+    assert "source_result_dir" not in run
+    copied_paths = {entry["path"] for entry in run["files"]}
+    assert copied_paths == {
+        "runs/run-001-run-a/run.jsonl",
+        "runs/run-001-run-a/hardware.json",
+        "runs/run-001-run-a/run-metadata.json",
+        "runs/run-001-run-a/patch/short/rep-001.diff",
+    }
+    assert not (bundle_dir / "runs" / "run-001-run-a" / "raw").exists()
+    omitted = {entry["path"]: entry for entry in run["omitted_artifacts"]}
+    assert omitted["raw/short.request.json"]["reason"] == "raw-payload-omitted"
+    assert len(omitted["raw/short.request.json"]["sha256"]) == 64
+
+
+def test_registry_bundle_create_rejects_possible_secret(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps({"notes": "Authorization: Bearer sk-test-secret-value"}) + "\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    with pytest.raises(RegistryError, match="possible secret"):
+        create_result_bundle([result_dir], bundle_dir)
+
+    assert not bundle_dir.exists()
+
+
+def test_registry_bundle_create_rejects_output_inside_result_dir(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+
+    with pytest.raises(RegistryError, match="disjoint"):
+        create_result_bundle([result_dir], result_dir / "bundle", force=True)
+
+    assert not (result_dir / "bundle").exists()
+
+
+def test_registry_bundle_create_rejects_output_parent_of_result_dir(
+    tmp_path: Path,
+) -> None:
+    results_dir = tmp_path / "results"
+    result_dir = results_dir / "run-a"
+    _write_result_dir(result_dir)
+
+    with pytest.raises(RegistryError, match="disjoint"):
+        create_result_bundle([result_dir], results_dir, force=True)
+
+    assert result_dir.exists()
+    assert (result_dir / "run.jsonl").exists()
+
+
+def test_registry_bundle_accepts_patch_case_named_task(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    record = _record("task")
+    record["patch"] = {"path": "patch/task/rep-001.diff"}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "patch" / "task").mkdir(parents=True)
+    (result_dir / "patch" / "task" / "rep-001.diff").write_text(
+        "--- a/app.py\n+++ b/app.py\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    create_result_bundle([result_dir], bundle_dir)
+    summary = validate_result_bundle(bundle_dir)
+
+    assert summary.runs == 1
+    manifest = json.loads((bundle_dir / BUNDLE_MANIFEST_FILENAME).read_text())
+    paths = {entry["path"] for entry in manifest["runs"][0]["files"]}
+    assert "runs/run-001-run-a/patch/task/rep-001.diff" in paths
+
+
+def test_registry_bundle_omits_malformed_model_call_log_name(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    model_call_dir = result_dir / "task" / "case"
+    model_call_dir.mkdir(parents=True)
+    (model_call_dir / "rep-X.model-calls.jsonl").write_text(
+        json.dumps({"schema_version": 1, "sequence": 1, "model": "m", "ok": True})
+        + "\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    create_result_bundle([result_dir], bundle_dir)
+
+    manifest = json.loads((bundle_dir / BUNDLE_MANIFEST_FILENAME).read_text())
+    omitted = {entry["path"]: entry for entry in manifest["runs"][0]["omitted_artifacts"]}
+    assert omitted["task/case/rep-X.model-calls.jsonl"]["reason"] == (
+        "unsafe-model-call-log-omitted"
+    )
+
+
+def test_registry_bundle_create_rejects_non_utf8_copied_file(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    record = _record()
+    record["patch"] = {"path": "patch/short/rep-001.diff"}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "patch" / "short").mkdir(parents=True)
+    (result_dir / "patch" / "short" / "rep-001.diff").write_bytes(b"\xff")
+    bundle_dir = tmp_path / "bundle"
+
+    with pytest.raises(RegistryError, match="could not decode bundle file"):
+        create_result_bundle([result_dir], bundle_dir)
+
+    assert not bundle_dir.exists()
+
+
+def test_registry_bundle_validate_rejects_non_utf8_copied_file(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    record = _record()
+    record["patch"] = {"path": "patch/short/rep-001.diff"}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "patch" / "short").mkdir(parents=True)
+    (result_dir / "patch" / "short" / "rep-001.diff").write_text(
+        "--- a/app.py\n+++ b/app.py\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+    create_result_bundle([result_dir], bundle_dir)
+    bundled_patch = bundle_dir / "runs" / "run-001-run-a" / "patch" / "short" / "rep-001.diff"
+    bundled_patch.write_bytes(b"\xff")
+    manifest_path = bundle_dir / BUNDLE_MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text())
+    for entry in manifest["runs"][0]["files"]:
+        if entry["path"] == "runs/run-001-run-a/patch/short/rep-001.diff":
+            entry["sha256"] = hashlib.sha256(b"\xff").hexdigest()
+            entry["bytes"] = 1
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(RegistryError, match="could not decode bundle file"):
+        validate_result_bundle(bundle_dir)
+
+
+def test_registry_bundle_validate_rejects_unlisted_files(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    bundle_dir = tmp_path / "bundle"
+    create_result_bundle([result_dir], bundle_dir)
+    leaked = bundle_dir / "runs" / "run-001-run-a" / "raw" / "request.json"
+    leaked.parent.mkdir()
+    leaked.write_text('{"prompt":"not in manifest"}\n', encoding="utf-8")
+
+    with pytest.raises(RegistryError, match="unlisted file"):
+        validate_result_bundle(bundle_dir)

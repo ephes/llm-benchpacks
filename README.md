@@ -56,6 +56,8 @@ uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --mod
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
+uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
+uv run benchpack registry bundle validate bundles/example
 ```
 
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
@@ -244,6 +246,17 @@ row metadata plus normalized timing/token/scoring fields, and leaves benchmark
 outputs untouched. The result directory remains canonical evidence; the
 registry is a local search/index aid, not a submission bundle or replacement
 artifact format.
+
+`benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
+compact public-sharing bundle from existing result directories. The bundle
+copies `run.jsonl`, optional `hardware.json`, optional `run-metadata.json`,
+patch files needed for repo-task outcome summaries, and safe model-call JSONL
+logs only when every line uses the documented allowlisted telemetry shape. It
+omits raw payloads, workspaces, task logs, verifier artifacts, and unsafe
+model-call logs by default while recording hashes for omitted files when they
+are available. Use `--provenance self-reported`, `operator-curated`, or
+`independently-reproduced` to label the bundle, and run
+`benchpack registry bundle validate <bundle-dir>` before sharing.
 
 Bundled packs:
 

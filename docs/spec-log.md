@@ -98,6 +98,54 @@ working history and open questions.
   storage, registry-backed report reproduction, and comparison-explorer views
   remain later result-registry slices.
 
+## 2026-05-08 (public result bundles)
+
+### Changed
+
+- Added `benchpack registry bundle create --out <bundle-dir> <result-dir>...`
+  and `benchpack registry bundle validate <bundle-dir>` as the first compact
+  public result-bundle slice.
+- Bundle schema version `1` writes a directory containing
+  `benchpack-bundle.json` and one `runs/run-NNN-<label>/` directory per source
+  result. Copied files are limited to `run.jsonl`, optional `hardware.json`,
+  optional `run-metadata.json`, referenced patch diffs, and safe model-call
+  JSONL logs only when every non-empty line uses the allowlisted telemetry
+  shape.
+- Raw payloads, workspaces, normal task logs, verifier artifacts, and unsafe
+  model-call logs are omitted by default. Omitted regular files safely below
+  the result directory get byte-count and SHA-256 entries in the manifest.
+- Bundles require a provenance label: `self-reported`, `operator-curated`, or
+  `independently-reproduced`. Bundle manifests use bundle-relative paths and
+  source directory names rather than canonical local absolute result paths.
+- Creation and validation run offline and apply conservative checks for listed
+  file hashes, row and optional metadata shape, unlisted files, disallowed raw/
+  workspace/verify files, and obvious secret patterns.
+- A follow-up review fix tightened bundle output safety so `--force` rejects
+  both bundle-inside-source and source-inside-bundle layouts before deleting an
+  existing output path. It also made bundle role validation shape-aware so
+  case ids named `task`, `raw`, `workspace`, or `verify` do not falsely reject
+  valid patch paths, hoisted model-call summary parsing, records malformed
+  model-call log names as omitted unsafe logs, and converts non-UTF-8 copied
+  artifact scans into `RegistryError`.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document the public bundle boundary.
+
+### Validation
+
+- Focused registry tests cover compact artifact copying, omitted raw hashes,
+  offline validation, unlisted-file rejection, and obvious secret rejection.
+- Review-regression tests cover parent-output source preservation, reserved
+  case names in patch paths, malformed model-call log omission, and non-UTF-8
+  copied artifact failures during create and validate.
+- CLI coverage exercises `registry bundle create` and `registry bundle
+  validate`.
+
+### Open Questions
+
+- Authenticated upload/review, deeper secret scanning, size limits, duplicate
+  detection, hosted storage, website ingestion, and registry-backed report
+  reproduction remain later result-registry slices.
+
 ## 2026-05-08
 
 ### Changed
