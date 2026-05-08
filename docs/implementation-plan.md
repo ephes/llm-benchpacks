@@ -466,7 +466,10 @@ Scope:
   M4/M5/NVIDIA direct-edit comparison is reasonable as exploratory evidence.
   Lightweight report/status polish landed on 2026-05-08, so empty workspace
   diffs and no-mutation failures are now visible without manual artifact
-  inspection.
+  inspection. For endpoint-only correctness, add a simpler deterministic
+  verifier-backed repo-task pack before changing the default four-pack matrix;
+  treat `desktop-django-wrap` as prompt/format coverage rather than the primary
+  cross-host correctness signal.
 
 Validation:
 
@@ -1009,6 +1012,19 @@ Scope:
   artifact data. The table shows patch byte counts and compact labels such as
   `passed`, `failed-no-mutation`, `failed-with-mutation`, and
   `failed-unknown-mutation` without changing `run.jsonl`.
+- Add a simple endpoint-only coding correctness pack before promoting another
+  cross-host correctness matrix. **Planned next.** The pack should run through
+  normal chat adapters, require no external agent, use a tiny committed Python
+  repo fixture, ask the model for one fenced unified diff or replacement-file
+  patch, apply it through the existing fenced-patch repo-task executor, and
+  verify success with a deterministic stdlib `verify-script`. The task should
+  avoid brittle output-skeleton scoring: correctness comes from the applied
+  workspace mutation and verifier result. Include at least one edge case in the
+  verifier that is not solved by merely matching prompt text, keep repetitions
+  and token budgets small enough for local M4/M5 and Hetzner runs, and document
+  it as the universal endpoint-only correctness signal. After local validation,
+  consider adding it to the tmux helper and demoting `desktop-django-wrap` to
+  smoke/coverage in the recommended matrix.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1077,6 +1093,16 @@ Scope:
   report-only repo-task outcome summaries in `summary.md` and
   `benchpack report`, making empty workspace diffs and mutation-visible
   failures visible before broader direct-edit campaigns.
+- Universal endpoint-only correctness pack. **Planned next.** Add a small
+  verifier-backed `repo-task` pack that runs on any chat endpoint through the
+  existing fenced-patch executor, without requiring `external-agent`. The first
+  candidate should be simpler than `desktop-django-wrap`: a compact Python
+  regression fixture, a patch-only prompt, deterministic stdlib verification,
+  and reportable pass/fail/mutation outcomes. Use it to separate "model can
+  produce an applyable correct fix" from "an external agent stack is installed
+  and operating." Keep `desktop-django-wrap` available as prompt-only
+  coding-agent-shaped coverage rather than treating its regex skeleton as the
+  main correctness benchmark.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.

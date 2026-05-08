@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (endpoint-only correctness pack backlog)
+
+### Changed
+
+- Added a planned Phase 4 / benchmark-design backlog slice for a simpler
+  endpoint-only verifier-backed coding correctness pack.
+- The planned pack should run through existing chat adapters with no
+  `external-agent` dependency, use a tiny committed Python repo fixture, ask
+  the model for one fenced unified diff or replacement-file patch, apply it
+  through the existing fenced-patch repo-task executor, and score only through
+  deterministic workspace mutation plus `verify-script` results.
+- Recorded the intended interpretation boundary: use this future pack as the
+  universal cross-host endpoint-only correctness signal, keep direct-edit
+  external-agent packs as agent-workflow evidence, and treat
+  `desktop-django-wrap` as prompt/format coverage rather than the primary
+  correctness benchmark.
+
+### Open Questions
+
+- Exact pack id, fixture behavior, hidden-edge verifier checks, tmux helper
+  inclusion, and whether it should replace `desktop-django-wrap` in the
+  recommended default matrix remain implementation-slice decisions after local
+  validation.
+
 ## 2026-05-08 (research backlog: bench360 / ds4 review)
 
 ### Changed
