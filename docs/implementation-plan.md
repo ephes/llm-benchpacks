@@ -239,7 +239,10 @@ Scope:
   default four-pack matrix, and fenced-patch `coding-tasks` set remain
   unchanged. The helper launch path requires `BENCHPACK_EXTERNAL_AGENT_ARGV`
   for this pack set and injects it into tmux windows without printing its value
-  in dry-run output.
+  in dry-run output. Local M5 direct-edit validation later on 2026-05-07 showed
+  that this surface now produces meaningful deterministic signal with Codex
+  OSS/Ollama: two fixtures passed and the larger dashboard fixture failed from
+  no workspace mutation.
 - Add a local Codex OSS external-agent wrapper. **Landed 2026-05-07** as
   `examples/external-agent/codex-oss-agent.py`, adapting the public
   external-agent context to `codex exec --oss --local-provider <provider>` for
@@ -458,10 +461,12 @@ Scope:
   public TLS -> Django Bearer auth/proxy -> vLLM access path only, not approval
   for a benchmark matrix.
 - Next-work ordering: do not spend the next slice on another broad live
-  tri-host matrix for the current four-pack lane. Groom backlog/research first,
-  design a direct-edit external-agent benchmark slice next, validate that slice
-  locally on M5, and only then consider broader M4/M5/NVIDIA comparison when
-  the benchmark surface is meaningful.
+  tri-host matrix for the current four-pack lane. The direct-edit external-agent
+  slice now has local M5 evidence with 2/3 verifier passes, so broader
+  M4/M5/NVIDIA direct-edit comparison is reasonable as exploratory evidence.
+  Before scaling the campaign, add lightweight report/status polish if needed
+  so empty workspace diffs and no-mutation failures are visible without manual
+  artifact inspection.
 
 Validation:
 
@@ -920,6 +925,13 @@ Scope:
   workspace. Captured workspace diffs were empty. Treat this as mechanical
   harness validation plus benchmark-quality failure, not successful
   coding-agent task evidence.
+- Record direct-edit external-agent live evidence. **Landed 2026-05-07** as a
+  second M5-only Codex OSS/Ollama run of the same explicit pack set after the
+  prompts changed to direct workspace editing. `fix-greeting` and
+  `fix-task-summary` passed their deterministic verifiers with non-empty
+  workspace diffs, while `fix-dashboard-regressions` failed with an empty
+  workspace diff after Codex emitted only a plan. Treat this as meaningful
+  exploratory coding-agent task signal, not default-matrix promotion.
 - Add the first bundled measured repo-mutating repo-task pack over the fenced
   unified-diff contract. **Landed 2026-05-02** as `patch-from-failure`: one
   tiny Python repo fixture, one `fix-greeting` measured `repo-task` case,
@@ -945,9 +957,11 @@ Scope:
   aggregate model-call summaries. The first local live external-agent evidence
   mechanically validated the public path but failed deterministically under
   copied fenced-diff prompts. External-agent-specific direct-edit prompts have
-  now landed for the bundled variants; required model-call logging beyond the
-  optional summary artifact and richer harness configuration remain planned
-  later.
+  now landed for the bundled variants, and the first M5 direct-edit validation
+  passed two of three deterministic verifiers while classifying the dashboard
+  case as a no-mutation task-quality failure. Required model-call logging
+  beyond the optional summary artifact and richer harness configuration remain
+  planned later.
 - Add richer task status/reporting only if a real harness proves the existing
   task logs and runner-failure boundaries are insufficient. **Planned later.**
 - Add repo-task warmup support, workspace cleanup/retention options, task
@@ -967,9 +981,11 @@ campaigns. See `docs/benchmark-research.md` for research notes, source leads,
 and caveats.
 
 **Status:** opened 2026-05-07 as documentation/backlog only; the first
-direct-edit external-agent prompt slice landed later the same day. No live
-benchmarks were run, no datasets were downloaded, and no generated artifacts
-were added in that implementation slice.
+direct-edit external-agent prompt slice and local M5 real-agent validation
+landed later the same day. No datasets were downloaded, and generated
+`results/*`, metadata, raw payloads, workspaces, task logs, model-call logs,
+patch artifacts, and verify artifacts remain local/ignored unless explicitly
+curated.
 
 Scope:
 
@@ -979,6 +995,17 @@ Scope:
   tmux defaults. **Landed 2026-05-07** for the three existing external-agent
   coding-task packs by changing only their prompts, pack versions,
   descriptions, docs, and prompt-contract tests.
+- Validate the direct-edit variants locally on M5 with a real external agent.
+  **Landed 2026-05-07** with Codex OSS through local Ollama:
+  `patch-from-failure-external-agent` and
+  `python-regression-fix-external-agent` passed, while
+  `django-dashboard-regression-fix-external-agent` failed from no workspace
+  mutation. This is enough to justify exploratory broader direct-edit
+  comparison, but not default matrix promotion.
+- Add lightweight report/status polish for external-agent repo-task outcomes if
+  larger campaigns become hard to classify manually. The current artifact set
+  was enough for the M5 slice, but `repo_task.status` alone did not distinguish
+  wrong mutation from no mutation.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1009,9 +1036,11 @@ Move beyond speed into correctness.
 **Status:** started. The current bundled task-completion packs establish
 fenced-patch repo-task plumbing and deterministic verifier behavior, but recent
 live evidence shows that fenced-diff prompts are too prompt-contract-sensitive
-for broad coding-agent conclusions. The next useful implementation slice is a
-direct-edit external-agent benchmark design, not another generic rerun of the
-same fenced-patch tasks.
+for broad coding-agent conclusions. The direct-edit external-agent variants now
+have local M5 real-agent evidence with 2/3 verifier passes. The next useful
+slice is lightweight task-outcome reporting polish; broader direct-edit
+comparison can follow as exploratory evidence, but another generic rerun of the
+same fenced-patch tasks is not useful.
 
 Scope:
 
@@ -1030,12 +1059,17 @@ Scope:
 - Model output to patch extraction. **Landed** through the default fenced
   unified-diff executor.
 - Public external-agent harness plumbing. **Landed mechanically** through the
-  public `external-agent` path and M5 Codex OSS/Ollama evidence, but current
-  copied prompts failed to produce workspace edits.
+  public `external-agent` path and M5 Codex OSS/Ollama evidence. The initial
+  copied prompts failed to produce workspace edits, while the later direct-edit
+  prompts produced 2/3 verifier passes on the same local runtime family.
 - Direct-edit external-agent benchmark variants. **Landed 2026-05-07** by
   updating the existing external-agent coding-task packs to instruct real
   agents to edit the prepared workspace directly while preserving the default
   fenced-patch packs and runner semantics.
+- Local M5 direct-edit validation. **Landed 2026-05-07** with Codex
+  OSS/Ollama: two direct-edit fixtures passed end to end and one larger
+  dashboard fixture failed from no workspace mutation. Generated artifacts
+  stayed local/ignored.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.
@@ -1044,6 +1078,7 @@ Validation:
 
 - A baseline real external-agent/runtime pair can solve at least one
   direct-edit fixture end to end without relying on fenced-diff stdout.
+  **Validated 2026-05-07** on local M5 with Codex OSS through Ollama.
 
 ## Phase 5: Remote Host Orchestration
 
@@ -1071,3 +1106,75 @@ Scope:
 Validation:
 
 - A run from a remote Linux CUDA host can be compared with a local Mac run.
+
+## Operational Track: Result Registry And Community Submission
+
+Make benchmark results searchable and shareable without weakening provenance or
+comparability.
+
+**Status:** proposed 2026-05-07. This is a good direction, but the first
+implementation should not replace the current artifact-first workflow. Local
+`results/<date>-<host-label>/` directories, `run.jsonl`, `hardware.json`,
+`run-metadata.json`, and pack manifests should remain the canonical evidence.
+The database should start as an index over validated result artifacts, not as
+the only copy of benchmark truth.
+
+Scope:
+
+- Define a result-registry data model before choosing a hosted implementation.
+  Core entities should include benchmark pack/version, case, run, repetition
+  row, host, hardware, operating system, runtime, adapter, endpoint class,
+  model identity, model artifact, quantization, context/cache options,
+  run metadata, normalized timing/token metrics, scoring results, warnings,
+  artifact references, schema version, runner version, repo commit, and
+  submitter/provenance metadata.
+- Preserve raw and large artifacts outside the relational core. Store compact
+  normalized rows in the database, keep optional `raw/`, `workspace/`,
+  `patch/`, `task/`, `verify/`, and model-call artifacts in object storage or
+  local artifact bundles, and reference them by content hash or immutable
+  artifact id.
+- Add a local import/index command before adding public submission:
+  `benchpack registry import <result-dir>` or equivalent should validate an
+  existing result directory, record schema/version metadata, reject malformed
+  rows, and avoid mutating benchmark outputs.
+- Add an export/bundle format for public sharing. A bundle should include
+  compact artifacts needed to reproduce reports, omit secrets and large raw
+  payloads by default, include hashes for omitted artifacts when useful, and
+  clearly mark whether the result is self-reported, operator-curated, or
+  independently reproduced.
+- Design comparability rules as first-class database fields, not ad hoc UI
+  filters. The registry should make artifact parity, runtime-and-format
+  comparisons, cache parity, prompt-token parity, pack version parity, and
+  hardware/operating-condition caveats visible in every comparison view.
+- Treat community submission as untrusted input. Public uploads should go
+  through schema validation, size limits, secret scanning, content-type checks,
+  duplicate detection, provenance labels, and moderation or review states
+  before appearing in default leaderboards.
+- Avoid a single leaderboard as the primary product. The first website should
+  be a comparison explorer that lets users filter by pack, model artifact,
+  runtime, quantization, host class, operating system, memory, cache settings,
+  and provenance; it should separate throughput, latency, correctness, and
+  resource metrics instead of collapsing them into one opaque score.
+- Build the website in stages:
+  - static or read-only generated reports over a local registry snapshot;
+  - authenticated upload/review for result bundles;
+  - public browse and comparison views;
+  - optional API for querying normalized results;
+  - only later, richer submitter profiles, hardware catalogs, or maintained
+    public leaderboards.
+- Keep privacy boundaries explicit. Result bundles and the registry must not
+  store bearer tokens, API keys, full private prompts, private repository
+  contents, local absolute paths that identify users unnecessarily, or raw task
+  logs by default. Any public raw-artifact sharing should be explicit opt-in.
+
+Validation:
+
+- A local registry import can round-trip existing result directories into a
+  database and reproduce `benchpack report` medians and warnings.
+- Imported rows retain enough provenance to explain whether two runs are
+  comparable, partially comparable, or only useful as separate observations.
+- A sample public bundle can be validated without network access and without
+  leaking secrets.
+- The first web view can answer a concrete question such as "compare this
+  model artifact across M4, M5, and RTX 4000 SFF Ada using the same pack and
+  runtime family" without manual spreadsheet work.

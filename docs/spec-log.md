@@ -16,6 +16,87 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-07 (direct-edit external-agent live validation)
+
+### Changed
+
+- Ran the M5-only `coding-tasks-external-agent` pack set with Codex CLI
+  0.128.0 in OSS/Ollama mode against local `qwen3-coder:latest` after a dry
+  run showed exactly `patch-from-failure-external-agent`,
+  `python-regression-fix-external-agent`, and
+  `django-dashboard-regression-fix-external-agent`.
+- Confirmed the direct-edit prompt variants produce deterministic coding-task
+  signal: `fix-greeting` and `fix-task-summary` passed their verifiers with
+  non-empty workspace diffs, while `fix-dashboard-regressions` failed after
+  Codex completed without mutating the workspace.
+- Classified the dashboard failure as external-agent task-quality/no mutation,
+  not Ollama reachability, pre-task adapter, tmux sequencing, external-agent
+  argv routing, model-call telemetry, patch capture, or verifier
+  infrastructure.
+- Recorded that this is a material improvement over the earlier copied
+  fenced-diff prompt evidence, where all three external-agent workspaces stayed
+  unchanged.
+- Kept generated result directories, metadata, raw payloads, workspaces,
+  patches, task logs, verify artifacts, and model-call logs local/ignored.
+
+### Validation
+
+- Prerequisites were checked locally: Codex CLI 0.128.0, Ollama 0.20.5 server
+  with 0.23.1 client warning, and `qwen3-coder:latest` Q4_K_M were available.
+- `benchpack report` over the three generated result directories showed 2/3
+  verifier passes and one valid safe external-agent model-call telemetry line
+  per pack.
+- The first launch with stamp `20260507-211205` stopped before benchmark output
+  because the local ignored metadata file used an array for `notes`; after
+  correcting that field to a string, the second dry run and launch produced the
+  recorded result directories.
+- The tmux session `bench-m5-codex-oss-direct-edit-20260507-211205` was absent
+  after cleanup.
+
+### Open Questions
+
+- Current task logs plus patch and verifier artifacts were enough to classify
+  this slice, but `repo_task.status` alone was not. A compact summary/report
+  field for empty-vs-nonempty workspace diffs or task outcome classification
+  would reduce manual artifact inspection before larger campaigns.
+- Broader M4/M5/NVIDIA direct-edit comparison is now justifiable as
+  exploratory evidence because at least one real external-agent fixture passed,
+  but it should preserve this opt-in pack set and artifact policy.
+
+## 2026-05-07 (result registry backlog)
+
+### Changed
+
+- Added a proposed result-registry and community-submission track to
+  `docs/implementation-plan.md` under "Operational Track: Result Registry And
+  Community Submission".
+- Captured the design direction that local result directories remain canonical
+  evidence first, while a future database starts as a validated index over
+  existing artifacts.
+- Scoped the future registry around normalized runs, rows, hardware, runtime,
+  model artifact, pack/case, metric, scoring, provenance, and artifact
+  reference data, with raw and large artifacts kept outside the relational core
+  by default.
+- Documented website staging: local/read-only registry views first,
+  authenticated upload and review later, public comparison views after
+  validation, and leaderboards only after comparability rules are explicit.
+
+### Validation
+
+- Documentation-only backlog update; no live benchmarks were run, no result
+  artifacts were generated, and no schema or runner behavior changed.
+
+### Open Questions
+
+- Which storage backend should the first local registry use: SQLite for simple
+  offline indexing, Postgres for early multi-user deployment, or an import
+  abstraction that supports both?
+- What is the minimal public bundle format that preserves provenance and
+  report reproduction without leaking raw prompts, credentials, or local
+  private workspace data?
+- Which comparison views are more useful than a leaderboard for the first
+  website release?
+
 ## 2026-05-07 (direct-edit external-agent prompts)
 
 ### Changed

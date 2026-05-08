@@ -7,12 +7,13 @@ candidate directions for stronger coding-agent benchmarks after live evidence
 showed that the public external-agent path works mechanically but copied
 fenced-diff task prompts were the wrong benchmark surface for direct
 workspace-editing agents. The first direct-edit prompt slice for the existing
-external-agent coding-task packs has now landed; real-agent validation remains
-the next evidence step.
+external-agent coding-task packs has now landed and has local M5 real-agent
+evidence: two fixtures passed deterministically and one larger dashboard
+fixture failed from no workspace mutation.
 
-No live benchmarks were run for this note. No datasets were downloaded. No
-generated `results/*`, metadata, raw payloads, workspaces, task logs, model-call
-logs, or secrets should be committed for this research track.
+No datasets were downloaded. Generated `results/*`, metadata, raw payloads,
+workspaces, patches, task logs, verify artifacts, model-call logs, or secrets
+should not be committed for this research track unless explicitly curated.
 
 ## Current Evidence Boundary
 
@@ -29,16 +30,28 @@ logs, or secrets should be committed for this research track.
 - The external-agent coding-task packs now have direct-edit prompts that ask
   the agent to edit the prepared workspace directly while preserving existing
   verifier semantics.
-- The next useful work is local real-agent validation of that direct-edit slice.
-  More broad M4/M5/Hetzner live rows should wait until the benchmark surface
-  produces meaningful deterministic task outcomes.
+- The 2026-05-07 local M5 direct-edit validation with Codex OSS through Ollama
+  produced meaningful deterministic outcomes: `fix-greeting` and
+  `fix-task-summary` passed with non-empty workspace diffs, while
+  `fix-dashboard-regressions` failed with an empty diff after Codex emitted a
+  plan but made no edits.
+- Current task logs plus patch and verifier artifacts were enough to classify
+  the dashboard failure, but the aggregate row status alone was not. A compact
+  report/status summary for empty-vs-nonempty workspace diffs would make larger
+  result review less manual.
+- Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
+  evidence, provided the pack set stays opt-in and generated artifacts remain
+  local/ignored unless curated explicitly.
 
 ## Next Work Ordering
 
 1. Keep this research backlog and implementation plan current.
-2. Validate the direct-edit slice locally on M5 with a real external agent.
-3. Broaden to M4/M5/NVIDIA comparison only after the direct-edit benchmark
-   surface produces meaningful deterministic task outcomes.
+2. Add lightweight reporting or status polish for direct-edit external-agent
+   runs so empty workspace diffs and task-quality/no-mutation failures are
+   visible without opening several artifacts.
+3. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
+   keeping `coding-tasks-external-agent` opt-in and preserving the current
+   artifact policy.
 
 ## Candidate Benchmark Tracks
 
@@ -66,7 +79,9 @@ external-agent-specific variants of the bundled repo-task fixtures so their
 prompts tell the agent to edit files in the prepared workspace and stop, not to
 produce a fenced patch. Keep the existing fenced-patch packs as
 compatibility/default evidence and do not promote the direct-edit slice into
-the default matrix until it has local M5 evidence.
+the default matrix. The first local M5 validation produced 2/3 verifier passes,
+which is enough to treat the surface as meaningful exploratory evidence but not
+enough to make it a default matrix.
 
 Design questions:
 
@@ -77,6 +92,12 @@ Design questions:
   agents be allowed to leave it arbitrary while scoring only workspace state?
 - Do current task logs and `repo_task.status` give enough failure signal, or is
   a later richer task-status row field justified by live evidence?
+
+Current evidence answer: stdout/stderr logs, patch bytes, and verifier JSON were
+enough to classify the no-mutation dashboard failure, but `repo_task.status` by
+itself only said `failed`. A report-facing task summary is justified before
+larger campaigns, while a result-schema change can wait until repeated evidence
+shows the exact field shape needed.
 
 ### Product Classification And Matching Programs
 
