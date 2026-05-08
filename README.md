@@ -55,6 +55,7 @@ uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-c
 uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-dashboard-regression --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
+uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 ```
 
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
@@ -235,6 +236,14 @@ result_dirs = [
 Relative `result_dirs` entries resolve relative to the manifest file. The
 manifest is source-only and read-only: it does not schedule runs, start
 servers, copy artifacts, or write report files.
+
+`benchpack registry import --db <sqlite> <result-dir>...` creates or updates a
+local SQLite index over existing result directories. It validates `run.jsonl`,
+optionally reads `hardware.json` and `run-metadata.json`, stores compact run and
+row metadata plus normalized timing/token/scoring fields, and leaves benchmark
+outputs untouched. The result directory remains canonical evidence; the
+registry is a local search/index aid, not a submission bundle or replacement
+artifact format.
 
 Bundled packs:
 

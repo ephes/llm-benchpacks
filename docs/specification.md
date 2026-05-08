@@ -615,7 +615,8 @@ resolved token value.
 ## CLI
 
 The runner exposes subcommands for executing packs, comparing existing result
-directories, and rendering read-only Markdown reports from existing results.
+directories, rendering read-only Markdown reports from existing results, and
+building a local SQLite index over existing result artifacts.
 
 ### `benchpack run`
 
@@ -887,6 +888,51 @@ expansion step. The command may parse optional `run-metadata.json` for display,
 but compare remains independent of that artifact. Its comparison section reuses
 the compare summarization and parity helpers so report medians and statuses do
 not silently diverge from `benchpack compare`.
+
+### `benchpack registry import`
+
+```text
+benchpack registry import --db <sqlite-db> <result-dir> [<result-dir> ...]
+```
+
+`benchpack registry import` creates or updates a local SQLite index over
+existing result directories. It is an indexing workflow, not a new benchmark
+artifact authority: `results/<date>-<host-label>/`, `run.jsonl`,
+`hardware.json`, `run-metadata.json`, pack manifests, and intentionally retained
+artifacts remain the canonical evidence.
+
+Each input must be a result directory containing a non-empty `run.jsonl`. The
+importer validates that every row is a JSON object with the normalized runner
+fields needed for indexing: pack id/version, case id, adapter, endpoint, model,
+boolean `ok`, `timing` object, `tokens` object, optional positive integer
+`repetition`, optional scoring object with boolean `passed`, and optional
+`repo_task` verifier status. Optional `hardware.json` must be a JSON object
+when present. Optional `run-metadata.json` uses the same permissive validation
+as `benchpack run --run-metadata` and `benchpack report`.
+
+The SQLite schema version is `1`, recorded in `PRAGMA user_version` and a
+`registry_meta` row. The first schema stores:
+
+- one `runs` row per canonical result-directory path, with import time,
+  `run.jsonl` SHA-256, row count, compact JSON lists of pack ids/versions,
+  adapters, models, and endpoints, optional hardware and run-metadata JSON, and
+  selected host/runtime/model metadata columns for filtering;
+- one `result_rows` row per `run.jsonl` record, with normalized pack/case,
+  repetition, adapter/model/endpoint, `ok`, timing metrics, token metrics,
+  scoring mode/pass state, repo-task verifier status, and a compact
+  sort-keyed JSON re-encoding of the normalized row.
+
+Re-importing the same result directory updates the `runs` row and replaces its
+indexed `result_rows`. This keeps the database aligned with the current
+artifact contents without appending duplicate rows.
+
+The command writes only the requested SQLite database. It does not mutate result
+directories, write report artifacts, copy raw payloads, inspect `raw/`,
+workspace, task, patch, verify, or model-call artifacts, execute packs, contact
+endpoints, collect hardware, run compare/report, perform SSH, or create a public
+submission bundle. The local registry may store the canonical local result
+directory path for idempotent re-imports; public bundle/export privacy rules are
+left to a later explicit slice.
 
 ## Result Artifacts
 

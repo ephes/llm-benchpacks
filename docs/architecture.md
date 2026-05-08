@@ -16,6 +16,9 @@
 - **Compare/report utilities**: read-only reporting over existing `run.jsonl`
   result directories plus optional per-run `hardware.json` and
   `run-metadata.json` files.
+- **Local registry importer**: SQLite-backed index over existing result
+  directories. It validates normalized rows, records compact run and row
+  metadata, and leaves benchmark outputs as the canonical evidence.
 
 Repo-task execution adds responsibilities around the existing concepts rather
 than changing the adapter boundary:
@@ -83,6 +86,7 @@ src/
     run_metadata.py
     compare.py
     report.py
+    registry.py
     hardware.py
 docs/
   specification.md
@@ -605,6 +609,35 @@ warnings, or `prefill parity` status. It does not load adapters,
 collect hardware, execute packs, read `raw/`, write result artifacts, mutate
 result directories, or alter
 the result schema. Compare remains independent of `run-metadata.json`.
+
+## Registry Import Flow
+
+`benchpack registry import --db <sqlite> <result-dir>...` is outside the
+benchmark execution flow and outside report generation. It loads existing
+result directories through the same `run.jsonl` loader used by compare/report,
+then applies a stricter indexing validation over normalized row fields before
+writing SQLite rows. Optional `hardware.json` and `run-metadata.json` are read
+only when present; malformed optional metadata fails clearly because the
+registry is being asked to index it.
+
+The local registry starts with schema version `1`. The `runs` table stores one
+row per canonical result directory path, import timestamp, row count,
+`run.jsonl` SHA-256, compact JSON lists for pack ids/versions, adapters,
+models, and endpoints, optional hardware/run-metadata JSON, and selected host,
+runtime, and model metadata columns. The `result_rows` table stores one row per
+measured `run.jsonl` record with normalized pack/case/repetition, adapter,
+model, endpoint, `ok`, timing metrics, token metrics, scoring state, repo-task
+verifier status, and compact sort-keyed JSON re-encoding of the normalized row.
+Re-importing the same result directory updates the run row and replaces its
+child rows.
+
+The importer writes only the configured SQLite database. It does not execute
+packs, load adapters, start runtimes, collect hardware, contact endpoints, read
+`raw/`, inspect workspace/task/patch/verify/model-call artifacts, write result
+artifacts, mutate result directories, generate reports, perform SSH, or create
+public submission bundles. Public export, upload review, secret scanning,
+object storage for large artifacts, and comparison-explorer views remain later
+components.
 
 ## Operational Helper Flow
 

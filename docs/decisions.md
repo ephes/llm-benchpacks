@@ -486,3 +486,30 @@ agents and early integrations. Recommending a tiny object shape gives harness
 authors a portable starting point without committing the runner to validation,
 normalization, summaries, or result schema fields before real harnesses prove
 what should be standardized.
+
+## D-029: Local Result Registry Starts As SQLite Artifact Index
+
+The first result-registry implementation is a local SQLite index created by
+`benchpack registry import --db <sqlite> <result-dir>...`. Existing result
+directories remain canonical evidence. The importer validates normalized
+`run.jsonl` rows plus optional `hardware.json` and `run-metadata.json`, records
+schema version `1`, and stores compact run and row metadata for local querying.
+It writes only the requested SQLite database and does not mutate benchmark
+outputs, read `raw/`, inspect workspaces or task artifacts, generate reports,
+contact endpoints, or create public submission bundles.
+
+SQLite is the initial storage backend for offline indexing. Re-importing the
+same result directory updates the run row and replaces its child rows, using the
+canonical local result directory path as the identity key. The first schema
+stores enough normalized fields for local filtering over pack/version, case,
+adapter, model, endpoint, host/runtime/model metadata, timing/token metrics,
+scoring, and repo-task verifier state. Public upload, bundles, secret scanning,
+object storage for large artifacts, provenance labels, hosted databases,
+registry-backed report reproduction, and website comparison views remain later
+explicit slices.
+
+Reason: a local registry is useful for searching and grouping accumulated
+benchmark artifacts, but replacing the artifact-first workflow would weaken
+provenance too early. SQLite keeps the first index portable and testable without
+introducing hosted infrastructure, submission trust policy, or broad privacy
+surface before import semantics are stable.

@@ -16,6 +16,46 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (local result registry import)
+
+### Changed
+
+- Added `benchpack registry import --db <sqlite> <result-dir>...` as the first
+  local result-registry implementation slice.
+- The importer validates existing `run.jsonl` rows, optional `hardware.json`,
+  and optional `run-metadata.json`, then writes a local SQLite schema version
+  `1` with `runs`, `result_rows`, and `registry_meta` tables.
+- Indexed run data includes canonical result-directory path, row count,
+  `run.jsonl` SHA-256, pack ids/versions, adapters, models, endpoints, optional
+  hardware/run-metadata JSON, and selected host/runtime/model fields.
+- Indexed row data includes normalized pack/case/repetition, adapter/model/
+  endpoint, `ok`, timing metrics, token metrics, scoring state, repo-task
+  verifier status, and compact sort-keyed JSON re-encoding of the normalized
+  row.
+- Re-importing the same result directory updates the run row and replaces its
+  indexed child rows, avoiding duplicate rows.
+- Kept result directories canonical and untouched. The registry writes only the
+  requested SQLite database and does not read `raw/`, inspect workspaces or task
+  artifacts, generate reports, run compare, contact endpoints, or create public
+  submission bundles.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document the SQLite-first local index boundary.
+
+### Validation
+
+- Focused registry tests cover metadata indexing, absent optional metadata,
+  normalized row fields, idempotent re-import, all-or-nothing multi-input
+  validation, malformed row rejection, and malformed optional metadata
+  rejection.
+- CLI tests cover `benchpack registry import` dispatch and missing
+  `run.jsonl` failure.
+
+### Open Questions
+
+- Public bundle/export format, secret scanning, provenance labels, hosted
+  storage, registry-backed report reproduction, and comparison-explorer views
+  remain later result-registry slices.
+
 ## 2026-05-08
 
 ### Changed

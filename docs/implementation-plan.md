@@ -1119,31 +1119,37 @@ Validation:
 Make benchmark results searchable and shareable without weakening provenance or
 comparability.
 
-**Status:** proposed 2026-05-07. This is a good direction, but the first
-implementation should not replace the current artifact-first workflow. Local
-`results/<date>-<host-label>/` directories, `run.jsonl`, `hardware.json`,
-`run-metadata.json`, and pack manifests should remain the canonical evidence.
-The database should start as an index over validated result artifacts, not as
-the only copy of benchmark truth.
+**Status:** started 2026-05-08. The first local SQLite registry import slice has
+landed as `benchpack registry import --db <sqlite> <result-dir>...`. It keeps
+the artifact-first workflow: local `results/<date>-<host-label>/` directories,
+`run.jsonl`, `hardware.json`, `run-metadata.json`, and pack manifests remain
+the canonical evidence. The database is an index over validated result
+artifacts, not the only copy of benchmark truth.
 
 Scope:
 
 - Define a result-registry data model before choosing a hosted implementation.
-  Core entities should include benchmark pack/version, case, run, repetition
-  row, host, hardware, operating system, runtime, adapter, endpoint class,
-  model identity, model artifact, quantization, context/cache options,
-  run metadata, normalized timing/token metrics, scoring results, warnings,
-  artifact references, schema version, runner version, repo commit, and
-  submitter/provenance metadata.
+  **Partially landed 2026-05-08** as local SQLite schema version `1`, with
+  `runs`, `result_rows`, and `registry_meta` tables. The first schema captures
+  result-directory identity, row count, `run.jsonl` SHA-256, pack ids/versions,
+  adapters, models, endpoints, optional hardware/run-metadata JSON, selected
+  host/runtime/model fields, normalized row timing/token/scoring/repo-task
+  fields, and compact sort-keyed row JSON. Hosted submitter/provenance
+  metadata, artifact references beyond the canonical local result path, richer
+  comparability fields, runner version, repo commit, and endpoint-class
+  normalization remain later work.
 - Preserve raw and large artifacts outside the relational core. Store compact
   normalized rows in the database, keep optional `raw/`, `workspace/`,
   `patch/`, `task/`, `verify/`, and model-call artifacts in object storage or
   local artifact bundles, and reference them by content hash or immutable
   artifact id.
-- Add a local import/index command before adding public submission:
-  `benchpack registry import <result-dir>` or equivalent should validate an
-  existing result directory, record schema/version metadata, reject malformed
-  rows, and avoid mutating benchmark outputs.
+- Add a local import/index command before adding public submission. **Landed
+  2026-05-08** as `benchpack registry import --db <sqlite> <result-dir>...`,
+  which validates existing result directories and normalized rows, records
+  schema version `1`, indexes optional hardware and run metadata when present,
+  rejects malformed rows or malformed optional metadata, replaces indexed rows
+  on re-import of the same result directory, and avoids mutating benchmark
+  outputs.
 - Add an export/bundle format for public sharing. A bundle should include
   compact artifacts needed to reproduce reports, omit secrets and large raw
   payloads by default, include hashes for omitted artifacts when useful, and
@@ -1177,7 +1183,11 @@ Scope:
 Validation:
 
 - A local registry import can round-trip existing result directories into a
-  database and reproduce `benchpack report` medians and warnings.
+  database and reproduce `benchpack report` medians and warnings. **Partially
+  landed 2026-05-08** for local import/indexing: focused tests cover metadata
+  indexing, row normalization, idempotent re-import, malformed row rejection,
+  malformed optional metadata rejection, and CLI dispatch. Report-median
+  reproduction from registry data remains future work.
 - Imported rows retain enough provenance to explain whether two runs are
   comparable, partially comparable, or only useful as separate observations.
 - A sample public bundle can be validated without network access and without

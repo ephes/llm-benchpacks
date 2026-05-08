@@ -3424,3 +3424,27 @@ def test_cli_report_rejects_malformed_hardware_without_traceback(
 
     with pytest.raises(SystemExit, match="could not parse"):
         main(["report", str(run_a)])
+
+
+def test_cli_registry_import_indexes_result_dir(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_compare_run(run_a)
+    db_path = tmp_path / "registry.sqlite"
+
+    assert main(["registry", "import", "--db", str(db_path), str(run_a)]) == 0
+
+    output = capsys.readouterr().out
+    assert f"imported 1 row from {run_a}" in output
+    assert "run_id 1" in output
+    assert db_path.is_file()
+
+
+def test_cli_registry_import_rejects_missing_run_jsonl(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_a.mkdir()
+
+    with pytest.raises(SystemExit, match="missing run.jsonl"):
+        main(["registry", "import", "--db", str(tmp_path / "registry.sqlite"), str(run_a)])

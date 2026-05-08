@@ -44,6 +44,7 @@ from .report import (
     load_report_set,
     render_report,
 )
+from .registry import RegistryError, import_result_dirs
 from .results import RunReporter
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, load_run_metadata
 from .tasks import (
@@ -449,6 +450,24 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_import(args: argparse.Namespace) -> int:
+    try:
+        summaries = import_result_dirs(args.result_dirs, args.db)
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    for summary in summaries:
+        row_word = "row" if summary.rows_imported == 1 else "rows"
+        print(
+            "imported {rows} {row_word} from {result_dir} into run_id {run_id}".format(
+                rows=summary.rows_imported,
+                row_word=row_word,
+                result_dir=summary.result_dir,
+                run_id=summary.run_id,
+            )
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchpack")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -511,6 +530,26 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="TOML report-set manifest with result_dirs entries",
     )
+
+    registry = sub.add_parser(
+        "registry",
+        help="Manage a local read-only index over existing result directories",
+    )
+    registry_sub = registry.add_subparsers(dest="registry_command", required=True)
+    registry_import = registry_sub.add_parser(
+        "import",
+        help="Import existing result directories into a local SQLite registry",
+    )
+    registry_import.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to create or update",
+    )
+    registry_import.add_argument(
+        "result_dirs",
+        nargs="+",
+        help="Result directories containing run.jsonl",
+    )
     return parser
 
 
@@ -523,6 +562,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_compare(args)
     if args.command == "report":
         return _cmd_report(args)
+    if args.command == "registry":
+        if args.registry_command == "import":
+            return _cmd_registry_import(args)
+        parser.error(f"unknown registry command: {args.registry_command}")
     parser.error(f"unknown command: {args.command}")
     return 2
 
