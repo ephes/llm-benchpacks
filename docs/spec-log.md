@@ -16,6 +16,48 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (research backlog: bench360 / ds4 review)
+
+### Changed
+
+- Expanded the ProjDevBench section in `docs/benchmark-research.md` with
+  upstream platform details from a 2026-05-08 review: 20 problems across 8
+  categories, ~138-turn / ~4.81M-token per-problem averages, and the upstream
+  combined `0.8 * execution + 0.2 * code-review` weighting. Recorded
+  explicitly that this repo does not adopt the LLM-judged 0.2 component as a
+  default scoring path.
+- Added a new "Runtime And Serving Coverage Gaps" section in
+  `docs/benchmark-research.md` capturing four research items derived from a
+  2026-05-08 review of [bench360](https://github.com/slinusc/bench360):
+  concurrent / Poisson multi-user serving, energy and cost-per-request,
+  quantization as a first-class axis, and the deliberate position to keep
+  using `openai-chat` for vLLM/TGI/SGLang/LMDeploy until a concrete missing
+  metric forces a native adapter.
+- Added a "Single-Model Runtime Watch Items" section noting
+  [ds4](https://github.com/antirez/ds4) as a watch item only. Recorded that
+  ds4 is reachable through the existing `openai-chat` adapter without runner
+  changes, loads its GGUF artifact from
+  [`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf),
+  is Metal-focused, alpha, and DeepSeek-V4-Flash-specific. A separate
+  llama.cpp fork by the same author,
+  [antirez/llama.cpp-deepseek-v4-flash](https://github.com/antirez/llama.cpp-deepseek-v4-flash),
+  loads the same artifact, so a same-artifact ds4-vs-llama.cpp-fork
+  comparison is in principle possible; the watch item stands on
+  alpha/specialization grounds, not on absence of a second runtime. Disk-
+  resident KV cache means `prefill parity = comparable` cannot be assumed for
+  ds4 rows; the existing gate is driven by normalized prompt-token and
+  cached-prompt-token medians, and `prefill_tps med` should be expected to
+  render as `—` until those medians are shown to match in practice.
+
+### Open Questions
+
+- All design questions added with the new sections remain research-only and
+  are not promoted into the existing "Next Work Ordering" until live
+  evidence justifies them.
+- No `run.jsonl`, adapter, pack manifest, CLI, or result-schema changes are
+  implied by this backlog refresh; the runtime/serving and quantization
+  fields discussed are explicitly conditional on future dedicated slices.
+
 ## 2026-05-08 (local result registry import)
 
 ### Changed

@@ -66,11 +66,37 @@ error, runtime error, time limit exceeded, and memory limit exceeded. Its
 platform shape with containerized execution, multi-agent support, execution
 score analysis, code-review score analysis, and combined score analysis.
 
+Concrete platform details from the upstream README at the 2026-05-08 review:
+20 problems across 8 categories (data structures, management systems,
+interpreters, storage systems, algorithms, assembly, game/simulation,
+optimization), difficulty ranging from easy partial-codebase tasks to
+from-scratch hard tasks, an average of about 138 interaction turns and about
+4.81M tokens per problem, and a combined score of
+`0.8 * execution + 0.2 * code-review`. That per-problem cost shape is
+materially different from the current single-case fenced-patch packs and would
+need its own opt-in lane before any default-matrix consideration. The 0.8/0.2
+execution/review weighting is informative but is not adopted by this repo:
+existing deterministic `verify-script` semantics should not be diluted with
+LLM-judged components by default.
+
 Backlog item: prototype a small project-construction or project-completion pack
 for this repo that keeps deterministic execution scoring first. Optional review
 or compliance checks may be researched later, but they must be explicitly
 separate from deterministic scoring and should not become an implicit
 LLM-as-judge default.
+
+Design questions:
+
+- Which one or two ProjDevBench-shaped problems are small enough to fit a
+  committed fixture and a bounded runner timeout, given the 138-turn /
+  4.81M-token per-problem averages?
+- Should diagnostic verdicts (TLE, MLE, RE, CE, WA) be lifted into a
+  structured `repo_task` field, or remain captured only in `verify-script`
+  stdout/stderr as today?
+- Container-isolated execution gives reproducibility but adds a Docker
+  dependency the runner does not currently require; should a project-level
+  pack inherit container isolation, or stay within the existing run-owned
+  workspace boundary with stricter resource limits?
 
 ### Direct-Edit External-Agent Tasks
 
@@ -146,6 +172,133 @@ Research questions:
 - Which metrics should be primary for each task type: match-class F1,
   micro-F1, macro-F1, weighted F1, hierarchical F1, pairwise precision/recall,
   or cluster-level metrics?
+
+### Runtime And Serving Coverage Gaps
+
+Notes derived from a 2026-05-08 review of
+[bench360](https://github.com/slinusc/bench360), an NVIDIA-CUDA-focused local
+LLM benchmarking suite covering vLLM, TGI, SGLang, and LMDeploy. bench360 has
+no overlap on workload philosophy with this repo's coding-agent direction, but
+it captures several runtime/serving dimensions that are currently missing or
+weakly represented here. None of these are committed work; they are research
+items to weigh against the existing coding-agent direction.
+
+#### Concurrent / Multi-User Serving
+
+The current `runtime-sweep` pack is sequential streaming only: one in-flight
+request per measured execution, no concurrency. bench360 distinguishes
+single-stream, offline batch, and multi-user server mode with
+Poisson-distributed query arrivals, which exposes scheduler and queueing
+behavior that sequential sweeps cannot. A candidate research direction is a
+separate concurrent-load pack that records per-request latency distributions
+under a fixed arrival rate, without changing the existing sequential pack
+semantics.
+
+Design questions:
+
+- Should concurrent load be a new pack kind, a new `defaults` field on
+  existing packs, or a runner-level option independent of pack manifests?
+- What concurrency primitives does the runner need? `openai-chat` currently
+  issues one request per measured execution; a load pack needs at least a
+  scheduled arrival generator and per-request timing capture.
+- Which percentile fields deserve `run.jsonl` row support (p50/p95/p99 wall
+  and TTFT), and is that worth a result-schema change before live evidence?
+- How does concurrent measurement interact with the existing prefill/cache
+  parity gates, since shared prompt-cache state across concurrent requests
+  changes prefill semantics?
+
+#### Energy And Cost-Per-Request
+
+`run-metadata.json` currently has free-text `operating_conditions.power` and
+`operating_conditions.thermal` fields, but the runner does not autodiscover
+energy or cost. bench360 captures power and reports amortized GPU cost per
+request, which is meaningful for the "is the Hetzner GEX44 worth it vs an
+M-class Mac" comparison the spec calls out as a core question. Energy capture
+is platform-specific (NVML on CUDA, `powermetrics`/IOReport on Apple Silicon),
+so any implementation needs a platform abstraction similar to the existing
+`hardware.json` shape.
+
+Design questions:
+
+- Should energy be a normalized `run.jsonl` field, a separate optional
+  `energy.json` per run, or only an auxiliary artifact alongside
+  `hardware.json`?
+- Cost-per-request requires a price input; should this repo own a price table
+  or treat cost as user-supplied metadata applied at report time?
+- Can platform-specific power capture be opt-in without making it a hard
+  runtime dependency on macOS or Linux?
+- How are energy samples reconciled with the existing measured-repetition
+  shape, where each repetition is short and the sampling window may be
+  coarser than a single request?
+
+#### Quantization As A First-Class Axis
+
+Quantization is currently captured only as `run-metadata.model.quantization`
+free text. bench360 sweeps FP16/INT8/INT4 across GPTQ/AWQ/GGUF as a structured
+axis. Treating quantization as a structured axis would let `benchpack compare`
+and `benchpack report` group results by quantization explicitly rather than
+relying on user-typed metadata strings, and would make matrix planning across
+runtimes easier.
+
+Design questions:
+
+- Should quantization be promoted into a normalized `run.jsonl` row field, or
+  remain in `run-metadata.json` with stricter validation?
+- What is the canonical quantization label set across MLX, GGUF, GPTQ, and
+  AWQ, and who owns it?
+- Should pack manifests be allowed to declare expected or required
+  quantization, or is quantization strictly an operating-condition concern?
+
+#### Native CUDA Server Adapters
+
+`openai-chat` already reaches vLLM, and through the same path can reach TGI,
+SGLang, or LMDeploy when they expose OpenAI-compatible endpoints. Native
+adapters would expose engine-specific telemetry (vLLM `usage` extensions,
+TGI/SGLang scheduling metrics) that the OpenAI-compat shape hides. This is
+strictly opportunistic: only worth doing when a real measurement question
+requires server-native fields, not as a coverage exercise. Default position
+is to keep using `openai-chat` until a concrete missing metric forces the
+issue.
+
+Design questions:
+
+- Which engine-specific metrics are actually missing today, given that
+  `tokens.cached_prompt` and the streaming TTFT/decode estimates already
+  cover most cross-runtime needs?
+- Should engine-specific adapters subclass `openai-chat` and add fields, or
+  remain separate adapters with their own request paths?
+
+### Single-Model Runtime Watch Items
+
+#### DeepSeek V4 Flash via ds4
+
+[ds4](https://github.com/antirez/ds4) is an alpha, Metal-focused,
+DeepSeek-V4-Flash-specific inference engine. It exposes OpenAI-compatible HTTP
+at `/v1/chat/completions`, so the existing `openai-chat` adapter reaches it
+without code changes. It loads custom GGUF artifacts from
+[`antirez/deepseek-v4-gguf`](https://huggingface.co/antirez/deepseek-v4-gguf),
+requires roughly 128 GB RAM (M3 Ultra / M5 Max class), and treats KV cache as
+a disk-resident first-class artifact.
+
+A separate llama.cpp fork by the same author,
+[antirez/llama.cpp-deepseek-v4-flash](https://github.com/antirez/llama.cpp-deepseek-v4-flash),
+loads the same `antirez/deepseek-v4-gguf` artifact, so a same-artifact
+cross-runtime comparison on DeepSeek V4 Flash is in principle possible between
+ds4 and that fork. Both sides are alpha and specialized, and neither has the
+broad cross-host evidence that strict-GGUF Gemma 4 already has, so the watch
+item stands on alpha/specialization grounds rather than absence of a second
+runtime.
+
+Watch item, not committed work: if DeepSeek V4 Flash is added to
+`docs/model-targets.md` as its own model target, ds4 plus the llama.cpp fork
+become the natural runtime pair for it on M-class hardware. Until that model
+target lands and at least one of the two runtimes stabilizes past alpha, ds4
+is a curiosity-run endpoint, not a runtime-comparison lane. Disk-resident
+compressed KV cache also means a `prefill parity = comparable` status cannot
+be assumed: the existing gate is driven by normalized prompt-token and
+cached-prompt-token medians, so parity for ds4 case rows would only hold if
+those medians actually match in practice. Until that is shown,
+`prefill_tps med` should be expected to render as `—` for ds4 case rows.
 
 ### Resource-Aware Program Scoring
 
