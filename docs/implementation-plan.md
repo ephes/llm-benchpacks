@@ -466,10 +466,10 @@ Scope:
   M4/M5/NVIDIA direct-edit comparison is reasonable as exploratory evidence.
   Lightweight report/status polish landed on 2026-05-08, so empty workspace
   diffs and no-mutation failures are now visible without manual artifact
-  inspection. For endpoint-only correctness, add a simpler deterministic
-  verifier-backed repo-task pack before changing the default four-pack matrix;
-  treat `desktop-django-wrap` as prompt/format coverage rather than the primary
-  cross-host correctness signal.
+  inspection. A simpler endpoint-only deterministic verifier-backed repo-task
+  pack has now landed as `endpoint-python-correctness` before any default
+  four-pack matrix change; treat `desktop-django-wrap` as prompt/format
+  coverage rather than the primary cross-host correctness signal.
 
 Validation:
 
@@ -1013,18 +1013,15 @@ Scope:
   `passed`, `failed-no-mutation`, `failed-with-mutation`, and
   `failed-unknown-mutation` without changing `run.jsonl`.
 - Add a simple endpoint-only coding correctness pack before promoting another
-  cross-host correctness matrix. **Planned next.** The pack should run through
-  normal chat adapters, require no external agent, use a tiny committed Python
-  repo fixture, ask the model for one fenced unified diff or replacement-file
-  patch, apply it through the existing fenced-patch repo-task executor, and
-  verify success with a deterministic stdlib `verify-script`. The task should
-  avoid brittle output-skeleton scoring: correctness comes from the applied
-  workspace mutation and verifier result. Include at least one edge case in the
-  verifier that is not solved by merely matching prompt text, keep repetitions
-  and token budgets small enough for local M4/M5 and Hetzner runs, and document
-  it as the universal endpoint-only correctness signal. After local validation,
-  consider adding it to the tmux helper and demoting `desktop-django-wrap` to
-  smoke/coverage in the recommended matrix.
+  cross-host correctness matrix. **Landed 2026-05-08** as
+  `endpoint-python-correctness`, a normal-chat-adapter `repo-task` pack with a
+  tiny committed Python inventory fixture, one fenced unified-diff prompt,
+  default fenced-patch executor use, deterministic stdlib `verify-script`
+  scoring, and a verifier-only edge dataset. It requires no `external-agent`,
+  avoids output-skeleton scoring, and is documented as the generic
+  endpoint-only correctness signal. Adding it to tmux helper matrices or
+  changing the recommended default matrix remains a later post-validation
+  decision.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1053,18 +1050,25 @@ Validation:
 Move beyond speed into correctness.
 
 **Status:** started. The current bundled task-completion packs establish
-fenced-patch repo-task plumbing and deterministic verifier behavior, but recent
-live evidence shows that fenced-diff prompts are too prompt-contract-sensitive
-for broad coding-agent conclusions. The direct-edit external-agent variants now
-have local M5 real-agent evidence with 2/3 verifier passes, and lightweight
-task-outcome reporting polish has landed. The next useful live slice is broader
-direct-edit comparison as exploratory evidence, but another generic rerun of the
-same fenced-patch tasks is not useful.
+fenced-patch repo-task plumbing and deterministic verifier behavior, including
+the new `endpoint-python-correctness` endpoint-only pack for a small generic
+correctness signal. Recent live evidence shows that fenced-diff prompts are too
+prompt-contract-sensitive for broad coding-agent conclusions. The direct-edit
+external-agent variants now have local M5 real-agent evidence with 2/3 verifier
+passes, and lightweight task-outcome reporting polish has landed. The next
+useful live slice is broader direct-edit comparison as exploratory evidence,
+plus local validation of `endpoint-python-correctness` before any matrix
+promotion.
 
 Scope:
 
 - `patch-from-failure` pack. **Landed 2026-05-02** as the first bundled
   measured repo-mutating repo-task pack using fenced model-output diffs.
+- `endpoint-python-correctness` pack. **Landed 2026-05-08** as a simple
+  endpoint-only measured repo-mutating repo-task pack with a tiny stdlib
+  inventory fixture, a normal chat-adapter fenced unified-diff prompt, a
+  deterministic verifier with a hidden edge dataset, and no external-agent
+  dependency.
 - `python-regression-fix` pack. **Landed 2026-05-05** as a second bundled
   measured repo-mutating repo-task pack with a small stdlib Python regression,
   multiple deterministic edge cases, and the existing fenced unified-diff
@@ -1093,16 +1097,13 @@ Scope:
   report-only repo-task outcome summaries in `summary.md` and
   `benchpack report`, making empty workspace diffs and mutation-visible
   failures visible before broader direct-edit campaigns.
-- Universal endpoint-only correctness pack. **Planned next.** Add a small
-  verifier-backed `repo-task` pack that runs on any chat endpoint through the
-  existing fenced-patch executor, without requiring `external-agent`. The first
-  candidate should be simpler than `desktop-django-wrap`: a compact Python
-  regression fixture, a patch-only prompt, deterministic stdlib verification,
-  and reportable pass/fail/mutation outcomes. Use it to separate "model can
-  produce an applyable correct fix" from "an external agent stack is installed
-  and operating." Keep `desktop-django-wrap` available as prompt-only
+- Universal endpoint-only correctness pack. **Landed 2026-05-08** as
+  `endpoint-python-correctness`. Use it to separate "model can produce an
+  applyable correct fix" from "an external agent stack is installed and
+  operating." Keep `desktop-django-wrap` available as prompt-only
   coding-agent-shaped coverage rather than treating its regex skeleton as the
-  main correctness benchmark.
+  main correctness benchmark. Post-validation tmux-helper or default-matrix
+  changes remain open.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.

@@ -51,6 +51,7 @@ uv run benchpack run runtime-sweep --adapter openai-chat --model qwen3-coder:lat
 uv run benchpack run smoke-chat --adapter openai-chat --model '<model>' --endpoint '<remote-openai-compatible-v1-url>' --openai-api-key-env BENCHPACK_REMOTE_OPENAI_TOKEN --host-label remote-smoke
 uv run benchpack run desktop-django-wrap --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-wrap --force
 uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-patch --force
+uv run benchpack run endpoint-python-correctness --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-endpoint-correctness --force
 uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
 uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-dashboard-regression --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
@@ -281,6 +282,12 @@ Bundled packs:
   `diff` block, applies that unified diff inside a run-owned workspace, captures
   `patch/fix-greeting/rep-001.diff`, and uses a stdlib `verify-script` to check
   that `greet("Ada")` returns exactly `Hello, Ada!`.
+- `endpoint-python-correctness`: non-streaming single-case `repo-task` pack
+  for endpoint-only coding correctness. It uses the normal chat adapter path,
+  asks for a fenced unified diff against a tiny inventory Python fixture, and
+  scores only through deterministic workspace mutation plus stdlib
+  `verify-script` checks, including an edge dataset not shown directly in the
+  prompt. It does not require `external-agent`.
 - `python-regression-fix`: non-streaming single-case `repo-task` pack with a
   small stdlib Python task-summary repo fixture. The case asks for a fenced
   unified diff to fix owner/status summary behavior, overdue-title filtering
@@ -312,7 +319,8 @@ The first implementation stays small:
 4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
    the prompt-only `desktop-django-wrap` starter pack and measured
    repo-mutating fenced unified-diff packs such as `patch-from-failure` and
-   `python-regression-fix` and `django-dashboard-regression-fix`.
+   `endpoint-python-correctness`, `python-regression-fix`, and
+   `django-dashboard-regression-fix`.
    `desktop-django-wrap` still treats directory
    fixtures as metadata-only; repo-task packs copy their repo fixtures into
    run-owned workspaces, apply the model diff there, and verify the result.

@@ -546,6 +546,7 @@ def test_known_public_harness_ids_include_external_agent() -> None:
 def test_bundled_coding_task_packs_keep_default_fenced_patch_behavior() -> None:
     for pack_name, case_id in [
         ("patch-from-failure", "fix-greeting"),
+        ("endpoint-python-correctness", "fix-inventory-aggregation"),
         ("python-regression-fix", "fix-task-summary"),
         ("django-dashboard-regression-fix", "fix-dashboard-regressions"),
     ]:
@@ -556,6 +557,30 @@ def test_bundled_coding_task_packs_keep_default_fenced_patch_behavior() -> None:
         assert pack.cases[0].id == case_id
         assert pack.cases[0].kind == "repo-task"
         assert pack.cases[0].harness is None
+
+
+def test_endpoint_python_correctness_pack_is_endpoint_only_verifier_task() -> None:
+    pack = load_pack(Path("benchpacks") / "endpoint-python-correctness")
+    case = pack.cases[0]
+
+    assert pack.id == "endpoint-python-correctness"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["stream"] is False
+    assert pack.defaults["warmup"] == 0
+    assert pack.defaults["repetitions"] == 1
+    assert case.id == "fix-inventory-aggregation"
+    assert case.kind == "repo-task"
+    assert case.harness is None
+    assert case.scoring is not None
+    assert case.scoring.mode == "verify-script"
+    assert case.scoring.script == "verify/check.py"
+    assert case.prompt is not None
+    assert "`inventory.py`" in case.prompt
+    assert "Quantities may be integers or numeric strings" in case.prompt
+    assert "strictly less than `minimum`" in case.prompt
+    assert "ascending order by total quantity, then SKU" in case.prompt
+    assert "`reorder_list(rows, minimum)` must not mutate" in case.prompt
+    assert_strict_fenced_diff_prompt(case.prompt)
 
 
 def test_bundled_external_agent_coding_task_variants_select_public_harness() -> None:

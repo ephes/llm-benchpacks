@@ -422,6 +422,22 @@ def _patch_from_failure_argv(extra: list[str] | None = None) -> list[str]:
     ]
 
 
+def _endpoint_python_correctness_argv(extra: list[str] | None = None) -> list[str]:
+    return [
+        "run",
+        "endpoint-python-correctness",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "test-model",
+        "--endpoint",
+        "http://example.test/v1",
+        "--host-label",
+        "unit-test",
+        *(extra or []),
+    ]
+
+
 def _python_regression_fix_argv(extra: list[str] | None = None) -> list[str]:
     return [
         "run",
@@ -1941,6 +1957,153 @@ def test_cli_bundled_patch_from_failure_runs_repo_task_flow(
     assert verify_json["patch_bytes"] > 0
     assert verify_json["exit_code"] == 0
     assert verify_json["passed"] is True
+
+
+def test_cli_bundled_endpoint_python_correctness_runs_repo_task_flow(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = "\n".join(
+        [
+            "```diff",
+            "--- a/inventory.py",
+            "+++ b/inventory.py",
+            "@@ -3,20 +3,29 @@",
+            " from typing import Any",
+            " ",
+            " ",
+            "+def _normalize_sku(value: Any) -> str:",
+            '+    return str(value).strip().upper()',
+            "+",
+            "+",
+            " def aggregate_stock(rows: list[dict[str, Any]]) -> dict[str, int]:",
+            "     stock: dict[str, int] = {}",
+            " ",
+            "     for row in rows:",
+            '-        sku = str(row.get("sku", ""))',
+            "+        sku = _normalize_sku(row.get(\"sku\", \"\"))",
+            "+        if not sku:",
+            "+            continue",
+            "         quantity = int(row.get(\"quantity\", 0))",
+            "-        stock[sku] = quantity",
+            "+        stock[sku] = stock.get(sku, 0) + quantity",
+            " ",
+            "     return stock",
+            " ",
+            " ",
+            " def reorder_list(rows: list[dict[str, Any]], minimum: int) -> list[str]:",
+            "-    return sorted(",
+            "-        sku",
+            "-        for sku, quantity in aggregate_stock(rows).items()",
+            "-        if quantity <= minimum",
+            "-    )",
+            "+    return [",
+            "+        sku",
+            "+        for sku, quantity in sorted(",
+            "+            aggregate_stock(rows).items(),",
+            "+            key=lambda item: (item[1], item[0]),",
+            "+        )",
+            "+        if quantity < minimum",
+            "+    ]",
+            "```",
+            "",
+        ]
+    )
+    calls = _install_output_adapter(monkeypatch, output)
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    out = tmp_path / "run"
+
+    source_file = (
+        repo_root
+        / "benchpacks"
+        / "endpoint-python-correctness"
+        / "fixtures"
+        / "repo"
+        / "inventory.py"
+    )
+    source_before = source_file.read_text(encoding="utf-8")
+
+    assert main(_endpoint_python_correctness_argv(["--out", str(out)])) == 0
+
+    workspace_file = (
+        out
+        / "workspace"
+        / "fix-inventory-aggregation"
+        / "rep-001"
+        / "inventory.py"
+    )
+    workspace_text = workspace_file.read_text(encoding="utf-8")
+    assert "def _normalize_sku" in workspace_text
+    assert "stock[sku] = stock.get(sku, 0) + quantity" in workspace_text
+    assert "if quantity < minimum" in workspace_text
+    assert source_file.read_text(encoding="utf-8") == source_before
+
+    assert len(calls) == 1
+    assert calls[0]["request_path"] == "fix-inventory-aggregation.request.json"
+    assert "Your entire response must be one fenced code block" in calls[0]["prompt"]
+    assert "`inventory.py`" in calls[0]["prompt"]
+    assert "Quantities may be integers or numeric strings" in calls[0]["prompt"]
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {
+        "id": "endpoint-python-correctness",
+        "version": "0.1.0",
+    }
+    assert record["case"] == "fix-inventory-aggregation"
+    assert record["adapter"] == "openai-chat"
+    assert record["raw"] == {
+        "request_path": "raw/fix-inventory-aggregation.request.json",
+        "response_path": "raw/fix-inventory-aggregation.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/fix-inventory-aggregation/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {
+        "path": "patch/fix-inventory-aggregation/rep-001.diff"
+    }
+    assert record["task"] == {
+        "stdout_path": "task/fix-inventory-aggregation/rep-001.stdout.log",
+        "stderr_path": "task/fix-inventory-aggregation/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/fix-inventory-aggregation/rep-001.json",
+        "stdout_path": "verify/fix-inventory-aggregation/rep-001.stdout.log",
+        "stderr_path": "verify/fix-inventory-aggregation/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert patch
+    assert "--- a/inventory.py" in patch
+    assert "def _normalize_sku" in patch
+    assert "stock[sku] = stock.get(sku, 0) + quantity" in patch
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["case"] == "fix-inventory-aggregation"
+    assert verify_json["pack_id"] == "endpoint-python-correctness"
+    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["source_fixture_id"] == "repo"
+    assert verify_json["patch_exists"] is True
+    assert verify_json["patch_bytes"] > 0
+    assert verify_json["passed"] is True
+    assert [check["name"] for check in verify_json["checks"]] == [
+        "aggregate_stock_visible",
+        "reorder_list_visible",
+        "hidden_numeric_string_blank_aggregate",
+        "hidden_strict_threshold_quantity_then_sku_reorder",
+    ]
+    assert all(check["passed"] for check in verify_json["checks"])
 
 
 def test_cli_bundled_python_regression_fix_runs_repo_task_flow(

@@ -40,6 +40,11 @@ should not be committed for this research track unless explicitly curated.
   report/status summary for empty-vs-nonempty workspace diffs landed on
   2026-05-08 as report-only repo-task outcome tables in `summary.md` and
   `benchpack report`.
+- The `endpoint-python-correctness` pack now provides a simpler endpoint-only
+  deterministic correctness lane: normal chat adapter, fenced unified diff,
+  tiny committed Python fixture, and verifier-only hidden edge checks. It is
+  the candidate universal endpoint-only correctness signal pending local live
+  validation and any later matrix-helper decision.
 - Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
   evidence, provided the pack set stays opt-in and generated artifacts remain
   local/ignored unless curated explicitly.
@@ -47,10 +52,12 @@ should not be committed for this research track unless explicitly curated.
 ## Next Work Ordering
 
 1. Keep this research backlog and implementation plan current.
-2. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
+2. Validate `endpoint-python-correctness` locally before changing helper
+   matrices or default cross-host recommendations.
+3. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
    keeping `coding-tasks-external-agent` opt-in and preserving the current
    artifact policy.
-3. Keep the result-schema question open until repeated live evidence shows
+4. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 
 ## Candidate Benchmark Tracks

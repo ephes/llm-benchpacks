@@ -1,0 +1,24 @@
+[pack]
+id = "endpoint-python-correctness"
+version = "0.1.0"
+description = "Endpoint-only repo-task pack for a small deterministic Python correctness fix"
+
+[defaults]
+temperature = 0
+max_tokens = 640
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Tiny Python inventory repo with intentional aggregation regressions"
+
+[[cases]]
+id = "fix-inventory-aggregation"
+kind = "repo-task"
+prompt_file = "prompts/fix-inventory-aggregation.md"
+fixture_refs = ["repo"]
+scoring = { mode = "verify-script", script = "verify/check.py" }

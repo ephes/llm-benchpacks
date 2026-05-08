@@ -74,6 +74,7 @@ benchpacks/
   runtime-sweep/
   desktop-django-wrap/
   patch-from-failure/
+  endpoint-python-correctness/
   python-regression-fix/
   django-dashboard-regression-fix/
 src/

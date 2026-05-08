@@ -69,6 +69,21 @@ Initial packs:
   `Hello, Ada!`. The pack sets `defaults.warmup = 0`,
   `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
+- `endpoint-python-correctness`: endpoint-only measured repo-mutating
+  `repo-task` pack. Version `0.1.0` has one tiny stdlib-only inventory Python
+  repo fixture and one `fix-inventory-aggregation` measured case. The prompt
+  asks the model to return only a fenced `diff` unified diff that fixes
+  `inventory.py`; the runner copies the repo fixture into
+  `workspace/fix-inventory-aggregation/rep-001/`, applies the model patch
+  inside that workspace, captures
+  `patch/fix-inventory-aggregation/rep-001.diff`, and runs a stdlib
+  `verify-script` that checks SKU normalization, quantity summing, blank-SKU
+  handling, input immutability, strict reorder threshold behavior, and a hidden
+  edge dataset with numeric-string quantities. The pack sets
+  `defaults.warmup = 0`, `defaults.repetitions = 1`,
+  `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`. It is the generic endpoint-only
+  correctness signal and does not require `external-agent`.
 - `patch-from-failure-external-agent`: explicit external-agent variant of the
   same workload. Version `0.1.1` uses the same fixture and verifier as
   `patch-from-failure`, but the prompt tells the external agent to edit the

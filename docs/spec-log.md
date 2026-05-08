@@ -16,6 +16,35 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (endpoint-python-correctness pack)
+
+### Changed
+
+- Implemented the planned endpoint-only correctness pack as
+  `endpoint-python-correctness` version `0.1.0`.
+- The new pack runs through normal chat adapters and the existing default
+  fenced-patch `repo-task` executor. It requires no `external-agent` harness.
+- Added a tiny committed stdlib Python inventory fixture, a patch-only prompt
+  for `inventory.py`, and a deterministic `verify-script` that checks visible
+  SKU aggregation/reorder behavior plus a verifier-only edge dataset covering
+  numeric-string quantities, blank SKUs, strict reorder threshold behavior, and
+  input immutability.
+- Documented the pack as the generic endpoint-only coding correctness signal
+  pending local live validation, while leaving tmux-helper inclusion and any
+  default matrix changes as later decisions.
+
+### Validation
+
+- Focused manifest and CLI tests cover bundled pack loading, prompt contract,
+  default fenced-patch behavior, workspace mutation, patch capture, verifier
+  output, and hidden-edge check execution.
+
+### Open Questions
+
+- Whether to add `endpoint-python-correctness` to a tmux helper pack set, and
+  whether it should replace or sit beside `desktop-django-wrap` in future
+  recommended matrices, remains a post-validation decision.
+
 ## 2026-05-08 (endpoint-only correctness pack backlog)
 
 ### Changed
