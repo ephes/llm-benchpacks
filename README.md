@@ -287,7 +287,10 @@ Bundled packs:
   asks for a fenced unified diff against a tiny inventory Python fixture, and
   scores only through deterministic workspace mutation plus stdlib
   `verify-script` checks, including an edge dataset not shown directly in the
-  prompt. It does not require `external-agent`.
+  prompt. It does not require `external-agent`. The first local M5
+  `qwen3-coder:latest` Ollama run reached the adapter but failed because the
+  model emitted replacement-file content rather than an applicable unified
+  diff, so matrix promotion remains deferred.
 - `python-regression-fix`: non-streaming single-case `repo-task` pack with a
   small stdlib Python task-summary repo fixture. The case asks for a fenced
   unified diff to fix owner/status summary behavior, overdue-title filtering

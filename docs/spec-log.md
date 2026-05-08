@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08 (backlog grooming after endpoint validation)
+
+### Changed
+
+- Groomed planning docs after the endpoint-only correctness validation failure.
+- Kept `endpoint-python-correctness` out of tmux helper pack sets and default
+  matrix recommendations because the first local M5 run proved endpoint
+  reachability but not apply-clean patch generation.
+- Retired stale Phase 3 wording that still described repo mutation, verifier
+  execution, and external-agent work as absent after those slices had landed.
+- Refreshed Gemma 4 catalog and runbook language so the strict same-GGUF
+  tri-host lane is described as completed evidence and future work points to
+  service-shaped/authenticated remote campaigns or new target refreshes.
+
+### Validation
+
+- Documentation-only grooming; no new benchmark runs or generated artifacts
+  were added by this slice.
+
+### Open Questions
+
+- Whether `endpoint-python-correctness` should tighten prompt wording, support
+  replacement-file patches, or wait for another endpoint remains open.
+
 ## 2026-05-08 (endpoint-python-correctness pack)
 
 ### Changed

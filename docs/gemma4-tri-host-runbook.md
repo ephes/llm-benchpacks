@@ -1,18 +1,20 @@
 # Gemma 4 Tri-host Runbook
 
-This runbook prepares a Gemma 4 benchmark campaign across the local M5, the M4
-Studio, and a Hetzner CUDA host. It is planning and operator workflow only. Do
-not run live benchmarks, contact Hetzner endpoints, or add generated
-`results/*` artifacts while applying documentation-only planning slices.
-Explicit local preflight work should keep machine-local facts in ignored
-`metadata/*.json` files and add only durable status notes here.
+This runbook prepared the first Gemma 4 benchmark campaign across the local M5,
+the M4 Studio, and a Hetzner CUDA host. It remains the operator workflow
+template for future Gemma 4 tri-host runs. Do not run live benchmarks, contact
+Hetzner endpoints, or add generated `results/*` artifacts while applying
+documentation-only planning slices. Explicit local preflight work should keep
+machine-local facts in ignored `metadata/*.json` files and add only durable
+status notes here.
 
-The first campaign mode is strict same-GGUF parity through `llama-server` on
-all three hosts, subject to artifact, runtime, and memory-fit validation. The
-fallback mode is a service-shaped runtime-and-format comparison: Apple Silicon
-uses MLX or GGUF while Hetzner serves Hugging Face weights through vLLM. That
-fallback is operationally useful, but it is not strict artifact parity and must
-be labeled as runtime-and-format in metadata and reports.
+The first campaign mode was strict same-GGUF parity through `llama-server` on
+all three hosts, and that lane now has four-pack evidence for the selected E2B
+Q4_K_M artifact. The fallback mode remains a service-shaped runtime-and-format
+comparison: Apple Silicon uses MLX or GGUF while Hetzner serves Hugging Face
+weights through vLLM. That fallback is operationally useful, but it is not
+strict artifact parity and must be labeled as runtime-and-format in metadata
+and reports.
 
 ## Non-goals
 
@@ -75,9 +77,9 @@ Primary mode:
 - Model: one verified Gemma 4 GGUF file, with the same artifact revision and
   checksum on all hosts.
 - Use when the exact GGUF artifact fits and loads correctly on every host.
-- This is the cleanest first hardware/runtime comparison because it avoids
+- This remains the cleanest hardware/runtime comparison because it avoids
   mixing MLX, GGUF, and Hugging Face/vLLM artifacts.
-- First strict-parity dry-run candidate once fit is confirmed:
+- Selected strict-parity artifact:
   `bartowski/google_gemma-4-E2B-it-GGUF` at revision
   `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
   `google_gemma-4-E2B-it-Q4_K_M.gguf`, base model

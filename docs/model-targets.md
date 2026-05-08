@@ -25,14 +25,17 @@ Selection rules:
 
 ### Gemma 4
 
-Use Gemma 4 as the preferred current small-model target for the next
-M4/M5/Hetzner planning slice, subject to artifact and runtime validation.
+Use Gemma 4 as the preferred current small-model target for tri-host planning.
+The strict same-GGUF E2B Q4_K_M lane now has M4, M5, and Hetzner evidence; a
+future service-shaped vLLM/MLX or authenticated remote matrix should still
+refresh this catalog before launch.
 Google announced Gemma 4 on 2026-04-02 with E2B, E4B, 26B MoE, and 31B dense
 variants, and described Multi-Token Prediction drafter support on 2026-05-05.
 
-Verified artifact state as of 2026-05-06, based on primary Google, Hugging
-Face, vLLM, Transformers, MLX conversion, and GGUF repository metadata. No
-models were downloaded, no endpoints were called, and no benchmarks were run.
+Initial artifact state was verified on 2026-05-06 from primary Google,
+Hugging Face, vLLM, Transformers, MLX conversion, and GGUF repository metadata.
+Later preflight and benchmark evidence for the selected strict-GGUF artifact
+is summarized below.
 
 The previous candidate IDs are real public Hugging Face model repos:
 
@@ -56,7 +59,7 @@ after any download; do not invent them from filenames or sizes.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Hetzner vLLM / Transformers E2B | Verified public HF model | Google HF weights | `google/gemma-4-E2B-it` | Pin `6b7e72c67d3c4556f42b56d5a68b4b8e864c63b4` | Safetensors BF16, `Gemma4ForConditionalGeneration` | HF API card license `apache-2.0`; gated/private false | Transformers docs include Gemma4 examples with this ID. vLLM latest supported-models docs list `Gemma4ForConditionalGeneration`; live vLLM serving on the target Hetzner host remains a preflight. | [HF model](https://huggingface.co/google/gemma-4-E2B-it), [Transformers Gemma4](https://huggingface.co/docs/transformers/model_doc/gemma4), [vLLM supported models](https://docs.vllm.ai/en/latest/models/supported_models/) |
 | Hetzner vLLM / Transformers E4B | Verified public HF model | Google HF weights | `google/gemma-4-E4B-it` | Pin `c53e9d33178b12afbad4a48334d21e19b8c29761` | Safetensors BF16, `Gemma4ForConditionalGeneration` | HF API card license `apache-2.0`; gated/private false | vLLM Gemma 4 recipe uses this ID in examples; live vLLM serving on the target Hetzner host remains a preflight. | [HF model](https://huggingface.co/google/gemma-4-E4B-it), [vLLM Gemma 4 recipe](https://docs.vllm.ai/projects/recipes/en/latest/Google/Gemma4.html) |
-| Primary strict same-GGUF candidate | Verified GGUF repo and file | HF GGUF conversion | `bartowski/google_gemma-4-E2B-it-GGUF`, file `google_gemma-4-E2B-it-Q4_K_M.gguf` | Pin `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143` | GGUF Q4_K_M, 3.46 GB in model card; optional multimodal projectors `mmproj-google_gemma-4-E2B-it-f16.gguf` or `mmproj-google_gemma-4-E2B-it-bf16.gguf` | Apache 2.0, not gated in HF metadata | Best first strict-GGUF candidate because it is the smallest verified Q4_K_M instruct artifact among the listed sources. Checksum, conservative load behavior, and memory fit are now preflighted on M4, M5, and Hetzner; Hetzner has not run a benchmark pack for this artifact. | [GGUF repo](https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF), [Q4_K_M file](https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/blob/main/google_gemma-4-E2B-it-Q4_K_M.gguf) |
+| Selected strict same-GGUF artifact | Verified GGUF repo and file | HF GGUF conversion | `bartowski/google_gemma-4-E2B-it-GGUF`, file `google_gemma-4-E2B-it-Q4_K_M.gguf` | Pin `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143` | GGUF Q4_K_M, 3.46 GB in model card; optional multimodal projectors `mmproj-google_gemma-4-E2B-it-f16.gguf` or `mmproj-google_gemma-4-E2B-it-bf16.gguf` | Apache 2.0, not gated in HF metadata | Selected because it was the smallest verified Q4_K_M instruct artifact among the listed sources. Checksum, conservative load behavior, memory fit, and four-pack benchmark evidence are now captured on M4, M5, and Hetzner. | [GGUF repo](https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF), [Q4_K_M file](https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/blob/main/google_gemma-4-E2B-it-Q4_K_M.gguf) |
 | Upstream ggml-org E2B GGUF | Verified GGUF repo, no Q4_K_M in repo | ggml-org HF GGUF | `ggml-org/gemma-4-E2B-it-GGUF`, files `gemma-4-E2B-it-Q8_0.gguf`, `gemma-4-E2B-it-bf16.gguf`, plus matching `mmproj-*` files | Pin `a1dac71d3ab220618f5a7573a52acdc4baf3ae3b` | GGUF Q8_0 or BF16, no Q4_K_M listed in this repo on 2026-05-06 | Not gated in HF metadata; repo card does not declare a license field, base model is Apache 2.0 | Repo README recommends `llama-server -hf ggml-org/gemma-4-E2B-it-GGUF`; use only after local load and fit preflight. | [GGUF repo](https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF), [tree](https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/tree/main) |
 | Upstream ggml-org E4B GGUF | Verified GGUF repo and file | ggml-org HF GGUF | `ggml-org/gemma-4-E4B-it-GGUF`, file `gemma-4-E4B-it-Q4_K_M.gguf` | Pin `2714b5519c6c3516b1000e7c5e1eba998dfe1fe8` | GGUF Q4_K_M, Q8_0, or BF16; Q4_K_M file is 5.34 GB in HF tree metadata | Not gated in HF metadata; repo card does not declare a license field, base model is Apache 2.0 | Repo README recommends `llama-server -hf ggml-org/gemma-4-E4B-it-GGUF`; use as a stricter upstream-org alternative to the E2B Q4_K_M candidate after fit preflight. | [GGUF repo](https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF), [Q4_K_M file](https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/blob/main/gemma-4-E4B-it-Q4_K_M.gguf) |
 | Alternative GGUF conversion set | Verified GGUF repos and files | Unsloth HF GGUF conversions | `unsloth/gemma-4-E2B-it-GGUF` and `unsloth/gemma-4-E4B-it-GGUF`, including `*-Q4_K_M.gguf` and `*-UD-Q4_K_XL.gguf` files | Pin E2B `90f9618340396838ee7ff5b0ba2da27da62953d3`; E4B `653803f092503c04a65164346f3208a36e707693` | GGUF standard and Unsloth dynamic quant files | Apache 2.0, not gated in HF metadata | Candidate alternatives if the operator wants Unsloth dynamic quants; still not artifact parity with bartowski or ggml-org files. | [E2B GGUF](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF), [E4B GGUF](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF) |
@@ -67,18 +70,18 @@ after any download; do not invent them from filenames or sizes.
 Tri-host comparison modes:
 
 - Primary strict parity: use the same GGUF artifact through `llama-server` on
-  M4, M5, and the Linux CUDA host. This is the first campaign mode documented
-  in `docs/gemma4-tri-host-runbook.md` and is the cleanest hardware/runtime
-  comparison if the CUDA host has a suitable llama.cpp build and the selected
-  quantization fits.
+  M4, M5, and the Linux CUDA host. This is the completed first campaign mode
+  documented in `docs/gemma4-tri-host-runbook.md` and remains the cleanest
+  hardware/runtime comparison when the CUDA host has a suitable llama.cpp build
+  and the selected quantization fits.
 - Service-shaped comparison: use MLX or GGUF on Apple Silicon and Hugging Face
   weights through vLLM on Hetzner. This secondary/fallback mode is useful
   operational evidence, but must be labeled as runtime-and-format rather than
   strict artifact parity.
 
-Current blockers:
+Current status and boundaries:
 
-- Exact small Gemma 4 IDs and first candidate GGUF/MLX/vLLM artifacts are now
+- Exact small Gemma 4 IDs and candidate GGUF/MLX/vLLM artifacts are now
   verified above. For the selected strict same-GGUF E2B Q4_K_M artifact, local
   M5 and M4 checksum, `llama-server --reasoning off` load behavior,
   tokenizer/chat-template behavior, context/cache settings, same-commit
@@ -169,8 +172,8 @@ default answer to every new “current preferred model” question.
   this repo now has strict-GGUF four-pack evidence for the same artifact on M5,
   M4, and Hetzner, summarized in
   `docs/gemma4-strict-gguf-trihost-summary.md`.
-- Use `docs/gemma4-tri-host-runbook.md` as the operational checklist for the
-  first tri-host campaign and keep its placeholder metadata examples aligned
+- Use `docs/gemma4-tri-host-runbook.md` as the archived checklist and template
+  for future tri-host campaigns, keeping placeholder metadata examples aligned
   with verified artifacts when they are known.
-- Revisit the catalog before scheduling the first authenticated remote
-  benchmark matrix.
+- Revisit the catalog before scheduling the next authenticated remote or
+  service-shaped benchmark matrix.

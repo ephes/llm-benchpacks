@@ -334,11 +334,12 @@ Scope:
   artifact parity or runtime-and-format, includes placeholder metadata examples
   and dry-run command matrices, and avoids committing generated `results/*`.
 - Decide and document the first Gemma 4 comparison mode before running it.
-  **Landed 2026-05-06.** The first campaign mode is strict same-GGUF parity
-  through `llama-server` on all three hosts, subject to artifact/runtime/memory
-  fit. The secondary service-shaped option is MLX/GGUF on Apple Silicon versus
-  vLLM Hugging Face weights on Hetzner, labeled as runtime-and-format rather
-  than artifact parity.
+  **Landed 2026-05-06.** The selected first campaign mode was strict same-GGUF
+  parity through `llama-server` on all three hosts, subject to artifact/runtime/
+  memory fit; that lane now has four-pack evidence. The secondary
+  service-shaped option remains MLX/GGUF on Apple Silicon versus vLLM Hugging
+  Face weights on Hetzner, labeled as runtime-and-format rather than artifact
+  parity.
 - Add authenticated endpoint pass-through to the tmux matrix helper.
   **Landed 2026-05-06** as `scripts/benchpack-tmux-matrix
   --openai-api-key-env <ENV_NAME>`, which passes the environment variable name
@@ -502,10 +503,15 @@ landed 2026-05-01: each measured execution copies exactly one referenced
 run output directory, while repo-task warmups are rejected. Measured repo-task
 workspace metadata landed 2026-05-01. Deterministic patch capture landed
 2026-05-02: each measured repo-task execution writes
-`patch/<case-id>/rep-NNN.diff` and records `patch.path`. Phase 3 does not yet
-include fixture execution, repo mutation by a task harness, agent-session
-replay, prompt templating, workspace retention options, task environment
-configuration, or broader bundled pack conversion. Measured repo-task
+`patch/<case-id>/rep-NNN.diff` and records `patch.path`. Later Phase 3 slices
+landed verifier execution, fenced model-output patch application, public
+`fenced-patch` selection, public `external-agent` execution, direct-edit
+external-agent variants, optional model-call summaries, and multiple bundled
+repo-task packs. Remaining Phase 3 follow-up is now narrower: prompt
+templating if needed, workspace cleanup/retention options, richer task
+environment configuration, optional full agent-session replay, and larger
+benchmark fixtures only when current evidence shows they are worth adding.
+Measured repo-task
 verifier execution and final verifier status landed 2026-05-02 for
 `verify-script` rows only. A fixed-default runner-owned verifier subprocess
 timeout landed 2026-05-02 so measured verifier hangs become completed failed
@@ -1099,7 +1105,7 @@ Scope:
   failures visible before broader direct-edit campaigns.
 - Universal endpoint-only correctness pack. **Landed 2026-05-08** as
   `endpoint-python-correctness`. Use it to separate "model can produce an
-  applyable correct fix" from "an external agent stack is installed and
+  applicable correct fix" from "an external agent stack is installed and
   operating." Keep `desktop-django-wrap` available as prompt-only
   coding-agent-shaped coverage rather than treating its regex skeleton as the
   main correctness benchmark. Post-validation tmux-helper or default-matrix
