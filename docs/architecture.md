@@ -358,6 +358,13 @@ cases do not use this flow. Verifier environment configuration stays on the
 execution side of the boundary: it is not added to adapter requests, normalized
 result rows, or reporter-owned repo-task objects.
 
+`summary.md` and `benchpack report` derive a report-only repo-task outcome
+table from those existing fields plus the patch artifact size. The table makes
+empty workspace diffs and mutation-visible failures visible without changing
+the `run.jsonl` schema. The current labels are `passed`,
+`failed-no-mutation`, `failed-with-mutation`, and
+`failed-unknown-mutation`.
+
 ## Result Record Envelope
 
 Each line of `run.jsonl` is a result record. The record is the union of three
@@ -585,13 +592,16 @@ The report renderer is intended for run-log and comparison-note assembly. It
 summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
 identity when available, user-supplied runtime/model/operating metadata when
 available, external-agent model-call aggregate telemetry when optional logs are
-present, row and `ok` counts, and scoring pass/fail/unscored counts. Malformed
-`run-metadata.json` fails clearly because the report is being asked to
-interpret that artifact. Malformed or unsafe model-call JSONL lines are counted
-as invalid and their payloads are not echoed. Its compare-median section reuses
-the compare summarization, prompt/cache warning, and prefill-parity helpers so
-the report cannot silently disagree with `benchpack compare` on median values,
-cache rows, warnings, or `prefill parity` status. It does not load adapters,
+present, repo-task outcome summaries when `repo_task` rows exist, row and `ok`
+counts, and scoring pass/fail/unscored counts. Malformed `run-metadata.json`
+fails clearly because the report is being asked to interpret that artifact.
+Malformed or unsafe model-call JSONL lines are counted as invalid and their
+payloads are not echoed. Repo-task outcome summaries resolve patch artifact
+paths only under the result directory and treat missing or unsafe patch paths as
+unknown mutation state. Its compare-median section reuses the compare
+summarization, prompt/cache warning, and prefill-parity helpers so the report
+cannot silently disagree with `benchpack compare` on median values, cache rows,
+warnings, or `prefill parity` status. It does not load adapters,
 collect hardware, execute packs, read `raw/`, write result artifacts, mutate
 result directories, or alter
 the result schema. Compare remains independent of `run-metadata.json`.

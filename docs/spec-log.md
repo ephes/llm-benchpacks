@@ -16,6 +16,39 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-08
+
+### Changed
+
+- Added report-only repo-task outcome summaries to `summary.md` and
+  `benchpack report`.
+- The new `Repo-Task Outcomes` table is derived from existing `run.jsonl`
+  fields plus patch artifact sizes. It shows case, repetition,
+  `repo_task.status`, verifier exit code, scoring result, patch byte count, and
+  a compact outcome label: `passed`, `failed-no-mutation`,
+  `failed-with-mutation`, or `failed-unknown-mutation`.
+- Kept `run.jsonl` unchanged. Missing, absolute, escaping, or unreadable patch
+  paths are treated as unknown mutation state in the report instead of being
+  followed outside the result directory.
+- Updated specification, architecture, README usage notes, implementation
+  backlog, and benchmark research notes to make the report-only boundary
+  explicit.
+
+### Validation
+
+- Focused summary/report tests cover passed-with-patch and failed-empty-patch
+  repo-task rendering.
+- Direct helper tests cover absolute, escaping, missing, non-file, missing
+  patch, and malformed patch artifact paths, plus unknown-mutation,
+  no-mutation, mutation-visible, and future-scoring-shape classification.
+- Full validation is recorded in the implementation session notes.
+
+### Open Questions
+
+- Broader direct-edit external-agent campaigns can now use the report table for
+  first-pass classification. A durable `run.jsonl` task-status field should
+  wait until more live evidence shows the stable field shape.
+
 ## 2026-05-07 (direct-edit external-agent live validation)
 
 ### Changed

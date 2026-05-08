@@ -553,6 +553,33 @@ def test_write_summary_includes_external_agent_model_call_summary(
     ) in text
 
 
+def test_write_summary_includes_repo_task_outcomes(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    patch_path = out / "patch" / "capital" / "rep-001.diff"
+    patch_path.parent.mkdir(parents=True)
+    patch_path.write_text("", encoding="utf-8")
+
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+        repetition=1,
+        patch={"path": "patch/capital/rep-001.diff"},
+        repo_task={"status": "failed", "verify_exit_code": 1},
+        scoring_override={"mode": "verify-script", "passed": False},
+    )
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+
+    assert "## Repo-Task Outcomes" in text
+    assert (
+        "| capital | 1 | failed | 1 | verify-script:fail | 0 | "
+        "failed-no-mutation |"
+    ) in text
+
+
 def test_write_summary_model_call_error_uses_relative_path(
     tmp_path: Path,
 ) -> None:

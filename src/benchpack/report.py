@@ -21,6 +21,12 @@ from .compare import (
     summarize_runs,
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
+from .repo_task_outcomes import (
+    format_patch_bytes,
+    format_repetition,
+    format_verify_exit_code,
+    summarize_repo_task_outcomes,
+)
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
@@ -121,6 +127,10 @@ def render_report(runs: list[ResultRun]) -> str:
         lines.extend(model_call_lines)
         lines.append("")
     else:
+        lines.append("")
+    repo_task_lines = _render_repo_task_outcomes(runs)
+    if repo_task_lines:
+        lines.extend(repo_task_lines)
         lines.append("")
     lines.extend(_render_case_outcomes(runs))
     lines.append("")
@@ -258,6 +268,36 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
                     prompt=format_tokens(summary.prompt_tokens),
                     output=format_tokens(summary.output_tokens),
                     cached=format_tokens(summary.cached_prompt_tokens),
+                )
+            )
+    if not rows:
+        return []
+    return header + rows
+
+
+def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
+    header = [
+        "## Repo-Task Outcomes",
+        "",
+        "| run | case | repetition | repo_task | verify_exit | scoring | "
+        "patch_bytes | outcome |",
+        "|-----|------|------------|-----------|-------------|---------|"
+        "-------------|---------|",
+    ]
+    rows: list[str] = []
+    for run in runs:
+        for outcome in summarize_repo_task_outcomes(run.records, run.path):
+            rows.append(
+                "| {run} | {case} | {repetition} | {repo_status} | "
+                "{verify_exit} | {scoring} | {patch_bytes} | {result} |".format(
+                    run=run.label,
+                    case=_markdown_cell(outcome.case),
+                    repetition=format_repetition(outcome.repetition),
+                    repo_status=_markdown_cell(outcome.repo_status),
+                    verify_exit=format_verify_exit_code(outcome.verify_exit_code),
+                    scoring=_markdown_cell(outcome.scoring),
+                    patch_bytes=format_patch_bytes(outcome.patch_bytes),
+                    result=_markdown_cell(outcome.outcome),
                 )
             )
     if not rows:

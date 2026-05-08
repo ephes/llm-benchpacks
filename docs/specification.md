@@ -828,7 +828,14 @@ user-supplied runtime, model, operating-condition, and notes fields. Missing
 fails with a clear error. When external-agent model-call JSONL artifacts exist
 under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
 safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
-unsafe JSONL lines are counted as invalid without echoing their payloads.
+unsafe JSONL lines are counted as invalid without echoing their payloads. When
+repo-task rows include `repo_task`, the report includes a compact
+`Repo-Task Outcomes` table derived from existing row fields and patch
+artifacts: case, repetition, `repo_task.status`, verifier exit code, scoring
+result, patch byte count when the patch artifact is available under the result
+directory, and a report-only outcome label such as `passed`,
+`failed-no-mutation`, `failed-with-mutation`, or `failed-unknown-mutation`.
+This is a read-only summary and does not add fields to `run.jsonl`.
 
 The optional `--set <manifest.toml>` mode loads a source TOML report-set
 manifest and expands it to the same existing result-directory inputs before the
@@ -864,6 +871,8 @@ skeleton. It summarizes:
 - external-agent model-call summary counts, success/failure/error counts,
   unique model/adapter/endpoint labels, summed duration, and summed token
   fields when optional model-call logs exist
+- repo-task outcome summaries when `repo_task` rows exist, including patch byte
+  counts and no-mutation versus mutation-visible failure labels
 - row and `ok` counts by run/case
 - scoring pass, fail, and unscored counts by run/case
 - the same median wall time, TTFT, prefill TPS, decode TPS, total TPS, output
@@ -939,7 +948,8 @@ raw/<case>.warmup-001.response.json
 `summary.md` contains one row per measured record. For repeated cases the case
 cell is displayed as `<case>#<repetition>` so rows remain distinguishable without
 changing the summary table columns. Single-repetition summaries keep the legacy
-case label.
+case label. When repo-task rows include `repo_task`, `summary.md` also includes
+the same report-only `Repo-Task Outcomes` table used by `benchpack report`.
 
 Generated result directories are ignored by default. Curated `summary.md`,
 `hardware.json`, `run-metadata.json`, and small `run.jsonl` files may be

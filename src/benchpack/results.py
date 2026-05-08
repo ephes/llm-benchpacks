@@ -15,6 +15,12 @@ from typing import Any
 from .adapters import AdapterResult
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .packs import Case, Pack
+from .repo_task_outcomes import (
+    format_patch_bytes,
+    format_repetition,
+    format_verify_exit_code,
+    summarize_repo_task_outcomes,
+)
 from .run_metadata import write_run_metadata
 from .scoring import evaluate
 
@@ -234,6 +240,24 @@ class RunReporter:
                 )
                 for summary in model_call_summaries:
                     lines.append(_model_call_summary_row(summary))
+        repo_task_outcomes = summarize_repo_task_outcomes(
+            self.records,
+            self.output_dir,
+        )
+        if repo_task_outcomes:
+            lines.append("")
+            lines.append("## Repo-Task Outcomes")
+            lines.append("")
+            lines.append(
+                "| case | repetition | repo_task | verify_exit | scoring | "
+                "patch_bytes | outcome |"
+            )
+            lines.append(
+                "|------|------------|-----------|-------------|---------|"
+                "-------------|---------|"
+            )
+            for outcome in repo_task_outcomes:
+                lines.append(_repo_task_outcome_row(outcome))
         lines.append("")
         lines.append("| case | adapter | model | ok | wall_s | total_tps | scoring |")
         lines.append("|------|---------|-------|----|--------|-----------|---------|")
@@ -311,6 +335,21 @@ def _model_call_summary_row(summary: Any) -> str:
             if summary.cached_prompt_tokens is not None
             else "—"
         ),
+    )
+
+
+def _repo_task_outcome_row(outcome: Any) -> str:
+    return (
+        "| {case} | {repetition} | {repo_status} | {verify_exit} | {scoring} | "
+        "{patch_bytes} | {result} |"
+    ).format(
+        case=_summary_table_cell(outcome.case),
+        repetition=format_repetition(outcome.repetition),
+        repo_status=_summary_table_cell(outcome.repo_status),
+        verify_exit=format_verify_exit_code(outcome.verify_exit_code),
+        scoring=_summary_table_cell(outcome.scoring),
+        patch_bytes=format_patch_bytes(outcome.patch_bytes),
+        result=_summary_table_cell(outcome.outcome),
     )
 
 

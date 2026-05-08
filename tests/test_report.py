@@ -53,8 +53,11 @@ def _record(
     prompt_tokens: int = 10,
     cached_prompt: int | None = None,
     scoring: dict | None = None,
+    patch: dict | None = None,
+    repo_task: dict | None = None,
+    repetition: int | None = None,
 ) -> dict:
-    return {
+    record = {
         "pack": {"id": pack_id, "version": version},
         "case": case,
         "adapter": "openai-chat",
@@ -80,6 +83,13 @@ def _record(
             "response_path": "raw/short.response.json",
         },
     }
+    if patch is not None:
+        record["patch"] = patch
+    if repo_task is not None:
+        record["repo_task"] = repo_task
+    if repetition is not None:
+        record["repetition"] = repetition
+    return record
 
 
 def test_report_renders_comparable_medians_and_hardware(tmp_path: Path) -> None:
@@ -241,6 +251,50 @@ def test_report_renders_external_agent_model_call_summary(tmp_path: Path) -> Non
         "example-local-http | local-http | 0.100000 | 3 | 5 | — |"
     ) in output
     assert "not safe for summaries" not in output
+
+
+def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(
+        run_a,
+        pack_id="patch-from-failure-external-agent",
+        rows=[
+            _record(
+                "fix-greeting",
+                pack_id="patch-from-failure-external-agent",
+                scoring={"mode": "verify-script", "passed": True},
+                patch={"path": "patch/fix-greeting/rep-001.diff"},
+                repo_task={"status": "passed", "verify_exit_code": 0},
+                repetition=1,
+            ),
+            _record(
+                "fix-dashboard-regressions",
+                pack_id="patch-from-failure-external-agent",
+                scoring={"mode": "verify-script", "passed": False},
+                patch={"path": "patch/fix-dashboard-regressions/rep-001.diff"},
+                repo_task={"status": "failed", "verify_exit_code": 1},
+                repetition=1,
+            ),
+        ],
+    )
+    patch = run_a / "patch" / "fix-greeting" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text("diff --git a/greeter.py b/greeter.py\n", encoding="utf-8")
+    empty_patch = run_a / "patch" / "fix-dashboard-regressions" / "rep-001.diff"
+    empty_patch.parent.mkdir(parents=True)
+    empty_patch.write_text("", encoding="utf-8")
+
+    output = render_report(load_report_runs([run_a]))
+
+    assert "## Repo-Task Outcomes" in output
+    assert (
+        "| run-a | fix-greeting | 1 | passed | 0 | verify-script:pass | "
+        "37 | passed |"
+    ) in output
+    assert (
+        "| run-a | fix-dashboard-regressions | 1 | failed | 1 | "
+        "verify-script:fail | 0 | failed-no-mutation |"
+    ) in output
 
 
 def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:

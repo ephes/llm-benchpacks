@@ -212,11 +212,15 @@ speed.
 existing result directories. It reads `run.jsonl`, optional `hardware.json`, and
 optional `run-metadata.json`, then summarizes inputs, pack id/version, host
 identity when available, user-supplied runtime/model/operating metadata,
-adapter/model/endpoint, row and `ok` counts, scoring pass/fail/unscored counts,
-and the same compare medians, cache rows, warnings, and `prefill parity`
-statuses used by `benchpack compare`. It is intended for assembling run notes
-and M4/M5 comparison reports without copying medians from several compare
-outputs by hand. For repeated report assembly, `benchpack report --set
+adapter/model/endpoint, optional external-agent model-call telemetry summaries,
+repo-task outcome summaries when `repo_task` rows exist, row and `ok` counts,
+scoring pass/fail/unscored counts, and the same compare medians, cache rows,
+warnings, and `prefill parity` statuses used by `benchpack compare`. Repo-task
+outcome summaries are report-only and distinguish empty workspace diffs from
+mutation-visible failures without changing `run.jsonl`. It is intended for
+assembling run notes and M4/M5 comparison reports without copying medians from
+several compare outputs by hand. For repeated report assembly,
+`benchpack report --set`
 <manifest.toml>` accepts a tiny TOML report-set manifest and expands it to the
 same existing result-directory inputs:
 

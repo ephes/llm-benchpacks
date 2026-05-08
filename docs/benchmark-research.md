@@ -1,6 +1,6 @@
 # Benchmark Research Backlog
 
-Status date: 2026-05-07.
+Status date: 2026-05-08.
 
 This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
@@ -37,8 +37,9 @@ should not be committed for this research track unless explicitly curated.
   plan but made no edits.
 - Current task logs plus patch and verifier artifacts were enough to classify
   the dashboard failure, but the aggregate row status alone was not. A compact
-  report/status summary for empty-vs-nonempty workspace diffs would make larger
-  result review less manual.
+  report/status summary for empty-vs-nonempty workspace diffs landed on
+  2026-05-08 as report-only repo-task outcome tables in `summary.md` and
+  `benchpack report`.
 - Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
   evidence, provided the pack set stays opt-in and generated artifacts remain
   local/ignored unless curated explicitly.
@@ -46,12 +47,11 @@ should not be committed for this research track unless explicitly curated.
 ## Next Work Ordering
 
 1. Keep this research backlog and implementation plan current.
-2. Add lightweight reporting or status polish for direct-edit external-agent
-   runs so empty workspace diffs and task-quality/no-mutation failures are
-   visible without opening several artifacts.
-3. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
+2. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
    keeping `coding-tasks-external-agent` opt-in and preserving the current
    artifact policy.
+3. Keep the result-schema question open until repeated live evidence shows
+   which repo-task status fields are worth making durable.
 
 ## Candidate Benchmark Tracks
 
@@ -95,9 +95,9 @@ Design questions:
 
 Current evidence answer: stdout/stderr logs, patch bytes, and verifier JSON were
 enough to classify the no-mutation dashboard failure, but `repo_task.status` by
-itself only said `failed`. A report-facing task summary is justified before
-larger campaigns, while a result-schema change can wait until repeated evidence
-shows the exact field shape needed.
+itself only said `failed`. A report-facing task summary landed on 2026-05-08;
+a result-schema change can wait until repeated evidence shows the exact field
+shape needed.
 
 ### Product Classification And Matching Programs
 

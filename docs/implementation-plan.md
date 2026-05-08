@@ -464,9 +464,9 @@ Scope:
   tri-host matrix for the current four-pack lane. The direct-edit external-agent
   slice now has local M5 evidence with 2/3 verifier passes, so broader
   M4/M5/NVIDIA direct-edit comparison is reasonable as exploratory evidence.
-  Before scaling the campaign, add lightweight report/status polish if needed
-  so empty workspace diffs and no-mutation failures are visible without manual
-  artifact inspection.
+  Lightweight report/status polish landed on 2026-05-08, so empty workspace
+  diffs and no-mutation failures are now visible without manual artifact
+  inspection.
 
 Validation:
 
@@ -1003,9 +1003,12 @@ Scope:
   mutation. This is enough to justify exploratory broader direct-edit
   comparison, but not default matrix promotion.
 - Add lightweight report/status polish for external-agent repo-task outcomes if
-  larger campaigns become hard to classify manually. The current artifact set
-  was enough for the M5 slice, but `repo_task.status` alone did not distinguish
-  wrong mutation from no mutation.
+  larger campaigns become hard to classify manually. **Landed 2026-05-08** as a
+  report-only `Repo-Task Outcomes` table in `summary.md` and
+  `benchpack report`, derived from existing `repo_task`, scoring, and patch
+  artifact data. The table shows patch byte counts and compact labels such as
+  `passed`, `failed-no-mutation`, `failed-with-mutation`, and
+  `failed-unknown-mutation` without changing `run.jsonl`.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1037,9 +1040,9 @@ Move beyond speed into correctness.
 fenced-patch repo-task plumbing and deterministic verifier behavior, but recent
 live evidence shows that fenced-diff prompts are too prompt-contract-sensitive
 for broad coding-agent conclusions. The direct-edit external-agent variants now
-have local M5 real-agent evidence with 2/3 verifier passes. The next useful
-slice is lightweight task-outcome reporting polish; broader direct-edit
-comparison can follow as exploratory evidence, but another generic rerun of the
+have local M5 real-agent evidence with 2/3 verifier passes, and lightweight
+task-outcome reporting polish has landed. The next useful live slice is broader
+direct-edit comparison as exploratory evidence, but another generic rerun of the
 same fenced-patch tasks is not useful.
 
 Scope:
@@ -1070,6 +1073,10 @@ Scope:
   OSS/Ollama: two direct-edit fixtures passed end to end and one larger
   dashboard fixture failed from no workspace mutation. Generated artifacts
   stayed local/ignored.
+- Lightweight task-outcome reporting polish. **Landed 2026-05-08** as
+  report-only repo-task outcome summaries in `summary.md` and
+  `benchpack report`, making empty workspace diffs and mutation-visible
+  failures visible before broader direct-edit campaigns.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.
