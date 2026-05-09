@@ -16,6 +16,38 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (registry bundle import)
+
+### Changed
+
+- Added `benchpack registry bundle import --db <sqlite> <bundle-dir>...` as a
+  local offline ingestion path for received compact public bundles.
+- The command validates every bundle with the existing manifest, hash,
+  role/path, row, metadata, unlisted-file, UTF-8, and conservative secret-scan
+  checks before opening SQLite, so malformed multi-bundle imports fail without
+  partial database writes.
+- Imported bundled runs use the normal registry indexing path, preserve the
+  original run label from the bundle manifest, and use the bundled compact run
+  directory path as the registry identity key.
+- Kept the slice local and artifact-first: it does not mutate bundle contents,
+  require source result directories, read omitted raw/workspace/task/verify
+  artifacts, contact endpoints, or create hosted upload/review state.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document the command and boundary.
+
+### Validation
+
+- Focused registry and CLI tests cover bundle import, original-label
+  preservation, metadata indexing from bundled compact files, CLI dispatch, and
+  all-input validation before database creation.
+
+### Open Questions
+
+- Authenticated upload/review, duplicate detection across bundle submissions,
+  hosted moderation state, richer public browse/comparison views, optional
+  query APIs, and public leaderboard policy remain later result-registry
+  slices.
+
 ## 2026-05-09 (registry static site)
 
 ### Changed

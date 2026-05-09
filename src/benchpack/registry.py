@@ -101,6 +101,21 @@ class RegistryBundleSummary:
 
 
 @dataclass(frozen=True)
+class _ValidatedBundle:
+    """Validated bundle manifest plus loaded compact run directories.
+
+    Each run path points at the bundled compact run directory; each run label
+    is preserved from the bundle manifest's original source run label.
+    """
+
+    bundle_dir: Path
+    provenance: str
+    runs: list[ResultRun]
+    files: int
+    omitted_artifacts: int
+
+
+@dataclass(frozen=True)
 class RegistryStaticSiteSummary:
     """Summary for a generated static registry snapshot."""
 
@@ -224,6 +239,36 @@ def import_result_dirs(
     return summaries
 
 
+def import_result_bundles(
+    bundle_dirs: list[Path | str],
+    db_path: Path | str,
+) -> list[RegistryImportSummary]:
+    """Validate compact public bundles and import their runs into the registry."""
+
+    if not bundle_dirs:
+        raise RegistryError("benchpack registry bundle import requires bundle directories")
+
+    # Validate every bundle before opening the database so multi-bundle imports
+    # fail without partial writes when a later bundle is malformed.
+    bundles = [_load_and_validate_result_bundle(path) for path in bundle_dirs]
+    loaded_runs = [run for bundle in bundles for run in bundle.runs]
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    db = Path(db_path)
+    if db.parent != Path("."):
+        db.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("BEGIN")
+            _ensure_schema(conn)
+            summaries = [_import_run(conn, run) for run in loaded_runs]
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not update registry database {db}: {exc}") from exc
+    return summaries
+
+
 def create_result_bundle(
     result_dirs: list[Path | str],
     bundle_dir: Path | str,
@@ -298,6 +343,19 @@ def create_result_bundle(
 def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
     """Validate a compact public result bundle without network access."""
 
+    bundle = _load_and_validate_result_bundle(bundle_dir)
+    return RegistryBundleSummary(
+        bundle_dir=bundle.bundle_dir,
+        runs=len(bundle.runs),
+        files=bundle.files,
+        omitted_artifacts=bundle.omitted_artifacts,
+        provenance=bundle.provenance,
+    )
+
+
+def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle:
+    """Validate a compact public result bundle and load its compact runs."""
+
     bundle_root = Path(bundle_dir)
     manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
     try:
@@ -327,12 +385,24 @@ def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
     expected_files = {BUNDLE_MANIFEST_FILENAME}
     file_count = 1
     omitted_count = 0
+    loaded_runs: list[ResultRun] = []
     for run_index, run_manifest in enumerate(runs, start=1):
         if not isinstance(run_manifest, dict):
             raise RegistryError(f"bundle run entry {run_index} must be an object")
+        label = _manifest_string(run_manifest, "label", f"run {run_index}")
         bundle_path = _manifest_string(run_manifest, "bundle_path", f"run {run_index}")
         run_dir = _resolve_bundle_relative(bundle_root, bundle_path)
-        _load_and_validate_result_dir(run_dir)
+        run = _load_and_validate_result_dir(run_dir)
+        loaded_runs.append(
+            ResultRun(
+                path=run.path,
+                label=label,
+                records=run.records,
+                hardware=run.hardware,
+                run_metadata=run.run_metadata,
+                artifact_root=run.artifact_root,
+            )
+        )
         files = run_manifest.get("files")
         if not isinstance(files, list) or not files:
             raise RegistryError(f"bundle run {run_index} requires non-empty files")
@@ -361,9 +431,9 @@ def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
     if extra_files:
         raise RegistryError(f"bundle contains unlisted file: {extra_files[0]}")
 
-    return RegistryBundleSummary(
+    return _ValidatedBundle(
         bundle_dir=bundle_root,
-        runs=len(runs),
+        runs=loaded_runs,
         files=file_count,
         omitted_artifacts=omitted_count,
         provenance=provenance,

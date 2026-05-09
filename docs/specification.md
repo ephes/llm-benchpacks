@@ -1032,6 +1032,7 @@ provided.
 ```text
 benchpack registry bundle create --out <bundle-dir> [--provenance <label>] [--force] <result-dir> [<result-dir> ...]
 benchpack registry bundle validate <bundle-dir>
+benchpack registry bundle import --db <sqlite-db> <bundle-dir> [<bundle-dir> ...]
 ```
 
 `benchpack registry bundle create` builds a compact directory bundle for
@@ -1082,6 +1083,17 @@ metadata, rejects unlisted files, rejects bundled `raw/`, `workspace/`, or
 `verify/` files, and applies the same conservative decode and secret scan. It
 does not contact endpoints, run packs, import SQLite, mutate benchmark result
 directories, or require network access.
+
+`benchpack registry bundle import --db <sqlite-db> <bundle-dir>...` validates
+each compact bundle with the same offline manifest, hash, secret-scan, row, and
+metadata checks before opening the SQLite database. After all bundle inputs
+validate, it imports the bundled `runs/run-NNN-<label>/` directories through
+the normal registry indexing path. Registry labels come from the bundle
+manifest's original run labels, while the registry identity key is the bundled
+run directory path. The command writes only the requested SQLite database. It
+does not contact endpoints, run packs, mutate bundle contents, require source
+result directories, read omitted raw/workspace/task/verify artifacts, or create
+hosted submission state.
 
 ## Result Artifacts
 

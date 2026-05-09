@@ -522,6 +522,11 @@ from `runs` and `result_case_stats`, and remains read-only over the database
 and source artifacts. Public upload, deeper secret scanning, object storage for
 large artifacts, hosted databases, and richer comparison-explorer views remain
 later explicit slices.
+The first received-bundle ingestion slice adds
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...`, which
+validates compact public bundles offline before writing SQLite rows, then
+indexes the bundled compact run directories through the same registry import
+path while preserving original run labels from the bundle manifest.
 
 Reason: a local registry is useful for searching and grouping accumulated
 benchmark artifacts, but replacing the artifact-first workflow would weaken
@@ -549,6 +554,15 @@ conservative text secret scan and fail on obvious bearer tokens, credentialed
 URLs, tokenized query strings, secret-looking JSON fields, or non-UTF-8 copied
 compact artifacts. Bundle output paths must be disjoint from source result
 directories so `--force` cannot delete source evidence.
+
+Validated bundles can be indexed offline with
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...`. That command
+first applies the same bundle validation, including manifest, hash, role/path,
+row, metadata, unlisted-file, UTF-8, and conservative secret-scan checks. It
+then imports only the bundled compact run directories into the local SQLite
+registry. It does not mutate the bundle, require the original source result
+directories, read omitted artifacts, contact endpoints, or implement hosted
+upload/review state.
 
 Reason: directory bundles are easy to inspect, diff, validate, and test without
 network access or hosted infrastructure. Keeping the export compact avoids

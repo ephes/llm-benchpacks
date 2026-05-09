@@ -691,6 +691,18 @@ copied compact artifacts, and a conservative secret scan entirely offline.
 Authenticated upload review, deeper secret scanning, object storage for large
 artifacts, and comparison-explorer views remain later components.
 
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...` is the local
+offline ingestion path for received compact bundles. It validates every bundle
+with the same manifest, file-hash, role/path, row, optional metadata, unlisted
+file, UTF-8, and conservative secret-scan checks before opening SQLite. When
+all inputs validate, it imports the bundled `runs/run-NNN-<label>/` directories
+through the same registry indexing path used for source result directories.
+The imported registry label comes from the bundle manifest's original run
+label; the idempotency key remains the bundled compact run directory path. The
+command does not mutate bundle contents, require source result directories,
+read omitted raw/workspace/task/verify artifacts, contact endpoints, or create
+hosted review state.
+
 ## Operational Helper Flow
 
 `scripts/benchpack-tmux-matrix` is an operator convenience wrapper, not a new

@@ -3644,3 +3644,22 @@ def test_cli_registry_bundle_create_and_validate(
     validate_output = capsys.readouterr().out
     assert f"validated bundle {bundle_dir}" in validate_output
     assert "1 run" in validate_output
+
+    db_path = tmp_path / "registry.sqlite"
+    assert (
+        main(
+            [
+                "registry",
+                "bundle",
+                "import",
+                "--db",
+                str(db_path),
+                str(bundle_dir),
+            ]
+        )
+        == 0
+    )
+    import_output = capsys.readouterr().out
+    assert "imported 1 row from bundled run" in import_output
+    assert "run_id 1" in import_output
+    assert db_path.is_file()

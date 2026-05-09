@@ -1182,12 +1182,14 @@ rendering the existing Markdown report medians, warnings, cache rows, and
 `prefill parity` statuses from indexed rows and stored compact metadata. A
 first static local site export has also landed as
 `benchpack registry site --db <sqlite> --out <site-dir>`, writing
-`index.html` and `report.md` from indexed compact rows. This
+`index.html` and `report.md` from indexed compact rows. A first offline
+received-bundle ingestion slice has also landed as
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...`. This
 keeps the artifact-first workflow: local `results/<date>-<host-label>/`
 directories, `run.jsonl`, `hardware.json`, `run-metadata.json`, and pack
 manifests remain the canonical evidence. The database is an index over
-validated result artifacts, and public bundles are compact exports for sharing,
-not the only copy of benchmark truth.
+validated result artifacts or validated compact bundles, and public bundles
+are compact exports for sharing, not the only copy of benchmark truth.
 
 Scope:
 
@@ -1227,6 +1229,16 @@ Scope:
   validate offline with file hash checks, row/metadata validation, unlisted-file
   rejection, and a conservative secret scan. This is not yet public upload,
   moderation, object storage, or website ingestion.
+- Add a local offline received-bundle import path before hosted upload/review.
+  **Landed 2026-05-09** as
+  `benchpack registry bundle import --db <sqlite> <bundle-dir>...`, which
+  validates every compact bundle before opening SQLite, then imports bundled
+  `runs/run-NNN-<label>/` directories through the same registry indexing path.
+  The command preserves original run labels from the bundle manifest, uses the
+  bundled compact run directory path as the registry identity key, writes only
+  the requested SQLite database, and does not mutate bundle contents, require
+  source result directories, read omitted raw/workspace/task/verify artifacts,
+  contact endpoints, or create hosted review state.
 - Design comparability rules as first-class database fields, not ad hoc UI
   filters. **First slice landed 2026-05-08** as nullable `runs` columns for
   explicit comparison mode, comparison boundary, host label/repo commit,
@@ -1292,6 +1304,12 @@ Validation:
   leaking secrets. **Landed 2026-05-08** for directory bundles through
   `benchpack registry bundle validate`, focused tests for copied compact files,
   omitted raw hashes, unlisted-file rejection, and obvious secret rejection.
+- A received compact public bundle can be validated and indexed into the local
+  registry without source result artifacts and without partial writes on
+  malformed multi-bundle input. **Landed 2026-05-09** through
+  `benchpack registry bundle import`, with focused tests for original-label
+  preservation, metadata indexing from bundled compact files, CLI dispatch, and
+  all-input validation before database creation.
 - The first web view can answer a concrete question such as "compare this
   model artifact across M4, M5, and RTX 4000 SFF Ada using the same pack and
   runtime family" without manual spreadsheet work.

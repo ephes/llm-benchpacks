@@ -61,6 +61,7 @@ uv run benchpack registry report --db registry/benchpack.sqlite --label 2026-04-
 uv run benchpack registry site --db registry/benchpack.sqlite --out registry/site
 uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
 uv run benchpack registry bundle validate bundles/example
+uv run benchpack registry bundle import --db registry/benchpack.sqlite bundles/example
 ```
 
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
@@ -271,7 +272,11 @@ omits raw payloads, workspaces, task logs, verifier artifacts, and unsafe
 model-call logs by default while recording hashes for omitted files when they
 are available. Use `--provenance self-reported`, `operator-curated`, or
 `independently-reproduced` to label the bundle, and run
-`benchpack registry bundle validate <bundle-dir>` before sharing.
+`benchpack registry bundle validate <bundle-dir>` before sharing. To index a
+received compact bundle offline, run
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...`; it validates
+each bundle before writing SQLite rows and imports only the bundled compact run
+directories.
 
 Bundled packs:
 

@@ -49,6 +49,7 @@ from .registry import (
     RegistryError,
     create_result_bundle,
     export_registry_static_site,
+    import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
     validate_result_bundle,
@@ -540,6 +541,24 @@ def _cmd_registry_bundle_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_bundle_import(args: argparse.Namespace) -> int:
+    try:
+        summaries = import_result_bundles(args.bundle_dirs, args.db)
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    for summary in summaries:
+        row_word = "row" if summary.rows_imported == 1 else "rows"
+        print(
+            "imported {rows} {row_word} from bundled run {result_dir} into run_id {run_id}".format(
+                rows=summary.rows_imported,
+                row_word=row_word,
+                result_dir=summary.result_dir,
+                run_id=summary.run_id,
+            )
+        )
+    return 0
+
+
 def _cmd_registry_site(args: argparse.Namespace) -> int:
     try:
         summary = export_registry_static_site(
@@ -674,7 +693,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     registry_bundle = registry_sub.add_parser(
         "bundle",
-        help="Create or validate compact public result bundles",
+        help="Create, validate, or import compact public result bundles",
     )
     registry_bundle_sub = registry_bundle.add_subparsers(
         dest="registry_bundle_command",
@@ -712,6 +731,20 @@ def _build_parser() -> argparse.ArgumentParser:
     registry_bundle_validate.add_argument(
         "bundle_dir",
         help="Bundle directory containing benchpack-bundle.json",
+    )
+    registry_bundle_import = registry_bundle_sub.add_parser(
+        "import",
+        help="Validate compact public bundles and import their runs into the registry",
+    )
+    registry_bundle_import.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to create or update",
+    )
+    registry_bundle_import.add_argument(
+        "bundle_dirs",
+        nargs="+",
+        help="Bundle directories containing benchpack-bundle.json",
     )
     registry_site = registry_sub.add_parser(
         "site",
@@ -770,6 +803,8 @@ def main(argv: list[str] | None = None) -> int:
                 return _cmd_registry_bundle_create(args)
             if args.registry_bundle_command == "validate":
                 return _cmd_registry_bundle_validate(args)
+            if args.registry_bundle_command == "import":
+                return _cmd_registry_bundle_import(args)
             parser.error(f"unknown registry bundle command: {args.registry_bundle_command}")
         if args.registry_command == "site":
             return _cmd_registry_site(args)

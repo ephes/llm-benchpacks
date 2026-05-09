@@ -18,6 +18,7 @@ from benchpack.registry import (
     RegistryError,
     create_result_bundle,
     export_registry_static_site,
+    import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
     validate_result_bundle,
@@ -901,6 +902,137 @@ def test_registry_bundle_create_copies_compact_public_artifacts(
     omitted = {entry["path"]: entry for entry in run["omitted_artifacts"]}
     assert omitted["raw/short.request.json"]["reason"] == "raw-payload-omitted"
     assert len(omitted["raw/short.request.json"]["sha256"]) == 64
+
+
+def test_registry_bundle_import_indexes_validated_compact_runs(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "results" / "run-a"
+    record = _record()
+    record["patch"] = {"path": "patch/short/rep-001.diff"}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas", "platform": "Darwin"}) + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "comparison_mode": "strict-same-gguf",
+                "runtime": {"name": "llama-server"},
+                "model": {"id": "gemma4-e2b-q4km"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "patch" / "short").mkdir(parents=True)
+    (result_dir / "patch" / "short" / "rep-001.diff").write_text(
+        "--- a/app.py\n+++ b/app.py\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+    create_result_bundle([result_dir], bundle_dir, provenance="operator-curated")
+    shutil.rmtree(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+
+    summaries = import_result_bundles([bundle_dir], db_path)
+    runs = load_registry_report_runs(db_path, labels=["run-a"])
+
+    assert summaries[0].rows_imported == 1
+    assert summaries[0].result_dir == bundle_dir / "runs" / "run-001-run-a"
+    assert runs[0].label == "run-a"
+    assert runs[0].records[0]["case"] == "short"
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT label, host_hostname, comparison_mode, runtime_name,
+                   model_metadata_id
+            FROM runs
+            """
+        ).fetchone()
+    assert row == (
+        "run-a",
+        "atlas",
+        "strict-same-gguf",
+        "llama-server",
+        "gemma4-e2b-q4km",
+    )
+
+
+def test_registry_bundle_import_validates_all_inputs_before_writing_db(
+    tmp_path: Path,
+) -> None:
+    good_result = tmp_path / "run-good"
+    _write_result_dir(good_result)
+    good_bundle = tmp_path / "bundle-good"
+    create_result_bundle([good_result], good_bundle)
+    bad_result = tmp_path / "run-bad"
+    _write_result_dir(bad_result)
+    bad_bundle = tmp_path / "bundle-bad"
+    create_result_bundle([bad_result], bad_bundle)
+    manifest_path = bad_bundle / BUNDLE_MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["runs"][0]["files"][0]["sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    db_path = tmp_path / "registry.sqlite"
+
+    with pytest.raises(RegistryError, match="hash mismatch"):
+        import_result_bundles([good_bundle, bad_bundle], db_path)
+
+    assert not db_path.exists()
+
+
+def test_registry_bundle_import_replaces_same_bundled_run_on_reimport(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    bundle_dir = tmp_path / "bundle"
+    create_result_bundle([result_dir], bundle_dir)
+    db_path = tmp_path / "registry.sqlite"
+
+    first = import_result_bundles([bundle_dir], db_path)
+    second = import_result_bundles([bundle_dir], db_path)
+
+    assert first[0].run_id == second[0].run_id
+    assert second[0].rows_imported == 1
+    with sqlite3.connect(db_path) as conn:
+        row_count = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        result_rows = conn.execute("SELECT COUNT(*) FROM result_rows").fetchone()[0]
+    assert row_count == 1
+    assert result_rows == 1
+
+
+def test_registry_bundle_import_accepts_multiple_bundles_in_one_call(
+    tmp_path: Path,
+) -> None:
+    result_a = tmp_path / "run-a"
+    result_b = tmp_path / "run-b"
+    _write_result_dir(result_a, [_record("short")])
+    _write_result_dir(result_b, [_record("long")])
+    bundle_a = tmp_path / "bundle-a"
+    bundle_b = tmp_path / "bundle-b"
+    create_result_bundle([result_a], bundle_a)
+    create_result_bundle([result_b], bundle_b)
+    db_path = tmp_path / "registry.sqlite"
+
+    summaries = import_result_bundles([bundle_a, bundle_b], db_path)
+
+    assert [summary.rows_imported for summary in summaries] == [1, 1]
+    with sqlite3.connect(db_path) as conn:
+        labels = [
+            row[0]
+            for row in conn.execute("SELECT label FROM runs ORDER BY label").fetchall()
+        ]
+        cases = [
+            row[0]
+            for row in conn.execute(
+                "SELECT case_id FROM result_rows ORDER BY case_id"
+            ).fetchall()
+        ]
+    assert labels == ["run-a", "run-b"]
+    assert cases == ["long", "short"]
 
 
 def test_registry_bundle_create_rejects_possible_secret(tmp_path: Path) -> None:
