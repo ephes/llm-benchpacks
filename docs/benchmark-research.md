@@ -6,10 +6,11 @@ This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
 showed that the public external-agent path works mechanically but copied
 fenced-diff task prompts were the wrong benchmark surface for direct
-workspace-editing agents. The first direct-edit prompt slice for the existing
-external-agent coding-task packs has now landed and has local M5 real-agent
-evidence: two fixtures passed deterministically and one larger dashboard
-fixture failed from no workspace mutation.
+workspace-editing agents. Direct-edit prompt variants now have live Codex
+OSS/Ollama evidence on M5 and M4: both Apple hosts passed the tiny greeting
+fixture, while the deeper Python and dashboard fixtures still exposed
+no-mutation, no-source-mutation, and partial-mutation verifier failures. The
+NVIDIA leg is blocked until SSH access is restored.
 
 No datasets were downloaded. Generated `results/*`, metadata, raw payloads,
 workspaces, patches, task logs, verify artifacts, model-call logs, or secrets
@@ -55,9 +56,16 @@ should not be committed for this research track unless explicitly curated.
   unified-diff file paths and without the required
   `*** Begin File: inventory.py` marker, so the fallback was not exercised and
   the verifier ran against the unchanged fixture.
-- Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
-  evidence, provided the pack set stays opt-in and generated artifacts remain
-  local/ignored unless curated explicitly.
+- The 2026-05-09 broader direct-edit comparison reached both Apple hosts at the
+  same repo commit with valid adapter rows and safe model-call telemetry. It
+  produced 2/6 deterministic verifier passes: `fix-greeting` passed on M5 and
+  M4; M5 `fix-task-summary` and M4 `fix-dashboard-regressions` failed with no
+  captured mutation; M5 `fix-dashboard-regressions` wrote only generated
+  `__pycache__` artifacts and no allowed source edit; and M4
+  `fix-task-summary` made a partial source edit but still failed owner-count
+  verification. NVIDIA was a remote availability blocker because SSH failed
+  before repo/runtime inspection. This is meaningful exploratory
+  agent-workflow evidence, not default-matrix proof.
 
 ## Next Work Ordering
 
@@ -69,9 +77,12 @@ should not be committed for this research track unless explicitly curated.
    tightening prompt wording, or broadening the replacement contract; do not
    treat endpoint reachability or logically plausible raw code as correctness
    success.
-2. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
-   keeping `coding-tasks-external-agent` opt-in and preserving the current
-   artifact policy.
+2. Keep `coding-tasks-external-agent` opt-in after the mixed M5/M4 validation.
+   The next direct-edit slice should be deliberate: rerun the NVIDIA leg when
+   access is available, try another already-configured local agent/model, or
+   refine report-facing classification for no-source-mutation versus partial
+   source mutation. Do not promote the pack set into defaults from the current
+   2/6 Apple verifier pass result.
 3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 4. Keep larger benchmark-design research parked until the endpoint-only and

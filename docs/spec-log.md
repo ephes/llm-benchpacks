@@ -16,6 +16,47 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (direct-edit external-agent M4/M5 validation)
+
+### Changed
+
+- Ran the explicit `coding-tasks-external-agent` pack set on the local M5 and
+  remote M4 through Codex CLI 0.130.0 in OSS/Ollama mode after dry runs showed
+  exactly the three direct-edit external-agent packs.
+- Synced the clean M4 checkout from `2acd1b3` to the local commit `86d3194`
+  before running; kept the NVIDIA target blocked because SSH to
+  `llm.django-cast.com` failed before repo/runtime inspection.
+- Kept generated artifacts ignored and local by default. Only compact M4
+  `run.jsonl`, `summary.md`, `hardware.json`, and `run-metadata.json` files
+  were pulled back; remote raw/workspace/patch/task/verify/model-call artifacts
+  stayed on the M4.
+
+### Outcome
+
+- Apple hosts produced 2/6 deterministic verifier passes: `fix-greeting`
+  passed on both M5 and M4.
+- All six Apple adapter rows were `ok=true`, and all six external-agent
+  telemetry records were valid and `ok=true`, so the failures were not
+  endpoint, adapter, harness configuration, or telemetry blockers.
+- Failure classes were mixed: M5 `fix-task-summary` and M4
+  `fix-dashboard-regressions` were no-mutation task-quality failures; M5
+  `fix-dashboard-regressions` wrote only generated `__pycache__` artifacts and
+  no allowed source edit; M4 `fix-task-summary` made a partial source edit but
+  still failed the owner-count verifier.
+
+### Validation
+
+- Documentation-only live-outcome update. `git diff --check` and
+  `uv run pytest` passed; generated benchmark artifacts remain ignored and
+  uncommitted.
+
+### Open Questions
+
+- `coding-tasks-external-agent` remains explicitly exploratory and opt-in.
+  Before any helper/default promotion, the lane needs broader verifier-passing
+  evidence and a deliberate answer for no-source-mutation versus partial-source
+  mutation failure reporting.
+
 ## 2026-05-09 (endpoint replacement fallback live validation)
 
 ### Changed

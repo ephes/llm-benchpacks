@@ -16,26 +16,35 @@ section to decide the next slice.
    block, so the workspace stayed unchanged and the verifier failed. Treat this
    as a model output-contract failure, not a successful endpoint correctness
    lane.
-2. Run a broader exploratory direct-edit external-agent comparison across
-   M4/M5/NVIDIA once operator time is available. Keep
-   `coding-tasks-external-agent` opt-in, keep generated artifacts ignored unless
-   explicitly curated, and treat the outcome as agent-workflow evidence rather
-   than a default correctness matrix.
-3. Decide the next endpoint-only correctness slice deliberately before changing
+2. Keep `coding-tasks-external-agent` explicitly exploratory and opt-in after
+   the 2026-05-09 direct-edit comparison. The Apple M5/M4 slice reached
+   Ollama/Codex on both hosts with valid telemetry and no endpoint or harness
+   configuration blocker, but produced only 2/6 deterministic verifier passes:
+   `fix-greeting` passed on both hosts, while the deeper Python and dashboard
+   fixtures failed as no-source-mutation, no-mutation, or partial-source-edit
+   task-quality failures. The NVIDIA target remains blocked until SSH access to
+   `llm.django-cast.com` is restored and repo/runtime state can be inspected.
+3. Decide any next direct-edit external-agent slice deliberately before changing
+   defaults: rerun the NVIDIA leg when access is available, try a different
+   already-configured local agent/model, or refine reporting around
+   no-source-mutation versus partial-source-mutation failures. Do not promote
+   the external-agent pack set into helper defaults from the current mixed
+   Apple-only evidence.
+4. Decide the next endpoint-only correctness slice deliberately before changing
    defaults: try another already-available endpoint, tighten the prompt
    contract, or consider whether accepting unmarked full-file replacements is
    safe enough. Do not change `scripts/benchpack-tmux-matrix` helper pack sets
    or default matrix recommendations until there is an apply-clean,
    verifier-passing live result.
-4. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
+5. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
    lane unless there is a new model target, runtime, host, or operational
    question. Existing M4/M5/Hetzner strict-GGUF evidence is sufficient for the
    current four-pack lane.
-5. Keep result-registry work focused on concrete reporting/sharing needs. Local
+6. Keep result-registry work focused on concrete reporting/sharing needs. Local
    import, report, static site export, bundle create/validate, and bundle import
    have landed; hosted upload/review, richer public browsing, duplicate
    handling, query APIs, and leaderboard policy are later slices.
-6. Keep research items parked until live evidence motivates them:
+7. Keep research items parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
    scoring, larger project-level tasks, and product matching/classification
