@@ -1176,12 +1176,15 @@ comparability.
 landed as `benchpack registry import --db <sqlite> <result-dir>...`, the first
 compact public bundle slice has landed as
 `benchpack registry bundle create/validate`, and the first comparability
-indexing slice has landed as SQLite schema version `2`. This keeps the
-artifact-first workflow: local `results/<date>-<host-label>/` directories,
-`run.jsonl`, `hardware.json`, `run-metadata.json`, and pack manifests remain
-the canonical evidence. The database is an index over validated result
-artifacts, and public bundles are compact exports for sharing, not the only
-copy of benchmark truth.
+indexing slice has landed as SQLite schema version `2`. A first registry-backed
+report slice has also landed as `benchpack registry report --db <sqlite>`,
+rendering the existing Markdown report medians, warnings, cache rows, and
+`prefill parity` statuses from indexed rows and stored compact metadata. This
+keeps the artifact-first workflow: local `results/<date>-<host-label>/`
+directories, `run.jsonl`, `hardware.json`, `run-metadata.json`, and pack
+manifests remain the canonical evidence. The database is an index over
+validated result artifacts, and public bundles are compact exports for sharing,
+not the only copy of benchmark truth.
 
 Scope:
 
@@ -1230,6 +1233,17 @@ Scope:
   now has structured inputs for artifact parity, runtime-and-format labeling,
   prompt/cache parity checks, pack-version filtering, and hardware/operating
   caveats without inferring missing metadata.
+- Add registry-backed report reproduction before website views.
+  **Landed 2026-05-08** as `benchpack registry report --db <sqlite>`, with
+  optional repeated `--run-id` or `--label` filters. The command reads schema
+  version `2` registry rows, reconstructs report inputs from
+  `result_rows.raw_json`, `runs.hardware_json`, and `runs.run_metadata_json`,
+  and reuses the existing report renderer so medians, warnings, cache rows,
+  and `prefill parity` semantics match directory-backed reports. It does not
+  require source result directories, mutate the database, read raw/workspace/
+  task/verify artifacts, or contact endpoints. Artifact-only sections stay
+  bounded: model-call summaries are omitted and repo-task patch byte counts
+  render as unknown from registry-only data.
 - Treat community submission as untrusted input. Public uploads should go
   through schema validation, size limits, secret scanning, content-type checks,
   duplicate detection, provenance labels, and moderation or review states
@@ -1254,13 +1268,14 @@ Scope:
 Validation:
 
 - A local registry import can round-trip existing result directories into a
-  database and reproduce `benchpack report` medians and warnings. **Partially
-  landed 2026-05-08** for local import/indexing and comparability stats:
+  database and reproduce `benchpack report` medians and warnings.
+  **Landed 2026-05-08** for local import/indexing, comparability stats, and
+  registry-backed report rendering:
   focused tests cover metadata indexing, row normalization, idempotent
   re-import, malformed row rejection, malformed optional metadata rejection,
   CLI dispatch, schema-v1 upgrade, comparability-anchor indexing, and per-case
-  prompt/cache/prefill median stats. Full report rendering from registry data
-  remains future work.
+  prompt/cache/prefill median stats, plus registry report rendering without
+  source artifacts and run-id/label selection.
 - Imported rows retain enough provenance to explain whether two runs are
   comparable, partially comparable, or only useful as separate observations.
 - A sample public bundle can be validated without network access and without

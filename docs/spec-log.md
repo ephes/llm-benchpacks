@@ -53,6 +53,38 @@ working history and open questions.
   slice. Tmux-helper and default-matrix promotion remain premature after this
   single failed local endpoint attempt.
 
+## 2026-05-08 (registry-backed report)
+
+### Changed
+
+- Added `benchpack registry report --db <sqlite>` as the first registry-backed
+  report reproduction slice.
+- The command reads SQLite schema version `2` registry rows, optionally filters
+  by repeated `--run-id` or `--label`, reconstructs report inputs from indexed
+  `result_rows.raw_json` plus stored hardware and run-metadata JSON, and reuses
+  the existing Markdown report renderer.
+- Directory-backed and registry-backed report medians, cache warnings, cache
+  rows, and `prefill parity` statuses now share the same compare/report helper
+  code.
+- Kept the registry report read-only and compact-data-only. It does not require
+  source result directories, mutate benchmark outputs or the database, read
+  raw/workspace/task/verify artifacts, contact endpoints, or infer parity from
+  missing metadata. Artifact-only model-call summaries are omitted, and
+  repo-task patch byte counts render as unknown from registry-only data.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document the command and boundary.
+
+### Validation
+
+- Focused registry/report tests cover rendering from SQLite after the source
+  result directory is removed, run-id and label selection, missing selection
+  errors, and CLI dispatch.
+
+### Open Questions
+
+- Public comparison explorer views, registry-backed artifact bundle selection,
+  hosted ingestion, and richer UI filters remain later result-registry slices.
+
 ## 2026-05-08 (backlog grooming after endpoint validation)
 
 ### Changed

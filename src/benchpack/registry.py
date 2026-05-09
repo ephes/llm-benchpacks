@@ -98,6 +98,50 @@ class RegistryBundleSummary:
     provenance: str
 
 
+def load_registry_report_runs(
+    db_path: Path | str,
+    *,
+    run_ids: list[int] | None = None,
+    labels: list[str] | None = None,
+) -> list[ResultRun]:
+    """Load report runs from the local SQLite registry."""
+
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    if run_ids is not None and labels is not None:
+        raise RegistryError("registry report accepts either --run-id or --label, not both")
+    if run_ids is not None:
+        if not run_ids:
+            raise RegistryError("registry report --run-id requires at least one value")
+        for run_id in run_ids:
+            if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
+                raise RegistryError("registry report --run-id values must be integers >= 1")
+    if labels is not None:
+        if not labels:
+            raise RegistryError("registry report --label requires at least one value")
+        for label in labels:
+            if not isinstance(label, str) or label == "":
+                raise RegistryError("registry report --label values must be non-empty")
+
+    db = Path(db_path)
+    if not db.is_file():
+        raise RegistryError(f"registry database not found: {db}")
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            conn.row_factory = sqlite3.Row
+            _assert_report_schema(conn, db)
+            run_rows = _select_report_run_rows(conn, run_ids=run_ids, labels=labels)
+            runs = [_registry_result_run(conn, row) for row in run_rows]
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not read registry database {db}: {exc}") from exc
+
+    if not runs:
+        raise RegistryError("registry report selection matched no runs")
+    return runs
+
+
 def import_result_dirs(
     result_dirs: list[Path | str],
     db_path: Path | str,
@@ -270,6 +314,109 @@ def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
         files=file_count,
         omitted_artifacts=omitted_count,
         provenance=provenance,
+    )
+
+
+def _assert_report_schema(conn: sqlite3.Connection, db: Path) -> None:
+    version = conn.execute("PRAGMA user_version").fetchone()
+    if version is None or int(version[0]) < REGISTRY_SCHEMA_VERSION:
+        raise RegistryError(
+            f"registry report requires schema version {REGISTRY_SCHEMA_VERSION}: {db}"
+        )
+    meta = conn.execute(
+        "SELECT value FROM registry_meta WHERE key = 'schema_version'"
+    ).fetchone()
+    if meta is None or meta["value"] != str(REGISTRY_SCHEMA_VERSION):
+        raise RegistryError(
+            f"registry report requires schema version {REGISTRY_SCHEMA_VERSION}: {db}"
+        )
+
+
+def _select_report_run_rows(
+    conn: sqlite3.Connection,
+    *,
+    run_ids: list[int] | None,
+    labels: list[str] | None,
+) -> list[sqlite3.Row]:
+    if run_ids:
+        placeholders = ",".join("?" for _ in run_ids)
+        rows = conn.execute(
+            f"""
+            SELECT id, result_dir, label, hardware_json, run_metadata_json
+            FROM runs
+            WHERE id IN ({placeholders})
+            ORDER BY id
+            """,
+            tuple(run_ids),
+        ).fetchall()
+        found_ids = {int(row["id"]) for row in rows}
+        missing = [run_id for run_id in run_ids if run_id not in found_ids]
+        if missing:
+            raise RegistryError(f"registry report run_id not found: {missing[0]}")
+        return rows
+
+    if labels:
+        placeholders = ",".join("?" for _ in labels)
+        rows = conn.execute(
+            f"""
+            SELECT id, result_dir, label, hardware_json, run_metadata_json
+            FROM runs
+            WHERE label IN ({placeholders})
+            ORDER BY id
+            """,
+            tuple(labels),
+        ).fetchall()
+        found_labels = {str(row["label"]) for row in rows}
+        missing = [label for label in labels if label not in found_labels]
+        if missing:
+            raise RegistryError(f"registry report label not found: {missing[0]}")
+        return rows
+
+    return conn.execute(
+        """
+        SELECT id, result_dir, label, hardware_json, run_metadata_json
+        FROM runs
+        ORDER BY id
+        """
+    ).fetchall()
+
+
+def _registry_result_run(conn: sqlite3.Connection, row: sqlite3.Row) -> ResultRun:
+    raw_rows = conn.execute(
+        """
+        SELECT raw_json
+        FROM result_rows
+        WHERE run_id = ?
+        ORDER BY row_index
+        """,
+        (row["id"],),
+    ).fetchall()
+    records: list[dict[str, Any]] = []
+    for index, raw_row in enumerate(raw_rows, start=1):
+        try:
+            record = json.loads(raw_row["raw_json"])
+        except json.JSONDecodeError as exc:
+            raise RegistryError(
+                f"could not parse indexed raw_json for run_id {row['id']} row {index}"
+            ) from exc
+        if not isinstance(record, dict):
+            raise RegistryError(
+                f"indexed raw_json for run_id {row['id']} row {index} is not an object"
+            )
+        records.append(record)
+    if not records:
+        raise RegistryError(f"registry run_id {row['id']} has no indexed rows")
+    return ResultRun(
+        path=Path(row["result_dir"]),
+        label=row["label"],
+        records=records,
+        hardware=_json_object_or_none(row["hardware_json"], "hardware_json", row["id"]),
+        run_metadata=_json_object_or_none(
+            row["run_metadata_json"],
+            "run_metadata_json",
+            row["id"],
+        ),
+        artifact_root=None,
     )
 
 
@@ -987,6 +1134,24 @@ def _load_optional_json_object(result_dir: Path, filename: str) -> dict[str, Any
         raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
     if not isinstance(value, dict):
         raise RegistryError(f"expected JSON object in {path}")
+    return value
+
+
+def _json_object_or_none(
+    raw_json: str | None,
+    field: str,
+    run_id: int,
+) -> dict[str, Any] | None:
+    if raw_json is None:
+        return None
+    try:
+        value = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise RegistryError(
+            f"could not parse indexed {field} for run_id {run_id}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise RegistryError(f"indexed {field} for run_id {run_id} is not an object")
     return value
 
 

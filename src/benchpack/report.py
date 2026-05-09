@@ -164,7 +164,7 @@ def _render_run_metadata(runs: list[ResultRun]) -> list[str]:
                 endpoint=_markdown_cell(
                     _unique_record_values(run.records, ("endpoint",))
                 ),
-                hardware=_markdown_cell(_hardware_cell(run.path)),
+                hardware=_markdown_cell(_hardware_cell(run)),
             )
         )
     return lines
@@ -178,7 +178,7 @@ def _render_runtime_metadata(runs: list[ResultRun]) -> list[str]:
         "|-----|---------|----------------|----------------------|-------|",
     ]
     for run in runs:
-        metadata = _runtime_metadata(run.path)
+        metadata = _runtime_metadata(run)
         if metadata is None:
             lines.append(
                 "| {run} | run-metadata.json missing | {missing} | {missing} | "
@@ -238,8 +238,10 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
     ]
     rows: list[str] = []
     for run in runs:
+        if run.artifact_root is None:
+            continue
         try:
-            summaries = summarize_model_call_logs(run.path)
+            summaries = summarize_model_call_logs(run.artifact_root)
         except ModelCallLogError as exc:
             raise ReportError(str(exc)) from exc
         for summary in summaries:
@@ -286,7 +288,7 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
     ]
     rows: list[str] = []
     for run in runs:
-        for outcome in summarize_repo_task_outcomes(run.records, run.path):
+        for outcome in summarize_repo_task_outcomes(run.records, run.artifact_root):
             rows.append(
                 "| {run} | {case} | {repetition} | {repo_status} | "
                 "{verify_exit} | {scoring} | {patch_bytes} | {result} |".format(
@@ -362,9 +364,13 @@ def _render_compare_medians(
     return lines
 
 
-def _runtime_metadata(result_dir: Path) -> dict[str, Any] | None:
+def _runtime_metadata(run: ResultRun) -> dict[str, Any] | None:
+    if run.run_metadata is not None:
+        return run.run_metadata
+    if run.artifact_root is None:
+        return None
     try:
-        return load_optional_run_metadata(result_dir)
+        return load_optional_run_metadata(run.artifact_root)
     except RunMetadataError as exc:
         raise ReportError(str(exc)) from exc
 
@@ -393,8 +399,12 @@ def _pack_cell(run: ResultRun) -> str:
     )
 
 
-def _hardware_cell(result_dir: Path) -> str:
-    path = result_dir / "hardware.json"
+def _hardware_cell(run: ResultRun) -> str:
+    if run.hardware is not None:
+        return _hardware_object_cell(run.hardware)
+    if run.artifact_root is None:
+        return "hardware.json missing"
+    path = run.artifact_root / "hardware.json"
     if not path.is_file():
         return "hardware.json missing"
     try:
@@ -403,7 +413,10 @@ def _hardware_cell(result_dir: Path) -> str:
         raise ReportError(f"could not parse {path}: {exc.msg}") from exc
     if not isinstance(hardware, dict):
         raise ReportError(f"expected JSON object in {path}")
+    return _hardware_object_cell(hardware)
 
+
+def _hardware_object_cell(hardware: dict[str, Any]) -> str:
     parts: list[str] = []
     for key in (
         "hostname",

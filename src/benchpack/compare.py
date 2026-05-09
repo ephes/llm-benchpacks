@@ -25,6 +25,9 @@ class ResultRun:
     path: Path
     label: str
     records: list[dict[str, Any]]
+    hardware: dict[str, Any] | None = None
+    run_metadata: dict[str, Any] | None = None
+    artifact_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -79,7 +82,7 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
     if not records:
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
-    return ResultRun(path=path, label=path.name, records=records)
+    return ResultRun(path=path, label=path.name, records=records, artifact_root=path)
 
 
 def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
@@ -298,7 +301,16 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
             if candidate_counts[candidate] > 1
             else candidate
         )
-        labeled.append(ResultRun(path=run.path, label=label, records=run.records))
+        labeled.append(
+            ResultRun(
+                path=run.path,
+                label=label,
+                records=run.records,
+                hardware=run.hardware,
+                run_metadata=run.run_metadata,
+                artifact_root=run.artifact_root,
+            )
+        )
     return labeled
 
 

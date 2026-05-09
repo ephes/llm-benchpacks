@@ -57,6 +57,7 @@ uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --mod
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
+uv run benchpack registry report --db registry/benchpack.sqlite --label 2026-04-28-mlx-lm-runtime --label 2026-04-29-llama-server-runtime
 uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
 uv run benchpack registry bundle validate bundles/example
 ```
@@ -250,6 +251,15 @@ per-case prompt/cache coverage medians for later comparison views. It leaves
 benchmark outputs untouched. The result directory remains canonical evidence;
 the registry is a local search/index aid, not a submission bundle or
 replacement artifact format.
+
+`benchpack registry report --db <sqlite>` renders the same Markdown report
+shape from indexed registry rows, with optional `--run-id <id>` or
+`--label <label>` filters. It uses the rows plus stored hardware and
+run-metadata JSON in SQLite, so median, warning, cache-row, and
+`prefill parity` output can be reproduced from a registry snapshot even when
+the original result directories are not present. Artifact-only sections stay
+bounded: external-agent model-call summaries are omitted, and repo-task patch
+byte counts render as unknown unless a normal directory-backed report is used.
 
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
 compact public-sharing bundle from existing result directories. The bundle

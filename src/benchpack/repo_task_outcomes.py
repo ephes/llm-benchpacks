@@ -26,7 +26,7 @@ class RepoTaskOutcome:
 
 def summarize_repo_task_outcomes(
     records: list[dict[str, Any]],
-    result_dir: Path,
+    result_dir: Path | None,
 ) -> list[RepoTaskOutcome]:
     """Return compact repo-task outcomes without changing result records."""
 
@@ -110,7 +110,9 @@ def _scoring_label(value: Any) -> str:
     return f"{mode}:{result}"
 
 
-def _patch_bytes(record: dict[str, Any], result_dir: Path) -> int | None:
+def _patch_bytes(record: dict[str, Any], result_dir: Path | None) -> int | None:
+    if result_dir is None:
+        return None
     patch = record.get("patch")
     if not isinstance(patch, dict):
         return None

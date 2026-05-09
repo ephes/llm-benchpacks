@@ -649,6 +649,19 @@ packs, load adapters, start runtimes, collect hardware, contact endpoints, read
 artifacts, mutate result directories, generate reports, perform SSH, or create
 public submission bundles.
 
+`benchpack registry report --db <sqlite>` is a read-only report path over that
+SQLite snapshot. It reconstructs `ResultRun` inputs from `result_rows.raw_json`
+and the stored `runs.hardware_json` / `runs.run_metadata_json` columns, then
+passes them through the same report and compare summarization helpers used by
+directory-backed `benchpack report`. This keeps median, cache-warning, and
+`prefill parity` semantics aligned without requiring the original result
+directories to exist. Optional `--run-id` and `--label` selectors only choose
+which imported runs to render; they do not mutate the database or source
+artifacts. Since the registry does not store patch bytes or model-call log
+contents, registry-backed reports omit external-agent model-call summaries and
+show repo-task patch byte counts as unknown unless a normal directory-backed
+report is used.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite
 database. It copies only compact report-facing files into a new directory:

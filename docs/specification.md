@@ -969,6 +969,36 @@ submission bundle. The local registry may store the canonical local result
 directory path for idempotent re-imports; public bundle/export privacy rules
 are handled by the separate bundle command below.
 
+### `benchpack registry report`
+
+```text
+benchpack registry report --db <sqlite-db> [--run-id <id> ...]
+benchpack registry report --db <sqlite-db> [--label <label> ...]
+```
+
+`benchpack registry report` renders the existing Markdown report shape from
+indexed SQLite rows. With no filters, it reports every imported run ordered by
+registry id. `--run-id` may be repeated to select specific run ids, and
+`--label` may be repeated to select runs by registry label; the two selector
+types are mutually exclusive.
+
+The command reads schema version `2` registry data: `result_rows.raw_json`
+provides normalized result records, and `runs.hardware_json` plus
+`runs.run_metadata_json` provide report-facing host and user-supplied runtime
+metadata when they were indexed. It reuses the normal report renderer, so row
+counts, scoring counts, median wall time, TTFT, prefill TPS, decode TPS, total
+TPS, token medians, cache rows, warnings, and `prefill parity` status follow
+the same rules as `benchpack report` and `benchpack compare`.
+
+The registry report is intentionally a snapshot report over indexed compact
+data, not an artifact reader. It does not require the canonical result
+directories to exist, and it does not read `raw/`, workspaces, task logs,
+verifier artifacts, patch files, or model-call logs. Because those artifact
+files are not in the SQLite registry, external-agent model-call summaries are
+omitted from registry-backed reports and repo-task patch byte counts render as
+unknown. Use directory-backed `benchpack report` when artifact-backed
+model-call or patch-size summaries are required.
+
 ### `benchpack registry bundle`
 
 ```text

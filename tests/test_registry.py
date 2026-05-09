@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 
 import pytest
 
 import benchpack.registry as registry
+from benchpack.cli import main
+from benchpack.report import render_report
 from benchpack.registry import (
     BUNDLE_MANIFEST_FILENAME,
     RegistryError,
     create_result_bundle,
     import_result_dirs,
+    load_registry_report_runs,
     validate_result_bundle,
 )
 
@@ -249,6 +253,171 @@ def test_registry_import_indexes_repo_commit_fallback_and_nullable_anchors(
         ).fetchone()
 
     assert run == ("def5678", None, None)
+
+
+def test_registry_report_loads_indexed_runs_without_source_artifacts(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "results" / "run-a"
+    rows = [
+        _record("short"),
+        _record("short"),
+    ]
+    _write_result_dir(result_dir, rows)
+    (result_dir / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas", "chip": "Apple M5 Max"}) + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "runtime": {"name": "llama-server", "version": "9030"},
+                "model": {"id": "gemma4-e2b-q4km", "quantization": "Q4_K_M"},
+                "operating_conditions": {"power": "plugged in"},
+                "notes": "indexed report",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+    shutil.rmtree(result_dir)
+
+    runs = load_registry_report_runs(db_path)
+    output = render_report(runs)
+
+    assert runs[0].artifact_root is None
+    assert "| run-a | runtime-sweep 0.1.0 | openai-chat | test-model |" in output
+    assert "hostname=atlas; chip=Apple M5 Max" in output
+    assert "name=llama-server" in output
+    assert "indexed report" in output
+    assert (
+        "| run-a | short | 2 | 2 | 1.250 | 0.200 | 100.00 | 40.00 | "
+        "30.00 | 60 | 10 | 0 | 2/2 | comparable |"
+    ) in output
+
+
+def test_registry_report_filters_by_run_id_or_label(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_result_dir(run_a, [_record("short")])
+    _write_result_dir(run_b, [_record("long")])
+    db_path = tmp_path / "registry.sqlite"
+    summaries = import_result_dirs([run_a, run_b], db_path)
+
+    by_id = load_registry_report_runs(db_path, run_ids=[summaries[1].run_id])
+    by_label = load_registry_report_runs(db_path, labels=["run-a"])
+
+    assert [run.label for run in by_id] == ["run-b"]
+    assert by_id[0].records[0]["case"] == "long"
+    assert [run.label for run in by_label] == ["run-a"]
+    assert by_label[0].records[0]["case"] == "short"
+
+
+def test_registry_report_rejects_missing_selection(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="run_id not found"):
+        load_registry_report_runs(db_path, run_ids=[999])
+
+    with pytest.raises(RegistryError, match="either --run-id or --label"):
+        load_registry_report_runs(db_path, run_ids=[1], labels=["run-a"])
+
+    with pytest.raises(RegistryError, match="--run-id requires at least one value"):
+        load_registry_report_runs(db_path, run_ids=[])
+
+    with pytest.raises(RegistryError, match="--label requires at least one value"):
+        load_registry_report_runs(db_path, labels=[])
+
+
+def test_registry_report_rejects_stale_schema_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "registry-v1.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE registry_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            INSERT INTO registry_meta(key, value) VALUES ('schema_version', '1');
+            PRAGMA user_version = 1;
+            """
+        )
+
+    with pytest.raises(RegistryError, match="requires schema version 2"):
+        load_registry_report_runs(db_path)
+
+
+def test_registry_report_rejects_corrupt_indexed_json(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE result_rows SET raw_json = ?", ("{bad json}",))
+
+    with pytest.raises(RegistryError, match="could not parse indexed raw_json"):
+        load_registry_report_runs(db_path)
+
+
+def test_registry_report_rejects_corrupt_indexed_metadata(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas"}) + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE runs SET hardware_json = ?", ("[]",))
+
+    with pytest.raises(RegistryError, match="indexed hardware_json"):
+        load_registry_report_runs(db_path)
+
+
+def test_registry_report_cli_renders_indexed_report(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    assert main(["registry", "report", "--db", str(db_path), "--label", "run-a"]) == 0
+
+    output = capsys.readouterr().out
+    assert "# benchpack report" in output
+    assert "| run-a | short | 1 | 1 | 1.250 |" in output
+
+
+def test_registry_report_cli_rejects_run_id_and_label_together(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "registry.sqlite"
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "registry",
+                "report",
+                "--db",
+                str(db_path),
+                "--run-id",
+                "1",
+                "--label",
+                "run-a",
+            ]
+        )
+
+    assert exc_info.value.code == 2
 
 
 def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:

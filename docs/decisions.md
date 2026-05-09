@@ -508,9 +508,14 @@ scoring, and repo-task verifier state. Schema version `2` adds nullable
 comparability anchors from explicit run metadata plus per-run/case prompt/cache
 coverage medians so future views can show artifact/runtime mode, pack version,
 prompt-token, and cache-token caveats without parsing every source artifact.
-Public upload, deeper secret scanning, object storage for large artifacts,
-hosted databases, registry-backed report reproduction, and website comparison
-views remain later explicit slices.
+The first registry-backed report slice adds
+`benchpack registry report --db <sqlite>`, which reconstructs report inputs
+from indexed `raw_json` rows plus stored hardware and run-metadata JSON. It
+reuses the existing report renderer for medians, warnings, cache rows, and
+`prefill parity`, while omitting artifact-only model-call summaries and treating
+patch byte counts as unknown when only registry data is available. Public
+upload, deeper secret scanning, object storage for large artifacts, hosted
+databases, and website comparison views remain later explicit slices.
 
 Reason: a local registry is useful for searching and grouping accumulated
 benchmark artifacts, but replacing the artifact-first workflow would weaken

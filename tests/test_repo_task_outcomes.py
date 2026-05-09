@@ -75,6 +75,16 @@ def test_repo_task_outcomes_classify_empty_patch_as_no_mutation(
     assert outcome.outcome == "failed-no-mutation"
 
 
+def test_repo_task_outcomes_treat_missing_artifact_root_as_unknown() -> None:
+    outcome = summarize_repo_task_outcomes(
+        [_repo_task_record(patch={"path": "patch/fix-repo/rep-001.diff"})],
+        None,
+    )[0]
+
+    assert outcome.patch_bytes is None
+    assert outcome.outcome == "failed-unknown-mutation"
+
+
 def test_repo_task_outcomes_classify_nonempty_failed_patch_as_mutation_visible(
     tmp_path: Path,
 ) -> None:

@@ -49,6 +49,7 @@ from .registry import (
     RegistryError,
     create_result_bundle,
     import_result_dirs,
+    load_registry_report_runs,
     validate_result_bundle,
 )
 from .results import RunReporter
@@ -474,6 +475,20 @@ def _cmd_registry_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_report(args: argparse.Namespace) -> int:
+    try:
+        runs = load_registry_report_runs(
+            args.db,
+            run_ids=args.run_ids,
+            labels=args.labels,
+        )
+        output = render_report(runs)
+    except (RegistryError, ReportError) as exc:
+        raise SystemExit(str(exc)) from exc
+    print(output)
+    return 0
+
+
 def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
     try:
         summary = create_result_bundle(
@@ -606,6 +621,31 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Result directories containing run.jsonl",
     )
+    registry_report = registry_sub.add_parser(
+        "report",
+        help="Render a Markdown report from indexed registry rows",
+    )
+    registry_report.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to read",
+    )
+    registry_report_selectors = registry_report.add_mutually_exclusive_group()
+    registry_report_selectors.add_argument(
+        "--run-id",
+        dest="run_ids",
+        action="append",
+        type=int,
+        default=None,
+        help="Registry run id to include; may be repeated",
+    )
+    registry_report_selectors.add_argument(
+        "--label",
+        dest="labels",
+        action="append",
+        default=None,
+        help="Registry run label to include; may be repeated",
+    )
     registry_bundle = registry_sub.add_parser(
         "bundle",
         help="Create or validate compact public result bundles",
@@ -662,6 +702,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "registry":
         if args.registry_command == "import":
             return _cmd_registry_import(args)
+        if args.registry_command == "report":
+            return _cmd_registry_report(args)
         if args.registry_command == "bundle":
             if args.registry_bundle_command == "create":
                 return _cmd_registry_bundle_create(args)
