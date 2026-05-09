@@ -662,6 +662,17 @@ contents, registry-backed reports omit external-agent model-call summaries and
 show repo-task patch byte counts as unknown unless a normal directory-backed
 report is used.
 
+`benchpack registry site --db <sqlite> --out <site-dir>` is the first static
+view over a local registry snapshot. It uses the same indexed compact rows as
+registry-backed reports, writes only `index.html` and `report.md`, and can use
+the same optional `--run-id` or `--label` selectors. The generated `index.html`
+contains local run and case-metric tables plus an embedded copy of the Markdown
+report; `report.md` is produced by the existing report renderer. The site
+export does not require source result directories, read raw/workspace/task/
+verify artifacts, inspect patch or model-call files, mutate the database, or
+contact endpoints. Existing output paths are refused unless `--force` is
+explicit.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite
 database. It copies only compact report-facing files into a new directory:

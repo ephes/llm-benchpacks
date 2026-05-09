@@ -58,6 +58,7 @@ uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-ll
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry report --db registry/benchpack.sqlite --label 2026-04-28-mlx-lm-runtime --label 2026-04-29-llama-server-runtime
+uv run benchpack registry site --db registry/benchpack.sqlite --out registry/site
 uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
 uv run benchpack registry bundle validate bundles/example
 ```

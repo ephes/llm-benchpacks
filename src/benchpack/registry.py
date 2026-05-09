@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import math
 import re
@@ -20,6 +21,7 @@ from .external_agent_model_calls import (
     ModelCallLogError,
     summarize_model_call_logs,
 )
+from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
@@ -98,6 +100,15 @@ class RegistryBundleSummary:
     provenance: str
 
 
+@dataclass(frozen=True)
+class RegistryStaticSiteSummary:
+    """Summary for a generated static registry snapshot."""
+
+    out_dir: Path
+    runs: int
+    files: int
+
+
 def load_registry_report_runs(
     db_path: Path | str,
     *,
@@ -108,20 +119,7 @@ def load_registry_report_runs(
 
     if str(db_path) == "":
         raise RegistryError("registry database path must not be empty")
-    if run_ids is not None and labels is not None:
-        raise RegistryError("registry report accepts either --run-id or --label, not both")
-    if run_ids is not None:
-        if not run_ids:
-            raise RegistryError("registry report --run-id requires at least one value")
-        for run_id in run_ids:
-            if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
-                raise RegistryError("registry report --run-id values must be integers >= 1")
-    if labels is not None:
-        if not labels:
-            raise RegistryError("registry report --label requires at least one value")
-        for label in labels:
-            if not isinstance(label, str) or label == "":
-                raise RegistryError("registry report --label values must be non-empty")
+    _validate_registry_selection("registry report", run_ids=run_ids, labels=labels)
 
     db = Path(db_path)
     if not db.is_file():
@@ -140,6 +138,61 @@ def load_registry_report_runs(
     if not runs:
         raise RegistryError("registry report selection matched no runs")
     return runs
+
+
+def export_registry_static_site(
+    db_path: Path | str,
+    out_dir: Path | str,
+    *,
+    run_ids: list[int] | None = None,
+    labels: list[str] | None = None,
+    force: bool = False,
+) -> RegistryStaticSiteSummary:
+    """Export a read-only static HTML snapshot from the local registry."""
+
+    if str(out_dir) == "":
+        raise RegistryError("registry site output path must not be empty")
+    site_root = Path(out_dir)
+    if site_root.exists():
+        if not force:
+            raise RegistryError(
+                f"registry site output already exists: {site_root}; "
+                "pass --force to replace it"
+            )
+
+    try:
+        runs, run_rows, case_rows = _load_registry_site_snapshot(
+            db_path,
+            run_ids=run_ids,
+            labels=labels,
+        )
+        report_markdown = render_report(runs)
+        index_html = _render_static_site_html(
+            db_path=Path(db_path),
+            run_rows=run_rows,
+            case_rows=case_rows,
+            report_markdown=report_markdown,
+        )
+    except ReportError as exc:
+        raise RegistryError(str(exc)) from exc
+
+    if site_root.exists():
+        if site_root.is_dir():
+            shutil.rmtree(site_root)
+        else:
+            site_root.unlink()
+    site_root.mkdir(parents=True, exist_ok=True)
+    output_files = {
+        "report.md": report_markdown,
+        "index.html": index_html,
+    }
+    for filename, contents in output_files.items():
+        (site_root / filename).write_text(contents, encoding="utf-8")
+    return RegistryStaticSiteSummary(
+        out_dir=site_root,
+        runs=len(runs),
+        files=len(output_files),
+    )
 
 
 def import_result_dirs(
@@ -418,6 +471,326 @@ def _registry_result_run(conn: sqlite3.Connection, row: sqlite3.Row) -> ResultRu
         ),
         artifact_root=None,
     )
+
+
+def _validate_registry_selection(
+    command: str,
+    *,
+    run_ids: list[int] | None,
+    labels: list[str] | None,
+) -> None:
+    if run_ids is not None and labels is not None:
+        raise RegistryError(f"{command} accepts either --run-id or --label, not both")
+    if run_ids is not None:
+        if not run_ids:
+            raise RegistryError(f"{command} --run-id requires at least one value")
+        for run_id in run_ids:
+            if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
+                raise RegistryError(
+                    f"{command} --run-id values must be integers >= 1"
+                )
+    if labels is not None:
+        if not labels:
+            raise RegistryError(f"{command} --label requires at least one value")
+        for label in labels:
+            if not isinstance(label, str) or label == "":
+                raise RegistryError(f"{command} --label values must be non-empty")
+
+
+def _load_registry_site_snapshot(
+    db_path: Path | str,
+    *,
+    run_ids: list[int] | None,
+    labels: list[str] | None,
+) -> tuple[list[ResultRun], list[sqlite3.Row], list[sqlite3.Row]]:
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    _validate_registry_selection("registry site", run_ids=run_ids, labels=labels)
+    db = Path(db_path)
+    if not db.is_file():
+        raise RegistryError(f"registry database not found: {db}")
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            conn.row_factory = sqlite3.Row
+            _assert_report_schema(conn, db)
+            selected_rows = _select_report_run_rows(
+                conn,
+                run_ids=run_ids,
+                labels=labels,
+            )
+            if not selected_rows:
+                raise RegistryError("registry site selection matched no runs")
+            runs = [_registry_result_run(conn, row) for row in selected_rows]
+            selected_ids = [int(row["id"]) for row in selected_rows]
+            return (
+                runs,
+                _select_site_run_rows(conn, selected_ids),
+                _select_site_case_rows(conn, selected_ids),
+            )
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not read registry database {db}: {exc}") from exc
+
+
+def _select_site_run_rows(
+    conn: sqlite3.Connection,
+    run_ids: list[int],
+) -> list[sqlite3.Row]:
+    placeholders = ",".join("?" for _ in run_ids)
+    return conn.execute(
+        f"""
+        SELECT id, label, row_count, imported_at, run_jsonl_sha256,
+               pack_ids_json, pack_versions_json, adapters_json, models_json,
+               endpoints_json, host_hostname, host_platform, host_label,
+               host_repo_commit, comparison_mode, comparison_boundary,
+               runtime_name, runtime_version, runtime_endpoint,
+               model_metadata_id, model_quantization, model_artifact_repo,
+               model_artifact_file, model_revision, model_sha256,
+               operating_power, operating_thermal, operating_background_load
+        FROM runs
+        WHERE id IN ({placeholders})
+        ORDER BY id
+        """,
+        tuple(run_ids),
+    ).fetchall()
+
+
+def _select_site_case_rows(
+    conn: sqlite3.Connection,
+    run_ids: list[int],
+) -> list[sqlite3.Row]:
+    placeholders = ",".join("?" for _ in run_ids)
+    return conn.execute(
+        f"""
+        SELECT r.label AS run_label, s.pack_id, s.pack_version, s.case_id,
+               s.row_count, s.ok_count, s.prompt_token_rows,
+               s.prompt_token_median, s.cached_prompt_token_rows,
+               s.cached_prompt_token_median, s.prefill_tps_rows,
+               s.prefill_tps_median
+        FROM result_case_stats AS s
+        JOIN runs AS r ON r.id = s.run_id
+        WHERE s.run_id IN ({placeholders})
+        ORDER BY s.run_id, s.pack_id, s.pack_version, s.case_id
+        """,
+        tuple(run_ids),
+    ).fetchall()
+
+
+def _render_static_site_html(
+    *,
+    db_path: Path,
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    report_markdown: str,
+) -> str:
+    generated_at = datetime.now(UTC).isoformat(timespec="seconds")
+    lines = [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>benchpack registry snapshot</title>",
+        "<style>",
+        "body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#202124;background:#f8faf9;line-height:1.45}",
+        "header{background:#12343b;color:#fff;padding:24px 32px}",
+        "main{padding:24px 32px;max-width:1440px}",
+        "h1{font-size:28px;margin:0 0 8px}h2{font-size:20px;margin:28px 0 12px}",
+        "p{margin:0 0 12px}.meta{color:#d7e4e5}",
+        "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}",
+        ".table-wrap{overflow-x:auto;border:1px solid #cbd8d9;background:#fff}",
+        "table{border-collapse:collapse;width:100%;font-size:13px}",
+        "th,td{border-bottom:1px solid #e1e8e8;padding:8px 10px;text-align:left;vertical-align:top;white-space:nowrap}",
+        "th{background:#edf4f2;color:#273536;font-weight:600;position:sticky;top:0}",
+        "tr:nth-child(even) td{background:#fbfdfc}",
+        "pre{background:#101820;color:#f5f7f7;overflow:auto;padding:16px;border-radius:6px;font-size:12px;line-height:1.5}",
+        "a{color:#0b6670}",
+        "</style>",
+        "</head>",
+        "<body>",
+        "<header>",
+        "<h1>benchpack registry snapshot</h1>",
+        (
+            '<p class="meta">Generated {generated} from <code>{db}</code>. '
+            "Static, read-only export over indexed compact rows.</p>"
+        ).format(
+            generated=_html(generated_at),
+            db=_html(db_path.name or str(db_path)),
+        ),
+        "</header>",
+        "<main>",
+        "<section>",
+        "<h2>Runs</h2>",
+        '<div class="table-wrap">',
+        "<table>",
+        "<thead><tr>"
+        "<th>id</th><th>label</th><th>imported</th><th>rows</th>"
+        "<th>packs</th><th>adapters</th><th>models</th><th>endpoints</th>"
+        "<th>runtime</th><th>model metadata</th><th>quantization</th>"
+        "<th>model artifact</th><th>model revision</th><th>model sha256</th>"
+        "<th>host</th><th>comparison</th><th>repo commit</th><th>operating</th>"
+        "<th>run.jsonl sha256</th>"
+        "</tr></thead>",
+        "<tbody>",
+    ]
+    for row in run_rows:
+        lines.append(
+            "<tr>"
+            f"<td>{_html(row['id'])}</td>"
+            f"<td>{_html(row['label'])}</td>"
+            f"<td>{_html(row['imported_at'] or '—')}</td>"
+            f"<td>{_html(row['row_count'])}</td>"
+            f"<td>{_html(_json_list_cell(row['pack_ids_json'], row['pack_versions_json']))}</td>"
+            f"<td>{_html(_json_list_cell(row['adapters_json']))}</td>"
+            f"<td>{_html(_json_list_cell(row['models_json']))}</td>"
+            f"<td>{_html(_json_list_cell(row['endpoints_json']))}</td>"
+            f"<td>{_html(_site_runtime_cell(row))}</td>"
+            f"<td>{_html(row['model_metadata_id'] or '—')}</td>"
+            f"<td>{_html(row['model_quantization'] or '—')}</td>"
+            f"<td>{_html(_site_model_artifact_cell(row))}</td>"
+            f"<td>{_html(row['model_revision'] or '—')}</td>"
+            f"<td>{_html(row['model_sha256'] or '—')}</td>"
+            f"<td>{_html(_site_host_cell(row))}</td>"
+            f"<td>{_html(_site_comparison_cell(row))}</td>"
+            f"<td>{_html(row['host_repo_commit'] or '—')}</td>"
+            f"<td>{_html(_site_operating_cell(row))}</td>"
+            f"<td>{_html(row['run_jsonl_sha256'] or '—')}</td>"
+            "</tr>"
+        )
+    lines.extend(
+        [
+            "</tbody>",
+            "</table>",
+            "</div>",
+            "</section>",
+            "<section>",
+            "<h2>Case Metrics</h2>",
+            '<div class="table-wrap">',
+            "<table>",
+            "<thead><tr>"
+            "<th>run</th><th>pack</th><th>case</th><th>rows</th><th>ok</th>"
+            "<th>prompt rows</th><th>prompt median</th>"
+            "<th>cached rows</th><th>cached median</th>"
+            "<th>prefill rows</th><th>prefill median</th>"
+            "</tr></thead>",
+            "<tbody>",
+        ]
+    )
+    for row in case_rows:
+        lines.append(
+            "<tr>"
+            f"<td>{_html(row['run_label'])}</td>"
+            f"<td>{_html(row['pack_id'] + ' ' + row['pack_version'])}</td>"
+            f"<td>{_html(row['case_id'])}</td>"
+            f"<td>{_html(row['row_count'])}</td>"
+            f"<td>{_html(row['ok_count'])}</td>"
+            f"<td>{_html(row['prompt_token_rows'])}</td>"
+            f"<td>{_html(_site_float(row['prompt_token_median']))}</td>"
+            f"<td>{_html(row['cached_prompt_token_rows'])}</td>"
+            f"<td>{_html(_site_float(row['cached_prompt_token_median']))}</td>"
+            f"<td>{_html(row['prefill_tps_rows'])}</td>"
+            f"<td>{_html(_site_float(row['prefill_tps_median']))}</td>"
+            "</tr>"
+        )
+    lines.extend(
+        [
+            "</tbody>",
+            "</table>",
+            "</div>",
+            "</section>",
+            "<section>",
+            "<h2>Markdown Report</h2>",
+            '<p><a href="report.md">Open report.md</a></p>',
+            f"<pre>{_html(report_markdown)}</pre>",
+            "</section>",
+            "</main>",
+            "</body>",
+            "</html>",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _html(value: object) -> str:
+    return html_lib.escape(str(value), quote=True)
+
+
+def _json_list_cell(raw_json: str | None, paired_json: str | None = None) -> str:
+    values = _json_list_values(raw_json)
+    if paired_json is None:
+        return ", ".join(values) if values else "—"
+    paired = _json_list_values(paired_json)
+    if not values:
+        return "—"
+    if len(values) == 1 and len(paired) == 1:
+        return f"{values[0]} {paired[0]}"
+    if paired:
+        return ", ".join(values) + " (versions: " + ", ".join(paired) + ")"
+    return ", ".join(values)
+
+
+def _json_list_values(raw_json: str | None) -> list[str]:
+    if raw_json is None:
+        return []
+    try:
+        value = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item not in (None, "", [])]
+
+
+def _site_runtime_cell(row: sqlite3.Row) -> str:
+    parts = [
+        row["runtime_name"],
+        row["runtime_version"],
+        row["runtime_endpoint"],
+    ]
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_model_artifact_cell(row: sqlite3.Row) -> str:
+    parts = [row["model_artifact_repo"], row["model_artifact_file"]]
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_host_cell(row: sqlite3.Row) -> str:
+    parts = [
+        row["host_label"],
+        row["host_hostname"],
+        row["host_platform"],
+    ]
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_comparison_cell(row: sqlite3.Row) -> str:
+    parts = [row["comparison_mode"], row["comparison_boundary"]]
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_operating_cell(row: sqlite3.Row) -> str:
+    parts = [
+        row["operating_power"],
+        row["operating_thermal"],
+        row["operating_background_load"],
+    ]
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_float(value: object) -> str:
+    if value is None:
+        return "—"
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "—"
+    return f"{float(value):.2f}"
 
 
 def _load_and_validate_result_dir(path: Path | str) -> ResultRun:

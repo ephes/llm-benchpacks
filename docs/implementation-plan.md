@@ -1179,7 +1179,10 @@ compact public bundle slice has landed as
 indexing slice has landed as SQLite schema version `2`. A first registry-backed
 report slice has also landed as `benchpack registry report --db <sqlite>`,
 rendering the existing Markdown report medians, warnings, cache rows, and
-`prefill parity` statuses from indexed rows and stored compact metadata. This
+`prefill parity` statuses from indexed rows and stored compact metadata. A
+first static local site export has also landed as
+`benchpack registry site --db <sqlite> --out <site-dir>`, writing
+`index.html` and `report.md` from indexed compact rows. This
 keeps the artifact-first workflow: local `results/<date>-<host-label>/`
 directories, `run.jsonl`, `hardware.json`, `run-metadata.json`, and pack
 manifests remain the canonical evidence. The database is an index over
@@ -1254,7 +1257,14 @@ Scope:
   and provenance; it should separate throughput, latency, correctness, and
   resource metrics instead of collapsing them into one opaque score.
 - Build the website in stages:
-  - static or read-only generated reports over a local registry snapshot;
+  - static or read-only generated reports over a local registry snapshot.
+    **Landed 2026-05-09** as `benchpack registry site --db <sqlite> --out
+    <site-dir>`, which writes a local `index.html` with run/case-metric tables
+    plus `report.md` from existing registry-backed report rendering. It reads
+    only SQLite schema version `2` compact rows, supports the same optional
+    `--run-id` and `--label` selectors as registry report, refuses existing
+    output paths unless `--force` is supplied, and does not read source
+    artifacts, mutate the database, or contact endpoints.
   - authenticated upload/review for result bundles;
   - public browse and comparison views;
   - optional API for querying normalized results;

@@ -16,6 +16,39 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (registry static site)
+
+### Changed
+
+- Added `benchpack registry site --db <sqlite> --out <site-dir>` as the first
+  static local view over an indexed registry snapshot.
+- The command reads SQLite schema version `2` compact registry data, supports
+  the same optional repeated `--run-id` or `--label` selectors as registry
+  report, and writes `index.html` plus `report.md`.
+- `index.html` contains dense run and case-metric tables from `runs` and
+  `result_case_stats`, plus an embedded copy of the Markdown report. The
+  `report.md` file is rendered through the existing registry-backed report
+  path, so medians, warnings, cache rows, and `prefill parity` semantics remain
+  aligned.
+- Kept the site export read-only over benchmark evidence and the registry. It
+  does not require source result directories, mutate the database, read
+  raw/workspace/task/verify artifacts, inspect patch or model-call files, or
+  contact endpoints. Existing output paths are refused unless `--force` is
+  supplied.
+- Updated README, specification, architecture, implementation backlog, and
+  decisions to document the command and boundary.
+
+### Validation
+
+- Focused registry tests cover static export without source result artifacts,
+  output overwrite refusal/`--force`, label selection, and CLI dispatch.
+
+### Open Questions
+
+- Authenticated upload/review, public browse and comparison views, optional
+  query APIs, hosted deployment, richer filters, and public leaderboard policy
+  remain later result-registry slices.
+
 ## 2026-05-08 (endpoint-python-correctness local validation)
 
 ### Changed

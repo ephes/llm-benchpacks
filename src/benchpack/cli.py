@@ -48,6 +48,7 @@ from .registry import (
     BUNDLE_PROVENANCE_LABELS,
     RegistryError,
     create_result_bundle,
+    export_registry_static_site,
     import_result_dirs,
     load_registry_report_runs,
     validate_result_bundle,
@@ -539,6 +540,31 @@ def _cmd_registry_bundle_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_site(args: argparse.Namespace) -> int:
+    try:
+        summary = export_registry_static_site(
+            args.db,
+            args.out,
+            run_ids=args.run_ids,
+            labels=args.labels,
+            force=args.force,
+        )
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    run_word = "run" if summary.runs == 1 else "runs"
+    file_word = "file" if summary.files == 1 else "files"
+    print(
+        "created registry site {out_dir} with {runs} {run_word}, {files} {file_word}".format(
+            out_dir=summary.out_dir,
+            runs=summary.runs,
+            run_word=run_word,
+            files=summary.files,
+            file_word=file_word,
+        )
+    )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchpack")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -687,6 +713,41 @@ def _build_parser() -> argparse.ArgumentParser:
         "bundle_dir",
         help="Bundle directory containing benchpack-bundle.json",
     )
+    registry_site = registry_sub.add_parser(
+        "site",
+        help="Generate a static read-only site from indexed registry rows",
+    )
+    registry_site.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to read",
+    )
+    registry_site.add_argument(
+        "--out",
+        required=True,
+        help="Output directory for index.html and report.md",
+    )
+    registry_site_selectors = registry_site.add_mutually_exclusive_group()
+    registry_site_selectors.add_argument(
+        "--run-id",
+        dest="run_ids",
+        action="append",
+        type=int,
+        default=None,
+        help="Registry run id to include; may be repeated",
+    )
+    registry_site_selectors.add_argument(
+        "--label",
+        dest="labels",
+        action="append",
+        default=None,
+        help="Registry run label to include; may be repeated",
+    )
+    registry_site.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing site output path",
+    )
     return parser
 
 
@@ -710,6 +771,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.registry_bundle_command == "validate":
                 return _cmd_registry_bundle_validate(args)
             parser.error(f"unknown registry bundle command: {args.registry_bundle_command}")
+        if args.registry_command == "site":
+            return _cmd_registry_site(args)
         parser.error(f"unknown registry command: {args.registry_command}")
     parser.error(f"unknown command: {args.command}")
     return 2

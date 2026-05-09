@@ -17,6 +17,7 @@ from benchpack.registry import (
     BUNDLE_MANIFEST_FILENAME,
     RegistryError,
     create_result_bundle,
+    export_registry_static_site,
     import_result_dirs,
     load_registry_report_runs,
     validate_result_bundle,
@@ -418,6 +419,191 @@ def test_registry_report_cli_rejects_run_id_and_label_together(
         )
 
     assert exc_info.value.code == 2
+
+
+def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "results" / "run-a"
+    rows = [_record("short"), _record("long")]
+    _write_result_dir(result_dir, rows)
+    (result_dir / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas", "platform": "Darwin"}) + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "comparison_mode": "strict-same-gguf",
+                "host": {"label": "m5-max", "repo_commit": "abc1234"},
+                "runtime": {
+                    "name": "llama-server",
+                    "version": "9030",
+                    "endpoint": "http://127.0.0.1:8081/v1",
+                },
+                "model": {
+                    "id": "gemma4-e2b-q4km",
+                    "artifact_repo": "bartowski/google_gemma-4-E2B-it-GGUF",
+                    "artifact_file": "google_gemma-4-E2B-it-Q4_K_M.gguf",
+                    "revision": "b5e99bd",
+                    "quantization": "Q4_K_M",
+                    "sha256": "b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705",
+                },
+                "operating_conditions": {"power": "plugged in"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+    shutil.rmtree(result_dir)
+
+    summary = export_registry_static_site(db_path, tmp_path / "site")
+
+    assert summary.runs == 1
+    assert summary.files == 2
+    html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    report = (tmp_path / "site" / "report.md").read_text(encoding="utf-8")
+    assert "benchpack registry snapshot" in html
+    assert "<td>run-a</td>" in html
+    assert "<td>runtime-sweep 0.1.0</td>" in html
+    assert "<td>openai-chat</td>" in html
+    assert "<td>test-model</td>" in html
+    assert "<td>http://example.test/v1/chat/completions</td>" in html
+    assert "<td>llama-server; 9030; http://127.0.0.1:8081/v1</td>" in html
+    assert "<td>gemma4-e2b-q4km</td>" in html
+    assert "<td>Q4_K_M</td>" in html
+    assert (
+        "<td>bartowski/google_gemma-4-E2B-it-GGUF; "
+        "google_gemma-4-E2B-it-Q4_K_M.gguf</td>"
+    ) in html
+    assert "<td>b5e99bd</td>" in html
+    assert "<td>b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705</td>" in html
+    assert "<td>m5-max; atlas; Darwin</td>" in html
+    assert "<td>strict-same-gguf</td>" in html
+    assert "<td>abc1234</td>" in html
+    assert "<td>plugged in</td>" in html
+    assert "<td>long</td>" in html
+    assert "# benchpack report" in report
+    assert "| run-a | short | 1 | 1 | 1.250 |" in report
+
+
+def test_registry_static_site_export_requires_force_for_existing_output(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "old.txt").write_text("old\n", encoding="utf-8")
+
+    with pytest.raises(RegistryError, match="already exists"):
+        export_registry_static_site(db_path, site_dir)
+
+    summary = export_registry_static_site(db_path, site_dir, force=True)
+
+    assert summary.runs == 1
+    assert not (site_dir / "old.txt").exists()
+    assert (site_dir / "index.html").is_file()
+
+
+def test_registry_static_site_force_keeps_existing_output_on_read_failure(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing.sqlite"
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "old.txt").write_text("old\n", encoding="utf-8")
+
+    with pytest.raises(RegistryError, match="database not found"):
+        export_registry_static_site(db_path, site_dir, force=True)
+
+    assert (site_dir / "old.txt").read_text(encoding="utf-8") == "old\n"
+
+
+def test_registry_static_site_rejects_invalid_programmatic_selection(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="--run-id requires at least one value"):
+        export_registry_static_site(db_path, tmp_path / "empty-run-ids", run_ids=[])
+
+    with pytest.raises(RegistryError, match="--label requires at least one value"):
+        export_registry_static_site(db_path, tmp_path / "empty-labels", labels=[])
+
+    with pytest.raises(RegistryError, match="values must be integers"):
+        export_registry_static_site(
+            db_path,
+            tmp_path / "bad-run-id",
+            run_ids=["1"],  # type: ignore[list-item]
+        )
+
+    with pytest.raises(RegistryError, match="values must be non-empty"):
+        export_registry_static_site(
+            db_path,
+            tmp_path / "bad-label",
+            labels=[1],  # type: ignore[list-item]
+        )
+
+
+def test_registry_static_site_renders_versions_for_multi_pack_runs(
+    tmp_path: Path,
+) -> None:
+    run_a = _record("short")
+    run_a["pack"] = {"id": "pack-a", "version": "0.2.0"}
+    run_b = _record("long")
+    run_b["pack"] = {"id": "pack-b", "version": "0.1.0"}
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir, [run_a, run_b])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    export_registry_static_site(db_path, tmp_path / "site")
+
+    html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    assert "<td>pack-a, pack-b (versions: 0.1.0, 0.2.0)</td>" in html
+
+
+def test_registry_static_site_cli_writes_selected_runs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_result_dir(run_a, [_record("short")])
+    _write_result_dir(run_b, [_record("long")])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([run_a, run_b], db_path)
+    site_dir = tmp_path / "site"
+
+    assert (
+        main(
+            [
+                "registry",
+                "site",
+                "--db",
+                str(db_path),
+                "--out",
+                str(site_dir),
+                "--label",
+                "run-b",
+            ]
+        )
+        == 0
+    )
+
+    assert "created registry site" in capsys.readouterr().out
+    html = (site_dir / "index.html").read_text(encoding="utf-8")
+    assert "<td>run-b</td>" in html
+    assert "<td>long</td>" in html
+    assert "<td>run-a</td>" not in html
 
 
 def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:

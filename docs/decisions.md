@@ -513,9 +513,15 @@ The first registry-backed report slice adds
 from indexed `raw_json` rows plus stored hardware and run-metadata JSON. It
 reuses the existing report renderer for medians, warnings, cache rows, and
 `prefill parity`, while omitting artifact-only model-call summaries and treating
-patch byte counts as unknown when only registry data is available. Public
-upload, deeper secret scanning, object storage for large artifacts, hosted
-databases, and website comparison views remain later explicit slices.
+patch byte counts as unknown when only registry data is available.
+The first static local site slice adds
+`benchpack registry site --db <sqlite> --out <site-dir>`, which writes
+`index.html` and `report.md` from indexed compact registry rows. It reuses
+registry report selection and rendering, adds dense run and case-metric tables
+from `runs` and `result_case_stats`, and remains read-only over the database
+and source artifacts. Public upload, deeper secret scanning, object storage for
+large artifacts, hosted databases, and richer comparison-explorer views remain
+later explicit slices.
 
 Reason: a local registry is useful for searching and grouping accumulated
 benchmark artifacts, but replacing the artifact-first workflow would weaken
