@@ -16,6 +16,34 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (backlog active queue grooming)
+
+### Changed
+
+- Added a short active backlog queue to `docs/implementation-plan.md` so the
+  next slices are visible without reading the full historical phase log.
+- Kept the top priorities focused on live validation of
+  `endpoint-python-correctness` version `0.2.0`, exploratory broader
+  direct-edit external-agent comparison, and a later decision about whether the
+  endpoint-correctness pack belongs in helper or default matrices.
+- Explicitly deferred another broad Gemma 4 strict-GGUF runtime-only matrix,
+  additional result-registry features, and larger research items until a new
+  concrete runtime, model, host, reporting, or correctness question motivates
+  them.
+- Aligned `docs/benchmark-research.md` next-work ordering with the active queue
+  while keeping candidate research tracks documented as research rather than
+  implemented benchmark contracts.
+
+### Validation
+
+- Documentation-only grooming; no live benchmarks or generated artifacts were
+  added.
+
+### Open Questions
+
+- The revised `endpoint-python-correctness` contract still needs live endpoint
+  validation before helper/default matrix promotion.
+
 ## 2026-05-09 (registry bundle import)
 
 ### Changed

@@ -1,5 +1,42 @@
 # Implementation Plan
 
+## Active Backlog Queue
+
+Status date: 2026-05-09.
+
+This queue is the short working view over the longer historical plan below.
+Keep completed implementation history in the phase sections, but use this
+section to decide the next slice.
+
+1. Validate `endpoint-python-correctness` version `0.2.0` against an
+   already-available live endpoint. The pack now accepts either a unified diff
+   or the explicit path-marked replacement block fallback, but it should not be
+   promoted into tmux helper pack sets or default matrix recommendations until
+   one live run proves an apply-clean, verifier-passing outcome.
+2. Run a broader exploratory direct-edit external-agent comparison across
+   M4/M5/NVIDIA once operator time is available. Keep
+   `coding-tasks-external-agent` opt-in, keep generated artifacts ignored unless
+   explicitly curated, and treat the outcome as agent-workflow evidence rather
+   than a default correctness matrix.
+3. Decide the endpoint-correctness matrix role after the live validation. If it
+   passes on at least one baseline endpoint, consider adding a helper pack set
+   or replacing some prompt-only correctness claims with this deterministic
+   verifier-backed lane. If it still fails, classify whether the issue is model
+   quality, output contract, or executor support before changing defaults.
+4. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
+   lane unless there is a new model target, runtime, host, or operational
+   question. Existing M4/M5/Hetzner strict-GGUF evidence is sufficient for the
+   current four-pack lane.
+5. Keep result-registry work focused on concrete reporting/sharing needs. Local
+   import, report, static site export, bundle create/validate, and bundle import
+   have landed; hosted upload/review, richer public browsing, duplicate
+   handling, query APIs, and leaderboard policy are later slices.
+6. Keep research items parked until live evidence motivates them:
+   concurrent/Poisson serving load, energy and cost-per-request, structured
+   quantization axes, native CUDA server adapters, resource-aware program
+   scoring, larger project-level tasks, and product matching/classification
+   program benchmarks.
+
 ## Phase 1: Minimal Runner
 
 **Status:** landed 2026-04-26. See `docs/spec-log.md` for the dated entries.

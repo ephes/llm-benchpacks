@@ -57,18 +57,20 @@ should not be committed for this research track unless explicitly curated.
 
 ## Next Work Ordering
 
-1. Keep this research backlog and implementation plan current.
-2. Treat `endpoint-python-correctness` helper/default-matrix promotion as
+1. Treat `endpoint-python-correctness` helper/default-matrix promotion as
    premature after the first local Ollama apply/format failure. The first
    follow-up has now deliberately added an explicit path-marked replacement
    block fallback and bumped the pack to `0.2.0`; a later live validation
    against an already-available endpoint is still required before any
    helper/default recommendation changes.
-3. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
+2. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
    keeping `coding-tasks-external-agent` opt-in and preserving the current
    artifact policy.
-4. Keep the result-schema question open until repeated live evidence shows
+3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
+4. Keep larger benchmark-design research parked until the endpoint-only and
+   direct-edit lanes produce enough live evidence to justify new fixtures,
+   result fields, or runner resource-measurement behavior.
 
 ## Candidate Benchmark Tracks
 
