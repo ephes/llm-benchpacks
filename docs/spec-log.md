@@ -16,6 +16,45 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (endpoint replacement fallback live validation)
+
+### Changed
+
+- Ran one local M5 live validation of `endpoint-python-correctness` version
+  `0.2.0` against the already-installed `qwen3-coder:latest` Ollama model
+  through `ollama-generate`.
+- Classified the outcome as a model output-contract failure, not an endpoint,
+  adapter, executor, or verifier blocker: the adapter row was `ok=true`, but
+  the model returned full replacement Python content inside a `diff` fence
+  without unified-diff file paths and without the new explicit
+  `*** Begin File: inventory.py` replacement marker.
+- Recorded the outcome in `docs/run-log.md`,
+  `docs/benchmark-research.md`, and `docs/implementation-plan.md` while
+  keeping generated results, metadata, raw responses, workspace, patch, task,
+  and verifier artifacts local and ignored.
+
+### Outcome
+
+- Local result directory:
+  `results/2026-05-09-m5-max-qwen3-coder-endpoint-correctness-v020-20260509-161046`.
+- The deterministic verifier again produced a meaningful fail signal:
+  `patch_exists=true`, `patch_bytes=0`, all visible and hidden checks failed
+  against the unchanged fixture, and `scoring.passed=false`.
+- The explicit replacement fallback remains unproven for this baseline because
+  the model did not emit the path-marked replacement block.
+
+### Validation
+
+- Documentation-only live-outcome update. `git diff --check` and
+  `uv run pytest` passed; generated artifacts remain ignored.
+
+### Open Questions
+
+- Whether another already-available endpoint, stronger prompt wording, or a
+  deliberately broader replacement contract is the right next endpoint-only
+  correctness slice remains open. Helper/default matrix promotion remains
+  deferred.
+
 ## 2026-05-09 (backlog active queue grooming)
 
 ### Changed

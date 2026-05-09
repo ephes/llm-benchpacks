@@ -48,21 +48,27 @@ should not be committed for this research track unless explicitly curated.
   `qwen3-coder:latest` returned replacement Python content inside a `diff`
   fence, the executor rejected it as having no unified-diff file paths, the
   captured patch was empty, and the verifier failed all visible and hidden
-  checks against the unchanged fixture. Version `0.2.0` adds the explicit
-  replacement block fallback; this still needs live validation before it counts
-  as broad correctness success.
+  checks against the unchanged fixture. Version `0.2.0` added an explicit
+  replacement block fallback, but the 2026-05-09 local M5 live validation still
+  failed as a model output-contract failure: the same baseline model again
+  returned full replacement Python content inside a `diff` fence without
+  unified-diff file paths and without the required
+  `*** Begin File: inventory.py` marker, so the fallback was not exercised and
+  the verifier ran against the unchanged fixture.
 - Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
   evidence, provided the pack set stays opt-in and generated artifacts remain
   local/ignored unless curated explicitly.
 
 ## Next Work Ordering
 
-1. Treat `endpoint-python-correctness` helper/default-matrix promotion as
-   premature after the first local Ollama apply/format failure. The first
-   follow-up has now deliberately added an explicit path-marked replacement
-   block fallback and bumped the pack to `0.2.0`; a later live validation
-   against an already-available endpoint is still required before any
-   helper/default recommendation changes.
+1. Keep `endpoint-python-correctness` helper/default-matrix promotion deferred.
+   The `0.2.0` live validation reached the local Ollama endpoint but did not
+   prove the new replacement fallback because `qwen3-coder:latest` ignored the
+   explicit path-marked replacement contract. The next endpoint-only slice
+   should choose deliberately between trying another already-available endpoint,
+   tightening prompt wording, or broadening the replacement contract; do not
+   treat endpoint reachability or logically plausible raw code as correctness
+   success.
 2. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
    keeping `coding-tasks-external-agent` opt-in and preserving the current
    artifact policy.
