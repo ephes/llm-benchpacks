@@ -10,7 +10,9 @@ workspace-editing agents. Direct-edit prompt variants now have live Codex
 OSS/Ollama evidence on M5 and M4: both Apple hosts passed the tiny greeting
 fixture, while the deeper Python and dashboard fixtures still exposed
 no-mutation, no-source-mutation, and partial-mutation verifier failures. The
-NVIDIA leg is blocked until SSH access is restored.
+Hetzner leg is now service/API-shaped evidence from the local runner through
+the authenticated OpenAI-compatible endpoint; it reached the endpoint but
+produced 0/3 verifier passes.
 
 No datasets were downloaded. Generated `results/*`, metadata, raw payloads,
 workspaces, patches, task logs, verify artifacts, model-call logs, or secrets
@@ -63,9 +65,27 @@ should not be committed for this research track unless explicitly curated.
   captured mutation; M5 `fix-dashboard-regressions` wrote only generated
   `__pycache__` artifacts and no allowed source edit; and M4
   `fix-task-summary` made a partial source edit but still failed owner-count
-  verification. NVIDIA was a remote availability blocker because SSH failed
-  before repo/runtime inspection. This is meaningful exploratory
-  agent-workflow evidence, not default-matrix proof.
+  verification. The first NVIDIA follow-up preflight used the wrong SSH user
+  and was corrected: Hetzner is not expected to have Codex, Claude, Ollama, or
+  an `llm-benchpacks` checkout installed for this lane. It should be driven
+  from the local machine through the authenticated Hetzner OpenAI-compatible
+  API. This is meaningful exploratory agent-workflow evidence, not
+  default-matrix proof.
+- The follow-up Hetzner API slice added a local
+  `openai-direct-edit-agent.py` wrapper for authenticated OpenAI-compatible
+  endpoints and fixed one wrapper allowed-path parsing bug exposed by the first
+  dry-run-backed launch. With `BENCHPACK_HETZNER_OPENAI_TOKEN` loaded from
+  `../llm-node-bare` through `direnv`, the rerun reached
+  `https://llm.django-cast.com/v1` and model
+  `Qwen/Qwen2.5-1.5B-Instruct` for all three external-agent packs. The adapter
+  rows were all `ok=true`, but the deterministic verifiers produced 0/3
+  passes. Treat that result primarily as wrapper output-contract evidence, not
+  a broad model task-quality verdict: `fix-greeting` and `fix-task-summary`
+  failed before mutation because the wrapper received non-JSON edit payloads
+  (`fix-task-summary` also ended with `finish_reason=length`), and
+  `fix-dashboard-regressions` wrote allowed files but failed verification after
+  introducing invalid dashboard code. This keeps the lane explicitly
+  exploratory and opt-in.
 
 ## Next Work Ordering
 
@@ -77,12 +97,13 @@ should not be committed for this research track unless explicitly curated.
    tightening prompt wording, or broadening the replacement contract; do not
    treat endpoint reachability or logically plausible raw code as correctness
    success.
-2. Keep `coding-tasks-external-agent` opt-in after the mixed M5/M4 validation.
-   The next direct-edit slice should be deliberate: rerun the NVIDIA leg when
-   access is available, try another already-configured local agent/model, or
-   refine report-facing classification for no-source-mutation versus partial
-   source mutation. Do not promote the pack set into defaults from the current
-   2/6 Apple verifier pass result.
+2. Keep `coding-tasks-external-agent` opt-in after the mixed M5/M4/Hetzner API
+   validation. The next direct-edit slice should be deliberate: improve or
+   replace the remote API wrapper output contract, including JSON-mode or
+   larger completion-budget experiments where the endpoint supports them; try a
+   stronger already-configured agent/model; or refine report-facing
+   classification for no-source-mutation versus partial source mutation. Do not
+   promote the pack set into defaults from the current mixed verifier evidence.
 3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 4. Keep larger benchmark-design research parked until the endpoint-only and

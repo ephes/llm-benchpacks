@@ -22,14 +22,21 @@ section to decide the next slice.
    configuration blocker, but produced only 2/6 deterministic verifier passes:
    `fix-greeting` passed on both hosts, while the deeper Python and dashboard
    fixtures failed as no-source-mutation, no-mutation, or partial-source-edit
-   task-quality failures. The NVIDIA target remains blocked until SSH access to
-   `llm.django-cast.com` is restored and repo/runtime state can be inspected.
+   task-quality failures. The Hetzner leg is driven from this machine through
+   the authenticated OpenAI-compatible API, not by installing Codex, Claude,
+   Ollama, or this repo on `llm.django-cast.com`. The local
+   `openai-direct-edit-agent.py` wrapper reached
+   `Qwen/Qwen2.5-1.5B-Instruct` through that API, but the rerun produced 0/3
+   verifier passes: two non-JSON edit-payload failures before mutation and one
+   verifier failure after an allowed-file mutation. Treat this as remote
+   wrapper output-contract evidence first, especially because one non-JSON row
+   ended with `finish_reason=length`; it is not a broad model-quality verdict.
 3. Decide any next direct-edit external-agent slice deliberately before changing
-   defaults: rerun the NVIDIA leg when access is available, try a different
-   already-configured local agent/model, or refine reporting around
-   no-source-mutation versus partial-source-mutation failures. Do not promote
-   the external-agent pack set into helper defaults from the current mixed
-   Apple-only evidence.
+   defaults: tighten the remote wrapper output contract, try JSON-mode or a
+   larger completion budget on endpoints that support them, try a different
+   already-configured agent/model, or refine reporting around no-source-mutation
+   versus partial-source-mutation failures. Do not promote the external-agent
+   pack set into helper defaults from the current mixed evidence.
 4. Decide the next endpoint-only correctness slice deliberately before changing
    defaults: try another already-available endpoint, tighten the prompt
    contract, or consider whether accepting unmarked full-file replacements is

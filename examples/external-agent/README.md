@@ -90,3 +90,25 @@ current directory, so repo-relative argv paths resolve inside that workspace.
 The wrapper passes `--sandbox workspace-write`, `--skip-git-repo-check`, and
 `--ephemeral` to `codex exec`. It is intended for local OSS/provider evidence,
 not for cloud-backed runs or runs that require secrets.
+
+`openai-direct-edit-agent.py` is an opt-in live wrapper for authenticated
+OpenAI-compatible chat endpoints. It reads the public context, calls
+`/chat/completions`, expects the assistant to return JSON full-file
+replacements, applies only files listed in the prompt's allowed edit paths, and
+writes one safe telemetry line. Use it from the operator machine when the
+endpoint and token are already configured locally:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/openai-direct-edit-agent.py\",\"--endpoint\",\"https://llm.django-cast.com/v1\",\"--model\",\"Qwen/Qwen2.5-1.5B-Instruct\",\"--api-key-env\",\"BENCHPACK_HETZNER_OPENAI_TOKEN\"]" \
+  uv run benchpack run patch-from-failure-external-agent \
+    --adapter openai-chat \
+    --model Qwen/Qwen2.5-1.5B-Instruct \
+    --endpoint https://llm.django-cast.com/v1 \
+    --openai-api-key-env BENCHPACK_HETZNER_OPENAI_TOKEN
+```
+
+The wrapper records only the environment variable name in commands and context;
+the token value must stay in the local environment or secret store. For the
+Hetzner service path, the server is reached through the public TLS/Django
+Bearer-auth proxy. Do not install or expect Codex, Claude, Ollama, or this
+repository on the server for this wrapper.

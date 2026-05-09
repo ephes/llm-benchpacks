@@ -16,6 +16,46 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-09 (Hetzner API external-agent validation)
+
+### Changed
+
+- Corrected the NVIDIA/Hetzner benchmark path: this lane runs from the local
+  `llm-benchpacks` checkout through the authenticated
+  `https://llm.django-cast.com/v1` OpenAI-compatible API. It does not require
+  Codex, Claude, Ollama, or this repository to be installed on the server.
+- Added `examples/external-agent/openai-direct-edit-agent.py` as an opt-in
+  external-agent wrapper for authenticated OpenAI-compatible chat endpoints,
+  plus focused tests and example documentation.
+- Fixed the wrapper's allowed-path bullet parser after the first launch exposed
+  an over-escaped regex that prevented model calls.
+- Ran the explicit `coding-tasks-external-agent` pack set against the Hetzner
+  API with `BENCHPACK_HETZNER_OPENAI_TOKEN` loaded locally from
+  `../llm-node-bare` via `direnv`.
+
+### Outcome
+
+- The authenticated `/v1/models` probe returned
+  `Qwen/Qwen2.5-1.5B-Instruct`, and all three benchmark adapter rows were
+  `ok=true`.
+- The corrected wrapper rerun produced 0/3 deterministic verifier passes:
+  `fix-greeting` and `fix-task-summary` reached the wrapper model call but
+  failed before mutation because the assistant edit payload was not JSON
+  (`fix-task-summary` also ended with `finish_reason=length`);
+  `fix-dashboard-regressions` wrote all three allowed files but failed the
+  verifier after introducing invalid dashboard code.
+- The generated result directories remain ignored under
+  `results/2026-05-09-hetzner-openai-direct-edit-20260509-170034-*`. Metadata
+  files under `metadata/` remain ignored and record only the token environment
+  variable name, not the token value.
+
+### Open Questions
+
+- The remote API wrapper may need a stronger JSON-output contract, endpoint
+  JSON-mode support, a larger completion budget, or a different served model
+  before this lane can separate model task quality from wrapper output-contract
+  failures.
+
 ## 2026-05-09 (direct-edit external-agent M4/M5 validation)
 
 ### Changed
@@ -24,8 +64,11 @@ working history and open questions.
   remote M4 through Codex CLI 0.130.0 in OSS/Ollama mode after dry runs showed
   exactly the three direct-edit external-agent packs.
 - Synced the clean M4 checkout from `2acd1b3` to the local commit `86d3194`
-  before running; kept the NVIDIA target blocked because SSH to
-  `llm.django-cast.com` failed before repo/runtime inspection.
+  before running; kept the NVIDIA target blocked. A follow-up preflight
+  corrected the SSH user to `root@llm.django-cast.com`, then clarified that the
+  direct-edit external-agent NVIDIA leg should be driven from this machine
+  through the Hetzner OpenAI-compatible API, not by installing Codex, Claude,
+  Ollama, or this repo on the server.
 - Kept generated artifacts ignored and local by default. Only compact M4
   `run.jsonl`, `summary.md`, `hardware.json`, and `run-metadata.json` files
   were pulled back; remote raw/workspace/patch/task/verify/model-call artifacts

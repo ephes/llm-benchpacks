@@ -171,6 +171,14 @@ prompts tell the external agent to edit the prepared workspace directly. The
 runner still performs the normal pre-task adapter call, captures the workspace
 patch after the external-agent task phase, and runs deterministic verifiers.
 This set is explicit opt-in evidence and is not part of the default matrix.
+See
+[`examples/external-agent/openai-direct-edit-agent.py`](examples/external-agent/openai-direct-edit-agent.py)
+for an opt-in live wrapper that calls an authenticated OpenAI-compatible chat
+endpoint from the operator machine and applies JSON full-file replacement edits
+only to prompt-allowed paths. For Hetzner service runs, load
+`BENCHPACK_HETZNER_OPENAI_TOKEN` locally and use the public
+`https://llm.django-cast.com/v1` path; do not require Codex, Claude, Ollama, or
+this repository to be installed on the server.
 
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
