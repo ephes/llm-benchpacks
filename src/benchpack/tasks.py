@@ -356,7 +356,7 @@ def _run_fenced_model_patch_executor(
             "workspace left unchanged.\n"
         )
     else:
-        _, stdout, stderr = apply_unified_diff_to_workspace(
+        _, stdout, stderr = apply_fenced_edit_to_workspace(
             patch,
             request.workspace,
             timeout_s=request.task_timeout_s,
@@ -725,6 +725,106 @@ def apply_unified_diff_to_workspace(
         )
 
     return True, "Applied fenced model patch to workspace.\n", ""
+
+
+def apply_fenced_edit_to_workspace(
+    block: str,
+    workspace: Path,
+    *,
+    timeout_s: float | None = None,
+) -> tuple[bool, str, str]:
+    """Apply a fenced repo-task edit block to ``workspace``.
+
+    The compatibility path remains a unified diff. A deliberately marked
+    full-file replacement block is also accepted for endpoint-only models that
+    can produce correct code but not a valid unified diff.
+    """
+
+    replacement = _parse_replacement_file_block(block)
+    if replacement is None:
+        return apply_unified_diff_to_workspace(
+            block,
+            workspace,
+            timeout_s=timeout_s,
+        )
+    path, content, error = replacement
+    if error is not None:
+        return (
+            False,
+            "",
+            f"Replacement file rejected: {error}; workspace left unchanged.\n",
+        )
+    return _apply_replacement_file_to_workspace(path, content, workspace)
+
+
+def _parse_replacement_file_block(block: str) -> tuple[str, str, str | None] | None:
+    normalized = block.replace("\r\n", "\n").replace("\r", "\n")
+    lines = normalized.splitlines(keepends=True)
+    if not lines:
+        return None
+
+    first_line = lines[0].rstrip("\n")
+    prefix = "*** Begin File: "
+    if not first_line.startswith(prefix):
+        return None
+    path = first_line[len(prefix) :].strip()
+    if not path:
+        return ("", "", "missing file path")
+
+    end_index: int | None = None
+    for index in range(len(lines) - 1, 0, -1):
+        if lines[index].rstrip() == "*** End File":
+            end_index = index
+            break
+        if lines[index].strip():
+            break
+    if end_index is None:
+        return (path, "", "missing end marker")
+
+    return path, "".join(lines[1:end_index]), None
+
+
+def _apply_replacement_file_to_workspace(
+    path: str,
+    content: str,
+    workspace: Path,
+) -> tuple[bool, str, str]:
+    if content == "":
+        return (
+            False,
+            "",
+            "Replacement file rejected: empty file content; workspace left "
+            "unchanged.\n",
+        )
+
+    workspace_root = Path(workspace).resolve(strict=False)
+    try:
+        destination = _resolve_workspace_relative_path(path, workspace_root)
+    except _PatchContractError as exc:
+        return (
+            False,
+            "",
+            f"Replacement file rejected: {exc}; workspace left unchanged.\n",
+        )
+    try:
+        if destination.exists() and destination.is_dir():
+            return (
+                False,
+                "",
+                "Replacement file rejected: target path is a directory; "
+                "workspace left unchanged.\n",
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
+    except OSError:
+        return (
+            False,
+            "",
+            "Replacement file rejected: workspace file could not be written; "
+            "workspace left unchanged.\n",
+        )
+
+    return True, "Applied fenced model replacement file to workspace.\n", ""
 
 
 def _validate_patch_paths(diff: str, workspace: Path) -> None:

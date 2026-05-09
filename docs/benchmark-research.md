@@ -1,6 +1,6 @@
 # Benchmark Research Backlog
 
-Status date: 2026-05-08.
+Status date: 2026-05-09.
 
 This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
@@ -41,15 +41,16 @@ should not be committed for this research track unless explicitly curated.
   2026-05-08 as report-only repo-task outcome tables in `summary.md` and
   `benchpack report`.
 - The `endpoint-python-correctness` pack now provides a simpler endpoint-only
-  deterministic correctness lane: normal chat adapter, fenced unified diff,
-  tiny committed Python fixture, and verifier-only hidden edge checks. The
-  first local M5 Ollama validation reached the endpoint with `ok=true` but
-  failed at the patch contract: `qwen3-coder:latest` returned replacement
-  Python content inside a `diff` fence, the executor rejected it as having no
-  unified-diff file paths, the captured patch was empty, and the verifier
-  failed all visible and hidden checks against the unchanged fixture. This is a
-  meaningful deterministic model-output/task-format failure, not broad
-  correctness success or an infrastructure blocker.
+  deterministic correctness lane: normal chat adapter, fenced unified diff or
+  explicit path-marked replacement block, tiny committed Python fixture, and
+  verifier-only hidden edge checks. The first local M5 Ollama validation
+  reached the endpoint with `ok=true` but failed at the `0.1.0` patch contract:
+  `qwen3-coder:latest` returned replacement Python content inside a `diff`
+  fence, the executor rejected it as having no unified-diff file paths, the
+  captured patch was empty, and the verifier failed all visible and hidden
+  checks against the unchanged fixture. Version `0.2.0` adds the explicit
+  replacement block fallback; this still needs live validation before it counts
+  as broad correctness success.
 - Broader M4/M5/NVIDIA direct-edit comparison is now reasonable as exploratory
   evidence, provided the pack set stays opt-in and generated artifacts remain
   local/ignored unless curated explicitly.
@@ -58,10 +59,11 @@ should not be committed for this research track unless explicitly curated.
 
 1. Keep this research backlog and implementation plan current.
 2. Treat `endpoint-python-correctness` helper/default-matrix promotion as
-   premature after the first local Ollama apply/format failure; a later slice
-   should either tighten the endpoint-only patch contract, validate another
-   already-available endpoint, or deliberately add replacement-file handling
-   before any helper/default recommendation changes.
+   premature after the first local Ollama apply/format failure. The first
+   follow-up has now deliberately added an explicit path-marked replacement
+   block fallback and bumped the pack to `0.2.0`; a later live validation
+   against an already-available endpoint is still required before any
+   helper/default recommendation changes.
 3. Broaden to M4/M5/NVIDIA comparison as exploratory direct-edit evidence,
    keeping `coding-tasks-external-agent` opt-in and preserving the current
    artifact policy.

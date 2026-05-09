@@ -57,6 +57,27 @@ def assert_strict_fenced_diff_prompt(prompt: str) -> None:
     assert "Close the fenced block" in normalized
 
 
+def assert_fenced_diff_or_replacement_prompt(prompt: str) -> None:
+    normalized = " ".join(prompt.split())
+
+    assert "Your entire response must be one fenced code block" in normalized
+    assert "info string exactly `diff`" in normalized
+    assert "first line of your response must be the literal fence marker" in normalized
+    assert "```diff" in prompt
+    assert (
+        "Do not include `<think>`, hidden reasoning, analysis, explanations"
+        in normalized
+    )
+    assert "commands, or markdown outside the fenced block" in normalized
+    assert "Use only exact repo-root paths listed above" in normalized
+    assert "Omit `index` lines and do not invent paths" in normalized
+    assert "Prefer a complete unified diff that applies with `git apply`" in normalized
+    assert "replacement block inside the same `diff` fence" in normalized
+    assert "*** Begin File: inventory.py" in normalized
+    assert "*** End File" in normalized
+    assert "Close the fenced block" in normalized
+
+
 def assert_direct_edit_external_agent_prompt(prompt: str) -> None:
     normalized = " ".join(prompt.split())
     lower_prompt = prompt.lower()
@@ -564,7 +585,7 @@ def test_endpoint_python_correctness_pack_is_endpoint_only_verifier_task() -> No
     case = pack.cases[0]
 
     assert pack.id == "endpoint-python-correctness"
-    assert pack.version == "0.1.0"
+    assert pack.version == "0.2.0"
     assert pack.defaults["stream"] is False
     assert pack.defaults["warmup"] == 0
     assert pack.defaults["repetitions"] == 1
@@ -580,7 +601,7 @@ def test_endpoint_python_correctness_pack_is_endpoint_only_verifier_task() -> No
     assert "strictly less than `minimum`" in case.prompt
     assert "ascending order by total quantity, then SKU" in case.prompt
     assert "`reorder_list(rows, minimum)` must not mutate" in case.prompt
-    assert_strict_fenced_diff_prompt(case.prompt)
+    assert_fenced_diff_or_replacement_prompt(case.prompt)
 
 
 def test_bundled_external_agent_coding_task_variants_select_public_harness() -> None:

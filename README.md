@@ -300,13 +300,16 @@ Bundled packs:
   that `greet("Ada")` returns exactly `Hello, Ada!`.
 - `endpoint-python-correctness`: non-streaming single-case `repo-task` pack
   for endpoint-only coding correctness. It uses the normal chat adapter path,
-  asks for a fenced unified diff against a tiny inventory Python fixture, and
-  scores only through deterministic workspace mutation plus stdlib
-  `verify-script` checks, including an edge dataset not shown directly in the
-  prompt. It does not require `external-agent`. The first local M5
-  `qwen3-coder:latest` Ollama run reached the adapter but failed because the
-  model emitted replacement-file content rather than an applicable unified
-  diff, so matrix promotion remains deferred.
+  prefers a fenced unified diff against a tiny inventory Python fixture, allows
+  an explicit path-marked full-file replacement block for `inventory.py` as a
+  fallback, and scores only through deterministic workspace mutation plus
+  stdlib `verify-script` checks, including an edge dataset not shown directly
+  in the prompt. It does not require `external-agent`. The first local M5
+  `qwen3-coder:latest` Ollama run reached the adapter but failed against pack
+  version `0.1.0` because the model emitted replacement-file content rather
+  than an applicable unified diff; version `0.2.0` adds the explicit
+  replacement block format, but matrix promotion still needs a successful live
+  validation.
 - `python-regression-fix`: non-streaming single-case `repo-task` pack with a
   small stdlib Python task-summary repo fixture. The case asks for a fenced
   unified diff to fix owner/status summary behavior, overdue-title filtering
@@ -337,12 +340,13 @@ The first implementation stays small:
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
 4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
    the prompt-only `desktop-django-wrap` starter pack and measured
-   repo-mutating fenced unified-diff packs such as `patch-from-failure` and
-   `endpoint-python-correctness`, `python-regression-fix`, and
-   `django-dashboard-regression-fix`.
+   repo-mutating fenced unified-diff packs such as `patch-from-failure`,
+   `python-regression-fix`, and `django-dashboard-regression-fix`, plus
+   `endpoint-python-correctness`, which also allows an explicit replacement
+   block fallback.
    `desktop-django-wrap` still treats directory
    fixtures as metadata-only; repo-task packs copy their repo fixtures into
-   run-owned workspaces, apply the model diff there, and verify the result.
+   run-owned workspaces, apply the model edit there, and verify the result.
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.

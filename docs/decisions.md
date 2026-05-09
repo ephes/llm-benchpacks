@@ -244,9 +244,10 @@ stdout/stderr log artifact paths as `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log`. The current task phase runs through a
 narrow internal task-executor boundary. Current CLI repo-task runs use the
 fenced model-output patch bridge by default: it extracts the first fenced
-`diff` or `patch` block from adapter output, applies that unified diff only
-inside the prepared workspace, and writes deterministic task stdout/stderr
-describing success, missing patch content, unsafe paths, or failed application.
+`diff` or `patch` block from adapter output, applies a unified diff or explicit
+path-marked replacement block only inside the prepared workspace, and writes
+deterministic task stdout/stderr describing success, missing patch content,
+unsafe paths, or failed application.
 A minimal internal agent-session harness path also exists behind the same
 boundary for runner-side callers and tests, without manifest or CLI selection.
 Measured rows using
@@ -570,3 +571,29 @@ turning public sharing into a raw-artifact leak, while hashes preserve useful
 provenance for omitted files. This is still not a full community upload policy:
 moderation, deeper secret scanning, size limits, duplicate detection, object
 storage, and website ingestion remain explicit later slices.
+
+## D-031: Fenced Repo-Task Replacement Blocks Must Be Explicitly Path-Marked
+
+The default fenced repo-task executor continues to prefer unified diffs in the
+first fenced `diff` or `patch` block. It also accepts a narrow full-file
+replacement fallback when the block starts with
+`*** Begin File: <repo-relative-path>` and ends with `*** End File`. The runner
+writes only the explicitly named UTF-8 file, after applying the same
+workspace-relative path boundary used by harness helpers. Replacement content
+is LF-canonicalized before it is written, matching the runner's existing text
+diff normalization. Unsafe paths, missing markers, empty content, directory
+targets, and write failures are task outcomes: the workspace is left unchanged,
+deterministic task stderr is written, patch capture still runs, and the
+verifier can classify the result.
+
+The `endpoint-python-correctness` pack uses this fallback in version `0.2.0`
+because the first local endpoint validation showed a model that produced
+plausible replacement-file content but not an applicable unified diff. The
+fallback is not inferred from arbitrary code in a fence and does not change
+external-agent direct-edit behavior, adapter schemas, raw artifacts,
+`run.jsonl`, or compare/report semantics.
+
+Reason: accepting unmarked replacement content would make the runner guess
+which file a model intended to edit and would weaken workspace safety. A
+path-marked block is still simple enough for endpoint-only models while keeping
+mutation explicit, deterministic, and verifier-driven.

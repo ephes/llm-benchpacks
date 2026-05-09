@@ -2048,7 +2048,7 @@ def test_cli_bundled_endpoint_python_correctness_runs_repo_task_flow(
     record = json.loads((out / "run.jsonl").read_text())
     assert record["pack"] == {
         "id": "endpoint-python-correctness",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
     assert record["case"] == "fix-inventory-aggregation"
     assert record["adapter"] == "openai-chat"
@@ -2092,7 +2092,7 @@ def test_cli_bundled_endpoint_python_correctness_runs_repo_task_flow(
     verify_json = json.loads((out / record["verify"]["path"]).read_text())
     assert verify_json["case"] == "fix-inventory-aggregation"
     assert verify_json["pack_id"] == "endpoint-python-correctness"
-    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["pack_version"] == "0.2.0"
     assert verify_json["source_fixture_id"] == "repo"
     assert verify_json["patch_exists"] is True
     assert verify_json["patch_bytes"] > 0
@@ -2104,6 +2104,72 @@ def test_cli_bundled_endpoint_python_correctness_runs_repo_task_flow(
         "hidden_strict_threshold_quantity_then_sku_reorder",
     ]
     assert all(check["passed"] for check in verify_json["checks"])
+
+
+def test_cli_endpoint_python_correctness_accepts_replacement_file_block(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = "\n".join(
+        [
+            "```diff",
+            "*** Begin File: inventory.py",
+            "from __future__ import annotations",
+            "",
+            "from typing import Any",
+            "",
+            "",
+            "def _normalize_sku(value: Any) -> str:",
+            "    return str(value).strip().upper()",
+            "",
+            "",
+            "def aggregate_stock(rows: list[dict[str, Any]]) -> dict[str, int]:",
+            "    stock: dict[str, int] = {}",
+            "",
+            "    for row in rows:",
+            '        sku = _normalize_sku(row.get("sku", ""))',
+            "        if not sku:",
+            "            continue",
+            '        quantity = int(row.get("quantity", 0))',
+            "        stock[sku] = stock.get(sku, 0) + quantity",
+            "",
+            "    return stock",
+            "",
+            "",
+            "def reorder_list(rows: list[dict[str, Any]], minimum: int) -> list[str]:",
+            "    return [",
+            "        sku",
+            "        for sku, quantity in sorted(",
+            "            aggregate_stock(rows).items(),",
+            "            key=lambda item: (item[1], item[0]),",
+            "        )",
+            "        if quantity < minimum",
+            "    ]",
+            "*** End File",
+            "```",
+            "",
+        ]
+    )
+    _install_output_adapter(monkeypatch, output)
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    out = tmp_path / "run"
+
+    assert main(_endpoint_python_correctness_argv(["--out", str(out)])) == 0
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {
+        "id": "endpoint-python-correctness",
+        "version": "0.2.0",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model replacement file to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert "--- a/inventory.py" in patch
+    assert "def _normalize_sku" in patch
 
 
 def test_cli_bundled_python_regression_fix_runs_repo_task_flow(

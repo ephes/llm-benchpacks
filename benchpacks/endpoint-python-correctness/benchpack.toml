@@ -1,6 +1,6 @@
 [pack]
 id = "endpoint-python-correctness"
-version = "0.1.0"
+version = "0.2.0"
 description = "Endpoint-only repo-task pack for a small deterministic Python correctness fix"
 
 [defaults]

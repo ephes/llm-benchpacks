@@ -25,6 +25,7 @@ from benchpack.tasks import (
     TaskArtifactPaths,
     TaskError,
     TaskExecutionRequest,
+    apply_fenced_edit_to_workspace,
     apply_unified_diff_to_workspace,
     extract_fenced_patch,
     run_model_patch_task,
@@ -299,6 +300,125 @@ def test_apply_unified_diff_to_workspace_renames_file_from_git_header(
     assert stderr == ""
     assert not old.exists()
     assert new.read_text(encoding="utf-8") == "same\n"
+
+
+def test_apply_fenced_edit_to_workspace_replaces_explicit_file(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inventory.py").write_text("old\n", encoding="utf-8")
+    block = (
+        "*** Begin File: inventory.py\n"
+        "from __future__ import annotations\n"
+        "\n"
+        "VALUE = 42\n"
+        "*** End File\n"
+    )
+
+    applied, stdout, stderr = apply_fenced_edit_to_workspace(block, workspace)
+
+    assert applied is True
+    assert stdout == "Applied fenced model replacement file to workspace.\n"
+    assert stderr == ""
+    assert (workspace / "inventory.py").read_text(encoding="utf-8") == (
+        "from __future__ import annotations\n\nVALUE = 42\n"
+    )
+
+
+def test_apply_fenced_edit_to_workspace_rejects_replacement_path_escape(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    block = (
+        "*** Begin File: ../outside.py\n"
+        "VALUE = 42\n"
+        "*** End File\n"
+    )
+
+    applied, stdout, stderr = apply_fenced_edit_to_workspace(block, workspace)
+
+    assert applied is False
+    assert stdout == ""
+    assert stderr == (
+        "Replacement file rejected: path escapes workspace: ../outside.py; "
+        "workspace left unchanged.\n"
+    )
+    assert not (tmp_path / "outside.py").exists()
+
+
+def test_apply_fenced_edit_to_workspace_rejects_missing_replacement_end_marker(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inventory.py").write_text("old\n", encoding="utf-8")
+    block = (
+        "*** Begin File: inventory.py\n"
+        "VALUE = 42\n"
+    )
+
+    applied, stdout, stderr = apply_fenced_edit_to_workspace(block, workspace)
+
+    assert applied is False
+    assert stdout == ""
+    assert stderr == (
+        "Replacement file rejected: missing end marker; workspace left "
+        "unchanged.\n"
+    )
+    assert (workspace / "inventory.py").read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_fenced_edit_to_workspace_tolerates_trailing_marker_whitespace(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inventory.py").write_text("old\n", encoding="utf-8")
+    block = (
+        "*** Begin File: inventory.py\n"
+        "VALUE = 42\n"
+        "*** End File   \n"
+    )
+
+    applied, stdout, stderr = apply_fenced_edit_to_workspace(block, workspace)
+
+    assert applied is True
+    assert stdout == "Applied fenced model replacement file to workspace.\n"
+    assert stderr == ""
+    assert (workspace / "inventory.py").read_text(encoding="utf-8") == (
+        "VALUE = 42\n"
+    )
+
+
+def test_run_model_patch_task_replacement_block_writes_task_logs(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    workspace = out / "workspace" / "edit-repo" / "rep-001"
+    workspace.mkdir(parents=True)
+    (workspace / "README.md").write_text("old\n", encoding="utf-8")
+
+    record = run_model_patch_task(
+        out,
+        make_case(),
+        1,
+        workspace,
+        (
+            "```diff\n"
+            "*** Begin File: README.md\n"
+            "new\n"
+            "*** End File\n"
+            "```\n"
+        ),
+    )
+
+    assert (workspace / "README.md").read_text(encoding="utf-8") == "new\n"
+    assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model replacement file to workspace.\n"
+    )
+    assert (out / record["stderr_path"]).read_text(encoding="utf-8") == ""
 
 
 def test_run_model_patch_task_no_matching_block_logs_stderr_and_keeps_workspace(

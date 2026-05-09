@@ -4,7 +4,7 @@ Bundled endpoint-only `repo-task` pack for a small deterministic Python
 correctness fix. It uses the normal chat adapter path and the default fenced
 unified-diff executor; it does not require `external-agent`.
 
-Pack version: `0.1.0`.
+Pack version: `0.2.0`.
 
 ## Case
 
@@ -12,10 +12,16 @@ Pack version: `0.1.0`.
   module so SKU aggregation and reorder behavior match deterministic checks.
 
 The prompt lives in `prompts/fix-inventory-aggregation.md` and tells the model
-to return only a fenced code block with info string `diff`. The runner extracts
-the first fenced `diff` or `patch` block, applies it inside the run-owned
-workspace, then captures `patch/fix-inventory-aggregation/rep-001.diff` and
-runs the verifier.
+to return only a fenced code block with info string `diff`. The preferred
+response remains a unified diff. If the model cannot produce one, the prompt
+allows a full-file replacement block for `inventory.py` using exact
+`*** Begin File: inventory.py` and `*** End File` markers inside the same
+`diff` fence. The runner extracts the first fenced `diff` or `patch` block,
+applies either the unified diff or the explicit replacement block inside the
+run-owned workspace, then captures
+`patch/fix-inventory-aggregation/rep-001.diff` and runs the verifier.
+The generic executor validates workspace-relative paths; this pack's prompt and
+verifier constrain the useful replacement target to `inventory.py`.
 
 ## Fixture
 

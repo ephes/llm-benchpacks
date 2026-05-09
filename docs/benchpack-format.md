@@ -261,8 +261,8 @@ strings. The runner rejects manifests that violate this at load time.
   `workspace/<case-id>/rep-NNN/` under the run output directory before each
   measured adapter call, runs an internal task executor after the adapter call,
   and current CLI runs apply the first fenced `diff` or `patch` block from
-  model output as a unified diff inside that workspace through the default
-  executor,
+  model output as a unified diff or explicitly marked full-file replacement
+  inside that workspace through the default executor,
   captures a deterministic patch artifact at `patch/<case-id>/rep-NNN.diff`
   after the task phase, writes task logs at
   `task/<case-id>/rep-NNN.stdout.log` and
@@ -295,9 +295,9 @@ strings. The runner rejects manifests that violate this at load time.
 
 The current `repo-task` implementation prepares disposable measured workspaces,
 runs the task phase through an internal executor boundary, applies model output
-only through the executor's explicit fenced unified-diff contract, captures
-patch artifacts, writes deterministic task stdout/stderr logs for that task
-phase, and executes `verify-script` scoring when declared.
+only through the executor's explicit fenced unified-diff or replacement-file
+contract, captures patch artifacts, writes deterministic task stdout/stderr
+logs for that task phase, and executes `verify-script` scoring when declared.
 Referenced file fixtures still append to `Case.prompt`; referenced non-repo
 directory fixtures are rejected for repo-task; the single referenced repo
 directory is copied into a run-owned workspace; the measured result record
@@ -558,11 +558,17 @@ Directory fixture semantics for repo-task cases:
 - The current CLI mutation source is narrow and model-output-only: after the
   adapter call, the runner invokes the default internal task executor. It
   extracts the first fenced code block whose info string is exactly `diff` or
-  `patch`, treats the block body as a unified diff, and applies it from the
-  prepared workspace root. Non-matching fenced blocks are ignored. If no
-  matching block exists, if the block is empty, if paths are unsafe, or if the
-  diff cannot be applied cleanly, the workspace remains unchanged, task stderr
-  records a deterministic message, and the measured row is still written.
+  `patch`, treats the block body as a unified diff or an explicit full-file
+  replacement whose first content line is
+  `*** Begin File: <repo-relative-path>` and whose final marker line is
+  `*** End File`, and applies it from the prepared workspace root. Replacement
+  blocks write UTF-8 text with LF-canonicalized line endings; trailing
+  whitespace on the end marker is tolerated.
+  Non-matching fenced blocks are ignored. If no matching block exists, if the
+  block is empty, if paths are unsafe, if the replacement marker/content is
+  invalid, or if the diff cannot be applied cleanly, the workspace remains
+  unchanged, task stderr records a deterministic message, and the measured row
+  is still written.
 - Repo-task execution must not write outside the run output directory and the
   prepared workspace, and pack contracts must not depend on implicit network
   access or private local host paths.
@@ -592,11 +598,12 @@ Workspace and artifact layout:
   `task/<case-id>/rep-NNN.stderr.log`, including `rep-001` for
   single-repetition packs. Measured repo-task records include a top-level
   `task` object with run-relative `stdout_path` and `stderr_path`. For current
-  CLI runs, these files record the default fenced unified-diff
-  extraction/application phase. On successful application stdout contains a
-  short deterministic success message and stderr is empty; no-patch and
-  rejected-patch outcomes are recorded in stderr. For internal harness runs,
-  the same files record the harness task phase without adding result fields.
+  CLI runs, these files record the default fenced unified-diff or explicit
+  replacement-file extraction/application phase. On successful application
+  stdout contains a short deterministic success message and stderr is empty;
+  no-patch and rejected-patch outcomes are recorded in stderr. For internal
+  harness runs, the same files record the harness task phase without adding
+  result fields.
 - External-agent context capture writes deterministic runner-owned context JSON
   at `task/<case-id>/rep-NNN.context.json` for public `external-agent`
   executions only. The file is harness input and is not referenced from

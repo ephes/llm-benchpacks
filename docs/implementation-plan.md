@@ -471,10 +471,12 @@ Scope:
   pack has now landed as `endpoint-python-correctness`, and the first local M5
   Ollama validation reached the adapter but failed the patch-output contract:
   `qwen3-coder:latest` returned replacement Python content inside a `diff`
-  fence rather than an applicable unified diff. Treat `desktop-django-wrap` as
-  prompt/format coverage rather than the primary cross-host correctness signal,
-  and keep endpoint-correctness helper/default-matrix promotion deferred until
-  a later successful or deliberately revised endpoint-only slice.
+  fence rather than an applicable unified diff. The first follow-up has now
+  deliberately added an explicit path-marked replacement block fallback and
+  bumped the pack to `0.2.0`. Treat `desktop-django-wrap` as prompt/format
+  coverage rather than the primary cross-host correctness signal, and keep
+  endpoint-correctness helper/default-matrix promotion deferred until a later
+  successful live endpoint validation.
 
 Validation:
 
@@ -533,7 +535,9 @@ repo-task execution writes empty
 for measured repo-task executions, the runner extracts the first fenced `diff`
 or `patch` block from model output, applies it as a unified diff inside the
 prepared workspace, logs the task-phase outcome, then captures the
-source-vs-workspace patch and runs any verifier. Full agent harness
+source-vs-workspace patch and runs any verifier. A 2026-05-09 follow-up added
+an explicit path-marked full-file replacement fallback to the same fenced
+executor. Full agent harness
 integration and manifest task command execution remain planned. The first
 bundled measured repo-mutating repo-task pack, `patch-from-failure`, landed
 2026-05-02 as a narrow fixture/prompt/verifier slice over that fenced diff
@@ -724,6 +728,12 @@ Scope:
   and before patch capture, writes task stdout/stderr logs, keeps rows
   completed for missing or unapplicable patches, and leaves the adapter boundary
   and result object shapes unchanged.
+- Add explicit full-file replacement support to the fenced repo-task executor.
+  **Landed 2026-05-09** as a narrow fallback inside the same first fenced
+  `diff` or `patch` block: content beginning with
+  `*** Begin File: <repo-relative-path>` and ending with `*** End File` writes
+  only that validated workspace-relative UTF-8 file. Invalid replacement blocks
+  are task outcomes with unchanged workspaces and deterministic task stderr.
 - Introduce an internal repo-task task-executor boundary around the existing
   fenced model-output patch phase. **Landed 2026-05-03** without adding
   manifest fields, CLI flags, executor selection, task commands, task
@@ -1025,14 +1035,16 @@ Scope:
 - Add a simple endpoint-only coding correctness pack before promoting another
   cross-host correctness matrix. **Landed 2026-05-08** as
   `endpoint-python-correctness`, a normal-chat-adapter `repo-task` pack with a
-  tiny committed Python inventory fixture, one fenced unified-diff prompt,
+  tiny committed Python inventory fixture, a fenced unified-diff prompt,
   default fenced-patch executor use, deterministic stdlib `verify-script`
-  scoring, and a verifier-only edge dataset. It requires no `external-agent`,
-  avoids output-skeleton scoring, and is documented as the generic
-  endpoint-only correctness signal. Adding it to tmux helper matrices or
-  changing the recommended default matrix remains deferred after the first
+  scoring, and a verifier-only edge dataset. **Replacement fallback landed
+  2026-05-09** by accepting an explicit path-marked full-file replacement block
+  inside the same fenced executor and bumping the pack to `0.2.0`. It requires
+  no `external-agent`, avoids output-skeleton scoring, and is documented as the
+  generic endpoint-only correctness signal. Adding it to tmux helper matrices
+  or changing the recommended default matrix remains deferred after the first
   local M5 validation attempt failed from model output format rather than
-  endpoint reachability.
+  endpoint reachability, pending a new live validation of the revised contract.
 - Research ProjDevBench-inspired project-level tasks where an agent builds or
   completes an executable project and deterministic execution scoring supplies
   detailed failure classes.
@@ -1069,11 +1081,12 @@ external-agent variants now have local M5 real-agent evidence with 2/3 verifier
 passes, and lightweight task-outcome reporting polish has landed. The first
 local M5 validation of `endpoint-python-correctness` reached Ollama but failed
 because the model emitted replacement-file content instead of an applicable
-unified diff, so it proves meaningful deterministic failure classification but
-not endpoint-only correctness success. The next useful live slice is broader
-direct-edit comparison as exploratory evidence; endpoint-only helper/default
-matrix promotion remains deferred until a later successful or revised
-endpoint-correctness slice.
+unified diff. The revised `0.2.0` pack now explicitly supports a path-marked
+replacement block fallback, but it still needs live endpoint validation before
+it counts as endpoint-only correctness success. The next useful live slice is
+broader direct-edit comparison as exploratory evidence; endpoint-only
+helper/default matrix promotion remains deferred until a later successful
+endpoint-correctness validation.
 
 Scope:
 
@@ -1122,8 +1135,11 @@ Scope:
   but the model returned replacement Python content inside a `diff` fence, the
   runner rejected it as a non-unified diff with no file paths, captured
   `patch_bytes=0`, and the verifier failed all visible and hidden checks
-  against the unchanged fixture. Tmux-helper or default-matrix changes remain
-  premature from this evidence.
+  against the unchanged fixture. **Replacement fallback landed 2026-05-09** as
+  a deliberate path-marked full-file replacement block inside the fenced
+  executor plus `endpoint-python-correctness` version `0.2.0`. Tmux-helper or
+  default-matrix changes remain premature until that revised contract has live
+  endpoint validation.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.
@@ -1134,11 +1150,12 @@ Validation:
   direct-edit fixture end to end without relying on fenced-diff stdout.
   **Validated 2026-05-07** on local M5 with Codex OSS through Ollama.
 - A baseline endpoint-only runtime should produce one applicable correct fenced
-  patch for `endpoint-python-correctness` before the pack is promoted into
-  helper/default matrices. **Attempted 2026-05-08** on local M5 with
-  `qwen3-coder:latest` through Ollama; this failed as a model-output format
-  issue with a meaningful deterministic verifier failure, not as an
-  infrastructure blocker.
+  diff or explicit replacement block for `endpoint-python-correctness` before
+  the pack is promoted into helper/default matrices. **Attempted 2026-05-08**
+  on local M5 with `qwen3-coder:latest` through Ollama; this failed against the
+  original `0.1.0` diff-only contract as a model-output format issue with a
+  meaningful deterministic verifier failure, not as an infrastructure blocker.
+  The `0.2.0` replacement fallback needs a new live validation.
 
 ## Phase 5: Remote Host Orchestration
 

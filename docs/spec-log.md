@@ -48,6 +48,39 @@ working history and open questions.
   query APIs, and public leaderboard policy remain later result-registry
   slices.
 
+## 2026-05-09 (endpoint replacement fallback)
+
+### Changed
+
+- Added an explicit full-file replacement fallback to the default fenced
+  repo-task executor. The runner still prefers unified diffs, but a fenced
+  `diff` or `patch` block may now start with
+  `*** Begin File: <repo-relative-path>` and end with `*** End File`; the
+  runner writes only that path after the same workspace-boundary validation
+  used by harness helpers, LF-canonicalizing text content before writing it.
+- Kept malformed replacement blocks as task outcomes, not runner crashes:
+  unsafe paths, empty content, directories, missing markers, and write failures
+  leave the workspace unchanged, write deterministic task stderr, and still
+  allow patch capture and verifier execution to classify the result.
+- Bumped `endpoint-python-correctness` to version `0.2.0` and updated its
+  prompt to prefer a unified diff while allowing the exact replacement block
+  form for `inventory.py`.
+- Updated README, specification, architecture, benchpack-format docs,
+  implementation backlog, benchmark research notes, and decisions to document
+  the explicit fallback and the remaining live-validation boundary.
+
+### Validation
+
+- Focused executor, manifest, and CLI tests cover successful replacement-file
+  execution, workspace-escape rejection, missing-marker rejection,
+  trailing-whitespace tolerance on the end marker, endpoint pack version/prompt
+  contract, and end-to-end verifier pass through the replacement block path.
+
+### Open Questions
+
+- The revised `endpoint-python-correctness` contract still needs live endpoint
+  validation before tmux-helper or default-matrix promotion.
+
 ## 2026-05-09 (registry static site)
 
 ### Changed

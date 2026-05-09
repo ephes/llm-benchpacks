@@ -90,6 +90,12 @@ Output contract:
   commands, or markdown outside the fenced block.
 - Use only exact repo-root paths listed above.
 - Omit `index` lines and do not invent paths.
-- Inside the block, return a complete unified diff that applies with
-  `git apply` from the repository root.
+- Prefer a complete unified diff that applies with `git apply` from the
+  repository root.
+- If you cannot produce a unified diff, return exactly one full-file
+  replacement block inside the same `diff` fence, with the first content line
+  exactly `*** Begin File: inventory.py`, then the complete file content, then
+  a final line exactly `*** End File`.
+- Use the replacement block only for `inventory.py`, and include the complete
+  file content between the begin and end markers.
 - Close the fenced block.

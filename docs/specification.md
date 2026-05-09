@@ -70,10 +70,12 @@ Initial packs:
   `defaults.repetitions = 1`, `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`.
 - `endpoint-python-correctness`: endpoint-only measured repo-mutating
-  `repo-task` pack. Version `0.1.0` has one tiny stdlib-only inventory Python
+  `repo-task` pack. Version `0.2.0` has one tiny stdlib-only inventory Python
   repo fixture and one `fix-inventory-aggregation` measured case. The prompt
-  asks the model to return only a fenced `diff` unified diff that fixes
-  `inventory.py`; the runner copies the repo fixture into
+  asks the model to return only one fenced `diff` block, preferring a unified
+  diff that fixes `inventory.py` but allowing a full-file replacement block for
+  `inventory.py` with explicit `*** Begin File: inventory.py` and
+  `*** End File` markers. The runner copies the repo fixture into
   `workspace/fix-inventory-aggregation/rep-001/`, applies the model patch
   inside that workspace, captures
   `patch/fix-inventory-aggregation/rep-001.diff`, and runs a stdlib
@@ -148,7 +150,8 @@ implementation is deliberately partial: the runner prepares disposable
 workspaces for measured executions, parses an optional case-local public
 `harness` selection for `repo-task` cases, runs the task phase through a narrow
 internal executor boundary whose default CLI implementation applies model
-output through a fenced unified-diff contract, and can explicitly route
+output through a fenced unified-diff or explicit replacement-file contract, and
+can explicitly route
 `harness = { id = "external-agent" }` to a runner-owned subprocess argv with
 an appended runner-owned JSON context file and optional case-local task timeout
 support on that harness declaration, and exposes a deterministic optional
@@ -464,11 +467,19 @@ The current default task executor, also selected explicitly by
 `harness = { id = "fenced-patch" }`, extracts the first fenced code block whose
 info string is exactly `diff` or `patch` from the adapter output. That block
 content is treated as a unified diff and applied inside the prepared workspace
-after the adapter call and before patch capture. Non-matching fenced blocks are
-ignored. If no matching block exists, or if the diff is empty, unsafe, cannot
-be applied cleanly, or times out during `git apply --check`, the runner leaves
-the workspace unchanged, writes a deterministic message to task stderr, and
-still records the measured row. If timeout occurs during the actual
+after the adapter call and before patch capture. As a narrow fallback for
+endpoint-only repo-task packs, the same fenced block may instead contain a
+full-file replacement whose first content line is exactly
+`*** Begin File: <repo-relative-path>` and whose final marker line is exactly
+`*** End File`; trailing whitespace on the end marker is tolerated. The runner
+writes only that explicit repo-relative UTF-8 file with LF-canonicalized line
+endings, after applying the same workspace path boundary checks used by harness
+helpers. Non-matching fenced blocks are ignored. If no matching block exists,
+or if the diff/replacement block is empty, unsafe, invalid, or cannot be
+applied cleanly, the runner leaves the workspace unchanged, writes a
+deterministic message to task stderr, and still records the measured row. For
+unified diff blocks only, a timeout during `git apply --check` also leaves the
+workspace unchanged as a task outcome. If timeout occurs during the actual
 `git apply` after successful preflight, the runner fails rather than recording
 a possibly partial workspace as a task outcome. On success, task stdout records
 a short deterministic success message and task stderr remains empty. This

@@ -29,8 +29,9 @@ than changing the adapter boundary:
   workspace for each measured repo-task execution.
 - **Task executor or agent harness**: runner-side component that applies model
   or agent actions inside the prepared workspace. The current CLI default
-  applies only the first fenced `diff` or `patch` block from model output as a
-  unified diff. A repo-task case may now explicitly declare
+  applies the first fenced `diff` or `patch` block from model output as either
+  a unified diff or an explicitly marked full-file replacement block. A
+  repo-task case may now explicitly declare
   `harness = { id = "fenced-patch" }` to select that same public compatibility
   executor, or `harness = { id = "external-agent" }` to route the task phase to
   a runner-owned subprocess argv loaded from `BENCHPACK_EXTERNAL_AGENT_ARGV`;
@@ -137,11 +138,13 @@ results/
    boundary. Current CLI runs use the default executor, or the same executor
    when the case explicitly declares `harness = { id = "fenced-patch" }`. That
    executor extracts the first fenced `diff` or `patch` block from model output,
-   applies it as a unified diff in the prepared workspace, and writes
-   deterministic task stdout/stderr logs. Missing or unapplicable patches are
-   logged and do not crash the benchmark row. If the case declares
-   `harness.timeout_s`, the fenced executor passes that timeout to both
-   `git apply --check` and `git apply`. A preflight timeout leaves the
+   applies it as a unified diff or an explicit
+   `*** Begin File: <repo-relative-path>` replacement block in the prepared
+   workspace, and writes deterministic task stdout/stderr logs. Missing or
+   unapplicable patches and invalid replacement blocks are logged and do not
+   crash the benchmark row. If the case declares `harness.timeout_s`, the
+   fenced executor passes that timeout to both `git apply --check` and
+   `git apply` for unified diff blocks. A preflight timeout leaves the
    workspace unchanged and is logged as a task outcome; an apply timeout after
    preflight is a runner failure because partial mutation cannot be ruled out.
    When the case declares `harness = { id = "external-agent" }`, the CLI passes
@@ -194,14 +197,15 @@ and before each measured adapter execution:
 5. After the adapter call, the runner invokes the internal task executor
    boundary. The default CLI executor extracts the first fenced code block
    whose info string is exactly `diff` or `patch` from
-   `AdapterResult.output_text`. The block body is treated as a unified diff and
-   applied from the prepared workspace root. Non-matching fences are ignored.
-   Missing blocks and rejected or unapplicable diffs are deterministic task
-   stderr outcomes, not runner crashes. `harness.timeout_s`, when present,
-   bounds the fenced executor subprocess calls. A `git apply --check` timeout
-   leaves the workspace unchanged and is logged in task stderr. A timeout during
-   the actual `git apply` after preflight is a runner failure because the
-   workspace state may be partial.
+   `AdapterResult.output_text`. The block body is treated as a unified diff or
+   an explicitly path-marked full-file replacement and applied from the
+   prepared workspace root. Non-matching fences are ignored. Missing blocks,
+   rejected or unapplicable diffs, and invalid replacement blocks are
+   deterministic task stderr outcomes, not runner crashes. `harness.timeout_s`,
+   when present, bounds the fenced executor subprocess calls for unified diff
+   application. A `git apply --check` timeout leaves the workspace unchanged and
+   is logged in task stderr. A timeout during the actual `git apply` after
+   preflight is a runner failure because the workspace state may be partial.
 6. For `harness = { id = "external-agent" }`, the CLI routes the task phase to
    the runner-owned external subprocess harness. The argv comes from
    `BENCHPACK_EXTERNAL_AGENT_ARGV`, not from the manifest. The runner appends
@@ -286,11 +290,11 @@ remains for model request/response payloads. Current repo-task artifacts are
 `task/<case-id>/rep-NNN.context.json` context inputs, optional public
 external-agent `task/<case-id>/rep-NNN.model-calls.jsonl` model-call logs, and
 `verify/<case-id>/rep-NNN.{json,stdout.log,stderr.log}`. Task logs now describe
-the executor-owned task phase: the default fenced unified-diff
-extraction/application phase for default CLI runs, the public external-agent
-subprocess phase, or an internal harness phase when runner-side code supplies
-one. A later full agent harness may replace or extend that phase without
-changing the adapter or reporter boundaries.
+the executor-owned task phase: the default fenced unified-diff or explicit
+replacement-file extraction/application phase for default CLI runs, the public
+external-agent subprocess phase, or an internal harness phase when runner-side
+code supplies one. A later full agent harness may replace or extend that phase
+without changing the adapter or reporter boundaries.
 
 Public harness selection is a manifest-format concern, not an adapter concern.
 The implemented public shape is an explicit `harness = { id = "..." }` table on
@@ -474,9 +478,10 @@ The repo-task `task` object is deliberately narrow:
 directory and use `task/<case-id>/rep-NNN.stdout.log` and
 `task/<case-id>/rep-NNN.stderr.log`. The log files are written for every
 measured repo-task execution. They record only the current internal executor
-phase: fenced unified-diff patch application for current CLI runs, or an
-internal harness phase when supplied by runner-side code. Chat records do not
-include `task`, even when they reference repo directory fixtures as metadata.
+phase: fenced unified-diff or explicit replacement-file application for current
+CLI runs, or an internal harness phase when supplied by runner-side code. Chat
+records do not include `task`, even when they reference repo directory fixtures
+as metadata.
 
 The repo-task `verify` object is deliberately narrow: `verify.path`,
 `verify.stdout_path`, and `verify.stderr_path` are relative to the run output
