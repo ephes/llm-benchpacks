@@ -63,6 +63,54 @@ working history and open questions.
   promotion remains separate work and should be scheduled only if this narrow
   evidence answers the immediate strict-parity question.
 
+## 2026-05-10 (Qwen3.6 strict-GGUF tri-host four-pack)
+
+### Changed
+
+- Refreshed the active backlog queue after the narrow Qwen3.6 preflight and ran
+  the full default four-pack matrix for the exact same strict-GGUF artifact:
+  `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure`.
+- Used the same `unsloth/Qwen3.6-27B-GGUF` file
+  `Qwen3.6-27B-Q4_K_M.gguf`, SHA256
+  `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0`, alias
+  `qwen36-27b-q4km`, 4K context, f16 KV cache, prompt cache, `--parallel 1`,
+  and `--reasoning off` on M5, M4, and Hetzner.
+- Reused the existing recount-capable dirty worktree on M4 and Hetzner rather
+  than pulling over it. The local M5 ran from commit `5e96f35` plus the current
+  documentation-only backlog update.
+- Ran helper dry runs before launch on all three hosts. Remote compact
+  artifacts pulled back were limited to `run.jsonl`, `summary.md`,
+  `hardware.json`, and `run-metadata.json`; remote raw, workspace, patch, task,
+  and verify payloads stayed on their source hosts.
+
+### Outcome
+
+- All three hosts completed the four-pack matrix without command failures.
+  Scored outcomes passed everywhere: smoke contains scoring, both
+  `desktop-django-wrap` regex cases, and the `patch-from-failure`
+  `fix-greeting` verifier.
+- `runtime-sweep` wrote 9/9 `ok=true` measured rows on every host. Compare
+  reported `prefill parity=comparable` for short, medium, and long.
+- Median total TPS for `runtime-sweep`, M5 vs M4 vs Hetzner:
+  short 25.04 vs 21.19 vs 14.44; medium 24.26 vs 21.39 vs 14.44; long 23.07
+  vs 21.84 vs 14.31.
+- Smoke total TPS was 15.30 on M5, 11.82 on M4, and 11.15 on Hetzner. Patch
+  total TPS was 18.85 on M5, 13.64 on M4, and 12.17 on Hetzner, with
+  `verify_exit=0` on all three.
+- Hetzner production `llm.service` was stopped only for the exclusive GPU
+  window and restored afterward. Final public checks showed `/healthz/` HTTP
+  200, `/readyz/` HTTP 200 with `backend_available=true`, unauthenticated
+  `/v1/models` HTTP 401, no strict-lane listener on port 18082, and GPU memory
+  back near the production baseline at about 18.3 GiB.
+
+### Open Questions
+
+- The strict Qwen3.6 27B GGUF lane now has enough evidence to consider a
+  helper/default recommendation for that exact artifact and runtime setup.
+  Any such promotion should stay scoped and should not generalize the result to
+  unrelated endpoint-only or external-agent lanes.
+
 ## 2026-05-09 (Hetzner API external-agent validation)
 
 ### Changed

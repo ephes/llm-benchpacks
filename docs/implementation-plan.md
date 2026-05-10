@@ -2,20 +2,24 @@
 
 ## Active Backlog Queue
 
-Status date: 2026-05-09.
+Status date: 2026-05-10.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
 section to decide the next slice.
 
-1. Keep `endpoint-python-correctness` helper/default-matrix promotion deferred
-   after the 2026-05-09 local M5 `0.2.0` validation. The run reached
-   `qwen3-coder:latest` through Ollama with `ok=true`, but the model again
-   returned unmarked full-file Python inside a `diff` fence. It did not emit a
-   unified diff or the new explicit `*** Begin File: inventory.py` replacement
-   block, so the workspace stayed unchanged and the verifier failed. Treat this
-   as a model output-contract failure, not a successful endpoint correctness
-   lane.
+1. Treat the Qwen3.6 27B strict-GGUF lane as the current strongest benchmark
+   signal after the 2026-05-09/10 tri-host preflight and the follow-up
+   2026-05-10 four-pack matrix. The same
+   `unsloth/Qwen3.6-27B-GGUF` file `Qwen3.6-27B-Q4_K_M.gguf` with SHA256
+   `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0` loaded
+   on M5, M4, and Hetzner through `llama-server --reasoning off`; all three
+   hosts passed `smoke-chat` and `endpoint-python-correctness` with the
+   recount-capable patch apply path. The four-pack matrix then passed
+   `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+   `patch-from-failure` on all three hosts. The next decision is whether this
+   exact strict-GGUF lane should get a helper/default recommendation, not
+   whether it needs another immediate validation run.
 2. Keep `coding-tasks-external-agent` explicitly exploratory and opt-in after
    the 2026-05-09 direct-edit comparison. The Apple M5/M4 slice reached
    Ollama/Codex on both hosts with valid telemetry and no endpoint or harness
@@ -37,12 +41,13 @@ section to decide the next slice.
    already-configured agent/model, or refine reporting around no-source-mutation
    versus partial-source-mutation failures. Do not promote the external-agent
    pack set into helper defaults from the current mixed evidence.
-4. Decide the next endpoint-only correctness slice deliberately before changing
-   defaults: try another already-available endpoint, tighten the prompt
-   contract, or consider whether accepting unmarked full-file replacements is
-   safe enough. Do not change `scripts/benchpack-tmux-matrix` helper pack sets
-   or default matrix recommendations until there is an apply-clean,
-   verifier-passing live result.
+4. Decide helper/default promotion deliberately. The Qwen3.6 strict-GGUF lane
+   now has broad enough four-pack evidence for that exact artifact/runtime
+   combination, but `endpoint-python-correctness` should not be generalized to
+   unrelated endpoints or runtimes. The older `qwen3-coder:latest` Ollama lane
+   remains a useful output-contract failure: it reached the adapter but
+   returned unmarked replacement-file content rather than an applicable diff or
+   explicit replacement block.
 5. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
    lane unless there is a new model target, runtime, host, or operational
    question. Existing M4/M5/Hetzner strict-GGUF evidence is sufficient for the
