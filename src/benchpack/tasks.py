@@ -656,16 +656,32 @@ def apply_unified_diff_to_workspace(
         return False, "", f"Patch rejected: {exc}; workspace left unchanged.\n"
 
     workspace_path = Path(workspace)
+    apply_command: list[str] | None = None
     try:
-        check = subprocess.run(
-            ["git", "apply", "--check", "--whitespace=nowarn"],
-            input=diff,
-            cwd=workspace_path,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout_s,
-        )
+        for check_command, candidate_apply_command in (
+            (
+                ["git", "apply", "--check", "--whitespace=nowarn", "--recount"],
+                ["git", "apply", "--whitespace=nowarn", "--recount"],
+            ),
+            # Keep the historical path as a compatibility fallback for any
+            # git/version-specific diff form that rejects recount preflight.
+            (
+                ["git", "apply", "--check", "--whitespace=nowarn"],
+                ["git", "apply", "--whitespace=nowarn"],
+            ),
+        ):
+            check = subprocess.run(
+                check_command,
+                input=diff,
+                cwd=workspace_path,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_s,
+            )
+            if check.returncode == 0:
+                apply_command = candidate_apply_command
+                break
     except subprocess.TimeoutExpired:
         return (
             False,
@@ -686,7 +702,7 @@ def apply_unified_diff_to_workspace(
             "Patch rejected: workspace could not be accessed; workspace left unchanged.\n",
         )
 
-    if check.returncode != 0:
+    if apply_command is None:
         return (
             False,
             "",
@@ -696,7 +712,7 @@ def apply_unified_diff_to_workspace(
 
     try:
         applied = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn"],
+            apply_command,
             input=diff,
             cwd=workspace_path,
             capture_output=True,

@@ -16,6 +16,53 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-10 (Qwen3.6 strict-GGUF M4/Hetzner preflight)
+
+### Changed
+
+- Continued the dense Qwen3.6 strict same-GGUF lane after the local M5 recount
+  preflight by running the same artifact on the remote M4 Studio first, then
+  on the Hetzner CUDA host after M4 passed.
+- Synced both remote repos from clean older commits to local commit `38f2017`
+  and applied the current local recount runner worktree patch without
+  overwriting dirty remote state. Both remote checkouts were clean before sync.
+- Verified the exact `unsloth/Qwen3.6-27B-GGUF` file
+  `Qwen3.6-27B-Q4_K_M.gguf` with SHA256
+  `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0` on M4
+  and Hetzner. The M4 file was already present; the Hetzner file was
+  downloaded from Hugging Face after a slow M5-to-Hetzner copy was stopped.
+- Used `llama-server` with alias `qwen36-27b-q4km`, loopback port `18082`,
+  4K context, f16 KV cache, prompt cache, `--parallel 1`, and
+  `--reasoning off` on both remaining hosts.
+- Ran only `smoke-chat` and `endpoint-python-correctness` on M4 and Hetzner,
+  with ignored metadata under `metadata/` and compact result pullback only.
+  Remote raw/workspace/patch/task/verify payloads stayed on the source hosts.
+
+### Outcome
+
+- M4 Studio passed both packs:
+  `smoke-chat` wrote `ok=true`, contains scoring passed, and total TPS was
+  10.39; `endpoint-python-correctness` wrote `ok=true`, `verify_exit=0`,
+  `patch_bytes=1284`, and total TPS was 18.09.
+- Hetzner passed both packs:
+  `smoke-chat` wrote `ok=true`, contains scoring passed, total TPS was 10.93,
+  and reported GPU memory around 16.5 GiB while the strict-lane server was
+  active; `endpoint-python-correctness` wrote `ok=true`, `verify_exit=0`,
+  `patch_bytes=1419`, and total TPS was 13.78.
+- Hetzner production `llm.service` was stopped only for the exclusive GPU
+  window and restored afterward. Final checks showed `llm`, `llm-mgmt`, and
+  `caddy` active/enabled, public `/healthz/` HTTP 200, public `/readyz/`
+  `backend_available=true`, unauthenticated public `/v1/models` HTTP 401, no
+  strict-lane listener on port 18082, no matching temporary `llama-server`
+  process, and GPU memory back near the production baseline at about 18.3 GiB.
+
+### Open Questions
+
+- The Qwen3.6 27B strict-GGUF lane now has tri-host load, smoke, and one
+  deterministic endpoint-coding pass. A full four-pack matrix or default
+  promotion remains separate work and should be scheduled only if this narrow
+  evidence answers the immediate strict-parity question.
+
 ## 2026-05-09 (Hetzner API external-agent validation)
 
 ### Changed
@@ -55,6 +102,48 @@ working history and open questions.
   JSON-mode support, a larger completion budget, or a different served model
   before this lane can separate model task quality from wrapper output-contract
   failures.
+
+## 2026-05-09 (Qwen3.6 strict-GGUF M5 preflight)
+
+### Changed
+
+- Started the next strict same-GGUF Qwen3.6 lane with a narrow local M5
+  preflight before spending M4 or Hetzner time.
+- Used `llama-server` 9090 (`5757c4dcb`) with
+  `unsloth/Qwen3.6-27B-GGUF` file `Qwen3.6-27B-Q4_K_M.gguf`, SHA256
+  `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0`,
+  alias `qwen36-27b-q4km`, 4K context, f16 KV cache, prompt cache,
+  `--parallel 1`, and `--reasoning off`.
+- Ran `smoke-chat` and `endpoint-python-correctness` through `openai-chat`
+  against `http://127.0.0.1:18082/v1`, with ignored metadata in
+  `metadata/m5-qwen36-dense-llamacpp-strict-preflight-20260509-214623.json`.
+- Changed the fenced repo-task executor to try `git apply --recount` before
+  falling back to the standard apply path, then reran the same narrow M5
+  preflight with ignored metadata in
+  `metadata/m5-qwen36-dense-llamacpp-strict-preflight-20260509-215133.json`.
+
+### Outcome
+
+- The model loaded cleanly on the M5; `llama-server` reported all 65/65 layers
+  offloaded to Metal, `thinking = 0`, 26.90B params, and no memory-fit
+  reduction.
+- `smoke-chat` passed with an `ok=true` row.
+- `endpoint-python-correctness` reached the adapter and produced a non-empty
+  workspace mutation, but deterministic verification failed. The raw response
+  used the requested `diff` fence and contained a plausible full fix, but the
+  unified-diff hunk counts were inconsistent. `git apply` accepted a partial
+  edit, leaving `reorder_list()` without a body and causing a syntax error.
+- With `git apply --recount`, the rerun applied the complete model diff:
+  `endpoint-python-correctness` passed with `verify_exit=0`,
+  `patch_bytes=1284`, and all visible and hidden verifier checks passing.
+- The server was stopped after the run, and no listener remained on TCP port
+  18082.
+
+### Open Questions
+
+- Superseded by the 2026-05-10 entry above: the same-artifact M4 and Hetzner
+  narrow preflights now also pass `smoke-chat` and
+  `endpoint-python-correctness` with the recount-capable runner.
 
 ## 2026-05-09 (direct-edit external-agent M4/M5 validation)
 

@@ -1765,7 +1765,13 @@ with open(args.output, "w", encoding="utf-8") as fh:
     timeouts: list[float] = []
 
     def timeout_task_preflight(command, *args, **kwargs):
-        if command == ["git", "apply", "--check", "--whitespace=nowarn"]:
+        if command == [
+            "git",
+            "apply",
+            "--check",
+            "--whitespace=nowarn",
+            "--recount",
+        ]:
             timeouts.append(kwargs["timeout"])
             raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         return real_run(command, *args, **kwargs)

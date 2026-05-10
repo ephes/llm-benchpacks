@@ -250,7 +250,13 @@ The supported keys are currently `id` and optional `timeout_s`. When present,
 `harness.timeout_s` must be a positive TOML integer or float and bounds the
 selected task harness/executor phase; booleans, strings, zero, negative values,
 arrays, and tables are rejected. It is enforced for the subprocess-backed
-fenced-patch and external-agent executors. For `fenced-patch`, a timeout during
+fenced-patch and external-agent executors. For `fenced-patch`, unified diff
+preflight first tries `git apply --check --recount` so otherwise valid model
+diffs with inaccurate hunk line counts can be applied as complete hunks rather
+than partially counted edits; if recount preflight rejects the diff, the runner
+falls back to the standard `git apply --check` path for compatibility. The
+actual apply command matches the successful preflight mode. The timeout budget
+is applied independently to each subprocess call. A timeout during
 `git apply --check` is a task outcome: the workspace is known unchanged, task
 stderr records the timeout, patch capture still runs, and verifier execution
 still follows patch capture. A timeout during the actual `git apply` after

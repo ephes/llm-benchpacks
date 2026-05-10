@@ -163,6 +163,20 @@ Qwen3.6 remains useful for trend continuity and for the documented Apple
 Silicon MLX-vs-llama.cpp-vs-Ollama workflow. It should not be treated as the
 default answer to every new “current preferred model” question.
 
+Latest strict-GGUF preflight note:
+
+- On 2026-05-09/10, the narrow dense `Qwen3.6-27B-Q4_K_M.gguf` strict-GGUF
+  preflight reached all three target hosts: local M5, remote M4 Studio, and
+  Hetzner CUDA. All three hosts used SHA256
+  `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0`,
+  alias `qwen36-27b-q4km`, `llama-server`, 4K context, f16 KV cache,
+  prompt cache, `--parallel 1`, and `--reasoning off`. `smoke-chat` and
+  `endpoint-python-correctness` both passed on M4 and Hetzner after the local
+  M5 recount-capable runner fix, so the lane now has same-artifact load,
+  endpoint-smoke, and one deterministic endpoint-coding pass on all three
+  hosts. This is still a narrow preflight, not a full four-pack default matrix
+  promotion.
+
 ## Next Catalog Work
 
 - Keep the strict-GGUF tri-host summary current if the selected Gemma 4
@@ -172,6 +186,10 @@ default answer to every new “current preferred model” question.
   this repo now has strict-GGUF four-pack evidence for the same artifact on M5,
   M4, and Hetzner, summarized in
   `docs/gemma4-strict-gguf-trihost-summary.md`.
+- Keep `docs/qwen36-27b-strict-gguf-trihost-summary.md` current if the narrow
+  Qwen3.6 27B strict-GGUF preflight is expanded into a full four-pack matrix
+  or if the selected artifact, checksum, llama.cpp builds, context/cache
+  settings, or Hetzner production baseline changes.
 - Use `docs/gemma4-tri-host-runbook.md` as the archived checklist and template
   for future tri-host campaigns, keeping placeholder metadata examples aligned
   with verified artifacts when they are known.

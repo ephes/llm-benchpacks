@@ -303,9 +303,10 @@ Bundled packs:
   wrap benchmark.
 - `patch-from-failure`: non-streaming single-case `repo-task` pack with one
   tiny Python repo fixture. The case asks the model to return only a fenced
-  `diff` block, applies that unified diff inside a run-owned workspace, captures
-  `patch/fix-greeting/rep-001.diff`, and uses a stdlib `verify-script` to check
-  that `greet("Ada")` returns exactly `Hello, Ada!`.
+  `diff` block, applies that unified diff inside a run-owned workspace using
+  the recount-capable `git apply` path, captures
+  `patch/fix-greeting/rep-001.diff`, and uses a stdlib `verify-script` to
+  check that `greet("Ada")` returns exactly `Hello, Ada!`.
 - `endpoint-python-correctness`: non-streaming single-case `repo-task` pack
   for endpoint-only coding correctness. It uses the normal chat adapter path,
   prefers a fenced unified diff against a tiny inventory Python fixture, allows

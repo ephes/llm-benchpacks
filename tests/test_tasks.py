@@ -217,6 +217,75 @@ def test_apply_unified_diff_to_workspace_mutates_file(tmp_path: Path) -> None:
     assert (workspace / "README.md").read_text(encoding="utf-8") == "new\nshared\n"
 
 
+def test_apply_unified_diff_to_workspace_recounts_incorrect_hunk_lengths(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "README.md").write_text("old\nshared\n", encoding="utf-8")
+    diff = (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-old\n"
+        "+new\n"
+        "+extra\n"
+        " shared\n"
+    )
+
+    applied, stdout, stderr = apply_unified_diff_to_workspace(diff, workspace)
+
+    assert applied is True
+    assert stdout == "Applied fenced model patch to workspace.\n"
+    assert stderr == ""
+    assert (workspace / "README.md").read_text(encoding="utf-8") == (
+        "new\nextra\nshared\n"
+    )
+
+
+def test_apply_unified_diff_to_workspace_falls_back_after_recount_rejection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    readme = workspace / "README.md"
+    readme.write_text("old\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_git_apply(command, *args, **kwargs):
+        calls.append(command)
+        if command == ["git", "apply", "--check", "--whitespace=nowarn", "--recount"]:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="bad")
+        if command == ["git", "apply", "--check", "--whitespace=nowarn"]:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command == ["git", "apply", "--whitespace=nowarn"]:
+            readme.write_text("new\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr("benchpack.tasks.subprocess.run", fake_git_apply)
+    diff = (
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+    )
+
+    applied, stdout, stderr = apply_unified_diff_to_workspace(diff, workspace)
+
+    assert applied is True
+    assert stdout == "Applied fenced model patch to workspace.\n"
+    assert stderr == ""
+    assert readme.read_text(encoding="utf-8") == "new\n"
+    assert calls == [
+        ["git", "apply", "--check", "--whitespace=nowarn", "--recount"],
+        ["git", "apply", "--check", "--whitespace=nowarn"],
+        ["git", "apply", "--whitespace=nowarn"],
+    ]
+
+
 def test_apply_unified_diff_to_workspace_handles_git_header_path_with_spaces(
     tmp_path: Path,
 ) -> None:
@@ -608,7 +677,13 @@ def test_run_repo_task_executor_preflight_timeout_logs_task_outcome(
     (workspace / "README.md").write_text("old\n", encoding="utf-8")
 
     def timeout_check(command, *args, **kwargs):
-        assert command == ["git", "apply", "--check", "--whitespace=nowarn"]
+        assert command == [
+            "git",
+            "apply",
+            "--check",
+            "--whitespace=nowarn",
+            "--recount",
+        ]
         assert kwargs["timeout"] == 0.25
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
@@ -682,8 +757,8 @@ def test_run_repo_task_executor_application_timeout_is_runner_failure(
         )
 
     assert calls == [
-        ["git", "apply", "--check", "--whitespace=nowarn"],
-        ["git", "apply", "--whitespace=nowarn"],
+        ["git", "apply", "--check", "--whitespace=nowarn", "--recount"],
+        ["git", "apply", "--whitespace=nowarn", "--recount"],
     ]
     assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
     assert not (out / "task" / "edit-repo" / "rep-001.stderr.log").exists()

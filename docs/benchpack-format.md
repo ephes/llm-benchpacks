@@ -406,11 +406,17 @@ Rules:
   tables are rejected. It bounds the selected task harness/executor phase, not
   the adapter request and not the verifier subprocess.
 - Task timeout is enforced by subprocess-backed task executors. For
-  `fenced-patch`, it is passed to both `git apply --check` and `git apply`. A
-  timeout during `git apply --check` leaves the workspace unchanged, writes
-  deterministic task stderr, and still allows patch capture and verifier
-  execution. A timeout during the actual `git apply` after successful preflight
-  is a runner failure because the workspace may be partially changed. For
+  `fenced-patch`, it is passed to the unified diff preflight and apply calls.
+  Preflight tries `git apply --check --recount` first, then standard
+  `git apply --check` if recount rejects the diff. The apply call uses the mode
+  that passed preflight. The recount mode accepts otherwise valid unified diffs
+  whose hunk line counts are inaccurate, which is common in model output. The
+  timeout is applied independently to each subprocess call rather than as one
+  shared phase budget. A timeout during `git apply --check` leaves the
+  workspace unchanged, writes deterministic task stderr, and still allows patch
+  capture and verifier execution. A timeout during the actual `git apply` after
+  successful preflight is a runner failure because the workspace may be
+  partially changed. For
   `external-agent`, a subprocess timeout is captured in the task stderr log
   after the runner stops the external process group with a bounded
   terminate-then-kill cleanup policy.

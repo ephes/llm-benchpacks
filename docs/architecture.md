@@ -143,10 +143,15 @@ results/
    workspace, and writes deterministic task stdout/stderr logs. Missing or
    unapplicable patches and invalid replacement blocks are logged and do not
    crash the benchmark row. If the case declares `harness.timeout_s`, the
-   fenced executor passes that timeout to both `git apply --check` and
-   `git apply` for unified diff blocks. A preflight timeout leaves the
-   workspace unchanged and is logged as a task outcome; an apply timeout after
-   preflight is a runner failure because partial mutation cannot be ruled out.
+   fenced executor passes that timeout to the unified diff preflight and apply
+   calls. Preflight tries `git apply --check --recount` first, then falls back
+   to standard `git apply --check` if recount rejects the diff; the apply call
+   uses the successful mode. The timeout budget is passed independently to
+   each subprocess call, not shared across the whole fenced-patch phase.
+   `--recount` lets the runner apply otherwise valid LLM-generated diffs whose
+   hunk line counts are inaccurate. A preflight timeout leaves the workspace
+   unchanged and is logged as a task outcome; an apply timeout after preflight
+   is a runner failure because partial mutation cannot be ruled out.
    When the case declares `harness = { id = "external-agent" }`, the CLI passes
    the preloaded runner-owned subprocess argv to `ExternalProcessHarness`, which
    writes `task/<case-id>/rep-NNN.context.json` as runner-owned harness input,
@@ -203,9 +208,14 @@ and before each measured adapter execution:
    rejected or unapplicable diffs, and invalid replacement blocks are
    deterministic task stderr outcomes, not runner crashes. `harness.timeout_s`,
    when present, bounds the fenced executor subprocess calls for unified diff
-   application. A `git apply --check` timeout leaves the workspace unchanged and
-   is logged in task stderr. A timeout during the actual `git apply` after
-   preflight is a runner failure because the workspace state may be partial.
+   application. Unified diff application tries `git apply --recount` before
+   the standard apply path to avoid partial edits from otherwise valid model
+   diffs with wrong hunk counts while preserving compatibility with diffs that
+   standard `git apply` accepts. The declared timeout is applied separately to
+   each preflight or apply subprocess call. A `git apply --check` timeout
+   leaves the workspace unchanged and is logged in task stderr. A timeout
+   during the actual `git apply` after preflight is a runner failure because
+   the workspace state may be partial.
 6. For `harness = { id = "external-agent" }`, the CLI routes the task phase to
    the runner-owned external subprocess harness. The argv comes from
    `BENCHPACK_EXTERNAL_AGENT_ARGV`, not from the manifest. The runner appends
