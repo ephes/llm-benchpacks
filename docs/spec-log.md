@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-10 (Endpoint correctness backlog closure)
+
+### Changed
+
+- Closed the stale endpoint-only correctness follow-up in the active backlog.
+  The `endpoint-python-correctness` `0.2.0` pack already has live
+  strict-GGUF validation across M5, M4, and Hetzner after the recount-capable
+  fenced diff apply path landed.
+- Updated the implementation plan, README, and benchmark research notes to
+  distinguish that narrow successful Qwen3.6 strict-GGUF evidence from any
+  broader helper/default-matrix promotion decision.
+- Kept `endpoint-python-correctness` as an explicit opt-in pack. The default
+  four-pack helper matrix remains `smoke-chat`, `runtime-sweep`,
+  `desktop-django-wrap`, and `patch-from-failure`.
+
+### Open Questions
+
+- Future endpoint-only work should be tied to a new endpoint, model, or
+  promotion question. The current Qwen3.6 strict-GGUF evidence no longer needs
+  another validation rerun. This supersedes the previous 2026-05-10
+  endpoint-correctness open question about choosing another endpoint, tighter
+  prompt wording, or a broader replacement contract for this already-validated
+  lane.
+- Broader direct-edit external-agent output-contract work remains the next
+  more concrete agent-shaped correctness slice.
+
 ## 2026-05-10 (Backlog grooming after Qwen3.6 helper)
 
 ### Changed

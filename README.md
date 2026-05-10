@@ -343,8 +343,10 @@ Bundled packs:
   `qwen3-coder:latest` Ollama run reached the adapter but failed against pack
   version `0.1.0` because the model emitted replacement-file content rather
   than an applicable unified diff; version `0.2.0` adds the explicit
-  replacement block format, but matrix promotion still needs a successful live
-  validation.
+  replacement block format. Later Qwen3.6 27B strict-GGUF preflights passed
+  the `0.2.0` pack on M5, M4, and Hetzner after the recount-capable fenced
+  diff apply path landed. Matrix promotion remains an explicit policy choice,
+  not a missing validation step for that exact lane.
 - `python-regression-fix`: non-streaming single-case `repo-task` pack with a
   small stdlib Python task-summary repo fixture. The case asks for a fenced
   unified diff to fix owner/status summary behavior, overdue-title filtering

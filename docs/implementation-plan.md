@@ -20,7 +20,10 @@ Current posture:
 2. Default helper behavior stays conservative. The default matrix remains
    `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
    `patch-from-failure`; `endpoint-python-correctness`, `coding-tasks`, and
-   `coding-tasks-external-agent` remain explicit opt-in paths.
+   `coding-tasks-external-agent` remain explicit opt-in paths. The
+   `endpoint-python-correctness` `0.2.0` pack has passed live Qwen3.6
+   strict-GGUF preflights on M5, M4, and Hetzner, but that narrow evidence is
+   not a default-matrix promotion by itself.
 3. Gemma 4 strict-GGUF four-pack evidence is also sufficient for the current
    selected `google_gemma-4-E2B-it-Q4_K_M.gguf` artifact and host lane. Park
    broad runtime-only reruns until a new model target, runtime version, host,
@@ -35,23 +38,17 @@ Next actionable slices:
    agent/model. Keep this as opt-in evidence; do not promote
    `coding-tasks-external-agent` into defaults from the current mixed verifier
    outcomes.
-2. Endpoint-only correctness follow-up. Keep
-   `endpoint-python-correctness` helper/default promotion deferred. The next
-   endpoint-only slice should deliberately choose between a different
-   already-available endpoint, tighter prompt wording, or a broader replacement
-   contract. Do not treat adapter reachability or plausible raw code as
-   correctness success.
-3. Reporting polish only when it answers a concrete review question. Possible
+2. Reporting polish only when it answers a concrete review question. Possible
    small slices are better direct-edit failure classification, clearer
    no-source-mutation versus partial-source-mutation summaries, or result-set
    report ergonomics for already-generated evidence. Do not commit generated
    `results/*` artifacts for this work unless a later curated run-log entry
    explicitly calls for a small retained subset.
-4. Result registry work remains demand-driven. Local import, report, static
+3. Result registry work remains demand-driven. Local import, report, static
    site export, bundle create/validate, and bundle import have landed. Hosted
    upload/review, richer public browsing, duplicate handling, query APIs, and
    leaderboard policy should wait for a concrete sharing workflow.
-5. Research tracks stay parked until live evidence motivates them:
+4. Research tracks stay parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
    scoring, larger project-level tasks, and product matching/classification
@@ -1138,19 +1135,20 @@ Move beyond speed into correctness.
 
 **Status:** started. The current bundled task-completion packs establish
 fenced-patch repo-task plumbing and deterministic verifier behavior, including
-the new `endpoint-python-correctness` endpoint-only pack for a small generic
+the `endpoint-python-correctness` endpoint-only pack for a small generic
 correctness signal. Recent live evidence shows that fenced-diff prompts are too
 prompt-contract-sensitive for broad coding-agent conclusions. The direct-edit
 external-agent variants now have local M5 real-agent evidence with 2/3 verifier
 passes, and lightweight task-outcome reporting polish has landed. The first
 local M5 validation of `endpoint-python-correctness` reached Ollama but failed
 because the model emitted replacement-file content instead of an applicable
-unified diff. The revised `0.2.0` pack now explicitly supports a path-marked
-replacement block fallback, but it still needs live endpoint validation before
-it counts as endpoint-only correctness success. The next useful live slice is
-broader direct-edit comparison as exploratory evidence; endpoint-only
-helper/default matrix promotion remains deferred until a later successful
-endpoint-correctness validation.
+unified diff. The revised `0.2.0` pack explicitly supports a path-marked
+replacement block fallback, and the later Qwen3.6 strict-GGUF preflights
+passed `endpoint-python-correctness` on M5, M4, and Hetzner after the runner's
+recount-capable fenced diff apply path landed. Endpoint-only helper/default
+matrix promotion remains deferred; future endpoint-only work should be tied to
+a different endpoint, model, or promotion question rather than rerunning the
+validated strict-GGUF lane.
 
 Scope:
 
@@ -1201,9 +1199,13 @@ Scope:
   `patch_bytes=0`, and the verifier failed all visible and hidden checks
   against the unchanged fixture. **Replacement fallback landed 2026-05-09** as
   a deliberate path-marked full-file replacement block inside the fenced
-  executor plus `endpoint-python-correctness` version `0.2.0`. Tmux-helper or
-  default-matrix changes remain premature until that revised contract has live
-  endpoint validation.
+  executor plus `endpoint-python-correctness` version `0.2.0`. **Live
+  strict-GGUF validation landed 2026-05-09/2026-05-10** for Qwen3.6 27B
+  `llama-server --reasoning off`: the M5, M4, and Hetzner preflights all
+  produced `ok=true`, non-empty patches, `verify_exit=0`, and visible plus
+  hidden verifier passes. Tmux-helper or default-matrix promotion remains a
+  separate policy question rather than a validation blocker for this exact
+  lane.
 - Deterministic scoring by tests passing, timeouts, and resource use.
   **Partially landed** for verifier pass/fail and timeouts; resource-aware
   scoring for agent-written programs remains research/design work.
@@ -1219,7 +1221,10 @@ Validation:
   on local M5 with `qwen3-coder:latest` through Ollama; this failed against the
   original `0.1.0` diff-only contract as a model-output format issue with a
   meaningful deterministic verifier failure, not as an infrastructure blocker.
-  The `0.2.0` replacement fallback needs a new live validation.
+  **Validated 2026-05-09/2026-05-10** for the Qwen3.6 27B strict-GGUF
+  `llama-server --reasoning off` lane on M5, M4, and Hetzner. Promotion into
+  helper/default matrices remains explicit opt-in policy work, not a missing
+  validation step.
 
 ## Phase 5: Remote Host Orchestration
 

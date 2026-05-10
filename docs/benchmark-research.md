@@ -63,7 +63,14 @@ should not be committed for this research track unless explicitly curated.
   returned full replacement Python content inside a `diff` fence without
   unified-diff file paths and without the required
   `*** Begin File: inventory.py` marker, so the fallback was not exercised and
-  the verifier ran against the unchanged fixture.
+  the verifier ran against the unchanged fixture. A later Qwen3.6 27B
+  strict-GGUF lane did validate the `0.2.0` pack as an endpoint-only
+  correctness signal: M5, M4, and Hetzner all passed
+  `endpoint-python-correctness` with `ok=true`, non-empty captured patches,
+  `verify_exit=0`, and visible plus hidden verifier checks passing after the
+  recount-capable fenced diff apply path landed. Treat that as narrow evidence
+  for the exact Qwen3.6 strict-GGUF `llama-server --reasoning off` lane, not
+  as broad proof for Ollama, public APIs, or default-matrix promotion.
 - The 2026-05-09 broader direct-edit comparison reached both Apple hosts at the
   same repo commit with valid adapter rows and safe model-call telemetry. It
   produced 2/6 deterministic verifier passes: `fix-greeting` passed on M5 and
@@ -95,14 +102,11 @@ should not be committed for this research track unless explicitly curated.
 
 ## Next Work Ordering
 
-1. Keep `endpoint-python-correctness` helper/default-matrix promotion deferred.
-   The `0.2.0` live validation reached the local Ollama endpoint but did not
-   prove the new replacement fallback because `qwen3-coder:latest` ignored the
-   explicit path-marked replacement contract. The next endpoint-only slice
-   should choose deliberately between trying another already-available endpoint,
-   tightening prompt wording, or broadening the replacement contract; do not
-   treat endpoint reachability or logically plausible raw code as correctness
-   success.
+1. Keep `endpoint-python-correctness` helper/default-matrix promotion deferred,
+   but do not spend the next slice rerunning the already-validated Qwen3.6
+   strict-GGUF lane. Future endpoint-only work should be tied to a new
+   endpoint, model, or promotion question; do not treat endpoint reachability
+   or logically plausible raw code as correctness success.
 2. Keep `coding-tasks-external-agent` opt-in after the mixed M5/M4/Hetzner API
    validation. The next direct-edit slice should be deliberate: improve or
    replace the remote API wrapper output contract, including JSON-mode or
