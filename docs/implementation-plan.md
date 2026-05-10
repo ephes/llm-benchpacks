@@ -6,58 +6,52 @@ Status date: 2026-05-10.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
-section to decide the next slice.
+section to decide the next slice. Items marked as parked are explicit
+non-actions until a new question changes the priority.
 
-1. Treat the Qwen3.6 27B strict-GGUF lane as the current strongest benchmark
-   signal after the 2026-05-09/10 tri-host preflight and the follow-up
-   2026-05-10 four-pack matrix. The same
-   `unsloth/Qwen3.6-27B-GGUF` file `Qwen3.6-27B-Q4_K_M.gguf` with SHA256
-   `5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0` loaded
-   on M5, M4, and Hetzner through `llama-server --reasoning off`; all three
-   hosts passed `smoke-chat` and `endpoint-python-correctness` with the
-   recount-capable patch apply path. The four-pack matrix then passed
+Current posture:
+
+1. Qwen3.6 27B strict-GGUF tri-host evidence is sufficient for the exact
+   `Qwen3.6-27B-Q4_K_M.gguf` / `llama-server --reasoning off` /
+   `qwen36-27b-q4km` lane. The helper preset has landed as
+   `scripts/benchpack-tmux-matrix --preset qwen36-27b-strict-gguf`. Do not run
+   another validation matrix for this lane unless there is a new artifact,
+   runtime, host, or operational question.
+2. Default helper behavior stays conservative. The default matrix remains
    `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
-   `patch-from-failure` on all three hosts. The narrow helper recommendation
-   has landed as an explicit `scripts/benchpack-tmux-matrix --preset
-   qwen36-27b-strict-gguf` path; do not treat that as a broader default
-   promotion or as a reason for another immediate validation run.
-2. Keep `coding-tasks-external-agent` explicitly exploratory and opt-in after
-   the 2026-05-09 direct-edit comparison. The Apple M5/M4 slice reached
-   Ollama/Codex on both hosts with valid telemetry and no endpoint or harness
-   configuration blocker, but produced only 2/6 deterministic verifier passes:
-   `fix-greeting` passed on both hosts, while the deeper Python and dashboard
-   fixtures failed as no-source-mutation, no-mutation, or partial-source-edit
-   task-quality failures. The Hetzner leg is driven from this machine through
-   the authenticated OpenAI-compatible API, not by installing Codex, Claude,
-   Ollama, or this repo on `llm.django-cast.com`. The local
-   `openai-direct-edit-agent.py` wrapper reached
-   `Qwen/Qwen2.5-1.5B-Instruct` through that API, but the rerun produced 0/3
-   verifier passes: two non-JSON edit-payload failures before mutation and one
-   verifier failure after an allowed-file mutation. Treat this as remote
-   wrapper output-contract evidence first, especially because one non-JSON row
-   ended with `finish_reason=length`; it is not a broad model-quality verdict.
-3. Decide any next direct-edit external-agent slice deliberately before changing
-   defaults: tighten the remote wrapper output contract, try JSON-mode or a
-   larger completion budget on endpoints that support them, try a different
-   already-configured agent/model, or refine reporting around no-source-mutation
-   versus partial-source-mutation failures. Do not promote the external-agent
-   pack set into helper defaults from the current mixed evidence.
-4. Keep helper/default promotion conservative. The Qwen3.6 strict-GGUF lane now
-   has an opt-in helper preset for that exact artifact/runtime combination, but
-   the default four-pack matrix is unchanged and `endpoint-python-correctness`
-   remains explicit rather than generalized to unrelated endpoints or runtimes.
-   The older `qwen3-coder:latest` Ollama lane remains a useful output-contract
-   failure: it reached the adapter but returned unmarked replacement-file
-   content rather than an applicable diff or explicit replacement block.
-5. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
-   lane unless there is a new model target, runtime, host, or operational
-   question. Existing M4/M5/Hetzner strict-GGUF evidence is sufficient for the
-   current four-pack lane.
-6. Keep result-registry work focused on concrete reporting/sharing needs. Local
-   import, report, static site export, bundle create/validate, and bundle import
-   have landed; hosted upload/review, richer public browsing, duplicate
-   handling, query APIs, and leaderboard policy are later slices.
-7. Keep research items parked until live evidence motivates them:
+   `patch-from-failure`; `endpoint-python-correctness`, `coding-tasks`, and
+   `coding-tasks-external-agent` remain explicit opt-in paths.
+3. Gemma 4 strict-GGUF four-pack evidence is also sufficient for the current
+   selected `google_gemma-4-E2B-it-Q4_K_M.gguf` artifact and host lane. Park
+   broad runtime-only reruns until a new model target, runtime version, host,
+   or comparison question appears.
+
+Next actionable slices:
+
+1. Direct-edit external-agent output contract. If more agent-shaped work is
+   needed, pick one narrow experiment: tighten the remote
+   `openai-direct-edit-agent.py` JSON edit contract, try JSON-mode or a larger
+   completion budget where supported, or try a stronger already-configured
+   agent/model. Keep this as opt-in evidence; do not promote
+   `coding-tasks-external-agent` into defaults from the current mixed verifier
+   outcomes.
+2. Endpoint-only correctness follow-up. Keep
+   `endpoint-python-correctness` helper/default promotion deferred. The next
+   endpoint-only slice should deliberately choose between a different
+   already-available endpoint, tighter prompt wording, or a broader replacement
+   contract. Do not treat adapter reachability or plausible raw code as
+   correctness success.
+3. Reporting polish only when it answers a concrete review question. Possible
+   small slices are better direct-edit failure classification, clearer
+   no-source-mutation versus partial-source-mutation summaries, or result-set
+   report ergonomics for already-generated evidence. Do not commit generated
+   `results/*` artifacts for this work unless a later curated run-log entry
+   explicitly calls for a small retained subset.
+4. Result registry work remains demand-driven. Local import, report, static
+   site export, bundle create/validate, and bundle import have landed. Hosted
+   upload/review, richer public browsing, duplicate handling, query APIs, and
+   leaderboard policy should wait for a concrete sharing workflow.
+5. Research tracks stay parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
    scoring, larger project-level tasks, and product matching/classification

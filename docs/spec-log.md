@@ -16,6 +16,38 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-10 (Backlog grooming after Qwen3.6 helper)
+
+### Changed
+
+- Groomed the active implementation backlog after the Qwen3.6 strict-GGUF
+  helper preset landed. The queue now separates completed evidence posture from
+  concrete next slices and parked non-actions.
+- Marked the exact Qwen3.6 27B strict-GGUF lane and current Gemma 4
+  strict-GGUF lane as sufficient for their current four-pack questions unless a
+  new artifact, runtime, host, or operational question appears.
+- Kept `endpoint-python-correctness`, `coding-tasks`, and
+  `coding-tasks-external-agent` explicit opt-in paths rather than default
+  helper behavior.
+- Refreshed the benchmark research backlog status date and evidence boundary to
+  include the completed Qwen3.6 strict-GGUF helper/evidence state without
+  promoting new research tracks.
+
+### Open Questions
+
+- The next direct-edit external-agent slice should be chosen only when there is
+  a concrete output-contract experiment, such as JSON edit contract tightening,
+  JSON-mode, a larger completion budget, or a stronger already-configured
+  agent/model.
+- `endpoint-python-correctness` follow-up remains explicit and should choose
+  deliberately between a different endpoint, tighter prompt wording, or a
+  broader replacement contract.
+- Reporting polish should stay tied to a concrete review question and should
+  not commit generated `results/*` artifacts unless a curated run-log entry
+  explicitly calls for a small retained subset.
+- Result registry work remains demand-driven until there is a concrete hosted
+  sharing, review, query, or leaderboard workflow.
+
 ## 2026-05-10 (Qwen3.6 strict-GGUF helper preset)
 
 ### Changed

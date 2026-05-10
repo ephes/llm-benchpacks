@@ -1,6 +1,6 @@
 # Benchmark Research Backlog
 
-Status date: 2026-05-09.
+Status date: 2026-05-10.
 
 This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
@@ -20,6 +20,12 @@ should not be committed for this research track unless explicitly curated.
 
 ## Current Evidence Boundary
 
+- Qwen3.6 27B strict same-GGUF evidence is complete enough for the exact
+  `Qwen3.6-27B-Q4_K_M.gguf` artifact, `llama-server --reasoning off`, alias
+  `qwen36-27b-q4km`, and current four-pack lane across M5, M4, and Hetzner.
+  The repeat helper preset is operational ergonomics for that lane only; it
+  does not make `endpoint-python-correctness`, Ollama, MLX, public API, or
+  external-agent evidence default-ready.
 - Gemma 4 strict same-GGUF evidence is complete enough for the selected
   `google_gemma-4-E2B-it-Q4_K_M.gguf` artifact and current four-pack lane
   across M5, M4, and Hetzner. That does not make the tiny repo-task pack broad
