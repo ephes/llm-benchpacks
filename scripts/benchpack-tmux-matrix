@@ -38,6 +38,13 @@ PACK_SETS = {
     CODING_TASK_PACK_SET: CODING_TASK_PACKS,
     CODING_TASK_EXTERNAL_AGENT_PACK_SET: CODING_TASK_EXTERNAL_AGENT_PACKS,
 }
+QWEN36_27B_STRICT_GGUF_PRESET = "qwen36-27b-strict-gguf"
+PRESETS = {
+    QWEN36_27B_STRICT_GGUF_PRESET: {
+        "model": "qwen36-27b-q4km",
+        "endpoint": "http://127.0.0.1:18082/v1",
+    },
+}
 
 PACK_LABEL_SUFFIXES = {
     "smoke-chat": "smoke",
@@ -251,6 +258,8 @@ def build_matrix_commands(args: argparse.Namespace) -> list[MatrixCommand]:
 def _print_dry_run(args: argparse.Namespace, commands: list[MatrixCommand]) -> None:
     print("# benchpack-tmux-matrix dry run")
     print(f"# session: {args.session_name}")
+    if args.preset is not None:
+        print(f"# preset: {args.preset}")
     if args.pack_set is not None:
         print(f"# pack-set: {args.pack_set}")
     if args.requires_external_agent_argv:
@@ -287,7 +296,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        required=True,
+        default=None,
         help="Model identifier passed to the adapter.",
     )
     parser.add_argument(
@@ -340,6 +349,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--preset",
+        choices=tuple(PRESETS),
+        default=None,
+        help=(
+            "Optional narrow operational preset. "
+            "'qwen36-27b-strict-gguf' supplies the validated strict-GGUF "
+            "model alias and loopback llama-server endpoint when omitted."
+        ),
+    )
+    parser.add_argument(
         "packs",
         nargs="*",
         default=None,
@@ -354,6 +373,14 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.preset is not None:
+        preset_defaults = PRESETS[args.preset]
+        if args.model is None:
+            args.model = preset_defaults["model"]
+        if args.endpoint is None:
+            args.endpoint = preset_defaults["endpoint"]
+    if args.model is None:
+        parser.error("--model is required unless supplied by --preset")
     if args.packs and args.pack_set is not None:
         parser.error("positional packs cannot be combined with --pack-set")
     if args.packs:

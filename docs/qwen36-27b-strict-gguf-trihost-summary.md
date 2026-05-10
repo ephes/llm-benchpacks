@@ -29,6 +29,27 @@ This is separate from Qwen2.5 production vLLM evidence through the public
 Django Bearer-auth path, Qwen3-Coder Ollama or external-agent evidence, and any
 MLX-vs-GGUF or service-vs-strict comparison.
 
+## Repeat Helper
+
+For repeat four-pack runs of this exact lane, use:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --preset qwen36-27b-strict-gguf \
+  --session-name 'bench-qwen36-27b-strict-<stamp>' \
+  --adapter openai-chat \
+  --host-label-prefix '<host>-qwen36-27b-strict-<stamp>' \
+  --run-metadata metadata/<host>-qwen36-27b-strict.json
+```
+
+The preset only supplies the alias `qwen36-27b-q4km` and endpoint
+`http://127.0.0.1:18082/v1` when omitted, then uses the normal default
+four-pack matrix. It assumes the matching `llama-server --reasoning off`
+process and run metadata already exist. It does not add
+`endpoint-python-correctness`, start servers, sync remotes, download models, or
+generalize this result to Ollama, MLX, public API, or external-agent lanes.
+
 ## Result Directories
 
 Preflight:

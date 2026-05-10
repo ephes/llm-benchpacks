@@ -693,6 +693,26 @@ benchpack run <pack> --adapter <adapter> --model <model>
   Intended fields are structured runtime, model, and operating-condition notes,
   not autodiscovered facts.
 
+### `scripts/benchpack-tmux-matrix`
+
+The repository also ships a narrow operational helper that renders or launches
+sequential tmux windows around existing `benchpack run` commands. Its default
+matrix remains `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+`patch-from-failure`; named pack sets and positional packs are explicit
+operator choices. The helper requires `--adapter`, `--host-label-prefix`, and
+`--run-metadata`, passes through optional endpoint, streaming usage,
+authenticated endpoint environment-variable name, and `--force`, and does not
+change pack semantics, result schemas, metadata schemas, server lifecycle, SSH,
+artifact pullback, or reporting behavior.
+
+The helper supports an opt-in `--preset qwen36-27b-strict-gguf` for the
+validated Qwen3.6 27B strict-GGUF lane. When omitted, that preset supplies
+`--model qwen36-27b-q4km` and
+`--endpoint http://127.0.0.1:18082/v1`; explicit `--model` or `--endpoint`
+arguments override those defaults. The preset is scoped to the exact
+`Qwen3.6-27B-Q4_K_M.gguf` `llama-server --reasoning off` workflow and does not
+add `endpoint-python-correctness` to the default four-pack matrix.
+
 The recommended `--run-metadata` shape is permissive and optional by field:
 
 ```json

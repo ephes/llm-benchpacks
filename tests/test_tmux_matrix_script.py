@@ -70,6 +70,149 @@ def test_dry_run_generates_default_matrix_commands() -> None:
     assert all("--endpoint '<endpoint>'" in line for line in benchpack_lines)
 
 
+def test_dry_run_qwen36_strict_gguf_preset_supplies_defaults() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--preset",
+        "qwen36-27b-strict-gguf",
+        "--session-name",
+        "bench-qwen36",
+        "--adapter",
+        "openai-chat",
+        "--host-label-prefix",
+        "m5-max-qwen36-<stamp>",
+        "--run-metadata",
+        "metadata/m5-qwen36-strict.json",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "# preset: qwen36-27b-strict-gguf" in result.stdout
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert [line.split()[5] for line in benchpack_lines] == [
+        "smoke-chat",
+        "runtime-sweep",
+        "desktop-django-wrap",
+        "patch-from-failure",
+    ]
+    assert all("--model qwen36-27b-q4km" in line for line in benchpack_lines)
+    assert all(
+        "--endpoint http://127.0.0.1:18082/v1" in line for line in benchpack_lines
+    )
+    assert "endpoint-python-correctness" not in result.stdout
+
+
+def test_dry_run_qwen36_strict_gguf_preset_allows_explicit_overrides() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--preset",
+        "qwen36-27b-strict-gguf",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "custom-qwen36-alias",
+        "--endpoint",
+        "http://127.0.0.1:19000/v1",
+        "--host-label-prefix",
+        "m5-max-qwen36-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert len(benchpack_lines) == 4
+    assert all("--model custom-qwen36-alias" in line for line in benchpack_lines)
+    assert all(
+        "--endpoint http://127.0.0.1:19000/v1" in line for line in benchpack_lines
+    )
+    assert "qwen36-27b-q4km" not in result.stdout
+    assert "http://127.0.0.1:18082/v1" not in result.stdout
+
+
+def test_dry_run_qwen36_strict_gguf_preset_allows_endpoint_only_override() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--preset",
+        "qwen36-27b-strict-gguf",
+        "--adapter",
+        "openai-chat",
+        "--endpoint",
+        "http://127.0.0.1:19000/v1",
+        "--host-label-prefix",
+        "m5-max-qwen36-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert len(benchpack_lines) == 4
+    assert all("--model qwen36-27b-q4km" in line for line in benchpack_lines)
+    assert all(
+        "--endpoint http://127.0.0.1:19000/v1" in line for line in benchpack_lines
+    )
+    assert "http://127.0.0.1:18082/v1" not in result.stdout
+
+
+def test_dry_run_qwen36_strict_gguf_preset_can_combine_with_pack_set() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--preset",
+        "qwen36-27b-strict-gguf",
+        "--pack-set",
+        "coding-tasks",
+        "--adapter",
+        "openai-chat",
+        "--host-label-prefix",
+        "m5-max-qwen36-coding-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "# preset: qwen36-27b-strict-gguf" in result.stdout
+    assert "# pack-set: coding-tasks" in result.stdout
+    benchpack_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("benchpack: ")
+    ]
+    assert [line.split()[5] for line in benchpack_lines] == [
+        "patch-from-failure",
+        "python-regression-fix",
+        "django-dashboard-regression-fix",
+    ]
+    assert all("--model qwen36-27b-q4km" in line for line in benchpack_lines)
+    assert all(
+        "--endpoint http://127.0.0.1:18082/v1" in line for line in benchpack_lines
+    )
+    assert "benchpack run smoke-chat" not in result.stdout
+    assert "benchpack run runtime-sweep" not in result.stdout
+    assert "benchpack run desktop-django-wrap" not in result.stdout
+    assert "endpoint-python-correctness" not in result.stdout
+
+
+def test_dry_run_requires_model_without_preset() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--adapter",
+        "openai-chat",
+        "--host-label-prefix",
+        "m5-max-llama-<stamp>",
+        "--run-metadata",
+        "<metadata-file>",
+    )
+
+    assert result.returncode == 2
+    assert "--model is required unless supplied by --preset" in result.stderr
+    assert result.stdout == ""
+
+
 def test_dry_run_requires_run_metadata() -> None:
     result = _run_script(
         "--dry-run",

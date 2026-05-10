@@ -16,6 +16,29 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-10 (Qwen3.6 strict-GGUF helper preset)
+
+### Changed
+
+- Added an explicit `scripts/benchpack-tmux-matrix --preset
+  qwen36-27b-strict-gguf` path for repeating the validated Qwen3.6 27B
+  strict-GGUF four-pack lane.
+- The preset supplies `--model qwen36-27b-q4km` and
+  `--endpoint http://127.0.0.1:18082/v1` only when those options are omitted;
+  explicit values override the defaults and remain visible in dry-run output.
+- The helper's no-preset behavior is unchanged: non-preset runs still require
+  `--model`, the default matrix remains `smoke-chat`, `runtime-sweep`,
+  `desktop-django-wrap`, and `patch-from-failure`, and
+  `endpoint-python-correctness` is not included unless an operator passes it
+  explicitly as a positional pack.
+- Updated the README, Apple Silicon runbook, Qwen3.6 strict-GGUF summary,
+  specification, and implementation plan to document the scope and non-goals.
+
+### Open Questions
+
+- None for this helper slice. Broader Ollama, MLX, public API, and
+  external-agent promotion decisions remain separate evidence questions.
+
 ## 2026-05-10 (Qwen3.6 strict-GGUF M4/Hetzner preflight)
 
 ### Changed

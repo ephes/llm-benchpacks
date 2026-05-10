@@ -168,6 +168,45 @@ omitted, the underlying `benchpack run` command keeps its current default.
 OpenAI-compatible endpoints. The helper passes the environment variable name to
 `benchpack run` but does not read or print the token value.
 
+## Known-good Qwen3.6 27B Strict-GGUF Helper Path
+
+The 2026-05-10 tri-host evidence validates one exact strict lane:
+`unsloth/Qwen3.6-27B-GGUF`, file `Qwen3.6-27B-Q4_K_M.gguf`, SHA256
+`5ed60d0af4650a854b1755bd392f9aef4872643dc25a254bc68043fa638392a0`, alias
+`qwen36-27b-q4km`, served by `llama-server --reasoning off` on loopback
+`http://127.0.0.1:18082/v1`.
+
+For repeats of that lane, use the explicit preset after starting the matching
+server and preparing host-specific metadata:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --preset qwen36-27b-strict-gguf \
+  --session-name 'bench-m5-qwen36-27b-strict-<stamp>' \
+  --adapter openai-chat \
+  --host-label-prefix 'm5-max-qwen36-27b-strict-<stamp>' \
+  --run-metadata metadata/m5-qwen36-27b-strict.json
+```
+
+When omitted, the preset supplies `--model qwen36-27b-q4km` and
+`--endpoint http://127.0.0.1:18082/v1`. Explicit `--model` or `--endpoint`
+values override those defaults; the dry run shows the resolved command. If no
+positional packs or `--pack-set` are supplied, the helper still uses the
+default four-pack matrix:
+`smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+`patch-from-failure`.
+Combining the preset with `--pack-set` is supported when the campaign
+intentionally uses this strict-lane model and endpoint with a non-default pack
+set.
+
+This path does not launch `llama-server`, infer GGUF paths, create metadata,
+SSH to another host, pull results, or run reports. It also does not add
+`endpoint-python-correctness` to the four-pack helper path. Run that pack only
+as a separate explicit positional pack when the campaign calls for endpoint
+correctness evidence. Do not generalize this preset to Ollama, MLX, public API,
+or external-agent lanes.
+
 For optional exploratory repo-task evidence, dry-run a separate coding-task
 matrix instead of changing the default four-pack workflow. The existing
 `coding-tasks` set stays on the default fenced-patch repo-task harness:

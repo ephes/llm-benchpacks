@@ -17,9 +17,10 @@ section to decide the next slice.
    hosts passed `smoke-chat` and `endpoint-python-correctness` with the
    recount-capable patch apply path. The four-pack matrix then passed
    `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
-   `patch-from-failure` on all three hosts. The next decision is whether this
-   exact strict-GGUF lane should get a helper/default recommendation, not
-   whether it needs another immediate validation run.
+   `patch-from-failure` on all three hosts. The narrow helper recommendation
+   has landed as an explicit `scripts/benchpack-tmux-matrix --preset
+   qwen36-27b-strict-gguf` path; do not treat that as a broader default
+   promotion or as a reason for another immediate validation run.
 2. Keep `coding-tasks-external-agent` explicitly exploratory and opt-in after
    the 2026-05-09 direct-edit comparison. The Apple M5/M4 slice reached
    Ollama/Codex on both hosts with valid telemetry and no endpoint or harness
@@ -41,13 +42,13 @@ section to decide the next slice.
    already-configured agent/model, or refine reporting around no-source-mutation
    versus partial-source-mutation failures. Do not promote the external-agent
    pack set into helper defaults from the current mixed evidence.
-4. Decide helper/default promotion deliberately. The Qwen3.6 strict-GGUF lane
-   now has broad enough four-pack evidence for that exact artifact/runtime
-   combination, but `endpoint-python-correctness` should not be generalized to
-   unrelated endpoints or runtimes. The older `qwen3-coder:latest` Ollama lane
-   remains a useful output-contract failure: it reached the adapter but
-   returned unmarked replacement-file content rather than an applicable diff or
-   explicit replacement block.
+4. Keep helper/default promotion conservative. The Qwen3.6 strict-GGUF lane now
+   has an opt-in helper preset for that exact artifact/runtime combination, but
+   the default four-pack matrix is unchanged and `endpoint-python-correctness`
+   remains explicit rather than generalized to unrelated endpoints or runtimes.
+   The older `qwen3-coder:latest` Ollama lane remains a useful output-contract
+   failure: it reached the adapter but returned unmarked replacement-file
+   content rather than an applicable diff or explicit replacement block.
 5. Defer another broad runtime-only matrix for the current Gemma 4 strict-GGUF
    lane unless there is a new model target, runtime, host, or operational
    question. Existing M4/M5/Hetzner strict-GGUF evidence is sufficient for the
@@ -305,6 +306,13 @@ Scope:
   that this surface now produces meaningful deterministic signal with Codex
   OSS/Ollama: two fixtures passed and the larger dashboard fixture failed from
   no workspace mutation.
+- Add an explicit Qwen3.6 27B strict-GGUF helper preset. **Landed
+  2026-05-10** as `scripts/benchpack-tmux-matrix --preset
+  qwen36-27b-strict-gguf`, supplying the validated `qwen36-27b-q4km` alias and
+  loopback `http://127.0.0.1:18082/v1` endpoint only when omitted. The preset
+  keeps the default four-pack matrix unchanged, leaves
+  `endpoint-python-correctness` explicit, and remains an operational wrapper
+  rather than server, remote, metadata, or result orchestration.
 - Add a local Codex OSS external-agent wrapper. **Landed 2026-05-07** as
   `examples/external-agent/codex-oss-agent.py`, adapting the public
   external-agent context to `codex exec --oss --local-provider <provider>` for

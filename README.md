@@ -124,6 +124,32 @@ the token value. Launch mode checks that the metadata file exists before
 creating tmux windows. It does not change benchmark semantics; after runs
 finish, use `benchpack report` on the result directories.
 
+For the validated Qwen3.6 27B strict-GGUF lane, the helper has an explicit
+opt-in preset that supplies the known-good model alias and loopback endpoint
+when they are omitted:
+
+```sh
+scripts/benchpack-tmux-matrix \
+  --dry-run \
+  --preset qwen36-27b-strict-gguf \
+  --session-name 'bench-qwen36-27b-strict-<stamp>' \
+  --adapter openai-chat \
+  --host-label-prefix 'm5-max-qwen36-27b-strict-<stamp>' \
+  --run-metadata metadata/m5-qwen36-27b-strict.json
+```
+
+The preset defaults to `--model qwen36-27b-q4km` and
+`--endpoint http://127.0.0.1:18082/v1`, and still expands to only the default
+four-pack matrix unless positional packs or `--pack-set` are supplied.
+Combining the preset with `--pack-set` is supported when a run intentionally
+uses the strict-lane model and endpoint with a non-default pack set.
+Operators must start the matching `llama-server --reasoning off` process and
+prepare metadata separately. This preset is scoped to the exact
+`Qwen3.6-27B-Q4_K_M.gguf` strict lane and does not promote
+`endpoint-python-correctness`, Ollama, MLX, public API, or external-agent
+workflows into default helper behavior. Explicit `--model` or `--endpoint`
+values override the preset defaults; the dry run shows the resolved command.
+
 For optional exploratory repo-task evidence, select the coding-task pack set
 explicitly instead of changing the default four-pack matrix:
 
