@@ -78,6 +78,7 @@ benchpacks/
   endpoint-python-correctness/
   python-regression-fix/
   django-dashboard-regression-fix/
+  mini-project-completion/
 src/
   benchpack/
     cli.py

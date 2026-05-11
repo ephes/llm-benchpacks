@@ -1,0 +1,24 @@
+[pack]
+id = "mini-project-completion"
+version = "0.1.0"
+description = "Small project-completion repo-task pack for a stdlib notes CLI"
+
+[defaults]
+temperature = 0
+max_tokens = 1400
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "repo"
+kind = "repo"
+path = "fixtures/repo"
+description = "Small stdlib Python notes CLI project with incomplete behavior"
+
+[[cases]]
+id = "complete-notes-cli"
+kind = "repo-task"
+prompt_file = "prompts/complete-notes-cli.md"
+fixture_refs = ["repo"]
+scoring = { mode = "verify-script", script = "verify/check.py" }

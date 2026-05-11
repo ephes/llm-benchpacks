@@ -125,8 +125,11 @@ should not be committed for this research track unless explicitly curated.
 3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 4. Keep larger benchmark-design research parked until the endpoint-only and
-   direct-edit lanes produce enough live evidence to justify new fixtures,
-   result fields, or runner resource-measurement behavior.
+   direct-edit lanes produce enough live evidence to justify new result
+   fields or runner resource-measurement behavior. The first small
+   project-completion fixture now exists as `mini-project-completion`; further
+   project-level expansion should wait for live evidence that this tiny
+   prototype adds useful signal.
 
 ## Candidate Benchmark Tracks
 
@@ -154,17 +157,18 @@ execution/review weighting is informative but is not adopted by this repo:
 existing deterministic `verify-script` semantics should not be diluted with
 LLM-judged components by default.
 
-Backlog item: prototype a small project-construction or project-completion pack
-for this repo that keeps deterministic execution scoring first. Optional review
-or compliance checks may be researched later, but they must be explicitly
-separate from deterministic scoring and should not become an implicit
-LLM-as-judge default.
+Backlog item: the first tiny prototype landed on 2026-05-11 as
+`mini-project-completion`, an opt-in stdlib notes CLI project fixture with one
+fenced-patch `repo-task` case and deterministic visible plus hidden execution
+checks. Optional review or compliance checks may be researched later, but they
+must be explicitly separate from deterministic scoring and should not become
+an implicit LLM-as-judge default.
 
 Design questions:
 
-- Which one or two ProjDevBench-shaped problems are small enough to fit a
-  committed fixture and a bounded runner timeout, given the 138-turn /
-  4.81M-token per-problem averages?
+- Whether `mini-project-completion` produces useful live signal before adding
+  larger ProjDevBench-shaped fixtures, given the 138-turn / 4.81M-token
+  per-problem averages in that reference.
 - Should diagnostic verdicts (TLE, MLE, RE, CE, WA) be lifted into a
   structured `repo_task` field, or remain captured only in `verify-script`
   stdout/stderr as today?

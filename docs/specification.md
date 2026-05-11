@@ -127,6 +127,19 @@ Initial packs:
   `scoring.mode = "verify-script"`. It is a stronger bundled fenced-patch
   signal than the tiny patch smoke pack, not broad production coding-agent
   proof.
+- `mini-project-completion`: opt-in bundled measured repo-mutating `repo-task`
+  pack with a tiny stdlib Python notes CLI project fixture. Version `0.1.0`
+  has one `complete-notes-cli` measured case. The prompt asks the model to
+  return only a fenced `diff` unified diff that completes parsing, tag
+  normalization, tag summaries, tag filtering, and CLI output across
+  `notes/store.py` and `notes/cli.py`; the runner copies the repo fixture into
+  `workspace/complete-notes-cli/rep-001/`, applies the model patch inside that
+  workspace, captures `patch/complete-notes-cli/rep-001.diff`, and runs a
+  stdlib `verify-script` with visible and hidden execution checks. The pack
+  sets `defaults.warmup = 0`, `defaults.repetitions = 1`,
+  `defaults.stream = false`, and case-local
+  `scoring.mode = "verify-script"`. It is the first small
+  project-completion prototype and is not part of the default matrix.
 - `django-dashboard-regression-fix-external-agent`: explicit external-agent
   variant of the same workload. Version `0.1.1` uses the same fixture and
   verifier as `django-dashboard-regression-fix`, but the prompt tells the

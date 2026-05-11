@@ -61,11 +61,13 @@ Next actionable slices:
    and local normalized-row JSON query have landed. Hosted upload/review,
    richer public browsing, broader hosted APIs, and leaderboard policy should
    wait for a concrete sharing workflow.
-4. Research tracks stay parked until live evidence motivates them:
+4. Research tracks stay mostly parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
-   scoring, larger project-level tasks, and product matching/classification
-   program benchmarks.
+   scoring, and product matching/classification program benchmarks. The first
+   tiny project-completion prototype has landed as the opt-in
+   `mini-project-completion` pack; do not treat it as default-matrix evidence
+   until live runs show it adds useful signal.
 
 ## Phase 1: Minimal Runner
 
@@ -1172,7 +1174,9 @@ passed `endpoint-python-correctness` on M5, M4, and Hetzner after the runner's
 recount-capable fenced diff apply path landed. Endpoint-only helper/default
 matrix promotion remains deferred; future endpoint-only work should be tied to
 a different endpoint, model, or promotion question rather than rerunning the
-validated strict-GGUF lane.
+validated strict-GGUF lane. The first small project-completion prototype has
+also landed as `mini-project-completion`, keeping deterministic
+`verify-script` scoring and the existing fenced-patch runner path.
 
 Scope:
 
@@ -1191,6 +1195,12 @@ Scope:
   bundled measured repo-mutating repo-task pack with a compact multi-file
   stdlib dashboard fixture, deterministic verifier checks, and the existing
   fenced unified-diff executor.
+- `mini-project-completion` pack. **Landed 2026-05-11** as the first tiny
+  project-completion prototype: a stdlib notes CLI project fixture, fenced
+  unified-diff prompt over `notes/store.py` and `notes/cli.py`, and a
+  deterministic verifier with visible plus hidden parser/report/filter/CLI
+  execution checks. It is opt-in and not part of the default matrix or tmux
+  helper pack sets.
 - Disposable worktree setup. **Landed** through measured repo-task workspace
   preparation and artifact recording.
 - Model output to patch extraction. **Landed** through the default fenced

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -2571,6 +2572,7 @@ def test_bundled_django_dashboard_regression_fix_verifier_fails_unpatched_fixtur
     )
 
     assert completed.returncode == 1
+    assert not any(fixture.rglob("__pycache__"))
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["passed"] is False
     assert payload["patch_exists"] is True
@@ -2584,3 +2586,186 @@ def test_bundled_django_dashboard_regression_fix_verifier_fails_unpatched_fixtur
         "dashboard_rows_excludes_archived_by_default",
         "dashboard_rows_sorting_missing_values_and_no_mutation",
     }
+
+
+def test_bundled_mini_project_completion_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "mini-project-completion")
+    pack_dir = repo_root / "benchpacks" / "mini-project-completion"
+
+    assert pack.id == "mini-project-completion"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 1400
+    assert pack.defaults["stream"] is False
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert pack.scoring is None
+
+    assert [fixture.id for fixture in pack.fixtures] == ["repo"]
+    fixture = pack.fixtures[0]
+    assert fixture.kind == "repo"
+    assert fixture.raw["path"] == "fixtures/repo"
+    assert fixture.path.is_relative_to(pack_dir.resolve())
+    assert fixture.path.is_dir()
+
+    assert len(pack.cases) == 1
+    case = pack.cases[0]
+    assert case.id == "complete-notes-cli"
+    assert case.kind == "repo-task"
+    assert case.fixture_refs == ["repo"]
+    assert case.raw["prompt_file"] == "prompts/complete-notes-cli.md"
+    assert "prompt" not in case.raw
+    assert case.prompt is not None
+    assert_strict_fenced_diff_prompt(case.prompt)
+    assert "`notes/store.py`" in case.prompt
+    assert "`notes/cli.py`" in case.prompt
+    assert "Current file: `notes/store.py`" in case.prompt
+    assert "Current file: `notes/cli.py`" in case.prompt
+    assert "filter_titles(notes, \"URGENT\")" in case.prompt
+    assert "main([\"--input\", path, \"--tag\", tag])" in case.prompt
+    assert "Tags are stripped, lowercased" in case.prompt
+
+    assert case.scoring is not None
+    assert case.scoring.mode == "verify-script"
+    assert case.scoring.script == "verify/check.py"
+    assert validate_repo_task_case(pack, case).id == "repo"
+
+    fixture_files = {
+        path.relative_to(fixture.path).as_posix()
+        for path in fixture.path.rglob("*")
+        if path.is_file()
+    }
+    assert fixture_files == {
+        "README.md",
+        "pyproject.toml",
+        "notes/__init__.py",
+        "notes/store.py",
+        "notes/cli.py",
+        "tests/test_notes_cli.py",
+    }
+    store = fixture.path.joinpath("notes/store.py").read_text(encoding="utf-8")
+    cli = fixture.path.joinpath("notes/cli.py").read_text(encoding="utf-8")
+    assert "def parse_notes" in store
+    assert 'notes.append({"title": text, "tags": []})' in store
+    assert "def filter_titles" in store
+    assert "def main" in cli
+    assert "filter_titles" not in cli
+    assert pack_dir.joinpath("verify/check.py").is_file()
+
+    forbidden_path_fragments = ("/Users/", "~/", "C:\\")
+    for source_file in [
+        pack_dir / "README.md",
+        pack_dir / "benchpack.toml",
+        pack_dir / "prompts" / "complete-notes-cli.md",
+        pack_dir / "verify" / "check.py",
+        *fixture.path.rglob("*"),
+    ]:
+        resolved_source_file = source_file.resolve()
+        assert resolved_source_file.is_relative_to(pack_dir.resolve())
+        if source_file.is_file():
+            contents = source_file.read_text(encoding="utf-8")
+            for fragment in forbidden_path_fragments:
+                assert fragment not in contents
+
+
+def test_bundled_mini_project_completion_verifier_fails_unpatched_fixture(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack_dir = repo_root / "benchpacks" / "mini-project-completion"
+    fixture = pack_dir / "fixtures" / "repo"
+    patch_path = tmp_path / "empty.diff"
+    output_path = tmp_path / "verify.json"
+    patch_path.write_text("", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(pack_dir / "verify" / "check.py"),
+            "--workspace",
+            str(fixture),
+            "--case",
+            "complete-notes-cli",
+            "--pack-id",
+            "mini-project-completion",
+            "--pack-version",
+            "0.1.0",
+            "--source-fixture-id",
+            "repo",
+            "--patch",
+            str(patch_path),
+            "--output",
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert not any(fixture.rglob("__pycache__"))
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["passed"] is False
+    assert payload["patch_exists"] is True
+    assert payload["patch_bytes"] == 0
+    failed_checks = {
+        check["name"] for check in payload["checks"] if not check["passed"]
+    }
+    assert failed_checks == {
+        "visible_parse_notes",
+        "visible_summary_report_filter",
+        "hidden_edge_parse_summary_filter",
+        "cli_summary_and_filter",
+        "visible_unittest_suite",
+    }
+
+
+def test_bundled_mini_project_completion_verifier_reports_missing_visible_tests(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack_dir = repo_root / "benchpacks" / "mini-project-completion"
+    source_fixture = pack_dir / "fixtures" / "repo"
+    workspace = tmp_path / "workspace"
+    shutil.copytree(source_fixture, workspace)
+    workspace.joinpath("tests", "test_notes_cli.py").unlink()
+    patch_path = tmp_path / "empty.diff"
+    output_path = tmp_path / "verify.json"
+    patch_path.write_text("", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(pack_dir / "verify" / "check.py"),
+            "--workspace",
+            str(workspace),
+            "--case",
+            "complete-notes-cli",
+            "--pack-id",
+            "mini-project-completion",
+            "--pack-version",
+            "0.1.0",
+            "--source-fixture-id",
+            "repo",
+            "--patch",
+            str(patch_path),
+            "--output",
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    unittest_check = next(
+        check
+        for check in payload["checks"]
+        if check["name"] == "visible_unittest_suite"
+    )
+    assert unittest_check["test_file_exists"] is False
+    assert unittest_check["tests_run"] == 0
+    assert unittest_check["minimum_tests_run"] == 3
+    assert unittest_check["passed"] is False

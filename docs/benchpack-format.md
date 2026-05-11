@@ -285,8 +285,9 @@ strings. The runner rejects manifests that violate this at load time.
   manifest task commands, retention options,
   repo-task warmups, task environment configuration, pack-level harness
   defaults, or production external agent-harness behavior. Bundled repo-task
-  examples currently include `patch-from-failure`, `python-regression-fix`, and
-  `django-dashboard-regression-fix`.
+  examples currently include `patch-from-failure`, `python-regression-fix`,
+  `django-dashboard-regression-fix`, and the opt-in project-completion
+  prototype `mini-project-completion`.
 
 `replay`
 : A recorded request sequence.

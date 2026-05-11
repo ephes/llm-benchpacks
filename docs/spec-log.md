@@ -16,6 +16,29 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (mini project-completion pack)
+
+### Changed
+
+- Added the opt-in bundled `mini-project-completion` repo-task pack.
+- The pack contains a tiny stdlib notes CLI project fixture and one
+  `complete-notes-cli` case that asks for a fenced unified diff over
+  `notes/store.py` and `notes/cli.py`.
+- Verification remains deterministic and stdlib-only, with visible and hidden
+  parser, tag summary, tag filtering, CLI output, and source-vs-workspace patch
+  checks.
+- Kept runner semantics, result schema, default matrix behavior, and tmux pack
+  sets unchanged. This is a project-completion prototype, not default-matrix
+  evidence.
+- Updated README, specification, architecture, benchpack format notes,
+  implementation backlog, and benchmark research docs.
+
+### Open Questions
+
+- Live endpoint or agent runs should determine whether this tiny
+  project-completion pack adds useful signal before adding larger project-level
+  fixtures, diagnostic verdict fields, or resource-aware scoring.
+
 ## 2026-05-11 (registry normalized-row query)
 
 ### Changed

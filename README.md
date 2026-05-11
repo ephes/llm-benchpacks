@@ -54,6 +54,7 @@ uv run benchpack run patch-from-failure --adapter openai-chat --model qwen3-code
 uv run benchpack run endpoint-python-correctness --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-endpoint-correctness --force
 uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
 uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-dashboard-regression --force
+uv run benchpack run mini-project-completion --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-mini-project --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
@@ -388,6 +389,12 @@ Bundled packs:
   `dashboard/views.py`; verification remains deterministic and stdlib-only.
   This is a stronger bundled fenced-patch repo-task signal than the tiny patch
   smoke pack, not broad production coding-agent proof.
+- `mini-project-completion`: non-streaming single-case `repo-task` pack with a
+  tiny stdlib Python notes CLI project fixture. The case asks for a fenced
+  unified diff to complete parsing, tag summaries, tag filtering, and CLI
+  output across `notes/store.py` and `notes/cli.py`; verification remains
+  deterministic and stdlib-only with visible and hidden execution checks. This
+  is an opt-in project-completion prototype, not a default matrix pack.
 - `patch-from-failure-external-agent`, `python-regression-fix-external-agent`,
   and `django-dashboard-regression-fix-external-agent`: opt-in direct-edit
   external-agent variants of the bundled repo-task fixtures. They select
@@ -407,7 +414,8 @@ The first implementation stays small:
    repo-mutating fenced unified-diff packs such as `patch-from-failure`,
    `python-regression-fix`, and `django-dashboard-regression-fix`, plus
    `endpoint-python-correctness`, which also allows an explicit replacement
-   block fallback.
+   block fallback, and the opt-in project-completion prototype
+   `mini-project-completion`.
    `desktop-django-wrap` still treats directory
    fixtures as metadata-only; repo-task packs copy their repo fixtures into
    run-owned workspaces, apply the model edit there, and verify the result.

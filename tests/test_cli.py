@@ -472,6 +472,22 @@ def _django_dashboard_regression_fix_argv(
     ]
 
 
+def _mini_project_completion_argv(extra: list[str] | None = None) -> list[str]:
+    return [
+        "run",
+        "mini-project-completion",
+        "--adapter",
+        "openai-chat",
+        "--model",
+        "test-model",
+        "--endpoint",
+        "http://example.test/v1",
+        "--host-label",
+        "unit-test",
+        *(extra or []),
+    ]
+
+
 def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> None:
     _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -2514,6 +2530,204 @@ def test_cli_bundled_django_dashboard_regression_fix_runs_repo_task_flow(
         "dashboard_rows_include_archived_when_requested",
         "dashboard_rows_sorting_missing_values_and_no_mutation",
     }
+    assert all(check["passed"] for check in verify_json["checks"])
+
+
+def test_cli_bundled_mini_project_completion_runs_repo_task_flow(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output = "\n".join(
+        [
+            "```diff",
+            "--- a/notes/store.py",
+            "+++ b/notes/store.py",
+            "@@ -6,13 +6,20 @@",
+            " Note = dict[str, object]",
+            " ",
+            " ",
+            "+def _normalized_tags(raw: str) -> list[str]:",
+            '+    tags = {tag.strip().lower() for tag in raw.split(",") if tag.strip()}',
+            '+    return sorted(tags) or ["untagged"]',
+            "+",
+            "+",
+            " def parse_notes(lines: Iterable[str]) -> list[Note]:",
+            "     notes: list[Note] = []",
+            "     for line in lines:",
+            "         text = line.strip()",
+            "-        if not text:",
+            '+        if not text or text.startswith("#"):',
+            "             continue",
+            '-        notes.append({"title": text, "tags": []})',
+            '+        title, separator, raw_tags = text.partition("|")',
+            '+        tags = _normalized_tags(raw_tags) if separator else ["untagged"]',
+            '+        notes.append({"title": title.strip(), "tags": tags})',
+            "     return notes",
+            " ",
+            " ",
+            "@@ -21,14 +28,22 @@",
+            "     for note in notes:",
+            '         for tag in note.get("tags", []):',
+            "             counts[str(tag)] += 1",
+            "-    return dict(counts)",
+            "+    return {tag: counts[tag] for tag in sorted(counts)}",
+            "+",
+            "+",
+            "+def _normalize_tag(tag: object) -> str:",
+            "+    return str(tag).strip().lower()",
+            " ",
+            " ",
+            " def filter_titles(notes: Iterable[Note], tag: str) -> list[str]:",
+            '-    return [str(note.get("title", "")) for note in notes]',
+            "+    needle = _normalize_tag(tag)",
+            "+    return [",
+            '+        str(note.get("title", ""))',
+            "+        for note in notes",
+            '+        if needle in {_normalize_tag(tag_value) for tag_value in note.get("tags", [])}',
+            "+    ]",
+            " ",
+            " ",
+            " def render_report(notes: Iterable[Note]) -> str:",
+            "     counts = summarize_by_tag(notes)",
+            '-    lines = [f"{tag}\\t{count}" for tag, count in counts.items()]',
+            '-    return "\\n".join(lines)',
+            '+    return "".join(f"{tag}\\t{count}\\n" for tag, count in counts.items())',
+            "--- a/notes/cli.py",
+            "+++ b/notes/cli.py",
+            "@@ -3,7 +3,7 @@",
+            " import argparse",
+            " from pathlib import Path",
+            " ",
+            "-from .store import parse_notes, render_report",
+            "+from .store import filter_titles, parse_notes, render_report",
+            " ",
+            " ",
+            " def main(argv: list[str] | None = None) -> int:",
+            "@@ -14,5 +14,9 @@",
+            " ",
+            '     lines = Path(args.input).read_text(encoding="utf-8").splitlines()',
+            "     notes = parse_notes(lines)",
+            "-    print(render_report(notes))",
+            "+    if args.tag:",
+            "+        for title in filter_titles(notes, args.tag):",
+            "+            print(title)",
+            "+    else:",
+            '+        print(render_report(notes), end="")',
+            "     return 0",
+            "```",
+            "",
+        ]
+    )
+    calls = _install_output_adapter(monkeypatch, output)
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    out = tmp_path / "run"
+
+    pack_dir = repo_root / "benchpacks" / "mini-project-completion"
+    source_files = [
+        pack_dir / "fixtures" / "repo" / "notes" / "store.py",
+        pack_dir / "fixtures" / "repo" / "notes" / "cli.py",
+    ]
+    source_before = {
+        path.relative_to(pack_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in source_files
+    }
+
+    assert main(_mini_project_completion_argv(["--out", str(out)])) == 0
+
+    workspace = out / "workspace" / "complete-notes-cli" / "rep-001"
+    store_text = (workspace / "notes" / "store.py").read_text(encoding="utf-8")
+    cli_text = (workspace / "notes" / "cli.py").read_text(encoding="utf-8")
+    assert "def _normalized_tags" in store_text
+    assert 'text.startswith("#")' in store_text
+    assert "return {tag: counts[tag] for tag in sorted(counts)}" in store_text
+    assert "filter_titles(notes, args.tag)" in cli_text
+    assert {
+        path.relative_to(pack_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in source_files
+    } == source_before
+
+    assert len(calls) == 1
+    assert calls[0]["request_path"] == "complete-notes-cli.request.json"
+    assert "Complete the small Python notes-report project" in calls[0]["prompt"]
+    assert "`notes/store.py`" in calls[0]["prompt"]
+    assert "`notes/cli.py`" in calls[0]["prompt"]
+    assert "Return a complete unified diff" in calls[0]["prompt"]
+
+    record = json.loads((out / "run.jsonl").read_text())
+    assert record["pack"] == {
+        "id": "mini-project-completion",
+        "version": "0.1.0",
+    }
+    assert record["case"] == "complete-notes-cli"
+    assert record["adapter"] == "openai-chat"
+    assert record["raw"] == {
+        "request_path": "raw/complete-notes-cli.request.json",
+        "response_path": "raw/complete-notes-cli.response.json",
+    }
+    assert record["workspace"] == {
+        "path": "workspace/complete-notes-cli/rep-001",
+        "source_fixture_id": "repo",
+        "source_path": "fixtures/repo",
+    }
+    assert record["patch"] == {
+        "path": "patch/complete-notes-cli/rep-001.diff",
+    }
+    assert record["task"] == {
+        "stdout_path": "task/complete-notes-cli/rep-001.stdout.log",
+        "stderr_path": "task/complete-notes-cli/rep-001.stderr.log",
+    }
+    assert record["verify"] == {
+        "path": "verify/complete-notes-cli/rep-001.json",
+        "stdout_path": "verify/complete-notes-cli/rep-001.stdout.log",
+        "stderr_path": "verify/complete-notes-cli/rep-001.stderr.log",
+    }
+    assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
+    assert record["scoring"] == {"mode": "verify-script", "passed": True}
+    assert "artifacts" not in record
+
+    patch = (out / record["patch"]["path"]).read_text(encoding="utf-8")
+    assert patch
+    assert "--- a/notes/store.py" in patch
+    assert "--- a/notes/cli.py" in patch
+    assert "def _normalized_tags" in patch
+    assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == (
+        "Applied fenced model patch to workspace.\n"
+    )
+    assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stdout_path"]).read_text(encoding="utf-8") == ""
+    assert (out / record["verify"]["stderr_path"]).read_text(encoding="utf-8") == ""
+
+    verify_json = json.loads((out / record["verify"]["path"]).read_text())
+    assert verify_json["case"] == "complete-notes-cli"
+    assert verify_json["pack_id"] == "mini-project-completion"
+    assert verify_json["pack_version"] == "0.1.0"
+    assert verify_json["source_fixture_id"] == "repo"
+    assert verify_json["patch_exists"] is True
+    assert verify_json["patch_bytes"] > 0
+    assert verify_json["exit_code"] == 0
+    assert verify_json["passed"] is True
+    assert {check["name"] for check in verify_json["checks"]} == {
+        "visible_parse_notes",
+        "visible_summary_report_filter",
+        "hidden_edge_parse_summary_filter",
+        "cli_summary_and_filter",
+        "visible_unittest_suite",
+    }
+    cli_check = next(
+        check
+        for check in verify_json["checks"]
+        if check["name"] == "cli_summary_and_filter"
+    )
+    assert cli_check["empty_summary_return_code"] == 0
+    assert cli_check["actual_empty_summary_stdout"] == ""
+    unittest_check = next(
+        check
+        for check in verify_json["checks"]
+        if check["name"] == "visible_unittest_suite"
+    )
+    assert unittest_check["test_file_exists"] is True
+    assert unittest_check["tests_run"] >= unittest_check["minimum_tests_run"]
     assert all(check["passed"] for check in verify_json["checks"])
 
 
