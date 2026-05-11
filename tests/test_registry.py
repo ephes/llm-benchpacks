@@ -696,6 +696,26 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     )
     assert "benchpack registry snapshot" in html
     assert 'href="snapshot.json"' in html
+    assert "<h2>Browse Filters</h2>" in html
+    assert 'id="filter-search"' in html
+    assert 'id="filter-pack"' in html
+    assert '<option value="runtime-sweep">runtime-sweep</option>' in html
+    assert '<option value="short">short</option>' in html
+    assert '<option value="atlas">atlas</option>' in html
+    assert '<option value="m5-max">m5-max</option>' in html
+    assert '<option value="llama-server">llama-server</option>' in html
+    assert '<option value="test-model">test-model</option>' in html
+    assert '<option value="gemma4-e2b-q4km">gemma4-e2b-q4km</option>' in html
+    assert '<option value="q4_k_m">Q4_K_M</option>' in html
+    assert 'data-table="comparison"' in html
+    assert 'data-registry-section="comparison"' in html
+    assert 'data-registry-section="cases"' in html
+    assert 'data-pack="[&quot;runtime-sweep&quot;]"' in html
+    assert 'data-host="[&quot;m5-max&quot;,&quot;atlas&quot;,&quot;darwin&quot;]"' in html
+    assert 'data-runtime="[&quot;llama-server&quot;]"' in html
+    assert 'data-model="[&quot;gemma4-e2b-q4km&quot;,&quot;test-model&quot;]"' in html
+    assert "JSON.parse(row.dataset[id]||'[]')" in html
+    assert "function applyFilters()" in html
     assert "<td>run-a</td>" in html
     assert "<td>runtime-sweep 0.1.0</td>" in html
     assert "<td>openai-chat</td>" in html
@@ -738,12 +758,29 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert snapshot["runs"][0]["model_metadata"]["quantization"] == "Q4_K_M"
     assert snapshot["comparison_matrix"][0]["run_id"] == snapshot["runs"][0]["id"]
     assert snapshot["comparison_matrix"][0]["run"] == "run-a"
+    assert snapshot["comparison_matrix"][0]["host"] == {
+        "label": "m5-max",
+        "hostname": "atlas",
+        "platform": "Darwin",
+    }
+    assert snapshot["comparison_matrix"][0]["model"] == "test-model"
     assert snapshot["comparison_matrix"][0]["medians"]["total_tps"] == 30.0
     assert snapshot["comparison_matrix"][0]["medians"]["output_tokens"] == 60.0
     assert snapshot["case_metrics"][0]["run_id"] == snapshot["runs"][0]["id"]
     assert snapshot["case_metrics"][0]["prompt_tokens"] == {
         "rows": 1,
         "median": 10.0,
+    }
+    assert snapshot["case_metrics"][0]["host"] == {
+        "label": "m5-max",
+        "hostname": "atlas",
+        "platform": "Darwin",
+    }
+    assert snapshot["case_metrics"][0]["runtime"] == {"name": "llama-server"}
+    assert snapshot["case_metrics"][0]["models"] == ["test-model"]
+    assert snapshot["case_metrics"][0]["model_metadata"] == {
+        "id": "gemma4-e2b-q4km",
+        "quantization": "Q4_K_M",
     }
 
 

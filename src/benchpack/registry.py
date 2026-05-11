@@ -156,9 +156,11 @@ class _SiteComparisonMetric:
     pack_version: str
     case_id: str
     host_label: str | None
+    host_hostname: str | None
     host_platform: str | None
     runtime_name: str | None
     model_metadata_id: str | None
+    model: str | None
     model_quantization: str | None
     rows: int
     ok_count: int
@@ -858,7 +860,10 @@ def _select_site_case_rows(
                s.pack_version, s.case_id, s.row_count, s.ok_count,
                s.prompt_token_rows, s.prompt_token_median,
                s.cached_prompt_token_rows, s.cached_prompt_token_median,
-               s.prefill_tps_rows, s.prefill_tps_median
+               s.prefill_tps_rows, s.prefill_tps_median,
+               r.host_label, r.host_hostname, r.host_platform,
+               r.runtime_name, r.models_json, r.model_metadata_id,
+               r.model_quantization
         FROM result_case_stats AS s
         JOIN runs AS r ON r.id = s.run_id
         WHERE s.run_id IN ({placeholders})
@@ -876,9 +881,10 @@ def _select_site_metric_rows(
     rows = conn.execute(
         f"""
         SELECT r.id AS run_id, r.label AS run_label, r.host_label,
-               r.host_platform, r.runtime_name, r.model_metadata_id,
-               r.model_quantization, rr.pack_id, rr.pack_version, rr.case_id,
-               rr.ok, rr.scoring_passed, rr.wall_s, rr.ttft_s,
+               r.host_hostname, r.host_platform, r.runtime_name,
+               r.model_metadata_id, r.model_quantization, rr.model,
+               rr.pack_id, rr.pack_version, rr.case_id, rr.ok,
+               rr.scoring_passed, rr.wall_s, rr.ttft_s,
                rr.decode_tps, rr.total_tps, rr.prompt_tokens,
                rr.cached_prompt_tokens, rr.output_tokens
         FROM result_rows AS rr
@@ -915,9 +921,11 @@ def _select_site_metric_rows(
                 pack_version=str(first["pack_version"]),
                 case_id=str(first["case_id"]),
                 host_label=_optional_text(first["host_label"]),
+                host_hostname=_optional_text(first["host_hostname"]),
                 host_platform=_optional_text(first["host_platform"]),
                 runtime_name=_optional_text(first["runtime_name"]),
                 model_metadata_id=_optional_text(first["model_metadata_id"]),
+                model=_optional_text(first["model"]),
                 model_quantization=_optional_text(first["model_quantization"]),
                 rows=len(group_rows),
                 ok_count=sum(1 for row in group_rows if int(row["ok"]) == 1),
@@ -1094,6 +1102,11 @@ def _render_static_site_html(
         "h1{font-size:28px;margin:0 0 8px}h2{font-size:20px;margin:28px 0 12px}",
         "p{margin:0 0 12px}.meta{color:#d7e4e5}",
         "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}",
+        ".filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 12px}",
+        ".filters label{display:grid;gap:4px;font-size:12px;font-weight:600;color:#334244}",
+        ".filters input,.filters select{font:inherit;font-size:13px;padding:7px 8px;border:1px solid #b8c9ca;background:#fff;color:#202124}",
+        ".filter-count{color:#526466;font-size:13px}",
+        ".is-hidden{display:none}",
         ".table-wrap{overflow-x:auto;border:1px solid #cbd8d9;background:#fff}",
         "table{border-collapse:collapse;width:100%;font-size:13px}",
         "th,td{border-bottom:1px solid #e1e8e8;padding:8px 10px;text-align:left;vertical-align:top;white-space:nowrap}",
@@ -1121,6 +1134,50 @@ def _render_static_site_html(
         "</header>",
         "<main>",
         "<section>",
+        "<h2>Browse Filters</h2>",
+        '<div class="filters" data-registry-filters>',
+        '<label>Search<input id="filter-search" type="search" '
+        'placeholder="run, pack, model, host"></label>',
+        '<label>Table<select id="filter-table">'
+        '<option value="">All tables</option>'
+        '<option value="runs">Runs</option>'
+        '<option value="comparison">Comparison Matrix</option>'
+        '<option value="cases">Case Metrics</option>'
+        "</select></label>",
+        _site_filter_select(
+            "filter-pack",
+            "Pack",
+            _site_pack_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-case",
+            "Case",
+            _site_case_filter_options(case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-host",
+            "Host",
+            _site_host_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-runtime",
+            "Runtime",
+            _site_runtime_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-model",
+            "Model",
+            _site_model_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-quantization",
+            "Quantization",
+            _site_quantization_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        "</div>",
+        '<p id="filter-count" class="filter-count"></p>',
+        "</section>",
+        '<section data-registry-section="runs">',
         "<h2>Runs</h2>",
         '<div class="table-wrap">',
         "<table>",
@@ -1135,8 +1192,40 @@ def _render_static_site_html(
         "<tbody>",
     ]
     for row in run_rows:
+        packs = _json_list_values(row["pack_ids_json"])
+        models = _json_list_values(row["models_json"])
+        search_values = [
+            row["id"],
+            row["label"],
+            row["imported_at"],
+            row["row_count"],
+            *packs,
+            *_json_list_values(row["adapters_json"]),
+            *models,
+            *_json_list_values(row["endpoints_json"]),
+            _site_runtime_cell(row),
+            row["model_metadata_id"],
+            row["model_quantization"],
+            _site_model_artifact_cell(row),
+            row["model_revision"],
+            row["model_sha256"],
+            _site_host_cell(row),
+            _site_comparison_cell(row),
+            row["host_repo_commit"],
+            _site_operating_cell(row),
+            row["run_jsonl_sha256"],
+        ]
         lines.append(
-            "<tr>"
+            "<tr class=\"registry-row\""
+            f" data-table=\"runs\""
+            f" data-pack=\"{_site_filter_values_attr(packs)}\""
+            f" data-case=\"\""
+            " data-host=\""
+            f"{_site_filter_values_attr([row['host_label'], row['host_hostname'], row['host_platform']])}\""
+            f" data-runtime=\"{_site_filter_values_attr([row['runtime_name']])}\""
+            f" data-model=\"{_site_filter_values_attr([row['model_metadata_id'], *models])}\""
+            f" data-quantization=\"{_site_filter_values_attr([row['model_quantization']])}\""
+            f" data-search=\"{_site_search_attr(search_values)}\">"
             f"<td>{_html(row['id'])}</td>"
             f"<td>{_html(row['label'])}</td>"
             f"<td>{_html(row['imported_at'] or '—')}</td>"
@@ -1164,7 +1253,7 @@ def _render_static_site_html(
             "</table>",
             "</div>",
             "</section>",
-            "<section>",
+            '<section data-registry-section="comparison">',
             "<h2>Comparison Matrix</h2>",
             '<div class="table-wrap">',
             "<table>",
@@ -1180,8 +1269,32 @@ def _render_static_site_html(
         ]
     )
     for row in metric_rows:
+        search_values = [
+            row.run_label,
+            row.pack_id,
+            row.pack_version,
+            row.case_id,
+            row.host_label,
+            row.host_hostname,
+            row.host_platform,
+            row.runtime_name,
+            row.model_metadata_id,
+            row.model,
+            row.model_quantization,
+            row.rows,
+            row.ok_count,
+            _site_count_cell(row.scoring_passed_count, row.scoring_rows),
+        ]
         lines.append(
-            "<tr>"
+            "<tr class=\"registry-row\""
+            f" data-table=\"comparison\""
+            f" data-pack=\"{_site_filter_values_attr([row.pack_id])}\""
+            f" data-case=\"{_site_filter_values_attr([row.case_id])}\""
+            f" data-host=\"{_site_filter_values_attr([row.host_label, row.host_hostname, row.host_platform])}\""
+            f" data-runtime=\"{_site_filter_values_attr([row.runtime_name])}\""
+            f" data-model=\"{_site_filter_values_attr([row.model_metadata_id, row.model])}\""
+            f" data-quantization=\"{_site_filter_values_attr([row.model_quantization])}\""
+            f" data-search=\"{_site_search_attr(search_values)}\">"
             f"<td>{_html(row.run_label)}</td>"
             f"<td>{_html(row.pack_id + ' ' + row.pack_version)}</td>"
             f"<td>{_html(row.case_id)}</td>"
@@ -1207,7 +1320,7 @@ def _render_static_site_html(
             "</table>",
             "</div>",
             "</section>",
-            "<section>",
+            '<section data-registry-section="cases">',
             "<h2>Case Metrics</h2>",
             '<div class="table-wrap">',
             "<table>",
@@ -1221,8 +1334,30 @@ def _render_static_site_html(
         ]
     )
     for row in case_rows:
+        search_values = [
+            row["run_label"],
+            row["pack_id"],
+            row["pack_version"],
+            row["case_id"],
+            row["host_label"],
+            row["host_hostname"],
+            row["host_platform"],
+            row["runtime_name"],
+            row["model_metadata_id"],
+            *_json_list_values(row["models_json"]),
+            row["model_quantization"],
+        ]
+        models = _json_list_values(row["models_json"])
         lines.append(
-            "<tr>"
+            "<tr class=\"registry-row\""
+            f" data-table=\"cases\""
+            f" data-pack=\"{_site_filter_values_attr([row['pack_id']])}\""
+            f" data-case=\"{_site_filter_values_attr([row['case_id']])}\""
+            f" data-host=\"{_site_filter_values_attr([row['host_label'], row['host_hostname'], row['host_platform']])}\""
+            f" data-runtime=\"{_site_filter_values_attr([row['runtime_name']])}\""
+            f" data-model=\"{_site_filter_values_attr([row['model_metadata_id'], *models])}\""
+            f" data-quantization=\"{_site_filter_values_attr([row['model_quantization']])}\""
+            f" data-search=\"{_site_search_attr(search_values)}\">"
             f"<td>{_html(row['run_label'])}</td>"
             f"<td>{_html(row['pack_id'] + ' ' + row['pack_version'])}</td>"
             f"<td>{_html(row['case_id'])}</td>"
@@ -1250,6 +1385,45 @@ def _render_static_site_html(
             ),
             f"<pre>{_html(report_markdown)}</pre>",
             "</section>",
+            "<script>",
+            "const registryRows=Array.from(document.querySelectorAll('.registry-row'));",
+            "const registrySections=Array.from(document.querySelectorAll('[data-registry-section]'));",
+            "const filterIds=['pack','case','host','runtime','model','quantization'];",
+            "const filters={search:document.getElementById('filter-search'),table:document.getElementById('filter-table')};",
+            "for(const id of filterIds){filters[id]=document.getElementById('filter-'+id);}",
+            "const countEl=document.getElementById('filter-count');",
+            "function rowMatches(row){",
+            "  if(filters.table.value&&row.dataset.table!==filters.table.value){return false;}",
+            "  const query=filters.search.value.trim().toLowerCase();",
+            "  if(query&&!(row.dataset.search||'').includes(query)){return false;}",
+            "  for(const id of filterIds){",
+            "    const value=filters[id].value;",
+            "    if(!value){continue;}",
+            "    const values=JSON.parse(row.dataset[id]||'[]');",
+            "    if(!values.includes(value)){return false;}",
+            "  }",
+            "  return true;",
+            "}",
+            "function applyFilters(){",
+            "  let shown=0;",
+            "  for(const row of registryRows){",
+            "    const visible=rowMatches(row);",
+            "    row.classList.toggle('is-hidden',!visible);",
+            "    if(visible){shown+=1;}",
+            "  }",
+            "  for(const section of registrySections){",
+            "    const table=section.dataset.registrySection;",
+            "    const visibleRows=section.querySelectorAll('.registry-row:not(.is-hidden)').length;",
+            "    const hidden=(filters.table.value&&filters.table.value!==table)||visibleRows===0;",
+            "    section.classList.toggle('is-hidden',hidden);",
+            "  }",
+            "  countEl.textContent=shown+' visible row'+(shown===1?'':'s')+' across generated tables.';",
+            "}",
+            "filters.search.addEventListener('input',applyFilters);",
+            "filters.table.addEventListener('change',applyFilters);",
+            "for(const id of filterIds){filters[id].addEventListener('change',applyFilters);}",
+            "applyFilters();",
+            "</script>",
             "</main>",
             "</body>",
             "</html>",
@@ -1342,9 +1516,11 @@ def _site_metric_row_dict(row: _SiteComparisonMetric) -> dict[str, Any]:
         "case": row.case_id,
         "host": {
             "label": row.host_label,
+            "hostname": row.host_hostname,
             "platform": row.host_platform,
         },
         "runtime": {"name": row.runtime_name},
+        "model": row.model,
         "model_metadata": {
             "id": row.model_metadata_id,
             "quantization": row.model_quantization,
@@ -1387,11 +1563,147 @@ def _site_case_row_dict(row: sqlite3.Row) -> dict[str, Any]:
             "rows": int(row["prefill_tps_rows"]),
             "median": row["prefill_tps_median"],
         },
+        "host": {
+            "label": row["host_label"],
+            "hostname": row["host_hostname"],
+            "platform": row["host_platform"],
+        },
+        "runtime": {"name": row["runtime_name"]},
+        "models": _json_list_values(row["models_json"]),
+        "model_metadata": {
+            "id": row["model_metadata_id"],
+            "quantization": row["model_quantization"],
+        },
     }
 
 
 def _html(value: object) -> str:
     return html_lib.escape(str(value), quote=True)
+
+
+def _site_filter_select(
+    element_id: str,
+    label: str,
+    options: list[tuple[str, str]],
+) -> str:
+    rendered = [
+        f'<label>{_html(label)}<select id="{_html(element_id)}">',
+        '<option value="">All</option>',
+    ]
+    for key, display in options:
+        rendered.append(f'<option value="{_html(key)}">{_html(display)}</option>')
+    rendered.append("</select></label>")
+    return "".join(rendered)
+
+
+def _site_pack_filter_options(
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    values: list[object] = []
+    for row in run_rows:
+        values.extend(_json_list_values(row["pack_ids_json"]))
+    values.extend(row["pack_id"] for row in case_rows)
+    values.extend(row.pack_id for row in metric_rows)
+    return _site_filter_options(values)
+
+
+def _site_case_filter_options(
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    return _site_filter_options(
+        [row["case_id"] for row in case_rows] + [row.case_id for row in metric_rows]
+    )
+
+
+def _site_host_filter_options(
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    values: list[object] = []
+    for row in run_rows:
+        values.extend([row["host_label"], row["host_hostname"], row["host_platform"]])
+    for row in case_rows:
+        values.extend([row["host_label"], row["host_hostname"], row["host_platform"]])
+    for row in metric_rows:
+        values.extend([row.host_label, row.host_hostname, row.host_platform])
+    return _site_filter_options(values)
+
+
+def _site_runtime_filter_options(
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    return _site_filter_options(
+        [row["runtime_name"] for row in run_rows]
+        + [row["runtime_name"] for row in case_rows]
+        + [row.runtime_name for row in metric_rows]
+    )
+
+
+def _site_model_filter_options(
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    values: list[object] = []
+    for row in run_rows:
+        values.extend([row["model_metadata_id"], *_json_list_values(row["models_json"])])
+    for row in case_rows:
+        values.extend([row["model_metadata_id"], *_json_list_values(row["models_json"])])
+    for row in metric_rows:
+        values.extend([row.model_metadata_id, row.model])
+    return _site_filter_options(values)
+
+
+def _site_quantization_filter_options(
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+) -> list[tuple[str, str]]:
+    return _site_filter_options(
+        [row["model_quantization"] for row in run_rows]
+        + [row["model_quantization"] for row in case_rows]
+        + [row.model_quantization for row in metric_rows]
+    )
+
+
+def _site_filter_options(values: Iterable[object]) -> list[tuple[str, str]]:
+    by_key: dict[str, str] = {}
+    for value in values:
+        key = _site_filter_key(value)
+        if key is None:
+            continue
+        by_key.setdefault(key, str(value))
+    return sorted(by_key.items(), key=lambda item: item[1].lower())
+
+
+def _site_filter_values_attr(values: Iterable[object]) -> str:
+    keys: list[str] = []
+    for value in values:
+        key = _site_filter_key(value)
+        if key is not None:
+            keys.append(key)
+    return _html(json.dumps(list(dict.fromkeys(keys)), separators=(",", ":")))
+
+
+def _site_search_attr(values: Iterable[object]) -> str:
+    rendered = [
+        str(value).lower()
+        for value in values
+        if value not in (None, "", [], "—")
+    ]
+    return _html(" ".join(rendered))
+
+
+def _site_filter_key(value: object) -> str | None:
+    if value in (None, "", [], "—"):
+        return None
+    return str(value).strip().lower()
 
 
 def _json_list_cell(raw_json: str | None, paired_json: str | None = None) -> str:

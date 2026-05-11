@@ -332,7 +332,8 @@ files, or model-call logs.
 `benchpack registry site --db <sqlite> --out <site-dir>` writes a local static
 snapshot with dense run tables, a comparison matrix of per-run/per-case median
 latency, throughput, token, and scoring fields from indexed rows, case-metric
-coverage tables, the generated `report.md`, and a machine-readable
+coverage tables, browser-side filters for pack, case, host, runtime, model,
+and quantization, the generated `report.md`, and a machine-readable
 `snapshot.json` containing the same compact run, comparison, and case-metric
 data. The export uses SQLite only; source result directories and large
 artifacts are not required.

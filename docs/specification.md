@@ -1147,8 +1147,9 @@ The output directory contains:
 
 - `index.html`, a local browser view with dense run tables, a comparison matrix
   of per-run/per-case median latency, throughput, token, and scoring fields,
-  case-metric coverage tables, and an embedded copy of the generated Markdown
-  report;
+  case-metric coverage tables, browser-side filters for pack, case, host,
+  runtime, model, quantization, and table type, and an embedded copy of the
+  generated Markdown report;
 - `report.md`, the same registry-backed Markdown report produced through the
   existing report renderer;
 - `snapshot.json`, a machine-readable static snapshot with schema version `1`,
@@ -1156,6 +1157,11 @@ The output directory contains:
   run metadata, comparison-matrix rows, case-metric rows, and the report path.
   Comparison-matrix and case-metric entries include the registry `run_id` so
   consumers can join them back to `runs` even when run labels collide.
+  Case-metric entries also include compact host, runtime, and model metadata
+  copied from the indexed run row so static review tools can apply the same
+  filters without opening the SQLite database. This is an additive extension;
+  `snapshot.json` `schema_version` remains `1` because no existing field shape
+  changed.
 
 The static site reads schema version `2` registry data only. It uses compact
 `runs`, `result_rows`, and `result_case_stats` data and does not require source

@@ -16,6 +16,31 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-12 (registry static site browse filters)
+
+### Changed
+
+- Extended `benchpack registry site --db <sqlite> --out <site-dir>` so the
+  generated `index.html` includes browser-side filters over the already-rendered
+  static tables.
+- The local static view can now filter generated rows by free-text search,
+  table type, pack, case, host, runtime, model, and quantization without
+  contacting a server or opening the SQLite database.
+- Extended `snapshot.json` case-metric rows with compact host, runtime, and
+  model metadata copied from indexed run rows so local review tooling can apply
+  the same browse dimensions to case-metric data. This is an additive
+  extension; `snapshot.json` schema version `1` is retained because no
+  existing field shape changed.
+- Kept the export read-only and SQLite-only: it still does not require source
+  result directories, read raw/workspace/task/verify/patch/model-call
+  artifacts, mutate the database, or contact endpoints.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Hosted upload/review, broader hosted APIs, and public leaderboard policy
+  remain deferred until there is a concrete sharing workflow.
+
 ## 2026-05-12 (registry site snapshot JSON)
 
 ### Changed

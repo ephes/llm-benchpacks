@@ -2,7 +2,7 @@
 
 ## Active Backlog Queue
 
-Status date: 2026-05-11.
+Status date: 2026-05-12.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
@@ -65,11 +65,11 @@ Next actionable slices:
    for this work unless a later curated run-log entry explicitly calls for a
    small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
-   site export with a per-run/per-case comparison matrix, bundle
-   create/validate, bundle import, duplicate inspection, and local
-   normalized-row JSON query have landed. Hosted upload/review, richer public
-   browsing, broader hosted APIs, and leaderboard policy should wait for a
-   concrete sharing workflow.
+   site export with a per-run/per-case comparison matrix, browser-side browse
+   filters, static snapshot JSON, bundle create/validate, bundle import,
+   duplicate inspection, and local normalized-row JSON query have landed.
+   Hosted upload/review, broader hosted APIs, and leaderboard policy should
+   wait for a concrete sharing workflow.
 4. Research tracks stay mostly parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
@@ -1440,8 +1440,11 @@ Scope:
     without reading source result directories. **Extended 2026-05-12** with a
     static `snapshot.json` file containing the same compact run, comparison,
     and case-metric data as machine-readable JSON for local review tooling.
+    **Extended 2026-05-12** with browser-side filters over the generated
+    tables for pack, case, host, runtime, model, quantization, free-text
+    search, and table type, while keeping the export SQLite-only and static.
   - authenticated upload/review for result bundles;
-  - public browse and comparison views;
+  - broader public browse and comparison views;
   - optional API for querying normalized results. **First local slice landed
     2026-05-11** as `benchpack registry query --db <sqlite>`, with broader
     hosted APIs deferred;
