@@ -16,6 +16,29 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (direct-edit JSON-schema hook)
+
+### Changed
+
+- Added an opt-in structured-output request hook to
+  `examples/external-agent/openai-direct-edit-agent.py` via
+  `--response-format json_schema`.
+- JSON-schema mode sends OpenAI-style
+  `response_format = {"type":"json_schema"}` with a strict full-file
+  replacement payload schema and a prompt-derived enum for allowed edit paths.
+- The wrapper now reports explicit assistant refusals from chat-completion
+  responses before edit-payload parsing.
+- Updated README, external-agent example docs, specification, implementation
+  plan, and benchmark research notes. The wrapper default remains a plain
+  non-streaming chat-completion request, and `coding-tasks-external-agent`
+  remains opt-in.
+
+### Open Questions
+
+- Live direct-edit evidence still needs a follow-up run against an endpoint
+  that supports JSON mode or structured outputs. Keep any such run opt-in and
+  do not promote the external-agent pack set from request-shape support alone.
+
 ## 2026-05-10 (direct-edit JSON-mode hook)
 
 ### Changed

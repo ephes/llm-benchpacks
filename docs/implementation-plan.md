@@ -2,7 +2,7 @@
 
 ## Active Backlog Queue
 
-Status date: 2026-05-10.
+Status date: 2026-05-11.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
@@ -31,13 +31,15 @@ Current posture:
 
 Next actionable slices:
 
-1. Direct-edit external-agent output contract. If more agent-shaped work is
-   needed, build on the narrow JSON-mode hook now available in
-   `openai-direct-edit-agent.py` via `--response-format json_object`: run that
-   opt-in experiment where the endpoint supports it, try a larger completion
-   budget, or try a stronger already-configured agent/model. Keep this as
-   opt-in evidence; do not promote `coding-tasks-external-agent` into defaults
-   from the current mixed verifier outcomes.
+1. Direct-edit external-agent output contract. The wrapper now has explicit
+   opt-in request-shape hooks for both JSON mode
+   `--response-format json_object` and structured outputs
+   `--response-format json_schema`, with the latter constraining the full-file
+   replacement payload and prompt-derived allowed paths. The next work here is
+   live opt-in evidence where the endpoint supports one of those modes, a
+   larger completion budget, or a stronger already-configured agent/model. Keep
+   this as opt-in evidence; do not promote `coding-tasks-external-agent` into
+   defaults from the current mixed verifier outcomes.
 2. Reporting polish only when it answers a concrete review question. Possible
    small slices are better direct-edit failure classification, clearer
    no-source-mutation versus partial-source-mutation summaries, or result-set

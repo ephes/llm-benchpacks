@@ -252,6 +252,69 @@ def test_call_chat_completion_sends_json_object_response_format(
     assert body["response_format"] == {"type": "json_object"}
 
 
+def test_call_chat_completion_sends_json_schema_response_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _load_agent_module()
+    requests: list[Any] = []
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '{"files":[],"summary":"nothing"}'
+                            }
+                        }
+                    ]
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+
+    agent._call_chat_completion(
+        endpoint="https://llm.example.test/v1",
+        api_key="secret",
+        model="test-model",
+        prompt="Fix it.",
+        allowed_paths=("greeter.py", "dashboard/views.py"),
+        timeout_s=12.5,
+        temperature=0.0,
+        max_tokens=1024,
+        response_format="json_schema",
+    )
+
+    request, _ = requests[0]
+    body = json.loads(request.data.decode("utf-8"))
+    response_format = body["response_format"]
+    assert response_format["type"] == "json_schema"
+    json_schema = response_format["json_schema"]
+    assert json_schema["name"] == "benchpack_direct_edit"
+    assert json_schema["strict"] is True
+    schema = json_schema["schema"]
+    assert schema["required"] == ["files", "summary"]
+    assert schema["additionalProperties"] is False
+    file_schema = schema["properties"]["files"]["items"]
+    assert file_schema["required"] == ["path", "content"]
+    assert file_schema["additionalProperties"] is False
+    assert file_schema["properties"]["path"]["enum"] == [
+        "greeter.py",
+        "dashboard/views.py",
+    ]
+
+
 def test_call_chat_completion_rejects_unknown_response_format() -> None:
     agent = _load_agent_module()
 
@@ -282,6 +345,45 @@ def test_parse_edit_payload_reports_finish_reason() -> None:
 
     with pytest.raises(ValueError, match="finish_reason=length"):
         agent._parse_edit_payload("not json", finish_reason="length")
+
+
+def test_assistant_content_reports_refusal() -> None:
+    agent = _load_agent_module()
+
+    with pytest.raises(ValueError, match="message.refusal"):
+        agent._assistant_content(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "refusal": "I cannot modify the requested file.",
+                            "content": "",
+                        }
+                    }
+                ]
+            }
+        )
+
+
+@pytest.mark.parametrize("refusal", (None, ""))
+def test_assistant_content_ignores_empty_refusal(refusal: str | None) -> None:
+    agent = _load_agent_module()
+
+    assert (
+        agent._assistant_content(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "refusal": refusal,
+                            "content": '{"files":[],"summary":"nothing"}',
+                        }
+                    }
+                ]
+            }
+        )
+        == '{"files":[],"summary":"nothing"}'
+    )
 
 
 def test_safe_endpoint_label_has_no_url_or_credential_markers() -> None:

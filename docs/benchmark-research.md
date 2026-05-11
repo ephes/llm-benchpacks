@@ -99,11 +99,11 @@ should not be committed for this research track unless explicitly curated.
   `fix-dashboard-regressions` wrote allowed files but failed verification after
   introducing invalid dashboard code. This keeps the lane explicitly
   exploratory and opt-in.
-- The wrapper now has an opt-in JSON-mode hook:
-  `--response-format json_object` adds OpenAI-style
-  `response_format = {"type":"json_object"}` to the harness-owned chat
-  completion request when a target endpoint supports it. The default wrapper
-  request remains unchanged.
+- The wrapper now has opt-in structured request-shape hooks:
+  `--response-format json_object` adds OpenAI-style JSON mode, while
+  `--response-format json_schema` adds OpenAI-style structured outputs with a
+  strict direct-edit payload schema and a prompt-derived allowed-path enum. The
+  default wrapper request remains unchanged.
 
 ## Next Work Ordering
 
@@ -115,11 +115,12 @@ should not be committed for this research track unless explicitly curated.
 2. Keep `coding-tasks-external-agent` opt-in after the mixed M5/M4/Hetzner API
    validation. The next direct-edit slice should be deliberate: improve or
    replace the remote API wrapper output contract, including a live run with
-   the new `--response-format json_object` hook or larger completion-budget
-   experiments where the endpoint supports them; try a stronger
-   already-configured agent/model; or refine report-facing
-   classification for no-source-mutation versus partial source mutation. Do not
-   promote the pack set into defaults from the current mixed verifier evidence.
+   `--response-format json_object` or `--response-format json_schema`, or
+   larger completion-budget experiments where the endpoint supports them; try a
+   stronger already-configured agent/model; or refine report-facing
+   classification for no-source-mutation versus partial source mutation. Do
+   not promote the pack set into defaults from the current mixed verifier
+   evidence.
 3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 4. Keep larger benchmark-design research parked until the endpoint-only and

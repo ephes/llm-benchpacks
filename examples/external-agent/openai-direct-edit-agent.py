@@ -183,6 +183,51 @@ def _build_messages(prompt: str, allowed_paths: tuple[str, ...]) -> list[dict[st
     ]
 
 
+def _response_format_payload(
+    response_format: str,
+    allowed_paths: tuple[str, ...],
+) -> dict[str, Any] | None:
+    if response_format == "default":
+        return None
+    if response_format == "json_object":
+        return {"type": "json_object"}
+    if response_format == "json_schema":
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "benchpack_direct_edit",
+                "description": (
+                    "Full-file replacements for the prepared benchmark workspace."
+                ),
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["files", "summary"],
+                    "properties": {
+                        "files": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["path", "content"],
+                                "properties": {
+                                    "path": {
+                                        "type": "string",
+                                        "enum": list(allowed_paths),
+                                    },
+                                    "content": {"type": "string"},
+                                },
+                            },
+                        },
+                        "summary": {"type": "string"},
+                    },
+                },
+            },
+        }
+    raise ValueError(f"unsupported response format: {response_format}")
+
+
 def _call_chat_completion(
     *,
     endpoint: str,
@@ -202,10 +247,9 @@ def _call_chat_completion(
         "max_tokens": max_tokens,
         "stream": False,
     }
-    if response_format == "json_object":
-        request_body["response_format"] = {"type": "json_object"}
-    elif response_format != "default":
-        raise ValueError(f"unsupported response format: {response_format}")
+    response_format_payload = _response_format_payload(response_format, allowed_paths)
+    if response_format_payload is not None:
+        request_body["response_format"] = response_format_payload
     data = json.dumps(request_body).encode("utf-8")
     request = urllib.request.Request(
         _chat_completions_url(endpoint),
@@ -245,6 +289,9 @@ def _assistant_content(response: dict[str, Any]) -> str:
     message = first.get("message")
     if not isinstance(message, dict):
         raise ValueError("chat response choice.message must be an object")
+    refusal = message.get("refusal")
+    if isinstance(refusal, str) and refusal:
+        raise ValueError(f"chat response message.refusal: {refusal[:180]}")
     return _string(message.get("content"), "chat response message.content")
 
 
@@ -355,11 +402,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument(
         "--response-format",
-        choices=("default", "json_object"),
+        choices=("default", "json_object", "json_schema"),
         default="default",
         help=(
             "OpenAI-compatible response_format mode for the task model call. "
-            "Use json_object only with endpoints that support JSON mode."
+            "Use json_object or json_schema only with endpoints that support "
+            "those structured-output modes."
         ),
     )
     parser.add_argument("--workspace", required=True)

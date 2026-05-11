@@ -99,8 +99,13 @@ writes one safe telemetry line. By default it sends a portable plain
 non-streaming chat-completion request. When the target endpoint supports
 OpenAI-style JSON-object response formatting, add
 `--response-format json_object` to the wrapper argv to request a stricter JSON
-assistant payload for the harness-owned task call. Use it from the operator
-machine when the endpoint and token are already configured locally:
+assistant payload for the harness-owned task call. When the endpoint supports
+OpenAI-style structured outputs, use `--response-format json_schema` instead;
+that mode sends a strict schema for the full-file replacement payload and
+constrains `files[].path` to the prompt-derived allowed path list. An empty
+`files` array is a valid no-op wrapper response; the benchmark verifier still
+decides whether that no-op passes. Use it from the operator machine when the
+endpoint and token are already configured locally:
 
 ```sh
 BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/openai-direct-edit-agent.py\",\"--endpoint\",\"https://llm.django-cast.com/v1\",\"--model\",\"Qwen/Qwen2.5-1.5B-Instruct\",\"--api-key-env\",\"BENCHPACK_HETZNER_OPENAI_TOKEN\"]" \
@@ -113,7 +118,8 @@ BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/opena
 
 For a JSON-mode experiment, add
 `"--response-format","json_object"` to `BENCHPACK_EXTERNAL_AGENT_ARGV` anywhere
-after the wrapper script path.
+after the wrapper script path. For a structured-output experiment, use
+`"--response-format","json_schema"` instead.
 
 The wrapper records only the environment variable name in commands and context;
 the token value must stay in the local environment or secret store. For the

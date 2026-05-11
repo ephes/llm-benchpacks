@@ -204,7 +204,13 @@ endpoint from the operator machine and applies JSON full-file replacement edits
 only to prompt-allowed paths. It defaults to a plain non-streaming chat
 completion request; pass `--response-format json_object` only when the endpoint
 supports OpenAI-style JSON-object response formatting for the harness-owned
-task call. For Hetzner service runs, load `BENCHPACK_HETZNER_OPENAI_TOKEN`
+task call, or `--response-format json_schema` when the endpoint supports
+OpenAI-style structured outputs with `response_format.type = "json_schema"`.
+The JSON-schema mode constrains the task response to the full-file replacement
+shape and the prompt-derived allowed path list. An empty `files` array remains
+a valid no-op wrapper response, with deterministic verification deciding
+whether the benchmark passes. For Hetzner service runs, load
+`BENCHPACK_HETZNER_OPENAI_TOKEN`
 locally and use the public
 `https://llm.django-cast.com/v1` path; do not require Codex, Claude, Ollama, or
 this repository to be installed on the server.

@@ -395,6 +395,19 @@ This wrapper is intended only when Codex CLI and the selected local provider
 and model are already available locally, such as a local Ollama model; it is
 not a cloud-backed or credential-injecting harness.
 
+An authenticated OpenAI-compatible direct-edit wrapper is available at
+`examples/external-agent/openai-direct-edit-agent.py`. It uses the same public
+context handoff, calls a configured `/chat/completions` endpoint from the
+operator machine, expects a JSON full-file replacement payload, and writes only
+prompt-allowed workspace files. The wrapper defaults to a portable plain
+non-streaming request, with explicit opt-in `--response-format json_object`
+and `--response-format json_schema` modes for endpoints that support those
+OpenAI-style structured-output request shapes. The JSON-schema mode constrains
+the assistant payload to the direct-edit object shape and the prompt-derived
+allowed path list. These modes are wrapper request options only; they do not
+change benchpack manifests, adapter schemas, result rows, or default helper
+matrices.
+
 Other richer harness artifacts must be explicitly named by a later
 artifact/schema slice before they are allowed. It must not mutate pack-owned
 fixtures, prompts, verifier scripts, source docs, `run-metadata.json`,
