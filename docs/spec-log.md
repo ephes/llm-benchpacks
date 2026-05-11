@@ -16,6 +16,24 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (repo-task source-mutation labels)
+
+### Changed
+
+- Split the report-only failed repo-task mutation label into
+  `failed-source-mutation` and `failed-non-source-mutation`.
+- The classifier still reads only existing `run.jsonl` fields and patch
+  artifacts. Generated/cache paths such as `__pycache__`, `.pytest_cache`, and
+  binary cache suffixes do not count as source mutations.
+- Updated `summary.md` and `benchpack report` count tables to include the new
+  labels while keeping `run.jsonl` unchanged.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Keep further reporting/schema work tied to concrete direct-edit review gaps;
+  no new durable result fields were added in this slice.
+
 ## 2026-05-11 (direct-edit JSON-object Ollama evidence)
 
 ### Changed

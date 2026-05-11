@@ -1,6 +1,6 @@
 # Benchmark Research Backlog
 
-Status date: 2026-05-10.
+Status date: 2026-05-11.
 
 This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
@@ -48,7 +48,8 @@ should not be committed for this research track unless explicitly curated.
   the dashboard failure, but the aggregate row status alone was not. A compact
   report/status summary for empty-vs-nonempty workspace diffs landed on
   2026-05-08 as report-only repo-task outcome tables in `summary.md` and
-  `benchpack report`.
+  `benchpack report`. A 2026-05-11 follow-up split mutation-visible failures
+  into source-file mutations and generated/non-source-only mutations.
 - The `endpoint-python-correctness` pack now provides a simpler endpoint-only
   deterministic correctness lane: normal chat adapter, fenced unified diff or
   explicit path-marked replacement block, tiny committed Python fixture, and
@@ -116,11 +117,11 @@ should not be committed for this research track unless explicitly curated.
    validation. The next direct-edit slice should be deliberate: improve or
    replace the remote API wrapper output contract, including a live run with
    `--response-format json_object` or `--response-format json_schema`, or
-   larger completion-budget experiments where the endpoint supports them; try a
-   stronger already-configured agent/model; or refine report-facing
-   classification for no-source-mutation versus partial source mutation. Do
-   not promote the pack set into defaults from the current mixed verifier
-   evidence.
+   larger completion-budget experiments where the endpoint supports them; or
+   try a stronger already-configured agent/model. The report-facing
+   source-vs-generated mutation split has landed, so further classification
+   should wait for a new concrete review gap. Do not promote the pack set into
+   defaults from the current mixed verifier evidence.
 3. Keep the result-schema question open until repeated live evidence shows
    which repo-task status fields are worth making durable.
 4. Keep larger benchmark-design research parked until the endpoint-only and

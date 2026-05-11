@@ -280,24 +280,25 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
 
 
 def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
+    # Aggregate counts intentionally omit the leading per-run label column.
     aggregate_header = [
         "## Repo-Task Outcome Summary",
         "",
         "### Aggregate",
         "",
-        "| rows | passed | failed-no-mutation | failed-with-mutation | "
-        "failed-unknown-mutation | other |",
-        "|------|--------|--------------------|----------------------|"
-        "-------------------------|-------|",
+        "| rows | passed | failed-no-mutation | failed-source-mutation | "
+        "failed-non-source-mutation | failed-unknown-mutation | other |",
+        "|------|--------|--------------------|------------------------|"
+        "----------------------------|-------------------------|-------|",
     ]
     by_run_header = [
         "",
         "### By Run",
         "",
-        "| run | rows | passed | failed-no-mutation | failed-with-mutation | "
-        "failed-unknown-mutation | other |",
-        "|-----|------|--------|--------------------|----------------------|"
-        "-------------------------|-------|",
+        "| run | rows | passed | failed-no-mutation | failed-source-mutation | "
+        "failed-non-source-mutation | failed-unknown-mutation | other |",
+        "|-----|------|--------|--------------------|------------------------|"
+        "----------------------------|-------------------------|-------|",
     ]
     detail_header = [
         "## Repo-Task Outcomes",
@@ -318,13 +319,15 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
         counts = count_repo_task_outcomes(outcomes)
         summary_rows.append(
             "| {run} | {total} | {passed} | {failed_no_mutation} | "
-            "{failed_with_mutation} | {failed_unknown_mutation} | "
+            "{failed_source_mutation} | {failed_non_source_mutation} | "
+            "{failed_unknown_mutation} | "
             "{other} |".format(
                 run=run.label,
                 total=counts.total,
                 passed=counts.passed,
                 failed_no_mutation=counts.failed_no_mutation,
-                failed_with_mutation=counts.failed_with_mutation,
+                failed_source_mutation=counts.failed_source_mutation,
+                failed_non_source_mutation=counts.failed_non_source_mutation,
                 failed_unknown_mutation=counts.failed_unknown_mutation,
                 other=counts.other,
             )
@@ -348,11 +351,13 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
     aggregate = count_repo_task_outcomes(all_outcomes)
     aggregate_row = (
         "| {total} | {passed} | {failed_no_mutation} | "
-        "{failed_with_mutation} | {failed_unknown_mutation} | {other} |".format(
+        "{failed_source_mutation} | {failed_non_source_mutation} | "
+        "{failed_unknown_mutation} | {other} |".format(
             total=aggregate.total,
             passed=aggregate.passed,
             failed_no_mutation=aggregate.failed_no_mutation,
-            failed_with_mutation=aggregate.failed_with_mutation,
+            failed_source_mutation=aggregate.failed_source_mutation,
+            failed_non_source_mutation=aggregate.failed_non_source_mutation,
             failed_unknown_mutation=aggregate.failed_unknown_mutation,
             other=aggregate.other,
         )

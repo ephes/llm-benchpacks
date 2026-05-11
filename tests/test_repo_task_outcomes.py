@@ -89,7 +89,7 @@ def test_repo_task_outcomes_treat_missing_artifact_root_as_unknown() -> None:
     assert outcome.outcome == "failed-unknown-mutation"
 
 
-def test_repo_task_outcomes_classify_nonempty_failed_patch_as_mutation_visible(
+def test_repo_task_outcomes_classify_nonempty_failed_patch_as_source_mutation(
     tmp_path: Path,
 ) -> None:
     result_dir = tmp_path / "run"
@@ -103,7 +103,54 @@ def test_repo_task_outcomes_classify_nonempty_failed_patch_as_mutation_visible(
     )[0]
 
     assert outcome.patch_bytes == 29
-    assert outcome.outcome == "failed-with-mutation"
+    assert outcome.outcome == "failed-source-mutation"
+
+
+def test_repo_task_outcomes_parse_quoted_git_diff_paths_with_spaces(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run"
+    patch = result_dir / "patch" / "fix-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text(
+        'diff --git "a/generated data/cache.pyc" "b/source dir/app file.py"\n',
+        encoding="utf-8",
+    )
+
+    outcome = summarize_repo_task_outcomes(
+        [_repo_task_record(patch={"path": "patch/fix-repo/rep-001.diff"})],
+        result_dir,
+    )[0]
+
+    assert outcome.outcome == "failed-source-mutation"
+
+
+def test_repo_task_outcomes_classify_generated_only_patch_as_non_source_mutation(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run"
+    patch = result_dir / "patch" / "fix-repo" / "rep-001.diff"
+    patch.parent.mkdir(parents=True)
+    patch.write_text(
+        "\n".join(
+            [
+                "Binary file added: __pycache__/task_summary.cpython-313.pyc",
+                "--- /dev/null",
+                "+++ b/.pytest_cache/v/cache/nodeids",
+                "@@ -0,0 +1 @@",
+                "+[]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    outcome = summarize_repo_task_outcomes(
+        [_repo_task_record(patch={"path": "patch/fix-repo/rep-001.diff"})],
+        result_dir,
+    )[0]
+
+    assert outcome.outcome == "failed-non-source-mutation"
 
 
 def test_repo_task_outcomes_classify_repo_task_passed_as_passed(
@@ -159,7 +206,8 @@ def test_repo_task_outcome_counts_aggregate_known_labels(tmp_path: Path) -> None
     assert counts.total == 4
     assert counts.passed == 1
     assert counts.failed_no_mutation == 1
-    assert counts.failed_with_mutation == 1
+    assert counts.failed_source_mutation == 1
+    assert counts.failed_non_source_mutation == 0
     assert counts.failed_unknown_mutation == 1
     assert counts.other == 0
 
@@ -182,6 +230,7 @@ def test_repo_task_outcome_counts_preserve_unknown_labels_as_other() -> None:
     assert counts.total == 1
     assert counts.passed == 0
     assert counts.failed_no_mutation == 0
-    assert counts.failed_with_mutation == 0
+    assert counts.failed_source_mutation == 0
+    assert counts.failed_non_source_mutation == 0
     assert counts.failed_unknown_mutation == 0
     assert counts.other == 1

@@ -272,8 +272,9 @@ repo-task outcome summaries with aggregate and per-run outcome counts when
 and the same
 compare medians, cache rows, warnings, and `prefill parity` statuses used by
 `benchpack compare`. Repo-task outcome summaries are report-only and
-distinguish empty workspace diffs from mutation-visible failures without
-changing `run.jsonl`. It is intended for
+distinguish empty workspace diffs, source-file mutations, generated/non-source
+only mutations, and unknown patch-artifact state without changing `run.jsonl`.
+It is intended for
 assembling run notes and M4/M5 comparison reports without copying medians from
 several compare outputs by hand. For repeated report assembly,
 `benchpack report --set <manifest.toml>` accepts a tiny TOML report-set

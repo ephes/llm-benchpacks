@@ -288,9 +288,9 @@ def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:
 
     assert "## Repo-Task Outcome Summary" in output
     assert "### Aggregate" in output
-    assert "\n| 2 | 1 | 1 | 0 | 0 | 0 |\n" in output
+    assert "\n| 2 | 1 | 1 | 0 | 0 | 0 | 0 |\n" in output
     assert "### By Run" in output
-    assert "| run-a | 2 | 1 | 1 | 0 | 0 | 0 |" in output
+    assert "| run-a | 2 | 1 | 1 | 0 | 0 | 0 | 0 |" in output
     assert "## Repo-Task Outcomes" in output
     assert (
         "| run-a | fix-greeting | 1 | passed | 0 | verify-script:pass | "
@@ -345,9 +345,9 @@ def test_report_aggregates_repo_task_outcomes_across_runs(tmp_path: Path) -> Non
 
     output = render_report(load_report_runs([run_a, run_b]))
 
-    assert "| 2 | 0 | 1 | 1 | 0 | 0 |" in output
-    assert "| run-a | 1 | 0 | 1 | 0 | 0 | 0 |" in output
-    assert "| run-b | 1 | 0 | 0 | 1 | 0 | 0 |" in output
+    assert "| 2 | 0 | 1 | 1 | 0 | 0 | 0 |" in output
+    assert "| run-a | 1 | 0 | 1 | 0 | 0 | 0 | 0 |" in output
+    assert "| run-b | 1 | 0 | 0 | 1 | 0 | 0 | 0 |" in output
 
 
 def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:

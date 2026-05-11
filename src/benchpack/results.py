@@ -250,22 +250,24 @@ class RunReporter:
             lines.append("## Repo-Task Outcome Summary")
             lines.append("")
             lines.append(
-                "| rows | passed | failed-no-mutation | failed-with-mutation | "
-                "failed-unknown-mutation | other |"
+                "| rows | passed | failed-no-mutation | failed-source-mutation | "
+                "failed-non-source-mutation | failed-unknown-mutation | other |"
             )
             lines.append(
-                "|------|--------|--------------------|----------------------|"
-                "-------------------------|-------|"
+                "|------|--------|--------------------|------------------------|"
+                "----------------------------|-------------------------|-------|"
             )
             counts = count_repo_task_outcomes(repo_task_outcomes)
             lines.append(
                 "| {total} | {passed} | {failed_no_mutation} | "
-                "{failed_with_mutation} | {failed_unknown_mutation} | "
+                "{failed_source_mutation} | {failed_non_source_mutation} | "
+                "{failed_unknown_mutation} | "
                 "{other} |".format(
                     total=counts.total,
                     passed=counts.passed,
                     failed_no_mutation=counts.failed_no_mutation,
-                    failed_with_mutation=counts.failed_with_mutation,
+                    failed_source_mutation=counts.failed_source_mutation,
+                    failed_non_source_mutation=counts.failed_non_source_mutation,
                     failed_unknown_mutation=counts.failed_unknown_mutation,
                     other=counts.other,
                 )

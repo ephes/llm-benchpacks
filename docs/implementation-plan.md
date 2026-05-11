@@ -50,10 +50,12 @@ Next actionable slices:
    failures.
 2. Reporting polish only when it answers a concrete review question.
    Direct-edit outcome labels, per-run counts, and aggregate result-set counts
-   have landed. Remaining possible small slices are sharper failure
-   classification if later direct-edit runs show a concrete gap. Do not commit
-   generated `results/*` artifacts for this work unless a later curated
-   run-log entry explicitly calls for a small retained subset.
+   have landed. A follow-up source-vs-generated mutation classifier also
+   landed, so reports now distinguish source-file mutations from
+   generated/non-source-only mutations. Further reporting work should wait for
+   a new direct-edit review gap. Do not commit generated `results/*` artifacts
+   for this work unless a later curated run-log entry explicitly calls for a
+   small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
    site export, bundle create/validate, and bundle import have landed. Hosted
    upload/review, richer public browsing, duplicate handling, query APIs, and
@@ -1100,8 +1102,8 @@ Scope:
   larger campaigns become hard to classify manually. **Landed 2026-05-08** as a
   report-only `Repo-Task Outcomes` table in `summary.md` and
   `benchpack report`, derived from existing `repo_task`, scoring, and patch
-  artifact data. The table shows patch byte counts and compact labels such as
-  `passed`, `failed-no-mutation`, `failed-with-mutation`, and
+  artifact data. The initial table showed patch byte counts and compact labels
+  such as `passed`, `failed-no-mutation`, `failed-with-mutation`, and
   `failed-unknown-mutation` without changing `run.jsonl`.
   **Extended 2026-05-11** with a report-only per-run
   `Repo-Task Outcome Summary` count table so direct-edit campaigns can be
@@ -1109,6 +1111,11 @@ Scope:
   **Extended 2026-05-11** with an aggregate report-set count above the per-run
   table in `benchpack report`, so multi-run direct-edit evidence can be scanned
   without summing rows by hand.
+  **Extended 2026-05-11** by replacing the generic failed-with-mutation
+  report label with `failed-source-mutation` and
+  `failed-non-source-mutation`, derived from patch artifact paths, so runs that
+  only write generated artifacts are not grouped with source edits. This
+  remains report-only and does not change `run.jsonl`.
 - Add a simple endpoint-only coding correctness pack before promoting another
   cross-host correctness matrix. **Landed 2026-05-08** as
   `endpoint-python-correctness`, a normal-chat-adapter `repo-task` pack with a

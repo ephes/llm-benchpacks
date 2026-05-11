@@ -906,8 +906,11 @@ The detail table shows case, repetition,
 `repo_task.status`, verifier exit code, scoring result, patch byte count when
 the patch artifact is available under the result directory, and a report-only
 outcome label such as `passed`, `failed-no-mutation`,
-`failed-with-mutation`, or `failed-unknown-mutation`. This is a read-only
-summary and does not add fields to `run.jsonl`.
+`failed-source-mutation`, `failed-non-source-mutation`, or
+`failed-unknown-mutation`. The source/non-source split is derived from patch
+artifact paths only; generated/cache artifacts such as `__pycache__` and
+`.pytest_cache` do not count as source mutations. This is a read-only summary
+and does not add fields to `run.jsonl`.
 
 The optional `--set <manifest.toml>` mode loads a source TOML report-set
 manifest and expands it to the same existing result-directory inputs before the

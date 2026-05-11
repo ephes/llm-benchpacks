@@ -574,7 +574,7 @@ def test_write_summary_includes_repo_task_outcomes(tmp_path: Path) -> None:
     text = (out / "summary.md").read_text()
 
     assert "## Repo-Task Outcome Summary" in text
-    assert "| 1 | 0 | 1 | 0 | 0 | 0 |" in text
+    assert "| 1 | 0 | 1 | 0 | 0 | 0 | 0 |" in text
     assert "## Repo-Task Outcomes" in text
     assert (
         "| capital | 1 | failed | 1 | verify-script:fail | 0 | "
