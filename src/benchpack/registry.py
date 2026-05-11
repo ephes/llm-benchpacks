@@ -164,7 +164,12 @@ def load_registry_report_runs(
             conn.execute("PRAGMA query_only = ON")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
-            run_rows = _select_report_run_rows(conn, run_ids=run_ids, labels=labels)
+            run_rows = _select_report_run_rows(
+                conn,
+                run_ids=run_ids,
+                labels=labels,
+                command="registry report",
+            )
             runs = [_registry_result_run(conn, row) for row in run_rows]
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
@@ -226,6 +231,73 @@ def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateG
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
     return groups
+
+
+def query_registry_results(
+    db_path: Path | str,
+    *,
+    run_ids: list[int] | None = None,
+    labels: list[str] | None = None,
+    pack_id: str | None = None,
+    case_id: str | None = None,
+    adapter: str | None = None,
+    model: str | None = None,
+    host_label: str | None = None,
+    runtime_name: str | None = None,
+    model_quantization: str | None = None,
+    ok: bool | None = None,
+    scoring_passed: bool | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Query normalized result rows from a local registry database."""
+
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    _validate_registry_selection("registry query", run_ids=run_ids, labels=labels)
+    _validate_registry_query_filters(
+        pack_id=pack_id,
+        case_id=case_id,
+        adapter=adapter,
+        model=model,
+        host_label=host_label,
+        runtime_name=runtime_name,
+        model_quantization=model_quantization,
+        limit=limit,
+    )
+    db = Path(db_path)
+    if not db.is_file():
+        raise RegistryError(f"registry database not found: {db}")
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            conn.row_factory = sqlite3.Row
+            _assert_report_schema(conn, db)
+            selected_rows = _select_report_run_rows(
+                conn,
+                run_ids=run_ids,
+                labels=labels,
+                command="registry query",
+            )
+            if not selected_rows:
+                raise RegistryError("registry query selection matched no runs")
+            rows = _select_registry_query_rows(
+                conn,
+                [int(row["id"]) for row in selected_rows],
+                pack_id=pack_id,
+                case_id=case_id,
+                adapter=adapter,
+                model=model,
+                host_label=host_label,
+                runtime_name=runtime_name,
+                model_quantization=model_quantization,
+                ok=ok,
+                scoring_passed=scoring_passed,
+                limit=limit,
+            )
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not read registry database {db}: {exc}") from exc
+    return [_registry_query_row_dict(row) for row in rows]
 
 
 def export_registry_static_site(
@@ -533,6 +605,7 @@ def _select_report_run_rows(
     *,
     run_ids: list[int] | None,
     labels: list[str] | None,
+    command: str,
 ) -> list[sqlite3.Row]:
     if run_ids:
         placeholders = ",".join("?" for _ in run_ids)
@@ -548,7 +621,7 @@ def _select_report_run_rows(
         found_ids = {int(row["id"]) for row in rows}
         missing = [run_id for run_id in run_ids if run_id not in found_ids]
         if missing:
-            raise RegistryError(f"registry report run_id not found: {missing[0]}")
+            raise RegistryError(f"{command} run_id not found: {missing[0]}")
         return rows
 
     if labels:
@@ -565,7 +638,7 @@ def _select_report_run_rows(
         found_labels = {str(row["label"]) for row in rows}
         missing = [label for label in labels if label not in found_labels]
         if missing:
-            raise RegistryError(f"registry report label not found: {missing[0]}")
+            raise RegistryError(f"{command} label not found: {missing[0]}")
         return rows
 
     return conn.execute(
@@ -640,6 +713,33 @@ def _validate_registry_selection(
                 raise RegistryError(f"{command} --label values must be non-empty")
 
 
+def _validate_registry_query_filters(
+    *,
+    pack_id: str | None,
+    case_id: str | None,
+    adapter: str | None,
+    model: str | None,
+    host_label: str | None,
+    runtime_name: str | None,
+    model_quantization: str | None,
+    limit: int | None,
+) -> None:
+    for name, value in (
+        ("--pack", pack_id),
+        ("--case", case_id),
+        ("--adapter", adapter),
+        ("--model", model),
+        ("--host-label", host_label),
+        ("--runtime", runtime_name),
+        ("--quantization", model_quantization),
+    ):
+        if value is not None and value == "":
+            raise RegistryError(f"registry query {name} value must be non-empty")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise RegistryError("registry query --limit must be an integer >= 1")
+
+
 def _load_registry_site_snapshot(
     db_path: Path | str,
     *,
@@ -662,6 +762,7 @@ def _load_registry_site_snapshot(
                 conn,
                 run_ids=run_ids,
                 labels=labels,
+                command="registry site",
             )
             if not selected_rows:
                 raise RegistryError("registry site selection matched no runs")
@@ -718,6 +819,136 @@ def _select_site_case_rows(
         """,
         tuple(run_ids),
     ).fetchall()
+
+
+def _select_registry_query_rows(
+    conn: sqlite3.Connection,
+    run_ids: list[int],
+    *,
+    pack_id: str | None,
+    case_id: str | None,
+    adapter: str | None,
+    model: str | None,
+    host_label: str | None,
+    runtime_name: str | None,
+    model_quantization: str | None,
+    ok: bool | None,
+    scoring_passed: bool | None,
+    limit: int | None,
+) -> list[sqlite3.Row]:
+    placeholders = ",".join("?" for _ in run_ids)
+    conditions = [f"rr.run_id IN ({placeholders})"]
+    params: list[object] = list(run_ids)
+    for column, value in (
+        ("rr.pack_id", pack_id),
+        ("rr.case_id", case_id),
+        ("rr.adapter", adapter),
+        ("rr.model", model),
+        ("r.host_label", host_label),
+        ("r.runtime_name", runtime_name),
+        ("r.model_quantization", model_quantization),
+    ):
+        if value is None:
+            continue
+        conditions.append(f"{column} = ?")
+        params.append(value)
+    if ok is not None:
+        conditions.append("rr.ok = ?")
+        params.append(1 if ok else 0)
+    if scoring_passed is not None:
+        conditions.append("rr.scoring_passed = ?")
+        params.append(1 if scoring_passed else 0)
+
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = " LIMIT ?"
+        params.append(limit)
+
+    return conn.execute(
+        f"""
+        SELECT r.id AS run_id, r.label, r.result_dir, r.imported_at,
+               r.host_label, r.host_platform, r.host_repo_commit,
+               r.comparison_mode, r.comparison_boundary,
+               r.runtime_name, r.runtime_version, r.runtime_endpoint,
+               r.model_metadata_id, r.model_quantization,
+               r.model_artifact_repo, r.model_artifact_file,
+               r.model_revision, r.model_sha256,
+               rr.row_index, rr.pack_id, rr.pack_version, rr.case_id,
+               rr.repetition, rr.adapter, rr.model, rr.endpoint, rr.ok,
+               rr.wall_s, rr.ttft_s, rr.prefill_tps, rr.decode_tps,
+               rr.total_tps, rr.prompt_tokens, rr.output_tokens,
+               rr.cached_prompt_tokens, rr.scoring_mode, rr.scoring_passed,
+               rr.repo_task_status, rr.verify_exit_code
+        FROM result_rows AS rr
+        JOIN runs AS r ON r.id = rr.run_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY rr.run_id, rr.row_index
+        {limit_sql}
+        """,
+        tuple(params),
+    ).fetchall()
+
+
+def _registry_query_row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "run_id": int(row["run_id"]),
+        "label": row["label"],
+        "result_dir": row["result_dir"],
+        "imported_at": row["imported_at"],
+        "row_index": int(row["row_index"]),
+        "pack": {
+            "id": row["pack_id"],
+            "version": row["pack_version"],
+        },
+        "case": row["case_id"],
+        "repetition": row["repetition"],
+        "adapter": row["adapter"],
+        "model": row["model"],
+        "endpoint": row["endpoint"],
+        "ok": bool(row["ok"]),
+        "timing": {
+            "wall_s": row["wall_s"],
+            "ttft_s": row["ttft_s"],
+            "prefill_tps": row["prefill_tps"],
+            "decode_tps": row["decode_tps"],
+            "total_tps": row["total_tps"],
+        },
+        "tokens": {
+            "prompt": row["prompt_tokens"],
+            "output": row["output_tokens"],
+            "cached_prompt": row["cached_prompt_tokens"],
+        },
+        "scoring": {
+            "mode": row["scoring_mode"],
+            "passed": _nullable_bool(row["scoring_passed"]),
+        },
+        "repo_task": {
+            "status": row["repo_task_status"],
+            "verify_exit_code": row["verify_exit_code"],
+        },
+        "host": {
+            "label": row["host_label"],
+            "platform": row["host_platform"],
+            "repo_commit": row["host_repo_commit"],
+        },
+        "comparison": {
+            "mode": row["comparison_mode"],
+            "boundary": row["comparison_boundary"],
+        },
+        "runtime": {
+            "name": row["runtime_name"],
+            "version": row["runtime_version"],
+            "endpoint": row["runtime_endpoint"],
+        },
+        "model_metadata": {
+            "id": row["model_metadata_id"],
+            "quantization": row["model_quantization"],
+            "artifact_repo": row["model_artifact_repo"],
+            "artifact_file": row["model_artifact_file"],
+            "revision": row["model_revision"],
+            "sha256": row["model_sha256"],
+        },
+    }
 
 
 def _render_static_site_html(
@@ -1720,6 +1951,12 @@ def _optional_positive_int(value: Any) -> int | None:
     if integer is None or integer < 1:
         return None
     return integer
+
+
+def _nullable_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    return bool(value)
 
 
 def _unique_pack_values(records: list[dict[str, Any]], field: str) -> list[str]:

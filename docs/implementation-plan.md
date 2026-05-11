@@ -57,9 +57,10 @@ Next actionable slices:
    for this work unless a later curated run-log entry explicitly calls for a
    small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
-   site export, bundle create/validate, bundle import, and duplicate
-   inspection have landed. Hosted upload/review, richer public browsing, query
-   APIs, and leaderboard policy should wait for a concrete sharing workflow.
+   site export, bundle create/validate, bundle import, duplicate inspection,
+   and local normalized-row JSON query have landed. Hosted upload/review,
+   richer public browsing, broader hosted APIs, and leaderboard policy should
+   wait for a concrete sharing workflow.
 4. Research tracks stay parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
@@ -1296,8 +1297,10 @@ received-bundle ingestion slice has also landed as
 `benchpack registry bundle import --db <sqlite> <bundle-dir>...`. The first
 duplicate-visibility slice has landed as
 `benchpack registry duplicates --db <sqlite>`, grouping imported runs by
-identical indexed `run.jsonl` SHA-256. This keeps the artifact-first workflow:
-local `results/<date>-<host-label>/` directories, `run.jsonl`,
+identical indexed `run.jsonl` SHA-256. A first local JSON query surface has
+also landed as `benchpack registry query --db <sqlite>`, filtering normalized
+indexed rows without reading source artifacts. This keeps the artifact-first
+workflow: local `results/<date>-<host-label>/` directories, `run.jsonl`,
 `hardware.json`, `run-metadata.json`, and pack manifests remain the canonical
 evidence. The database is an index over validated result artifacts or
 validated compact bundles, and public bundles are compact exports for sharing,
@@ -1359,6 +1362,14 @@ Scope:
   database, delete duplicates, inspect omitted artifacts, infer semantic
   equivalence for different `run.jsonl` contents, contact endpoints, or create
   hosted review state.
+- Add a local normalized-row query surface before hosted query APIs. **Landed
+  2026-05-11** as `benchpack registry query --db <sqlite>`, a read-only JSON
+  command over schema-version-2 `runs` and `result_rows` columns. It supports
+  run-id/label selection plus exact filters for pack, case, adapter, model,
+  host label, runtime name, quantization, adapter `ok`, deterministic
+  `scoring.passed`, and a row limit. It does not require source result
+  directories, read raw/workspace/task/verify/patch/model-call artifacts,
+  contact endpoints, infer missing metadata, or create hosted review/API state.
 - Design comparability rules as first-class database fields, not ad hoc UI
   filters. **First slice landed 2026-05-08** as nullable `runs` columns for
   explicit comparison mode, comparison boundary, host label/repo commit,
@@ -1399,7 +1410,9 @@ Scope:
     artifacts, mutate the database, or contact endpoints.
   - authenticated upload/review for result bundles;
   - public browse and comparison views;
-  - optional API for querying normalized results;
+  - optional API for querying normalized results. **First local slice landed
+    2026-05-11** as `benchpack registry query --db <sqlite>`, with broader
+    hosted APIs deferred;
   - only later, richer submitter profiles, hardware catalogs, or maintained
     public leaderboards.
 - Keep privacy boundaries explicit. Result bundles and the registry must not

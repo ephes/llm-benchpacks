@@ -53,6 +53,7 @@ from .registry import (
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
+    query_registry_results,
     validate_result_bundle,
 )
 from .results import RunReporter
@@ -523,6 +524,29 @@ def _cmd_registry_duplicates(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_query(args: argparse.Namespace) -> int:
+    try:
+        rows = query_registry_results(
+            args.db,
+            run_ids=args.run_ids,
+            labels=args.labels,
+            pack_id=args.pack_id,
+            case_id=args.case_id,
+            adapter=args.adapter,
+            model=args.model,
+            host_label=args.host_label,
+            runtime_name=args.runtime_name,
+            model_quantization=args.model_quantization,
+            ok=args.ok,
+            scoring_passed=args.scoring_passed,
+            limit=args.limit,
+        )
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(rows, indent=2, sort_keys=True))
+    return 0
+
+
 def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
     try:
         summary = create_result_bundle(
@@ -614,6 +638,14 @@ def _cmd_registry_site(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _parse_cli_bool(value: str) -> bool:
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise argparse.ArgumentTypeError("expected 'true' or 'false'")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -732,6 +764,88 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="SQLite registry database path to read",
     )
+    registry_query = registry_sub.add_parser(
+        "query",
+        help="Query normalized registry result rows as JSON",
+    )
+    registry_query.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to read",
+    )
+    registry_query_selectors = registry_query.add_mutually_exclusive_group()
+    registry_query_selectors.add_argument(
+        "--run-id",
+        dest="run_ids",
+        action="append",
+        type=int,
+        default=None,
+        help="Registry run id to include; may be repeated",
+    )
+    registry_query_selectors.add_argument(
+        "--label",
+        dest="labels",
+        action="append",
+        default=None,
+        help="Registry run label to include; may be repeated",
+    )
+    registry_query.add_argument(
+        "--pack",
+        dest="pack_id",
+        default=None,
+        help="Filter rows by pack id",
+    )
+    registry_query.add_argument(
+        "--case",
+        dest="case_id",
+        default=None,
+        help="Filter rows by case id",
+    )
+    registry_query.add_argument(
+        "--adapter",
+        default=None,
+        help="Filter rows by adapter id",
+    )
+    registry_query.add_argument(
+        "--model",
+        default=None,
+        help="Filter rows by model id",
+    )
+    registry_query.add_argument(
+        "--host-label",
+        default=None,
+        help="Filter rows by indexed run metadata host label",
+    )
+    registry_query.add_argument(
+        "--runtime",
+        dest="runtime_name",
+        default=None,
+        help="Filter rows by indexed run metadata runtime name",
+    )
+    registry_query.add_argument(
+        "--quantization",
+        dest="model_quantization",
+        default=None,
+        help="Filter rows by indexed run metadata model quantization",
+    )
+    registry_query.add_argument(
+        "--ok",
+        type=_parse_cli_bool,
+        default=None,
+        help="Filter rows by adapter success: true or false",
+    )
+    registry_query.add_argument(
+        "--scoring-passed",
+        type=_parse_cli_bool,
+        default=None,
+        help="Filter rows by deterministic scoring result: true or false",
+    )
+    registry_query.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of rows to return",
+    )
     registry_bundle = registry_sub.add_parser(
         "bundle",
         help="Create, validate, or import compact public result bundles",
@@ -841,6 +955,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_registry_report(args)
         if args.registry_command == "duplicates":
             return _cmd_registry_duplicates(args)
+        if args.registry_command == "query":
+            return _cmd_registry_query(args)
         if args.registry_command == "bundle":
             if args.registry_bundle_command == "create":
                 return _cmd_registry_bundle_create(args)

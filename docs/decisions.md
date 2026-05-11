@@ -531,6 +531,11 @@ The first received-bundle ingestion slice adds
 validates compact public bundles offline before writing SQLite rows, then
 indexes the bundled compact run directories through the same registry import
 path while preserving original run labels from the bundle manifest.
+The first local query slice adds
+`benchpack registry query --db <sqlite>`, which returns JSON arrays from
+normalized `runs` and `result_rows` columns with exact indexed filters. It is
+read-only, does not require source result directories or artifact files, and
+does not create hosted API, upload, review, or leaderboard policy.
 
 Reason: a local registry is useful for searching and grouping accumulated
 benchmark artifacts, but replacing the artifact-first workflow would weaken

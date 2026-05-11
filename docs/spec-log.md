@@ -16,6 +16,27 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (registry normalized-row query)
+
+### Changed
+
+- Added `benchpack registry query --db <sqlite>` as a read-only local JSON
+  query over schema-version-2 normalized registry rows.
+- The command supports run-id/label selection plus exact indexed filters for
+  pack, case, adapter, model, host label, runtime name, model quantization,
+  adapter `ok`, deterministic `scoring.passed`, and row limit.
+- Kept the query bounded to SQLite `runs` and `result_rows` columns. It does
+  not require source result directories, read artifact files, contact
+  endpoints, infer missing metadata, or create hosted upload/review/API state.
+- Updated README, specification, architecture, decisions, and implementation
+  backlog docs.
+
+### Open Questions
+
+- Hosted query APIs, public browse/comparison views, authenticated
+  upload/review, and leaderboard policy remain later result-registry work tied
+  to a concrete sharing workflow.
+
 ## 2026-05-11 (registry duplicate inspection)
 
 ### Changed

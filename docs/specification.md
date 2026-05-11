@@ -1048,6 +1048,36 @@ omitted bundle artifacts, infer semantic equivalence for different `run.jsonl`
 contents, or contact endpoints. Re-importing the same result directory still
 updates that directory's single registry row rather than creating a duplicate.
 
+### `benchpack registry query`
+
+```text
+benchpack registry query --db <sqlite-db> [--run-id <id> ...]
+benchpack registry query --db <sqlite-db> [--label <label> ...]
+benchpack registry query --db <sqlite-db> [--pack <id>] [--case <id>] [--adapter <id>] [--model <id>]
+benchpack registry query --db <sqlite-db> [--host-label <label>] [--runtime <name>] [--quantization <value>]
+benchpack registry query --db <sqlite-db> [--ok true|false] [--scoring-passed true|false] [--limit <n>]
+```
+
+`benchpack registry query` is a read-only JSON query over an existing schema
+version `2` registry. With no selectors, it searches every imported run ordered
+by registry id and row index. `--run-id` and `--label` mirror the registry
+report selectors and are mutually exclusive. Additional filters match indexed
+normalized fields exactly: pack id, case id, adapter id, model id, host label,
+runtime name, model quantization, adapter `ok` state, and deterministic
+`scoring.passed` state. `--limit` bounds the number of result rows returned.
+
+The command emits a JSON array. Each item contains compact run identity fields,
+the normalized result-row fields used by reports (`pack`, `case`, repetition,
+adapter/model/endpoint, timing, tokens, scoring, and repo-task verifier state),
+and selected host/comparison/runtime/model metadata that was indexed from
+`hardware.json` and `run-metadata.json`.
+
+This is a local machine-readable query API over compact SQLite rows, not an
+artifact reader or hosted service. It does not require source result
+directories to exist, mutate the database, read `raw/`, workspaces, task logs,
+verifier artifacts, patch files, or model-call logs, contact endpoints, infer
+missing metadata, or create hosted upload/review state.
+
 ### `benchpack registry report`
 
 ```text

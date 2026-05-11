@@ -698,6 +698,16 @@ byte-identical. This gives local operators a first duplicate-review aid before
 hosted upload/review exists, without changing import idempotency, deleting
 rows, or treating different `run.jsonl` contents as duplicates.
 
+`benchpack registry query --db <sqlite>` is the first machine-readable local
+query surface over normalized registry rows. It reads schema version `2` in
+SQLite query-only mode and returns a JSON array of compact row objects selected
+by optional run id or label plus exact indexed filters for pack, case, adapter,
+model, host label, runtime name, model quantization, adapter `ok` state, and
+deterministic scoring pass state. It uses only `runs` and `result_rows` columns,
+so it does not require source result directories, read artifact files, mutate
+the database, or contact endpoints. This is a local query aid, not hosted API
+infrastructure or upload/review policy.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite
 database. It copies only compact report-facing files into a new directory:

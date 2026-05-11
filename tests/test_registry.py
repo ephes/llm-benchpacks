@@ -22,6 +22,7 @@ from benchpack.registry import (
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
+    query_registry_results,
     validate_result_bundle,
 )
 
@@ -488,6 +489,162 @@ def test_registry_duplicates_cli_reports_no_duplicates(
 def test_registry_duplicates_rejects_missing_database(tmp_path: Path) -> None:
     with pytest.raises(RegistryError, match="database not found"):
         find_registry_duplicate_runs(tmp_path / "missing.sqlite")
+
+
+def test_registry_query_filters_normalized_rows(tmp_path: Path) -> None:
+    passed = _record("short")
+    passed["scoring"] = {"mode": "contains", "passed": True}
+    failed = _record("long")
+    failed["ok"] = False
+    failed["scoring"] = {"mode": "contains", "passed": False}
+    failed["repo_task"] = {"status": "failed", "verify_exit_code": 1}
+    run_a = tmp_path / "run-a"
+    _write_result_dir(run_a, [passed, failed])
+    (run_a / "hardware.json").write_text(
+        json.dumps({"hostname": "atlas", "platform": "Darwin"}) + "\n",
+        encoding="utf-8",
+    )
+    (run_a / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "comparison_mode": "strict-same-gguf",
+                "host": {"label": "m5-max", "repo_commit": "abc1234"},
+                "runtime": {"name": "llama-server", "version": "9030"},
+                "model": {
+                    "id": "gemma4-e2b-q4km",
+                    "quantization": "Q4_K_M",
+                    "artifact_repo": "bartowski/google_gemma-4-E2B-it-GGUF",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    run_b = tmp_path / "run-b"
+    other = _record("short")
+    other["model"] = "other-model"
+    _write_result_dir(run_b, [other])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([run_a, run_b], db_path)
+
+    rows = query_registry_results(
+        db_path,
+        labels=["run-a"],
+        host_label="m5-max",
+        runtime_name="llama-server",
+        model_quantization="Q4_K_M",
+        scoring_passed=False,
+    )
+
+    assert len(rows) == 1
+    data = rows[0]
+    assert data["label"] == "run-a"
+    assert data["case"] == "long"
+    assert data["ok"] is False
+    assert data["scoring"] == {"mode": "contains", "passed": False}
+    assert data["repo_task"] == {"status": "failed", "verify_exit_code": 1}
+    assert data["host"] == {
+        "label": "m5-max",
+        "platform": "Darwin",
+        "repo_commit": "abc1234",
+    }
+    assert data["runtime"] == {
+        "name": "llama-server",
+        "version": "9030",
+        "endpoint": None,
+    }
+    assert data["model_metadata"]["quantization"] == "Q4_K_M"
+
+
+def test_registry_query_cli_outputs_json(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_result_dir(run_a, [_record("short"), _record("long")])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([run_a], db_path)
+
+    assert (
+        main(
+            [
+                "registry",
+                "query",
+                "--db",
+                str(db_path),
+                "--case",
+                "long",
+                "--ok",
+                "true",
+                "--limit",
+                "1",
+            ]
+        )
+        == 0
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert len(output) == 1
+    assert output[0]["label"] == "run-a"
+    assert output[0]["case"] == "long"
+    assert output[0]["timing"]["wall_s"] == 1.25
+
+
+def test_registry_query_rejects_invalid_limit(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="--limit"):
+        query_registry_results(db_path, limit=0)
+
+
+def test_registry_query_returns_empty_list_when_row_filters_match_nothing(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    rows = query_registry_results(db_path, labels=["run-a"], case_id="missing")
+
+    assert rows == []
+
+
+def test_registry_query_rejects_run_id_and_label_together(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="registry query accepts either"):
+        query_registry_results(db_path, run_ids=[1], labels=["run-a"])
+
+
+def test_registry_query_missing_selection_error_names_query(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="registry query run_id not found"):
+        query_registry_results(db_path, run_ids=[999])
+
+
+def test_registry_site_missing_selection_error_names_site(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    with pytest.raises(RegistryError, match="registry site label not found"):
+        export_registry_static_site(db_path, tmp_path / "site", labels=["missing"])
 
 
 def test_registry_static_site_export_writes_snapshot_without_source_artifacts(

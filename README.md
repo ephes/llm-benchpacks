@@ -59,6 +59,7 @@ uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-lla
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry report --db registry/benchpack.sqlite --label 2026-04-28-mlx-lm-runtime --label 2026-04-29-llama-server-runtime
 uv run benchpack registry duplicates --db registry/benchpack.sqlite
+uv run benchpack registry query --db registry/benchpack.sqlite --pack runtime-sweep --runtime llama-server --quantization Q4_K_M
 uv run benchpack registry site --db registry/benchpack.sqlite --out registry/site
 uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
 uv run benchpack registry bundle validate bundles/example
@@ -313,6 +314,15 @@ run-metadata JSON in SQLite, so median, warning, cache-row, and
 the original result directories are not present. Artifact-only sections stay
 bounded: external-agent model-call summaries are omitted, and repo-task patch
 byte counts render as unknown unless a normal directory-backed report is used.
+
+`benchpack registry query --db <sqlite>` is a read-only JSON query over the
+same normalized registry rows. It supports `--run-id` or `--label` selection
+plus indexed filters such as `--pack`, `--case`, `--adapter`, `--model`,
+`--host-label`, `--runtime`, `--quantization`, `--ok true|false`,
+`--scoring-passed true|false`, and `--limit`. The output is a JSON array of
+compact run/result-row objects from SQLite only; it does not read source result
+directories, raw payloads, workspaces, task logs, verifier artifacts, patch
+files, or model-call logs.
 
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
 compact public-sharing bundle from existing result directories. The bundle
