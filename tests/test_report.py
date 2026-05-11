@@ -287,6 +287,9 @@ def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:
     output = render_report(load_report_runs([run_a]))
 
     assert "## Repo-Task Outcome Summary" in output
+    assert "### Aggregate" in output
+    assert "\n| 2 | 1 | 1 | 0 | 0 | 0 |\n" in output
+    assert "### By Run" in output
     assert "| run-a | 2 | 1 | 1 | 0 | 0 | 0 |" in output
     assert "## Repo-Task Outcomes" in output
     assert (
@@ -297,6 +300,54 @@ def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:
         "| run-a | fix-dashboard-regressions | 1 | failed | 1 | "
         "verify-script:fail | 0 | failed-no-mutation |"
     ) in output
+
+
+def test_report_aggregates_repo_task_outcomes_across_runs(tmp_path: Path) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(
+        run_a,
+        pack_id="patch-from-failure-external-agent",
+        rows=[
+            _record(
+                "fix-greeting",
+                pack_id="patch-from-failure-external-agent",
+                scoring={"mode": "verify-script", "passed": False},
+                patch={"path": "patch/fix-greeting/rep-001.diff"},
+                repo_task={"status": "failed", "verify_exit_code": 1},
+                repetition=1,
+            )
+        ],
+    )
+    _write_run(
+        run_b,
+        pack_id="python-regression-fix-external-agent",
+        rows=[
+            _record(
+                "fix-task-summary",
+                pack_id="python-regression-fix-external-agent",
+                scoring={"mode": "verify-script", "passed": False},
+                patch={"path": "patch/fix-task-summary/rep-001.diff"},
+                repo_task={"status": "failed", "verify_exit_code": 1},
+                repetition=1,
+            )
+        ],
+    )
+    empty_patch = run_a / "patch" / "fix-greeting" / "rep-001.diff"
+    empty_patch.parent.mkdir(parents=True)
+    empty_patch.write_text("", encoding="utf-8")
+    changed_patch = run_b / "patch" / "fix-task-summary" / "rep-001.diff"
+    changed_patch.parent.mkdir(parents=True)
+    changed_patch.write_text(
+        "diff --git a/task_summary.py b/task_summary.py\n",
+        encoding="utf-8",
+    )
+
+    output = render_report(load_report_runs([run_a, run_b]))
+
+    assert "| 2 | 0 | 1 | 1 | 0 | 0 |" in output
+    assert "| run-a | 1 | 0 | 1 | 0 | 0 | 0 |" in output
+    assert "| run-b | 1 | 0 | 0 | 1 | 0 | 0 |" in output
 
 
 def test_report_tolerates_missing_run_metadata_json(tmp_path: Path) -> None:

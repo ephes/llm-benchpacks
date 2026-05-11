@@ -45,12 +45,11 @@ Next actionable slices:
    not promote `coding-tasks-external-agent` into defaults from the current
    mixed verifier outcomes.
 2. Reporting polish only when it answers a concrete review question.
-   Direct-edit outcome labels and per-run counts have landed. Remaining
-   possible small slices are result-set report ergonomics for already-generated
-   evidence or sharper failure classification if later direct-edit runs show a
-   concrete gap. Do not commit generated `results/*` artifacts for this work
-   unless a later curated run-log entry explicitly calls for a small retained
-   subset.
+   Direct-edit outcome labels, per-run counts, and aggregate result-set counts
+   have landed. Remaining possible small slices are sharper failure
+   classification if later direct-edit runs show a concrete gap. Do not commit
+   generated `results/*` artifacts for this work unless a later curated
+   run-log entry explicitly calls for a small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
    site export, bundle create/validate, and bundle import have landed. Hosted
    upload/review, richer public browsing, duplicate handling, query APIs, and
@@ -1103,6 +1102,9 @@ Scope:
   **Extended 2026-05-11** with a report-only per-run
   `Repo-Task Outcome Summary` count table so direct-edit campaigns can be
   scanned without manually counting each detail row.
+  **Extended 2026-05-11** with an aggregate report-set count above the per-run
+  table in `benchpack report`, so multi-run direct-edit evidence can be scanned
+  without summing rows by hand.
 - Add a simple endpoint-only coding correctness pack before promoting another
   cross-host correctness matrix. **Landed 2026-05-08** as
   `endpoint-python-correctness`, a normal-chat-adapter `repo-task` pack with a

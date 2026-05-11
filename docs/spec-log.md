@@ -16,6 +16,24 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (repo-task aggregate report counts)
+
+### Changed
+
+- Added an aggregate all-runs row to `benchpack report`'s
+  `Repo-Task Outcome Summary`, above the existing per-run count table.
+- The aggregate uses the same report-only labels as the per-run table:
+  `passed`, `failed-no-mutation`, `failed-with-mutation`,
+  `failed-unknown-mutation`, and `other`.
+- Kept `run.jsonl` unchanged. Counts are still derived from existing row fields
+  and patch artifact sizes through the safe result-directory boundary.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Live direct-edit external-agent evidence still needs configured endpoint
+  access; no `BENCHPACK_*` or `OPENAI_*` token was present in this shell.
+
 ## 2026-05-11 (repo-task outcome counts)
 
 ### Changed

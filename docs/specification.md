@@ -900,8 +900,9 @@ safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
 unsafe JSONL lines are counted as invalid without echoing their payloads. When
 repo-task rows include `repo_task`, the report includes compact
 `Repo-Task Outcome Summary` and `Repo-Task Outcomes` tables derived from
-existing row fields and patch artifacts. The summary table counts per-run rows
-by report-only outcome label. The detail table shows case, repetition,
+existing row fields and patch artifacts. The summary section counts rows by
+report-only outcome label across the full report set and per individual run.
+The detail table shows case, repetition,
 `repo_task.status`, verifier exit code, scoring result, patch byte count when
 the patch artifact is available under the result directory, and a report-only
 outcome label such as `passed`, `failed-no-mutation`,

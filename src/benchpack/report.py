@@ -22,6 +22,7 @@ from .compare import (
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .repo_task_outcomes import (
+    RepoTaskOutcome,
     count_repo_task_outcomes,
     format_patch_bytes,
     format_repetition,
@@ -279,8 +280,19 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
 
 
 def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
-    summary_header = [
+    aggregate_header = [
         "## Repo-Task Outcome Summary",
+        "",
+        "### Aggregate",
+        "",
+        "| rows | passed | failed-no-mutation | failed-with-mutation | "
+        "failed-unknown-mutation | other |",
+        "|------|--------|--------------------|----------------------|"
+        "-------------------------|-------|",
+    ]
+    by_run_header = [
+        "",
+        "### By Run",
         "",
         "| run | rows | passed | failed-no-mutation | failed-with-mutation | "
         "failed-unknown-mutation | other |",
@@ -296,11 +308,13 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
         "-------------|---------|",
     ]
     summary_rows: list[str] = []
+    all_outcomes: list[RepoTaskOutcome] = []
     rows: list[str] = []
     for run in runs:
         outcomes = summarize_repo_task_outcomes(run.records, run.artifact_root)
         if not outcomes:
             continue
+        all_outcomes.extend(outcomes)
         counts = count_repo_task_outcomes(outcomes)
         summary_rows.append(
             "| {run} | {total} | {passed} | {failed_no_mutation} | "
@@ -331,7 +345,27 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
             )
     if not rows:
         return []
-    return summary_header + summary_rows + [""] + detail_header + rows
+    aggregate = count_repo_task_outcomes(all_outcomes)
+    aggregate_row = (
+        "| {total} | {passed} | {failed_no_mutation} | "
+        "{failed_with_mutation} | {failed_unknown_mutation} | {other} |".format(
+            total=aggregate.total,
+            passed=aggregate.passed,
+            failed_no_mutation=aggregate.failed_no_mutation,
+            failed_with_mutation=aggregate.failed_with_mutation,
+            failed_unknown_mutation=aggregate.failed_unknown_mutation,
+            other=aggregate.other,
+        )
+    )
+    return (
+        aggregate_header
+        + [aggregate_row]
+        + by_run_header
+        + summary_rows
+        + [""]
+        + detail_header
+        + rows
+    )
 
 
 def _render_compare_medians(
