@@ -193,6 +193,7 @@ def _call_chat_completion(
     timeout_s: float,
     temperature: float,
     max_tokens: int,
+    response_format: str,
 ) -> tuple[dict[str, Any], float]:
     request_body = {
         "model": model,
@@ -201,6 +202,10 @@ def _call_chat_completion(
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if response_format == "json_object":
+        request_body["response_format"] = {"type": "json_object"}
+    elif response_format != "default":
+        raise ValueError(f"unsupported response format: {response_format}")
     data = json.dumps(request_body).encode("utf-8")
     request = urllib.request.Request(
         _chat_completions_url(endpoint),
@@ -348,6 +353,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout-s", type=float, default=120.0)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument(
+        "--response-format",
+        choices=("default", "json_object"),
+        default="default",
+        help=(
+            "OpenAI-compatible response_format mode for the task model call. "
+            "Use json_object only with endpoints that support JSON mode."
+        ),
+    )
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--case", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -373,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
+            response_format=args.response_format,
         )
         payload = _parse_edit_payload(
             _assistant_content(response),

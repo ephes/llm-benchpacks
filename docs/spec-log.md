@@ -16,6 +16,26 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-10 (direct-edit JSON-mode hook)
+
+### Changed
+
+- Added an opt-in JSON-mode request hook to
+  `examples/external-agent/openai-direct-edit-agent.py` via
+  `--response-format json_object`.
+- The wrapper's default request remains unchanged. JSON-object response
+  formatting is sent only when an operator explicitly selects it for an
+  endpoint that supports OpenAI-style `response_format`.
+- Added focused request-body tests and updated the external-agent example docs
+  and README usage notes.
+
+### Open Questions
+
+- Live direct-edit evidence still needs a follow-up run against a supported
+  endpoint to see whether JSON mode reduces non-JSON assistant edit payloads.
+  Keep `coding-tasks-external-agent` opt-in until deterministic verifier
+  outcomes justify a broader recommendation.
+
 ## 2026-05-10 (Endpoint correctness backlog closure)
 
 ### Changed

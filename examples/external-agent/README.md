@@ -95,8 +95,12 @@ not for cloud-backed runs or runs that require secrets.
 OpenAI-compatible chat endpoints. It reads the public context, calls
 `/chat/completions`, expects the assistant to return JSON full-file
 replacements, applies only files listed in the prompt's allowed edit paths, and
-writes one safe telemetry line. Use it from the operator machine when the
-endpoint and token are already configured locally:
+writes one safe telemetry line. By default it sends a portable plain
+non-streaming chat-completion request. When the target endpoint supports
+OpenAI-style JSON-object response formatting, add
+`--response-format json_object` to the wrapper argv to request a stricter JSON
+assistant payload for the harness-owned task call. Use it from the operator
+machine when the endpoint and token are already configured locally:
 
 ```sh
 BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/openai-direct-edit-agent.py\",\"--endpoint\",\"https://llm.django-cast.com/v1\",\"--model\",\"Qwen/Qwen2.5-1.5B-Instruct\",\"--api-key-env\",\"BENCHPACK_HETZNER_OPENAI_TOKEN\"]" \
@@ -106,6 +110,10 @@ BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/opena
     --endpoint https://llm.django-cast.com/v1 \
     --openai-api-key-env BENCHPACK_HETZNER_OPENAI_TOKEN
 ```
+
+For a JSON-mode experiment, add
+`"--response-format","json_object"` to `BENCHPACK_EXTERNAL_AGENT_ARGV` anywhere
+after the wrapper script path.
 
 The wrapper records only the environment variable name in commands and context;
 the token value must stay in the local environment or secret store. For the

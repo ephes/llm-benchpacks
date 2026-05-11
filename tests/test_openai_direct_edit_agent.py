@@ -167,6 +167,108 @@ def test_apply_edits_writes_allowed_file(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "new\n"
 
 
+def test_call_chat_completion_omits_response_format_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _load_agent_module()
+    requests: list[Any] = []
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+
+    response, _ = agent._call_chat_completion(
+        endpoint="https://llm.example.test/v1",
+        api_key="secret",
+        model="test-model",
+        prompt="Fix it.",
+        allowed_paths=("greeter.py",),
+        timeout_s=12.5,
+        temperature=0.0,
+        max_tokens=1024,
+        response_format="default",
+    )
+
+    assert response["choices"][0]["message"]["content"] == '{"files":[]}'
+    request, timeout = requests[0]
+    assert timeout == 12.5
+    assert request.full_url == "https://llm.example.test/v1/chat/completions"
+    body = json.loads(request.data.decode("utf-8"))
+    assert "response_format" not in body
+
+
+def test_call_chat_completion_sends_json_object_response_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _load_agent_module()
+    requests: list[Any] = []
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+
+    agent._call_chat_completion(
+        endpoint="https://llm.example.test/v1",
+        api_key="secret",
+        model="test-model",
+        prompt="Fix it.",
+        allowed_paths=("greeter.py",),
+        timeout_s=12.5,
+        temperature=0.0,
+        max_tokens=1024,
+        response_format="json_object",
+    )
+
+    request, _ = requests[0]
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["response_format"] == {"type": "json_object"}
+
+
+def test_call_chat_completion_rejects_unknown_response_format() -> None:
+    agent = _load_agent_module()
+
+    with pytest.raises(ValueError, match="unsupported response format"):
+        agent._call_chat_completion(
+            endpoint="https://llm.example.test/v1",
+            api_key="secret",
+            model="test-model",
+            prompt="Fix it.",
+            allowed_paths=("greeter.py",),
+            timeout_s=12.5,
+            temperature=0.0,
+            max_tokens=1024,
+            response_format="xml",
+        )
+
+
 def test_parse_edit_payload_strips_json_fence() -> None:
     agent = _load_agent_module()
 

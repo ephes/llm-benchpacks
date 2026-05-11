@@ -201,8 +201,11 @@ See
 [`examples/external-agent/openai-direct-edit-agent.py`](examples/external-agent/openai-direct-edit-agent.py)
 for an opt-in live wrapper that calls an authenticated OpenAI-compatible chat
 endpoint from the operator machine and applies JSON full-file replacement edits
-only to prompt-allowed paths. For Hetzner service runs, load
-`BENCHPACK_HETZNER_OPENAI_TOKEN` locally and use the public
+only to prompt-allowed paths. It defaults to a plain non-streaming chat
+completion request; pass `--response-format json_object` only when the endpoint
+supports OpenAI-style JSON-object response formatting for the harness-owned
+task call. For Hetzner service runs, load `BENCHPACK_HETZNER_OPENAI_TOKEN`
+locally and use the public
 `https://llm.django-cast.com/v1` path; do not require Codex, Claude, Ollama, or
 this repository to be installed on the server.
 
