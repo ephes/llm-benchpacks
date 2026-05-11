@@ -16,6 +16,33 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (direct-edit JSON-object Ollama evidence)
+
+### Changed
+
+- Ran the explicit `coding-tasks-external-agent` pack set locally on M5 against
+  Ollama `qwen3-coder:latest` with
+  `examples/external-agent/openai-direct-edit-agent.py`.
+- The direct-edit wrapper task calls used Ollama's OpenAI-compatible
+  `/v1/chat/completions` path with `--response-format json_object` and
+  `--max-tokens 8192`; the normal pre-task benchmark adapter remained
+  `ollama-generate`.
+- All three wrapper model calls produced valid safe telemetry with `ok=true`
+  and wrote allowed workspace files.
+- Deterministic verifier outcomes were mixed: `patch-from-failure-external-agent`
+  passed; `python-regression-fix-external-agent` and
+  `django-dashboard-regression-fix-external-agent` failed with non-empty source
+  mutations.
+- Updated the active implementation backlog and run log. Generated
+  `results/*` and local `metadata/*.json` artifacts remain ignored.
+
+### Open Questions
+
+- The two mutation-visible failures may justify sharper direct-edit failure
+  analysis if a concrete review question appears.
+- Structured-output (`json_schema`) live evidence still needs an endpoint that
+  supports that request mode.
+
 ## 2026-05-11 (repo-task aggregate report counts)
 
 ### Changed

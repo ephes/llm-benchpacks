@@ -39,11 +39,15 @@ Next actionable slices:
    explicit completion-budget compatibility knob:
    `--token-budget-field max_completion_tokens` for endpoints/models that need
    that newer OpenAI-style request field while preserving the default
-   `max_tokens` request shape. The next work here is live opt-in evidence where
-   the endpoint supports one of those modes, a larger completion budget, or a
-   stronger already-configured agent/model. Keep this as opt-in evidence; do
-   not promote `coding-tasks-external-agent` into defaults from the current
-   mixed verifier outcomes.
+   `max_tokens` request shape. A local M5/Ollama JSON-object opt-in evidence
+   run landed on 2026-05-11 against `qwen3-coder:latest`: all three wrapper
+   model calls produced valid telemetry and workspace mutations, with 1/3
+   deterministic verifier passes and two mutation-visible failures. Keep this
+   as opt-in evidence; do not promote `coding-tasks-external-agent` into
+   defaults from the current mixed verifier outcomes. Further work here should
+   wait for a structured-output endpoint, a stronger already-configured
+   agent/model, or a concrete review question about the two mutation-visible
+   failures.
 2. Reporting polish only when it answers a concrete review question.
    Direct-edit outcome labels, per-run counts, and aggregate result-set counts
    have landed. Remaining possible small slices are sharper failure
