@@ -90,6 +90,25 @@ class RegistryImportSummary:
 
 
 @dataclass(frozen=True)
+class RegistryDuplicateRun:
+    """One registry run that shares a run.jsonl digest with another run."""
+
+    run_id: int
+    label: str
+    result_dir: Path
+    row_count: int
+    imported_at: str
+
+
+@dataclass(frozen=True)
+class RegistryDuplicateGroup:
+    """A group of imported runs with identical run.jsonl contents."""
+
+    run_jsonl_sha256: str
+    runs: list[RegistryDuplicateRun]
+
+
+@dataclass(frozen=True)
 class RegistryBundleSummary:
     """Summary for a created or validated public result bundle."""
 
@@ -153,6 +172,60 @@ def load_registry_report_runs(
     if not runs:
         raise RegistryError("registry report selection matched no runs")
     return runs
+
+
+def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateGroup]:
+    """Find imported registry runs with identical run.jsonl artifact hashes."""
+
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    db = Path(db_path)
+    if not db.is_file():
+        raise RegistryError(f"registry database not found: {db}")
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            conn.row_factory = sqlite3.Row
+            _assert_report_schema(conn, db)
+            duplicate_hashes = conn.execute(
+                """
+                SELECT run_jsonl_sha256
+                FROM runs
+                GROUP BY run_jsonl_sha256
+                HAVING COUNT(*) > 1
+                ORDER BY MIN(id)
+                """
+            ).fetchall()
+            groups: list[RegistryDuplicateGroup] = []
+            for hash_row in duplicate_hashes:
+                rows = conn.execute(
+                    """
+                    SELECT id, label, result_dir, row_count, imported_at
+                    FROM runs
+                    WHERE run_jsonl_sha256 = ?
+                    ORDER BY id
+                    """,
+                    (hash_row["run_jsonl_sha256"],),
+                ).fetchall()
+                groups.append(
+                    RegistryDuplicateGroup(
+                        run_jsonl_sha256=hash_row["run_jsonl_sha256"],
+                        runs=[
+                            RegistryDuplicateRun(
+                                run_id=int(row["id"]),
+                                label=str(row["label"]),
+                                result_dir=Path(row["result_dir"]),
+                                row_count=int(row["row_count"]),
+                                imported_at=str(row["imported_at"]),
+                            )
+                            for row in rows
+                        ],
+                    )
+                )
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not read registry database {db}: {exc}") from exc
+    return groups
 
 
 def export_registry_static_site(

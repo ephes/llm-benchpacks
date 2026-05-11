@@ -1028,6 +1028,26 @@ submission bundle. The local registry may store the canonical local result
 directory path for idempotent re-imports; public bundle/export privacy rules
 are handled by the separate bundle command below.
 
+### `benchpack registry duplicates`
+
+```text
+benchpack registry duplicates --db <sqlite-db>
+```
+
+`benchpack registry duplicates` is a read-only inspection command over an
+existing schema version `2` registry. It groups imported `runs` rows by the
+registry-stored `run_jsonl_sha256` value and prints only groups where more than one
+run has identical `run.jsonl` contents. Each duplicate entry includes the
+registry run id, label, row count, import time, and indexed result-directory
+identity. If no duplicates are present, the command prints a compact
+no-duplicates message and exits successfully.
+
+This is duplicate visibility, not automatic moderation or deletion. It does not
+mutate the database, mutate result directories, compare raw artifacts, inspect
+omitted bundle artifacts, infer semantic equivalence for different `run.jsonl`
+contents, or contact endpoints. Re-importing the same result directory still
+updates that directory's single registry row rather than creating a duplicate.
+
 ### `benchpack registry report`
 
 ```text

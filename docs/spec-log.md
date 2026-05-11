@@ -16,6 +16,26 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (registry duplicate inspection)
+
+### Changed
+
+- Added `benchpack registry duplicates --db <sqlite>` as a read-only local
+  duplicate inspection command.
+- The command groups imported registry runs by identical indexed
+  `run_jsonl_sha256` values and prints run ids, labels, row counts, import
+  times, and result-directory identities for duplicate groups.
+- Kept registry import idempotency unchanged: re-importing the same result
+  directory updates that path's row, while the duplicate command only reports
+  distinct imported result-directory identities with byte-identical
+  `run.jsonl` artifacts.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Hosted upload/review, moderation states, and automatic duplicate policy
+  remain later result-registry work tied to a concrete sharing workflow.
+
 ## 2026-05-11 (repo-task source-mutation labels)
 
 ### Changed

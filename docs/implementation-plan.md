@@ -57,9 +57,9 @@ Next actionable slices:
    for this work unless a later curated run-log entry explicitly calls for a
    small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
-   site export, bundle create/validate, and bundle import have landed. Hosted
-   upload/review, richer public browsing, duplicate handling, query APIs, and
-   leaderboard policy should wait for a concrete sharing workflow.
+   site export, bundle create/validate, bundle import, and duplicate
+   inspection have landed. Hosted upload/review, richer public browsing, query
+   APIs, and leaderboard policy should wait for a concrete sharing workflow.
 4. Research tracks stay parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
@@ -1293,12 +1293,15 @@ first static local site export has also landed as
 `benchpack registry site --db <sqlite> --out <site-dir>`, writing
 `index.html` and `report.md` from indexed compact rows. A first offline
 received-bundle ingestion slice has also landed as
-`benchpack registry bundle import --db <sqlite> <bundle-dir>...`. This
-keeps the artifact-first workflow: local `results/<date>-<host-label>/`
-directories, `run.jsonl`, `hardware.json`, `run-metadata.json`, and pack
-manifests remain the canonical evidence. The database is an index over
-validated result artifacts or validated compact bundles, and public bundles
-are compact exports for sharing, not the only copy of benchmark truth.
+`benchpack registry bundle import --db <sqlite> <bundle-dir>...`. The first
+duplicate-visibility slice has landed as
+`benchpack registry duplicates --db <sqlite>`, grouping imported runs by
+identical indexed `run.jsonl` SHA-256. This keeps the artifact-first workflow:
+local `results/<date>-<host-label>/` directories, `run.jsonl`,
+`hardware.json`, `run-metadata.json`, and pack manifests remain the canonical
+evidence. The database is an index over validated result artifacts or
+validated compact bundles, and public bundles are compact exports for sharing,
+not the only copy of benchmark truth.
 
 Scope:
 
@@ -1348,6 +1351,14 @@ Scope:
   the requested SQLite database, and does not mutate bundle contents, require
   source result directories, read omitted raw/workspace/task/verify artifacts,
   contact endpoints, or create hosted review state.
+- Add local duplicate inspection before hosted duplicate policy. **Landed
+  2026-05-11** as `benchpack registry duplicates --db <sqlite>`, a read-only
+  schema-version-2 query that groups imported runs with identical
+  `run_jsonl_sha256` values and prints run ids, labels, row counts, import
+  times, and indexed result-directory identities. It does not mutate the
+  database, delete duplicates, inspect omitted artifacts, infer semantic
+  equivalence for different `run.jsonl` contents, contact endpoints, or create
+  hosted review state.
 - Design comparability rules as first-class database fields, not ad hoc UI
   filters. **First slice landed 2026-05-08** as nullable `runs` columns for
   explicit comparison mode, comparison boundary, host label/repo commit,

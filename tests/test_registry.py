@@ -18,6 +18,7 @@ from benchpack.registry import (
     RegistryError,
     create_result_bundle,
     export_registry_static_site,
+    find_registry_duplicate_runs,
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
@@ -420,6 +421,73 @@ def test_registry_report_cli_rejects_run_id_and_label_together(
         )
 
     assert exc_info.value.code == 2
+
+
+def test_registry_duplicates_finds_runs_with_same_run_jsonl(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    run_c = tmp_path / "run-c"
+    _write_result_dir(run_a, [_record("short")])
+    _write_result_dir(run_b, [_record("short")])
+    _write_result_dir(run_c, [_record("long")])
+    db_path = tmp_path / "registry.sqlite"
+    summaries = import_result_dirs([run_a, run_b, run_c], db_path)
+
+    groups = find_registry_duplicate_runs(db_path)
+
+    assert len(groups) == 1
+    assert len(groups[0].run_jsonl_sha256) == 64
+    assert [run.run_id for run in groups[0].runs] == [
+        summaries[0].run_id,
+        summaries[1].run_id,
+    ]
+    assert [run.label for run in groups[0].runs] == ["run-a", "run-b"]
+    assert [run.result_dir for run in groups[0].runs] == [
+        run_a.resolve(),
+        run_b.resolve(),
+    ]
+
+
+def test_registry_duplicates_cli_reports_groups(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_result_dir(run_a)
+    _write_result_dir(run_b)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([run_a, run_b], db_path)
+
+    assert main(["registry", "duplicates", "--db", str(db_path)]) == 0
+
+    output = capsys.readouterr().out
+    assert "duplicate run.jsonl sha256" in output
+    assert "run_id=1 label=run-a rows=1" in output
+    assert "run_id=2 label=run-b rows=1" in output
+
+
+def test_registry_duplicates_cli_reports_no_duplicates(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_result_dir(run_a, [_record("short")])
+    _write_result_dir(run_b, [_record("long")])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([run_a, run_b], db_path)
+
+    assert main(["registry", "duplicates", "--db", str(db_path)]) == 0
+
+    assert capsys.readouterr().out == "no duplicate run.jsonl artifacts found\n"
+
+
+def test_registry_duplicates_rejects_missing_database(tmp_path: Path) -> None:
+    with pytest.raises(RegistryError, match="database not found"):
+        find_registry_duplicate_runs(tmp_path / "missing.sqlite")
 
 
 def test_registry_static_site_export_writes_snapshot_without_source_artifacts(

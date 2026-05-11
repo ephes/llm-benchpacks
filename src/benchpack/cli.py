@@ -49,6 +49,7 @@ from .registry import (
     RegistryError,
     create_result_bundle,
     export_registry_static_site,
+    find_registry_duplicate_runs,
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
@@ -491,6 +492,37 @@ def _cmd_registry_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_duplicates(args: argparse.Namespace) -> int:
+    try:
+        groups = find_registry_duplicate_runs(args.db)
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    if not groups:
+        print("no duplicate run.jsonl artifacts found")
+        return 0
+    for group in groups:
+        print(
+            "duplicate run.jsonl sha256 {sha}: {count} runs".format(
+                sha=group.run_jsonl_sha256,
+                count=len(group.runs),
+            )
+        )
+        for run in group.runs:
+            print(
+                (
+                    "  run_id={run_id} label={label} rows={rows} "
+                    "imported_at={imported_at} result_dir={result_dir}"
+                ).format(
+                    run_id=run.run_id,
+                    label=run.label,
+                    rows=run.row_count,
+                    imported_at=run.imported_at,
+                    result_dir=run.result_dir,
+                )
+            )
+    return 0
+
+
 def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
     try:
         summary = create_result_bundle(
@@ -691,6 +723,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Registry run label to include; may be repeated",
     )
+    registry_duplicates = registry_sub.add_parser(
+        "duplicates",
+        help="List imported runs with identical run.jsonl artifacts",
+    )
+    registry_duplicates.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to read",
+    )
     registry_bundle = registry_sub.add_parser(
         "bundle",
         help="Create, validate, or import compact public result bundles",
@@ -798,6 +839,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_registry_import(args)
         if args.registry_command == "report":
             return _cmd_registry_report(args)
+        if args.registry_command == "duplicates":
+            return _cmd_registry_duplicates(args)
         if args.registry_command == "bundle":
             if args.registry_bundle_command == "create":
                 return _cmd_registry_bundle_create(args)

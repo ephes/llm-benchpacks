@@ -691,6 +691,13 @@ verify artifacts, inspect patch or model-call files, mutate the database, or
 contact endpoints. Existing output paths are refused unless `--force` is
 explicit.
 
+`benchpack registry duplicates --db <sqlite>` is a read-only registry inspection
+view over the registry-stored `runs.run_jsonl_sha256` values. It reports groups of
+distinct imported result-directory identities whose `run.jsonl` artifacts are
+byte-identical. This gives local operators a first duplicate-review aid before
+hosted upload/review exists, without changing import idempotency, deleting
+rows, or treating different `run.jsonl` contents as duplicates.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite
 database. It copies only compact report-facing files into a new directory:
