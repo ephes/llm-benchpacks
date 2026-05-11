@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (direct-edit telemetry request-shape labels)
+
+### Changed
+
+- Extended the safe external-agent model-call telemetry allowlist with
+  `response_format`, `token_budget_field`, and `finish_reason`.
+- Updated `examples/external-agent/openai-direct-edit-agent.py` to write those
+  labels for its harness-owned OpenAI-compatible chat call while still omitting
+  prompts, responses, request bodies, headers, URLs, and credentials.
+- Updated `summary.md` and `benchpack report` model-call tables to surface the
+  new labels when present, so direct-edit JSON-object/structured-output runs
+  can be reviewed for request shape and truncation behavior from safe
+  summaries.
+- Updated README, external-agent example docs, specification, architecture,
+  benchpack format docs, and the implementation backlog.
+
+### Open Questions
+
+- Structured-output (`json_schema`) live evidence still needs an endpoint that
+  supports that request mode; this change only improves safe telemetry for the
+  next opt-in evidence run.
+
 ## 2026-05-11 (registry site comparison matrix)
 
 ### Changed

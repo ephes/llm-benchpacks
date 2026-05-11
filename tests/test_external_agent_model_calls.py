@@ -23,6 +23,9 @@ def test_summarize_model_call_logs_counts_only_safe_fields(tmp_path: Path) -> No
                         "ok": True,
                         "adapter": "example-local-http",
                         "endpoint": "local-http",
+                        "response_format": "json_schema",
+                        "token_budget_field": "max_completion_tokens",
+                        "finish_reason": "stop",
                         "duration_s": 0.125,
                         "prompt_tokens": 3,
                         "output_tokens": 5,
@@ -80,6 +83,9 @@ def test_summarize_model_call_logs_counts_only_safe_fields(tmp_path: Path) -> No
     assert summary.models == ("test-model",)
     assert summary.adapters == ("example-local-http",)
     assert summary.endpoints == ("local-http",)
+    assert summary.response_formats == ("json_schema",)
+    assert summary.token_budget_fields == ("max_completion_tokens",)
+    assert summary.finish_reasons == ("stop",)
     assert summary.duration_s == 0.125
     assert summary.prompt_tokens == 3
     assert summary.output_tokens == 5
@@ -186,4 +192,7 @@ def test_summarize_model_call_logs_handles_empty_and_wide_repetition_logs(
         ("empty-case", 1),
     ]
     assert summaries[0].valid == 1
+    assert summaries[0].response_formats == ()
+    assert summaries[0].token_budget_fields == ()
+    assert summaries[0].finish_reasons == ()
     assert summaries[1].calls == 0

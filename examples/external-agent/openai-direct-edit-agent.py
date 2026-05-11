@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -309,6 +310,16 @@ def _finish_reason(response: dict[str, Any]) -> str:
     return reason if isinstance(reason, str) else ""
 
 
+def _safe_finish_reason(response: dict[str, Any]) -> str:
+    reason = _finish_reason(response)[:64]
+    for ch in reason:
+        if ch == " ":
+            continue
+        if unicodedata.category(ch)[0] in {"C", "Z"}:
+            return ""
+    return reason
+
+
 def _parse_edit_payload(content: str, *, finish_reason: str = "") -> dict[str, Any]:
     text = content.strip()
     if text.startswith("```"):
@@ -369,6 +380,8 @@ def _write_telemetry(
     *,
     model: str,
     endpoint: str,
+    response_format: str,
+    token_budget_field: str,
     duration_s: float,
     ok: bool,
     response: dict[str, Any] | None = None,
@@ -381,9 +394,14 @@ def _write_telemetry(
         "ok": ok,
         "adapter": "openai-chat",
         "endpoint": _safe_endpoint_label(endpoint),
+        "response_format": response_format,
+        "token_budget_field": token_budget_field,
         "duration_s": round(duration_s, 6),
     }
     if response is not None:
+        finish_reason = _safe_finish_reason(response)
+        if finish_reason:
+            payload["finish_reason"] = finish_reason
         prompt_tokens = _usage_tokens(response, "prompt_tokens")
         output_tokens = _usage_tokens(response, "completion_tokens")
         if prompt_tokens is not None:
@@ -454,13 +472,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         payload = _parse_edit_payload(
             _assistant_content(response),
-            finish_reason=_finish_reason(response),
+            finish_reason=_safe_finish_reason(response),
         )
         changed, summary = _apply_edits(workspace, payload, allowed_paths)
         _write_telemetry(
             model_call_log_path,
             model=args.model,
             endpoint=args.endpoint,
+            response_format=args.response_format,
+            token_budget_field=args.token_budget_field,
             duration_s=duration_s,
             ok=True,
             response=response,
@@ -472,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
                     model_call_log_path,
                     model=args.model,
                     endpoint=args.endpoint,
+                    response_format=args.response_format,
+                    token_budget_field=args.token_budget_field,
                     duration_s=time.monotonic() - started,
                     ok=False,
                     response=response,

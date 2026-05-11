@@ -505,10 +505,12 @@ currently integer `1` for this recommended shape, `sequence` is the positive
 call sequence within the external-agent task phase, `model` is the model id
 when known, and `ok` records whether the call completed successfully. Optional
 fields may include `started_at`, `ended_at`, `duration_s`, `adapter`,
-`endpoint`, `prompt_tokens`, `output_tokens`, `cached_prompt_tokens`, and a
-short `error` string for failed calls. The summary allowlist is exactly those
-fields. Summary output reports aggregate counts, success/failure/error counts,
-unique model/adapter/endpoint labels, summed duration, and summed token fields;
+`endpoint`, `response_format`, `token_budget_field`, `finish_reason`,
+`prompt_tokens`, `output_tokens`, `cached_prompt_tokens`, and a short `error`
+string for failed calls. The summary allowlist is exactly those fields.
+Summary output reports aggregate counts, success/failure/error counts, unique
+model/adapter/endpoint/request-shape/finish labels, summed duration, and summed
+token fields;
 safe string fields must be short and must not contain control characters or
 Unicode separator characters other than plain spaces. `endpoint` is treated as
 a label rather than a URL. Values containing URL schemes, query strings, or

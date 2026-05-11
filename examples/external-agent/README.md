@@ -95,8 +95,10 @@ not for cloud-backed runs or runs that require secrets.
 OpenAI-compatible chat endpoints. It reads the public context, calls
 `/chat/completions`, expects the assistant to return JSON full-file
 replacements, applies only files listed in the prompt's allowed edit paths, and
-writes one safe telemetry line. By default it sends a portable plain
-non-streaming chat-completion request. When the target endpoint supports
+writes one safe telemetry line. That line includes the safe request-shape
+labels `response_format` and `token_budget_field`, plus `finish_reason` when
+the endpoint reports it. By default it sends a portable plain non-streaming
+chat-completion request. When the target endpoint supports
 OpenAI-style JSON-object response formatting, add
 `--response-format json_object` to the wrapper argv to request a stricter JSON
 assistant payload for the harness-owned task call. When the endpoint supports

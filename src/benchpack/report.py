@@ -233,10 +233,12 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
         "",
         "| run | case | repetition | calls | valid | invalid | ok | failed | "
         "errors | models | adapters | endpoints | duration_s | prompt_tokens | "
-        "output_tokens | cached_prompt_tokens |",
+        "output_tokens | cached_prompt_tokens | response_formats | "
+        "token_budget_fields | finish_reasons |",
         "|-----|------|------------|-------|-------|---------|----|--------|"
         "--------|--------|----------|-----------|------------|---------------|"
-        "---------------|----------------------|",
+        "---------------|----------------------|------------------|"
+        "---------------------|----------------|",
     ]
     rows: list[str] = []
     for run in runs:
@@ -251,7 +253,8 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
                 "| {run} | {case} | {repetition} | {calls} | {valid} | "
                 "{invalid} | {ok} | {failed} | {errors} | {models} | "
                 "{adapters} | {endpoints} | {duration} | {prompt} | "
-                "{output} | {cached} |".format(
+                "{output} | {cached} | {response_formats} | "
+                "{token_budget_fields} | {finish_reasons} |".format(
                     run=run.label,
                     case=_markdown_cell(summary.case),
                     repetition=summary.repetition,
@@ -272,6 +275,13 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
                     prompt=format_tokens(summary.prompt_tokens),
                     output=format_tokens(summary.output_tokens),
                     cached=format_tokens(summary.cached_prompt_tokens),
+                    response_formats=_markdown_cell(
+                        _join_values(summary.response_formats)
+                    ),
+                    token_budget_fields=_markdown_cell(
+                        _join_values(summary.token_budget_fields)
+                    ),
+                    finish_reasons=_markdown_cell(_join_values(summary.finish_reasons)),
                 )
             )
     if not rows:

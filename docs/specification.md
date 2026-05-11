@@ -366,8 +366,9 @@ Recommended core fields are `schema_version` as integer `1` for this
 recommended shape, `sequence` as a positive integer call sequence within the
 external-agent task phase, `model` as the model identifier when known, and `ok`
 as a boolean success indicator. Useful optional fields include `started_at`,
-`ended_at`, `duration_s`, `adapter`, `endpoint`, `prompt_tokens`,
-`output_tokens`, `cached_prompt_tokens`, and a short `error` string when
+`ended_at`, `duration_s`, `adapter`, `endpoint`, `response_format`,
+`token_budget_field`, `finish_reason`, `prompt_tokens`, `output_tokens`,
+`cached_prompt_tokens`, and a short `error` string when
 `ok` is false. The summary allowlist is exactly those fields; unknown keys,
 malformed JSON, wrong types, non-finite numbers, negative token counts, and
 unsafe strings make a line invalid for summary purposes. Safe strings are
@@ -957,8 +958,8 @@ skeleton. It summarizes:
 - user-supplied runtime/model/operating metadata when `run-metadata.json`
   exists
 - external-agent model-call summary counts, success/failure/error counts,
-  unique model/adapter/endpoint labels, summed duration, and summed token
-  fields when optional model-call logs exist
+  unique model/adapter/endpoint/request-shape/finish labels, summed duration,
+  and summed token fields when optional model-call logs exist
 - repo-task outcome summaries when `repo_task` rows exist, including patch byte
   counts and no-mutation versus mutation-visible failure labels
 - row and `ok` counts by run/case

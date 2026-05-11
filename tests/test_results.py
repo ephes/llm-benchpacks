@@ -534,6 +534,9 @@ def test_write_summary_includes_external_agent_model_call_summary(
                 "ok": True,
                 "adapter": "example-local-http",
                 "endpoint": "local-http",
+                "response_format": "json_schema",
+                "token_budget_field": "max_completion_tokens",
+                "finish_reason": "stop",
                 "duration_s": 0.25,
                 "prompt_tokens": 4,
                 "output_tokens": 6,
@@ -549,7 +552,48 @@ def test_write_summary_includes_external_agent_model_call_summary(
     assert "## External-Agent Model Calls" in text
     assert (
         "| capital | 1 | 1 | 1 | 0 | 1 | 0 | 0 | test-model | "
-        "example-local-http | local-http | 0.250000 | 4 | 6 | — |"
+        "example-local-http | local-http | 0.250000 | 4 | 6 | — | "
+        "json_schema | max_completion_tokens | stop |"
+    ) in text
+
+
+def test_write_summary_renders_old_shape_model_call_labels_as_missing(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    reporter.record(
+        pack.cases[0],
+        make_adapter_result(out),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    model_calls = out / "task" / "capital" / "rep-001.model-calls.jsonl"
+    model_calls.parent.mkdir(parents=True)
+    model_calls.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sequence": 1,
+                "model": "test-model",
+                "ok": True,
+                "adapter": "example-local-http",
+                "endpoint": "local-http",
+                "duration_s": 0.25,
+                "prompt_tokens": 4,
+                "output_tokens": 6,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+
+    assert (
+        "| capital | 1 | 1 | 1 | 0 | 1 | 0 | 0 | test-model | "
+        "example-local-http | local-http | 0.250000 | 4 | 6 | — | — | — | — |"
     ) in text
 
 

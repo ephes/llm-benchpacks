@@ -44,8 +44,12 @@ Next actionable slices:
    model calls produced valid telemetry and workspace mutations, with 1/3
    deterministic verifier passes and two mutation-visible failures. Keep this
    as opt-in evidence; do not promote `coding-tasks-external-agent` into
-   defaults from the current mixed verifier outcomes. Further work here should
-   wait for a structured-output endpoint, a stronger already-configured
+   defaults from the current mixed verifier outcomes. Safe model-call
+   telemetry now also records request-shape labels (`response_format`,
+   `token_budget_field`) and chat `finish_reason` when available, so future
+   JSON-object/structured-output reviews can separate request shape and
+   truncation behavior without storing prompts or responses. Further work here
+   should wait for a structured-output endpoint, a stronger already-configured
    agent/model, or a concrete review question about the two mutation-visible
    failures.
 2. Reporting polish only when it answers a concrete review question.
@@ -999,7 +1003,9 @@ Scope:
   echoing their payloads, includes aggregate summaries in `summary.md` and
   `benchpack report`, and keeps model-call paths, full prompts, full
   responses, request bodies, headers, credentials, and all model-call payloads
-  out of `run.jsonl`.
+  out of `run.jsonl`. **Expanded 2026-05-11** to include safe direct-edit
+  request-shape labels (`response_format`, `token_budget_field`) and
+  `finish_reason` summaries when harnesses record them.
 - Add explicit external-agent variants for the bundled coding-task workloads.
   **Landed 2026-05-07** as `patch-from-failure-external-agent`,
   `python-regression-fix-external-agent`, and

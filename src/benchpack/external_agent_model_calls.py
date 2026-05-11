@@ -23,12 +23,22 @@ _ALLOWED_KEYS = {
     "duration_s",
     "adapter",
     "endpoint",
+    "response_format",
+    "token_budget_field",
+    "finish_reason",
     "prompt_tokens",
     "output_tokens",
     "cached_prompt_tokens",
     "error",
 }
-_STRING_KEYS = ("model", "adapter", "endpoint")
+_STRING_KEYS = (
+    "model",
+    "adapter",
+    "endpoint",
+    "response_format",
+    "token_budget_field",
+    "finish_reason",
+)
 _TOKEN_KEYS = ("prompt_tokens", "output_tokens", "cached_prompt_tokens")
 
 
@@ -53,6 +63,9 @@ class ModelCallSummary:
     models: tuple[str, ...]
     adapters: tuple[str, ...]
     endpoints: tuple[str, ...]
+    response_formats: tuple[str, ...]
+    token_budget_fields: tuple[str, ...]
+    finish_reasons: tuple[str, ...]
     duration_s: float | None
     prompt_tokens: int | None
     output_tokens: int | None
@@ -107,6 +120,9 @@ def _summarize_one_log(
     models: list[str] = []
     adapters: list[str] = []
     endpoints: list[str] = []
+    response_formats: list[str] = []
+    token_budget_fields: list[str] = []
+    finish_reasons: list[str] = []
     duration_values: list[float] = []
     token_totals: dict[str, int] = {key: 0 for key in _TOKEN_KEYS}
     token_seen: dict[str, bool] = {key: False for key in _TOKEN_KEYS}
@@ -144,7 +160,13 @@ def _summarize_one_log(
         if isinstance(value.get("error"), str) and value["error"] != "":
             error_count += 1
         _append_unique(models, value["model"])
-        for field, destination in (("adapter", adapters), ("endpoint", endpoints)):
+        for field, destination in (
+            ("adapter", adapters),
+            ("endpoint", endpoints),
+            ("response_format", response_formats),
+            ("token_budget_field", token_budget_fields),
+            ("finish_reason", finish_reasons),
+        ):
             if isinstance(value.get(field), str) and value[field] != "":
                 _append_unique(destination, value[field])
         duration = value.get("duration_s")
@@ -170,6 +192,9 @@ def _summarize_one_log(
         models=tuple(models),
         adapters=tuple(adapters),
         endpoints=tuple(endpoints),
+        response_formats=tuple(response_formats),
+        token_budget_fields=tuple(token_budget_fields),
+        finish_reasons=tuple(finish_reasons),
         duration_s=round(sum(duration_values), 6) if duration_values else None,
         prompt_tokens=token_totals["prompt_tokens"]
         if token_seen["prompt_tokens"]

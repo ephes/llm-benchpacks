@@ -214,6 +214,9 @@ def test_report_renders_external_agent_model_call_summary(tmp_path: Path) -> Non
                         "ok": True,
                         "adapter": "example-local-http",
                         "endpoint": "local-http",
+                        "response_format": "json_object",
+                        "token_budget_field": "max_tokens",
+                        "finish_reason": "stop",
                         "duration_s": 0.1,
                         "prompt_tokens": 3,
                         "output_tokens": 5,
@@ -248,9 +251,44 @@ def test_report_renders_external_agent_model_call_summary(tmp_path: Path) -> Non
     assert "## External-Agent Model Calls" in output
     assert (
         "| run-a | edit-repo | 1 | 3 | 2 | 1 | 1 | 1 | 1 | test-model | "
-        "example-local-http | local-http | 0.100000 | 3 | 5 | — |"
+        "example-local-http | local-http | 0.100000 | 3 | 5 | — | "
+        "json_object | max_tokens | stop |"
     ) in output
     assert "not safe for summaries" not in output
+
+
+def test_report_renders_old_shape_model_call_labels_as_missing(
+    tmp_path: Path,
+) -> None:
+    run_a = tmp_path / "run-a"
+    _write_run(run_a)
+    model_calls = run_a / "task" / "edit-repo" / "rep-001.model-calls.jsonl"
+    model_calls.parent.mkdir(parents=True)
+    model_calls.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sequence": 1,
+                "model": "test-model",
+                "ok": True,
+                "adapter": "example-local-http",
+                "endpoint": "local-http",
+                "duration_s": 0.1,
+                "prompt_tokens": 3,
+                "output_tokens": 5,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output = render_report(load_report_runs([run_a]))
+
+    assert (
+        "| run-a | edit-repo | 1 | 1 | 1 | 0 | 1 | 0 | 0 | test-model | "
+        "example-local-http | local-http | 0.100000 | 3 | 5 | — | "
+        "— | — | — |"
+    ) in output
 
 
 def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:

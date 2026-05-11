@@ -90,7 +90,10 @@ per call with a minimal line such as
 `{"schema_version":1,"sequence":1,"model":"test-model","ok":true}` and should
 avoid putting full prompts, full responses, request bodies, headers,
 environment variables, API keys, bearer tokens, or credentials in the default
-telemetry shape.
+telemetry shape. Optional safe labels may include `response_format`,
+`token_budget_field`, and `finish_reason` so direct-edit runs can show whether
+JSON mode, structured outputs, or truncation-sensitive completion behavior was
+in play without storing payloads.
 See
 [`examples/external-agent/reference-agent.py`](examples/external-agent/reference-agent.py)
 for a deterministic local reference harness that validates the public context

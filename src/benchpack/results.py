@@ -232,12 +232,14 @@ class RunReporter:
                 lines.append(
                     "| case | repetition | calls | valid | invalid | ok | failed | "
                     "errors | models | adapters | endpoints | duration_s | "
-                    "prompt_tokens | output_tokens | cached_prompt_tokens |"
+                    "prompt_tokens | output_tokens | cached_prompt_tokens | "
+                    "response_formats | token_budget_fields | finish_reasons |"
                 )
                 lines.append(
                     "|------|------------|-------|-------|---------|----|--------|"
                     "--------|--------|----------|-----------|------------|"
                     "---------------|---------------|----------------------|"
+                    "------------------|---------------------|----------------|"
                 )
                 for summary in model_call_summaries:
                     lines.append(_model_call_summary_row(summary))
@@ -339,7 +341,8 @@ def _model_call_summary_row(summary: Any) -> str:
     return (
         "| {case} | {repetition} | {calls} | {valid} | {invalid} | {ok} | "
         "{failed} | {errors} | {models} | {adapters} | {endpoints} | "
-        "{duration} | {prompt} | {output} | {cached} |"
+        "{duration} | {prompt} | {output} | {cached} | {response_formats} | "
+        "{token_budget_fields} | {finish_reasons} |"
     ).format(
         case=_summary_table_cell(summary.case),
         repetition=summary.repetition,
@@ -361,6 +364,15 @@ def _model_call_summary_row(summary: Any) -> str:
             summary.cached_prompt_tokens
             if summary.cached_prompt_tokens is not None
             else "—"
+        ),
+        response_formats=_summary_table_cell(
+            _compact_summary_list(summary.response_formats)
+        ),
+        token_budget_fields=_summary_table_cell(
+            _compact_summary_list(summary.token_budget_fields)
+        ),
+        finish_reasons=_summary_table_cell(
+            _compact_summary_list(summary.finish_reasons)
         ),
     )
 

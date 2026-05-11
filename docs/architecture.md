@@ -617,8 +617,10 @@ The report renderer is intended for run-log and comparison-note assembly. It
 summarizes input paths, pack id/version, adapter/model/endpoint values, hardware
 identity when available, user-supplied runtime/model/operating metadata when
 available, external-agent model-call aggregate telemetry when optional logs are
-present, repo-task outcome summaries when `repo_task` rows exist, row and `ok`
-counts, and scoring pass/fail/unscored counts. Malformed `run-metadata.json`
+present, including safe request-shape and finish-reason labels when harnesses
+record them, repo-task outcome summaries when `repo_task` rows exist, row and
+`ok` counts, and scoring pass/fail/unscored counts. Malformed
+`run-metadata.json`
 fails clearly because the report is being asked to interpret that artifact.
 Malformed or unsafe model-call JSONL lines are counted as invalid and their
 payloads are not echoed. Repo-task outcome summaries resolve patch artifact

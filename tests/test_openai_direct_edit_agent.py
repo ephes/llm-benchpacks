@@ -414,6 +414,17 @@ def test_parse_edit_payload_reports_finish_reason() -> None:
         agent._parse_edit_payload("not json", finish_reason="length")
 
 
+def test_safe_finish_reason_omits_unsafe_parse_error_context() -> None:
+    agent = _load_agent_module()
+
+    assert (
+        agent._safe_finish_reason(
+            {"choices": [{"finish_reason": "length\u2028bad"}]}
+        )
+        == ""
+    )
+
+
 def test_assistant_content_reports_refusal() -> None:
     agent = _load_agent_module()
 
@@ -462,6 +473,91 @@ def test_safe_endpoint_label_has_no_url_or_credential_markers() -> None:
     assert "://" not in label
     assert "?" not in label
     assert "@" not in label
+
+
+def test_write_telemetry_records_safe_direct_edit_request_shape(
+    tmp_path: Path,
+) -> None:
+    agent = _load_agent_module()
+    path = tmp_path / "rep-001.model-calls.jsonl"
+
+    agent._write_telemetry(
+        path,
+        model="test-model",
+        endpoint="https://llm.example.test/v1",
+        response_format="json_schema",
+        token_budget_field="max_completion_tokens",
+        duration_s=0.1234567,
+        ok=True,
+        response={
+            "choices": [{"finish_reason": "stop", "message": {"content": "{}"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+        },
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["response_format"] == "json_schema"
+    assert payload["token_budget_field"] == "max_completion_tokens"
+    assert payload["finish_reason"] == "stop"
+    assert payload["endpoint"] == "llm.example.test"
+    assert payload["prompt_tokens"] == 10
+    assert payload["output_tokens"] == 20
+
+
+def test_write_telemetry_omits_unsafe_finish_reason(tmp_path: Path) -> None:
+    agent = _load_agent_module()
+    path = tmp_path / "rep-001.model-calls.jsonl"
+
+    agent._write_telemetry(
+        path,
+        model="test-model",
+        endpoint="https://llm.example.test/v1",
+        response_format="json_object",
+        token_budget_field="max_tokens",
+        duration_s=0.1,
+        ok=False,
+        response={
+            "choices": [
+                {
+                    "finish_reason": "length\u2028with-separator",
+                    "message": {"content": "{}"},
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+        },
+        error="failed after unsafe finish reason",
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert "finish_reason" not in payload
+    assert payload["response_format"] == "json_object"
+    assert payload["token_budget_field"] == "max_tokens"
+    assert payload["prompt_tokens"] == 10
+    assert payload["output_tokens"] == 20
+    assert payload["error"] == "failed after unsafe finish reason"
+
+
+def test_write_telemetry_truncates_long_finish_reason(tmp_path: Path) -> None:
+    agent = _load_agent_module()
+    path = tmp_path / "rep-001.model-calls.jsonl"
+
+    agent._write_telemetry(
+        path,
+        model="test-model",
+        endpoint="https://llm.example.test/v1",
+        response_format="json_object",
+        token_budget_field="max_tokens",
+        duration_s=0.1,
+        ok=True,
+        response={
+            "choices": [
+                {"finish_reason": "x" * 80, "message": {"content": "{}"}}
+            ],
+        },
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["finish_reason"] == "x" * 64
 
 
 def test_load_context_rejects_model_call_log_under_raw(tmp_path: Path) -> None:
