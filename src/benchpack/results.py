@@ -16,6 +16,7 @@ from .adapters import AdapterResult
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .packs import Case, Pack
 from .repo_task_outcomes import (
+    count_repo_task_outcomes,
     format_patch_bytes,
     format_repetition,
     format_verify_exit_code,
@@ -245,6 +246,30 @@ class RunReporter:
             self.output_dir,
         )
         if repo_task_outcomes:
+            lines.append("")
+            lines.append("## Repo-Task Outcome Summary")
+            lines.append("")
+            lines.append(
+                "| rows | passed | failed-no-mutation | failed-with-mutation | "
+                "failed-unknown-mutation | other |"
+            )
+            lines.append(
+                "|------|--------|--------------------|----------------------|"
+                "-------------------------|-------|"
+            )
+            counts = count_repo_task_outcomes(repo_task_outcomes)
+            lines.append(
+                "| {total} | {passed} | {failed_no_mutation} | "
+                "{failed_with_mutation} | {failed_unknown_mutation} | "
+                "{other} |".format(
+                    total=counts.total,
+                    passed=counts.passed,
+                    failed_no_mutation=counts.failed_no_mutation,
+                    failed_with_mutation=counts.failed_with_mutation,
+                    failed_unknown_mutation=counts.failed_unknown_mutation,
+                    other=counts.other,
+                )
+            )
             lines.append("")
             lines.append("## Repo-Task Outcomes")
             lines.append("")

@@ -895,13 +895,15 @@ fails with a clear error. When external-agent model-call JSONL artifacts exist
 under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
 safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
 unsafe JSONL lines are counted as invalid without echoing their payloads. When
-repo-task rows include `repo_task`, the report includes a compact
-`Repo-Task Outcomes` table derived from existing row fields and patch
-artifacts: case, repetition, `repo_task.status`, verifier exit code, scoring
-result, patch byte count when the patch artifact is available under the result
-directory, and a report-only outcome label such as `passed`,
-`failed-no-mutation`, `failed-with-mutation`, or `failed-unknown-mutation`.
-This is a read-only summary and does not add fields to `run.jsonl`.
+repo-task rows include `repo_task`, the report includes compact
+`Repo-Task Outcome Summary` and `Repo-Task Outcomes` tables derived from
+existing row fields and patch artifacts. The summary table counts per-run rows
+by report-only outcome label. The detail table shows case, repetition,
+`repo_task.status`, verifier exit code, scoring result, patch byte count when
+the patch artifact is available under the result directory, and a report-only
+outcome label such as `passed`, `failed-no-mutation`,
+`failed-with-mutation`, or `failed-unknown-mutation`. This is a read-only
+summary and does not add fields to `run.jsonl`.
 
 The optional `--set <manifest.toml>` mode loads a source TOML report-set
 manifest and expands it to the same existing result-directory inputs before the

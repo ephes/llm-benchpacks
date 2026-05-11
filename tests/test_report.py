@@ -286,6 +286,8 @@ def test_report_renders_repo_task_outcomes(tmp_path: Path) -> None:
 
     output = render_report(load_report_runs([run_a]))
 
+    assert "## Repo-Task Outcome Summary" in output
+    assert "| run-a | 2 | 1 | 1 | 0 | 0 | 0 |" in output
     assert "## Repo-Task Outcomes" in output
     assert (
         "| run-a | fix-greeting | 1 | passed | 0 | verify-script:pass | "

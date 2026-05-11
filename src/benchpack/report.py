@@ -22,6 +22,7 @@ from .compare import (
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .repo_task_outcomes import (
+    count_repo_task_outcomes,
     format_patch_bytes,
     format_repetition,
     format_verify_exit_code,
@@ -278,7 +279,15 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
 
 
 def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
-    header = [
+    summary_header = [
+        "## Repo-Task Outcome Summary",
+        "",
+        "| run | rows | passed | failed-no-mutation | failed-with-mutation | "
+        "failed-unknown-mutation | other |",
+        "|-----|------|--------|--------------------|----------------------|"
+        "-------------------------|-------|",
+    ]
+    detail_header = [
         "## Repo-Task Outcomes",
         "",
         "| run | case | repetition | repo_task | verify_exit | scoring | "
@@ -286,9 +295,27 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
         "|-----|------|------------|-----------|-------------|---------|"
         "-------------|---------|",
     ]
+    summary_rows: list[str] = []
     rows: list[str] = []
     for run in runs:
-        for outcome in summarize_repo_task_outcomes(run.records, run.artifact_root):
+        outcomes = summarize_repo_task_outcomes(run.records, run.artifact_root)
+        if not outcomes:
+            continue
+        counts = count_repo_task_outcomes(outcomes)
+        summary_rows.append(
+            "| {run} | {total} | {passed} | {failed_no_mutation} | "
+            "{failed_with_mutation} | {failed_unknown_mutation} | "
+            "{other} |".format(
+                run=run.label,
+                total=counts.total,
+                passed=counts.passed,
+                failed_no_mutation=counts.failed_no_mutation,
+                failed_with_mutation=counts.failed_with_mutation,
+                failed_unknown_mutation=counts.failed_unknown_mutation,
+                other=counts.other,
+            )
+        )
+        for outcome in outcomes:
             rows.append(
                 "| {run} | {case} | {repetition} | {repo_status} | "
                 "{verify_exit} | {scoring} | {patch_bytes} | {result} |".format(
@@ -304,7 +331,7 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
             )
     if not rows:
         return []
-    return header + rows
+    return summary_header + summary_rows + [""] + detail_header + rows
 
 
 def _render_compare_medians(

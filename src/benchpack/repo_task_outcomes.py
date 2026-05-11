@@ -9,6 +9,16 @@ from typing import Any
 
 
 MISSING = "—"
+OUTCOME_PASSED = "passed"
+OUTCOME_FAILED_NO_MUTATION = "failed-no-mutation"
+OUTCOME_FAILED_WITH_MUTATION = "failed-with-mutation"
+OUTCOME_FAILED_UNKNOWN_MUTATION = "failed-unknown-mutation"
+KNOWN_OUTCOME_LABELS = (
+    OUTCOME_PASSED,
+    OUTCOME_FAILED_NO_MUTATION,
+    OUTCOME_FAILED_WITH_MUTATION,
+    OUTCOME_FAILED_UNKNOWN_MUTATION,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +32,18 @@ class RepoTaskOutcome:
     scoring: str
     patch_bytes: int | None
     outcome: str
+
+
+@dataclass(frozen=True)
+class RepoTaskOutcomeCounts:
+    """Aggregate counts for report-facing repo-task outcome labels."""
+
+    total: int
+    passed: int
+    failed_no_mutation: int
+    failed_with_mutation: int
+    failed_unknown_mutation: int
+    other: int
 
 
 def summarize_repo_task_outcomes(
@@ -59,6 +81,28 @@ def summarize_repo_task_outcomes(
             )
         )
     return outcomes
+
+
+def count_repo_task_outcomes(
+    outcomes: list[RepoTaskOutcome],
+) -> RepoTaskOutcomeCounts:
+    """Count compact repo-task outcome labels for summary tables."""
+
+    counts = {label: 0 for label in KNOWN_OUTCOME_LABELS}
+    other = 0
+    for outcome in outcomes:
+        if outcome.outcome in counts:
+            counts[outcome.outcome] += 1
+        else:
+            other += 1
+    return RepoTaskOutcomeCounts(
+        total=len(outcomes),
+        passed=counts[OUTCOME_PASSED],
+        failed_no_mutation=counts[OUTCOME_FAILED_NO_MUTATION],
+        failed_with_mutation=counts[OUTCOME_FAILED_WITH_MUTATION],
+        failed_unknown_mutation=counts[OUTCOME_FAILED_UNKNOWN_MUTATION],
+        other=other,
+    )
 
 
 def format_repetition(repetition: int | None) -> str:
@@ -143,9 +187,9 @@ def _classify_outcome(
     patch_bytes: int | None,
 ) -> str:
     if repo_status == "passed":
-        return "passed"
+        return OUTCOME_PASSED
     if patch_bytes == 0:
-        return "failed-no-mutation"
+        return OUTCOME_FAILED_NO_MUTATION
     if patch_bytes is not None and patch_bytes > 0:
-        return "failed-with-mutation"
-    return "failed-unknown-mutation"
+        return OUTCOME_FAILED_WITH_MUTATION
+    return OUTCOME_FAILED_UNKNOWN_MUTATION

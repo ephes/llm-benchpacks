@@ -16,6 +16,25 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (repo-task outcome counts)
+
+### Changed
+
+- Added report-only per-run `Repo-Task Outcome Summary` count tables to
+  `summary.md` and `benchpack report`.
+- The new count table aggregates existing repo-task outcome labels:
+  `passed`, `failed-no-mutation`, `failed-with-mutation`,
+  `failed-unknown-mutation`, plus `other` for future report-only labels.
+- Kept `run.jsonl` unchanged. Counts are derived from existing row fields and
+  patch artifact sizes through the same safe result-directory boundary as the
+  detail `Repo-Task Outcomes` table.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Direct-edit external-agent evidence still needs live opt-in runs against a
+  stronger configured endpoint/model before any default-matrix promotion.
+
 ## 2026-05-11 (direct-edit JSON-schema hook)
 
 ### Changed

@@ -378,12 +378,12 @@ cases do not use this flow. Verifier environment configuration stays on the
 execution side of the boundary: it is not added to adapter requests, normalized
 result rows, or reporter-owned repo-task objects.
 
-`summary.md` and `benchpack report` derive a report-only repo-task outcome
-table from those existing fields plus the patch artifact size. The table makes
-empty workspace diffs and mutation-visible failures visible without changing
-the `run.jsonl` schema. The current labels are `passed`,
-`failed-no-mutation`, `failed-with-mutation`, and
-`failed-unknown-mutation`.
+`summary.md` and `benchpack report` derive report-only repo-task outcome
+summary and detail tables from those existing fields plus the patch artifact
+size. The tables make empty workspace diffs and mutation-visible failures
+visible, and count those outcomes per run, without changing the `run.jsonl`
+schema. The current labels are `passed`, `failed-no-mutation`,
+`failed-with-mutation`, and `failed-unknown-mutation`.
 
 ## Result Record Envelope
 

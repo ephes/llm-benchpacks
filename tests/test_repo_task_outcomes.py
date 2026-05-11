@@ -7,7 +7,11 @@ from typing import Any
 
 import pytest
 
-from benchpack.repo_task_outcomes import summarize_repo_task_outcomes
+from benchpack.repo_task_outcomes import (
+    RepoTaskOutcome,
+    count_repo_task_outcomes,
+    summarize_repo_task_outcomes,
+)
 
 
 def _repo_task_record(
@@ -123,3 +127,61 @@ def test_repo_task_outcomes_classify_repo_task_passed_as_passed(
 
     assert outcome.scoring == "unscored"
     assert outcome.outcome == "passed"
+
+
+def test_repo_task_outcome_counts_aggregate_known_labels(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run"
+    passing_patch = result_dir / "patch" / "passed" / "rep-001.diff"
+    passing_patch.parent.mkdir(parents=True)
+    passing_patch.write_text("diff --git a/app.py b/app.py\n", encoding="utf-8")
+    empty_patch = result_dir / "patch" / "empty" / "rep-001.diff"
+    empty_patch.parent.mkdir(parents=True)
+    empty_patch.write_text("", encoding="utf-8")
+    failed_patch = result_dir / "patch" / "failed" / "rep-001.diff"
+    failed_patch.parent.mkdir(parents=True)
+    failed_patch.write_text("diff --git a/other.py b/other.py\n", encoding="utf-8")
+
+    outcomes = summarize_repo_task_outcomes(
+        [
+            _repo_task_record(
+                patch={"path": "patch/passed/rep-001.diff"},
+                repo_status="passed",
+            ),
+            _repo_task_record(patch={"path": "patch/empty/rep-001.diff"}),
+            _repo_task_record(patch={"path": "patch/failed/rep-001.diff"}),
+            _repo_task_record(patch={"path": "patch/missing/rep-001.diff"}),
+        ],
+        result_dir,
+    )
+
+    counts = count_repo_task_outcomes(outcomes)
+
+    assert counts.total == 4
+    assert counts.passed == 1
+    assert counts.failed_no_mutation == 1
+    assert counts.failed_with_mutation == 1
+    assert counts.failed_unknown_mutation == 1
+    assert counts.other == 0
+
+
+def test_repo_task_outcome_counts_preserve_unknown_labels_as_other() -> None:
+    counts = count_repo_task_outcomes(
+        [
+            RepoTaskOutcome(
+                case="fix-repo",
+                repetition=1,
+                repo_status="failed",
+                verify_exit_code=1,
+                scoring="verify-script:fail",
+                patch_bytes=None,
+                outcome="future-label",
+            )
+        ]
+    )
+
+    assert counts.total == 1
+    assert counts.passed == 0
+    assert counts.failed_no_mutation == 0
+    assert counts.failed_with_mutation == 0
+    assert counts.failed_unknown_mutation == 0
+    assert counts.other == 1
