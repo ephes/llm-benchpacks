@@ -325,6 +325,12 @@ compact run/result-row objects from SQLite only; it does not read source result
 directories, raw payloads, workspaces, task logs, verifier artifacts, patch
 files, or model-call logs.
 
+`benchpack registry site --db <sqlite> --out <site-dir>` writes a local static
+snapshot with dense run tables, a comparison matrix of per-run/per-case median
+latency, throughput, token, and scoring fields from indexed rows, case-metric
+coverage tables, and the generated `report.md`. The export uses SQLite only;
+source result directories and large artifacts are not required.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
 compact public-sharing bundle from existing result directories. The bundle
 copies `run.jsonl`, optional `hardware.json`, optional `run-metadata.json`,

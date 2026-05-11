@@ -1136,14 +1136,16 @@ and are mutually exclusive.
 
 The output directory contains:
 
-- `index.html`, a local browser view with dense run and case-metric tables plus
-  an embedded copy of the generated Markdown report;
+- `index.html`, a local browser view with dense run tables, a comparison matrix
+  of per-run/per-case median latency, throughput, token, and scoring fields,
+  case-metric coverage tables, and an embedded copy of the generated Markdown
+  report;
 - `report.md`, the same registry-backed Markdown report produced through the
   existing report renderer.
 
 The static site reads schema version `2` registry data only. It uses compact
-`runs`, `result_rows.raw_json`, and `result_case_stats` data and does not
-require source result directories to exist. It does not read raw payloads,
+`runs`, `result_rows`, and `result_case_stats` data and does not require source
+result directories to exist. It does not read raw payloads,
 workspaces, task logs, verifier artifacts, patch files, or model-call logs; it
 does not mutate the database or source results; and it does not contact
 endpoints. Existing output directories are refused unless `--force` is

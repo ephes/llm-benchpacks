@@ -16,6 +16,25 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-11 (registry site comparison matrix)
+
+### Changed
+
+- Extended `benchpack registry site --db <sqlite> --out <site-dir>` with a
+  comparison matrix in `index.html`.
+- The matrix is derived from schema-version-2 indexed `result_rows` and shows
+  per-run/per-case median wall time, TTFT, decode TPS, total TPS, prompt
+  tokens, cached prompt tokens, output tokens, and scoring pass counts.
+- Kept the export read-only and SQLite-only: it still does not require source
+  result directories, read raw/workspace/task/verify/patch/model-call
+  artifacts, mutate the database, or contact endpoints.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Hosted upload/review, richer public browsing, and leaderboard policy remain
+  deferred until there is a concrete sharing workflow.
+
 ## 2026-05-11 (mini project-completion pack)
 
 ### Changed

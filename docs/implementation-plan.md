@@ -57,10 +57,11 @@ Next actionable slices:
    for this work unless a later curated run-log entry explicitly calls for a
    small retained subset.
 3. Result registry work remains demand-driven. Local import, report, static
-   site export, bundle create/validate, bundle import, duplicate inspection,
-   and local normalized-row JSON query have landed. Hosted upload/review,
-   richer public browsing, broader hosted APIs, and leaderboard policy should
-   wait for a concrete sharing workflow.
+   site export with a per-run/per-case comparison matrix, bundle
+   create/validate, bundle import, duplicate inspection, and local
+   normalized-row JSON query have landed. Hosted upload/review, richer public
+   browsing, broader hosted APIs, and leaderboard policy should wait for a
+   concrete sharing workflow.
 4. Research tracks stay mostly parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program
@@ -1302,7 +1303,9 @@ rendering the existing Markdown report medians, warnings, cache rows, and
 `prefill parity` statuses from indexed rows and stored compact metadata. A
 first static local site export has also landed as
 `benchpack registry site --db <sqlite> --out <site-dir>`, writing
-`index.html` and `report.md` from indexed compact rows. A first offline
+`index.html` and `report.md` from indexed compact rows, and a 2026-05-11
+follow-up added a per-run/per-case comparison matrix of median latency,
+throughput, token, and scoring fields to the HTML view. A first offline
 received-bundle ingestion slice has also landed as
 `benchpack registry bundle import --db <sqlite> <bundle-dir>...`. The first
 duplicate-visibility slice has landed as
@@ -1417,7 +1420,11 @@ Scope:
     only SQLite schema version `2` compact rows, supports the same optional
     `--run-id` and `--label` selectors as registry report, refuses existing
     output paths unless `--force` is supplied, and does not read source
-    artifacts, mutate the database, or contact endpoints.
+    artifacts, mutate the database, or contact endpoints. **Extended
+    2026-05-11** with a comparison matrix derived from indexed `result_rows`,
+    showing per-run/per-case median wall time, TTFT, decode TPS, total TPS,
+    prompt tokens, cached prompt tokens, output tokens, and scoring counts
+    without reading source result directories.
   - authenticated upload/review for result bundles;
   - public browse and comparison views;
   - optional API for querying normalized results. **First local slice landed

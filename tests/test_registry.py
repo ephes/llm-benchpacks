@@ -710,6 +710,14 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert "<td>strict-same-gguf</td>" in html
     assert "<td>abc1234</td>" in html
     assert "<td>plugged in</td>" in html
+    assert "<h2>Comparison Matrix</h2>" in html
+    assert "<th>decode TPS med</th>" in html
+    assert "<td>m5-max; Darwin</td>" in html
+    assert "<td>llama-server</td>" in html
+    assert "<td>gemma4-e2b-q4km</td>" in html
+    # Matrix medians from the fixture rows: total_tps and output_tokens.
+    assert "<td>30.00</td>" in html
+    assert "<td>60.00</td>" in html
     assert "<td>long</td>" in html
     assert "# benchpack report" in report
     assert "| run-a | short | 1 | 1 | 1.250 |" in report
@@ -795,6 +803,33 @@ def test_registry_static_site_renders_versions_for_multi_pack_runs(
 
     html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     assert "<td>pack-a, pack-b (versions: 0.1.0, 0.2.0)</td>" in html
+
+
+def test_registry_static_site_distinguishes_unscored_from_zero_passes(
+    tmp_path: Path,
+) -> None:
+    unscored_a = _record("unscored")
+    unscored_b = _record("unscored")
+    failed_a = _record("scored")
+    failed_b = _record("scored")
+    failed_a["scoring"] = {"mode": "contains", "passed": False}
+    failed_b["scoring"] = {"mode": "contains", "passed": False}
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir, [unscored_a, unscored_b, failed_a, failed_b])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+
+    export_registry_static_site(db_path, tmp_path / "site")
+
+    html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    assert (
+        "<td>unscored</td><td>—</td><td>—</td><td>—</td><td>—</td>"
+        "<td>2</td><td>2</td><td>—</td>"
+    ) in html
+    assert (
+        "<td>scored</td><td>—</td><td>—</td><td>—</td><td>—</td>"
+        "<td>2</td><td>2</td><td>0/2</td>"
+    ) in html
 
 
 def test_registry_static_site_cli_writes_selected_runs(

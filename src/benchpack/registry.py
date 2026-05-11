@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, Iterable
 
 from .compare import CompareError, ResultRun, load_result_run
 from .external_agent_model_calls import (
@@ -141,6 +141,32 @@ class RegistryStaticSiteSummary:
     out_dir: Path
     runs: int
     files: int
+
+
+@dataclass(frozen=True)
+class _SiteComparisonMetric:
+    """One registry-site comparison row derived from indexed result rows."""
+
+    run_label: str
+    pack_id: str
+    pack_version: str
+    case_id: str
+    host_label: str | None
+    host_platform: str | None
+    runtime_name: str | None
+    model_metadata_id: str | None
+    model_quantization: str | None
+    rows: int
+    ok_count: int
+    scoring_passed_count: int
+    scoring_rows: int
+    wall_s_median: float | None
+    ttft_s_median: float | None
+    decode_tps_median: float | None
+    total_tps_median: float | None
+    prompt_tokens_median: float | None
+    cached_prompt_tokens_median: float | None
+    output_tokens_median: float | None
 
 
 def load_registry_report_runs(
@@ -321,7 +347,7 @@ def export_registry_static_site(
             )
 
     try:
-        runs, run_rows, case_rows = _load_registry_site_snapshot(
+        runs, run_rows, case_rows, metric_rows = _load_registry_site_snapshot(
             db_path,
             run_ids=run_ids,
             labels=labels,
@@ -331,6 +357,7 @@ def export_registry_static_site(
             db_path=Path(db_path),
             run_rows=run_rows,
             case_rows=case_rows,
+            metric_rows=metric_rows,
             report_markdown=report_markdown,
         )
     except ReportError as exc:
@@ -745,7 +772,12 @@ def _load_registry_site_snapshot(
     *,
     run_ids: list[int] | None,
     labels: list[str] | None,
-) -> tuple[list[ResultRun], list[sqlite3.Row], list[sqlite3.Row]]:
+) -> tuple[
+    list[ResultRun],
+    list[sqlite3.Row],
+    list[sqlite3.Row],
+    list[_SiteComparisonMetric],
+]:
     if str(db_path) == "":
         raise RegistryError("registry database path must not be empty")
     _validate_registry_selection("registry site", run_ids=run_ids, labels=labels)
@@ -772,6 +804,7 @@ def _load_registry_site_snapshot(
                 runs,
                 _select_site_run_rows(conn, selected_ids),
                 _select_site_case_rows(conn, selected_ids),
+                _select_site_metric_rows(conn, selected_ids),
             )
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
@@ -819,6 +852,78 @@ def _select_site_case_rows(
         """,
         tuple(run_ids),
     ).fetchall()
+
+
+def _select_site_metric_rows(
+    conn: sqlite3.Connection,
+    run_ids: list[int],
+) -> list[_SiteComparisonMetric]:
+    placeholders = ",".join("?" for _ in run_ids)
+    rows = conn.execute(
+        f"""
+        SELECT r.id AS run_id, r.label AS run_label, r.host_label,
+               r.host_platform, r.runtime_name, r.model_metadata_id,
+               r.model_quantization, rr.pack_id, rr.pack_version, rr.case_id,
+               rr.ok, rr.scoring_passed, rr.wall_s, rr.ttft_s,
+               rr.decode_tps, rr.total_tps, rr.prompt_tokens,
+               rr.cached_prompt_tokens, rr.output_tokens
+        FROM result_rows AS rr
+        JOIN runs AS r ON r.id = rr.run_id
+        WHERE rr.run_id IN ({placeholders})
+        ORDER BY rr.run_id, rr.pack_id, rr.pack_version, rr.case_id, rr.row_index
+        """,
+        tuple(run_ids),
+    ).fetchall()
+
+    grouped: dict[tuple[object, ...], list[sqlite3.Row]] = {}
+    for row in rows:
+        key = (
+            row["run_id"],
+            row["pack_id"],
+            row["pack_version"],
+            row["case_id"],
+        )
+        grouped.setdefault(key, []).append(row)
+
+    metrics: list[_SiteComparisonMetric] = []
+    for group_rows in grouped.values():
+        first = group_rows[0]
+        scoring_values = [
+            int(row["scoring_passed"])
+            for row in group_rows
+            if row["scoring_passed"] is not None
+        ]
+        metrics.append(
+            _SiteComparisonMetric(
+                run_label=str(first["run_label"]),
+                pack_id=str(first["pack_id"]),
+                pack_version=str(first["pack_version"]),
+                case_id=str(first["case_id"]),
+                host_label=_optional_text(first["host_label"]),
+                host_platform=_optional_text(first["host_platform"]),
+                runtime_name=_optional_text(first["runtime_name"]),
+                model_metadata_id=_optional_text(first["model_metadata_id"]),
+                model_quantization=_optional_text(first["model_quantization"]),
+                rows=len(group_rows),
+                ok_count=sum(1 for row in group_rows if int(row["ok"]) == 1),
+                scoring_passed_count=sum(scoring_values),
+                scoring_rows=len(scoring_values),
+                wall_s_median=_site_median(row["wall_s"] for row in group_rows),
+                ttft_s_median=_site_median(row["ttft_s"] for row in group_rows),
+                decode_tps_median=_site_median(row["decode_tps"] for row in group_rows),
+                total_tps_median=_site_median(row["total_tps"] for row in group_rows),
+                prompt_tokens_median=_site_median(
+                    row["prompt_tokens"] for row in group_rows
+                ),
+                cached_prompt_tokens_median=_site_median(
+                    row["cached_prompt_tokens"] for row in group_rows
+                ),
+                output_tokens_median=_site_median(
+                    row["output_tokens"] for row in group_rows
+                ),
+            )
+        )
+    return metrics
 
 
 def _select_registry_query_rows(
@@ -956,6 +1061,7 @@ def _render_static_site_html(
     db_path: Path,
     run_rows: list[sqlite3.Row],
     case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
     report_markdown: str,
 ) -> str:
     generated_at = datetime.now(UTC).isoformat(timespec="seconds")
@@ -1030,6 +1136,49 @@ def _render_static_site_html(
             f"<td>{_html(row['host_repo_commit'] or '—')}</td>"
             f"<td>{_html(_site_operating_cell(row))}</td>"
             f"<td>{_html(row['run_jsonl_sha256'] or '—')}</td>"
+            "</tr>"
+        )
+    lines.extend(
+        [
+            "</tbody>",
+            "</table>",
+            "</div>",
+            "</section>",
+            "<section>",
+            "<h2>Comparison Matrix</h2>",
+            '<div class="table-wrap">',
+            "<table>",
+            "<thead><tr>"
+            "<th>run</th><th>pack</th><th>case</th><th>host</th>"
+            "<th>runtime</th><th>model</th><th>quantization</th>"
+            "<th>rows</th><th>ok</th><th>scoring passed</th>"
+            "<th>wall med s</th><th>TTFT med s</th>"
+            "<th>decode TPS med</th><th>total TPS med</th>"
+            "<th>prompt tok med</th><th>cached tok med</th><th>output tok med</th>"
+            "</tr></thead>",
+            "<tbody>",
+        ]
+    )
+    for row in metric_rows:
+        lines.append(
+            "<tr>"
+            f"<td>{_html(row.run_label)}</td>"
+            f"<td>{_html(row.pack_id + ' ' + row.pack_version)}</td>"
+            f"<td>{_html(row.case_id)}</td>"
+            f"<td>{_html(_site_parts_cell(row.host_label, row.host_platform))}</td>"
+            f"<td>{_html(row.runtime_name or '—')}</td>"
+            f"<td>{_html(row.model_metadata_id or '—')}</td>"
+            f"<td>{_html(row.model_quantization or '—')}</td>"
+            f"<td>{_html(row.rows)}</td>"
+            f"<td>{_html(row.ok_count)}</td>"
+            f"<td>{_html(_site_count_cell(row.scoring_passed_count, row.scoring_rows))}</td>"
+            f"<td>{_html(_site_float(row.wall_s_median))}</td>"
+            f"<td>{_html(_site_float(row.ttft_s_median))}</td>"
+            f"<td>{_html(_site_float(row.decode_tps_median))}</td>"
+            f"<td>{_html(_site_float(row.total_tps_median))}</td>"
+            f"<td>{_html(_site_float(row.prompt_tokens_median))}</td>"
+            f"<td>{_html(_site_float(row.cached_prompt_tokens_median))}</td>"
+            f"<td>{_html(_site_float(row.output_tokens_median))}</td>"
             "</tr>"
         )
     lines.extend(
@@ -1157,6 +1306,34 @@ def _site_operating_cell(row: sqlite3.Row) -> str:
     ]
     rendered = [str(part) for part in parts if part not in (None, "", [])]
     return "; ".join(rendered) if rendered else "—"
+
+
+def _site_parts_cell(*parts: object) -> str:
+    rendered = [str(part) for part in parts if part not in (None, "", [])]
+    return "; ".join(rendered) if rendered else "—"
+
+
+def _site_count_cell(passed: int, total: int) -> str:
+    if total == 0:
+        return "—"
+    return f"{passed}/{total}"
+
+
+def _site_median(values: Iterable[object]) -> float | None:
+    numeric = [
+        float(value)
+        for value in values
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    if not numeric:
+        return None
+    return float(median(numeric))
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _site_float(value: object) -> str:
