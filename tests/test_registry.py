@@ -688,10 +688,14 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     summary = export_registry_static_site(db_path, tmp_path / "site")
 
     assert summary.runs == 1
-    assert summary.files == 2
+    assert summary.files == 3
     html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     report = (tmp_path / "site" / "report.md").read_text(encoding="utf-8")
+    snapshot = json.loads(
+        (tmp_path / "site" / "snapshot.json").read_text(encoding="utf-8")
+    )
     assert "benchpack registry snapshot" in html
+    assert 'href="snapshot.json"' in html
     assert "<td>run-a</td>" in html
     assert "<td>runtime-sweep 0.1.0</td>" in html
     assert "<td>openai-chat</td>" in html
@@ -721,6 +725,26 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert "<td>long</td>" in html
     assert "# benchpack report" in report
     assert "| run-a | short | 1 | 1 | 1.250 |" in report
+    assert snapshot["schema_version"] == 1
+    assert snapshot["registry_schema_version"] == 2
+    assert snapshot["source_database"] == "registry.sqlite"
+    assert snapshot["report_path"] == "report.md"
+    assert snapshot["runs"][0]["label"] == "run-a"
+    assert snapshot["runs"][0]["packs"] == [
+        {"id": "runtime-sweep", "version": "0.1.0"}
+    ]
+    assert snapshot["runs"][0]["pack_versions"] == ["0.1.0"]
+    assert snapshot["runs"][0]["runtime"]["name"] == "llama-server"
+    assert snapshot["runs"][0]["model_metadata"]["quantization"] == "Q4_K_M"
+    assert snapshot["comparison_matrix"][0]["run_id"] == snapshot["runs"][0]["id"]
+    assert snapshot["comparison_matrix"][0]["run"] == "run-a"
+    assert snapshot["comparison_matrix"][0]["medians"]["total_tps"] == 30.0
+    assert snapshot["comparison_matrix"][0]["medians"]["output_tokens"] == 60.0
+    assert snapshot["case_metrics"][0]["run_id"] == snapshot["runs"][0]["id"]
+    assert snapshot["case_metrics"][0]["prompt_tokens"] == {
+        "rows": 1,
+        "median": 10.0,
+    }
 
 
 def test_registry_static_site_export_requires_force_for_existing_output(

@@ -28,6 +28,9 @@ from .run_metadata import RunMetadataError, load_optional_run_metadata
 REGISTRY_SCHEMA_VERSION = 2
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
+STATIC_SITE_INDEX_FILENAME = "index.html"
+STATIC_SITE_REPORT_FILENAME = "report.md"
+STATIC_SITE_SNAPSHOT_FILENAME = "snapshot.json"
 BUNDLE_PROVENANCE_LABELS = frozenset(
     {"self-reported", "operator-curated", "independently-reproduced"}
 )
@@ -147,6 +150,7 @@ class RegistryStaticSiteSummary:
 class _SiteComparisonMetric:
     """One registry-site comparison row derived from indexed result rows."""
 
+    run_id: int
     run_label: str
     pack_id: str
     pack_version: str
@@ -353,12 +357,21 @@ def export_registry_static_site(
             labels=labels,
         )
         report_markdown = render_report(runs)
+        generated_at = datetime.now(UTC).isoformat(timespec="seconds")
         index_html = _render_static_site_html(
             db_path=Path(db_path),
             run_rows=run_rows,
             case_rows=case_rows,
             metric_rows=metric_rows,
             report_markdown=report_markdown,
+            generated_at=generated_at,
+        )
+        snapshot_json = _render_static_site_snapshot_json(
+            db_path=Path(db_path),
+            run_rows=run_rows,
+            case_rows=case_rows,
+            metric_rows=metric_rows,
+            generated_at=generated_at,
         )
     except ReportError as exc:
         raise RegistryError(str(exc)) from exc
@@ -370,8 +383,9 @@ def export_registry_static_site(
             site_root.unlink()
     site_root.mkdir(parents=True, exist_ok=True)
     output_files = {
-        "report.md": report_markdown,
-        "index.html": index_html,
+        STATIC_SITE_REPORT_FILENAME: report_markdown,
+        STATIC_SITE_INDEX_FILENAME: index_html,
+        STATIC_SITE_SNAPSHOT_FILENAME: snapshot_json,
     }
     for filename, contents in output_files.items():
         (site_root / filename).write_text(contents, encoding="utf-8")
@@ -840,11 +854,11 @@ def _select_site_case_rows(
     placeholders = ",".join("?" for _ in run_ids)
     return conn.execute(
         f"""
-        SELECT r.label AS run_label, s.pack_id, s.pack_version, s.case_id,
-               s.row_count, s.ok_count, s.prompt_token_rows,
-               s.prompt_token_median, s.cached_prompt_token_rows,
-               s.cached_prompt_token_median, s.prefill_tps_rows,
-               s.prefill_tps_median
+        SELECT r.id AS run_id, r.label AS run_label, s.pack_id,
+               s.pack_version, s.case_id, s.row_count, s.ok_count,
+               s.prompt_token_rows, s.prompt_token_median,
+               s.cached_prompt_token_rows, s.cached_prompt_token_median,
+               s.prefill_tps_rows, s.prefill_tps_median
         FROM result_case_stats AS s
         JOIN runs AS r ON r.id = s.run_id
         WHERE s.run_id IN ({placeholders})
@@ -895,6 +909,7 @@ def _select_site_metric_rows(
         ]
         metrics.append(
             _SiteComparisonMetric(
+                run_id=int(first["run_id"]),
                 run_label=str(first["run_label"]),
                 pack_id=str(first["pack_id"]),
                 pack_version=str(first["pack_version"]),
@@ -1063,8 +1078,8 @@ def _render_static_site_html(
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
     report_markdown: str,
+    generated_at: str,
 ) -> str:
-    generated_at = datetime.now(UTC).isoformat(timespec="seconds")
     lines = [
         "<!doctype html>",
         '<html lang="en">',
@@ -1097,6 +1112,11 @@ def _render_static_site_html(
         ).format(
             generated=_html(generated_at),
             db=_html(db_path.name or str(db_path)),
+        ),
+        (
+            '<p class="meta">Machine-readable snapshot: '
+            f'<a href="{STATIC_SITE_SNAPSHOT_FILENAME}">'
+            f"{STATIC_SITE_SNAPSHOT_FILENAME}</a>.</p>"
         ),
         "</header>",
         "<main>",
@@ -1224,7 +1244,10 @@ def _render_static_site_html(
             "</section>",
             "<section>",
             "<h2>Markdown Report</h2>",
-            '<p><a href="report.md">Open report.md</a></p>',
+            (
+                f'<p><a href="{STATIC_SITE_REPORT_FILENAME}">'
+                f"Open {STATIC_SITE_REPORT_FILENAME}</a></p>"
+            ),
             f"<pre>{_html(report_markdown)}</pre>",
             "</section>",
             "</main>",
@@ -1234,6 +1257,137 @@ def _render_static_site_html(
         ]
     )
     return "\n".join(lines)
+
+
+def _render_static_site_snapshot_json(
+    *,
+    db_path: Path,
+    run_rows: list[sqlite3.Row],
+    case_rows: list[sqlite3.Row],
+    metric_rows: list[_SiteComparisonMetric],
+    generated_at: str,
+) -> str:
+    snapshot = {
+        "schema_version": 1,
+        "registry_schema_version": REGISTRY_SCHEMA_VERSION,
+        "generated_at": generated_at,
+        "source_database": db_path.name or str(db_path),
+        "runs": [_site_run_row_dict(row) for row in run_rows],
+        "comparison_matrix": [_site_metric_row_dict(row) for row in metric_rows],
+        "case_metrics": [_site_case_row_dict(row) for row in case_rows],
+        "report_path": STATIC_SITE_REPORT_FILENAME,
+    }
+    return json.dumps(snapshot, indent=2, sort_keys=True) + "\n"
+
+
+def _site_run_row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "label": row["label"],
+        "imported_at": row["imported_at"],
+        "row_count": int(row["row_count"]),
+        "run_jsonl_sha256": row["run_jsonl_sha256"],
+        "packs": _site_pack_list(row["pack_ids_json"], row["pack_versions_json"]),
+        "pack_versions": _json_list_values(row["pack_versions_json"]),
+        "adapters": _json_list_values(row["adapters_json"]),
+        "models": _json_list_values(row["models_json"]),
+        "endpoints": _json_list_values(row["endpoints_json"]),
+        "host": {
+            "label": row["host_label"],
+            "hostname": row["host_hostname"],
+            "platform": row["host_platform"],
+            "repo_commit": row["host_repo_commit"],
+        },
+        "comparison": {
+            "mode": row["comparison_mode"],
+            "boundary": row["comparison_boundary"],
+        },
+        "runtime": {
+            "name": row["runtime_name"],
+            "version": row["runtime_version"],
+            "endpoint": row["runtime_endpoint"],
+        },
+        "model_metadata": {
+            "id": row["model_metadata_id"],
+            "quantization": row["model_quantization"],
+            "artifact_repo": row["model_artifact_repo"],
+            "artifact_file": row["model_artifact_file"],
+            "revision": row["model_revision"],
+            "sha256": row["model_sha256"],
+        },
+        "operating_conditions": {
+            "power": row["operating_power"],
+            "thermal": row["operating_thermal"],
+            "background_load": row["operating_background_load"],
+        },
+    }
+
+
+def _site_pack_list(
+    pack_ids_json: str | None,
+    pack_versions_json: str | None,
+) -> list[dict[str, str | None]]:
+    pack_ids = _json_list_values(pack_ids_json)
+    versions = _json_list_values(pack_versions_json)
+    if len(pack_ids) != 1 or len(versions) != 1:
+        return [{"id": pack_id, "version": None} for pack_id in pack_ids]
+    return [{"id": pack_ids[0], "version": versions[0]}]
+
+
+def _site_metric_row_dict(row: _SiteComparisonMetric) -> dict[str, Any]:
+    return {
+        "run_id": row.run_id,
+        "run": row.run_label,
+        "pack": {"id": row.pack_id, "version": row.pack_version},
+        "case": row.case_id,
+        "host": {
+            "label": row.host_label,
+            "platform": row.host_platform,
+        },
+        "runtime": {"name": row.runtime_name},
+        "model_metadata": {
+            "id": row.model_metadata_id,
+            "quantization": row.model_quantization,
+        },
+        "rows": row.rows,
+        "ok_count": row.ok_count,
+        "scoring": {
+            "passed_count": row.scoring_passed_count,
+            "rows": row.scoring_rows,
+        },
+        "medians": {
+            "wall_s": row.wall_s_median,
+            "ttft_s": row.ttft_s_median,
+            "decode_tps": row.decode_tps_median,
+            "total_tps": row.total_tps_median,
+            "prompt_tokens": row.prompt_tokens_median,
+            "cached_prompt_tokens": row.cached_prompt_tokens_median,
+            "output_tokens": row.output_tokens_median,
+        },
+    }
+
+
+def _site_case_row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "run_id": int(row["run_id"]),
+        "run": row["run_label"],
+        "pack": {"id": row["pack_id"], "version": row["pack_version"]},
+        "case": row["case_id"],
+        "rows": int(row["row_count"]),
+        "ok_count": int(row["ok_count"]),
+        "prompt_tokens": {
+            "rows": int(row["prompt_token_rows"]),
+            "median": row["prompt_token_median"],
+        },
+        "cached_prompt_tokens": {
+            "rows": int(row["cached_prompt_token_rows"]),
+            "median": row["cached_prompt_token_median"],
+        },
+        "prefill_tps": {
+            "rows": int(row["prefill_tps_rows"]),
+            "median": row["prefill_tps_median"],
+        },
+    }
 
 
 def _html(value: object) -> str:

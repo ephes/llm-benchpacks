@@ -690,15 +690,19 @@ report is used.
 
 `benchpack registry site --db <sqlite> --out <site-dir>` is the first static
 view over a local registry snapshot. It uses the same indexed compact rows as
-registry-backed reports, writes only `index.html` and `report.md`, and can use
-the same optional `--run-id` or `--label` selectors. The generated `index.html`
-contains local run tables, a comparison matrix with per-run/per-case median
-latency, throughput, token, and scoring fields, case-metric coverage tables,
-and an embedded copy of the Markdown report; `report.md` is produced by the
-existing report renderer. The site export does not require source result
-directories, read raw/workspace/task/verify artifacts, inspect patch or
-model-call files, mutate the database, or contact endpoints. Existing output
-paths are refused unless `--force` is explicit.
+registry-backed reports, writes `index.html`, `report.md`, and
+`snapshot.json`, and can use the same optional `--run-id` or `--label`
+selectors. The generated `index.html` contains local run tables, a comparison
+matrix with per-run/per-case median latency, throughput, token, and scoring
+fields, case-metric coverage tables, and an embedded copy of the Markdown
+report; `report.md` is produced by the existing report renderer.
+`snapshot.json` is a machine-readable static export of the same compact run,
+comparison, and case-metric data for local review tooling; nested comparison
+and case-metric rows carry `run_id` for unambiguous joins back to `runs`. The
+site export does not require source result directories, read raw/workspace/
+task/verify artifacts, inspect patch or model-call files, mutate the database,
+or contact endpoints. Existing output paths are refused unless `--force` is
+explicit.
 
 `benchpack registry duplicates --db <sqlite>` is a read-only registry inspection
 view over the registry-stored `runs.run_jsonl_sha256` values. It reports groups of

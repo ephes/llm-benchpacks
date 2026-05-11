@@ -16,6 +16,27 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-12 (registry site snapshot JSON)
+
+### Changed
+
+- Extended `benchpack registry site --db <sqlite> --out <site-dir>` to write
+  `snapshot.json` alongside `index.html` and `report.md`.
+- The static JSON snapshot contains schema version `1`, the registry schema
+  version, generation time, source database name, compact run metadata,
+  comparison-matrix rows, case-metric rows, and the report path. Nested
+  comparison and case-metric rows include `run_id` so labels do not need to be
+  unique for consumers to join them back to `runs`.
+- Kept the export SQLite-only and read-only: it still does not require source
+  result directories, read raw/workspace/task/verify/patch/model-call
+  artifacts, mutate the database, or contact endpoints.
+- Updated README, specification, architecture, and implementation backlog docs.
+
+### Open Questions
+
+- Hosted upload/review and broader public browse/API workflows remain deferred
+  until there is a concrete sharing workflow.
+
 ## 2026-05-11 (direct-edit telemetry request-shape labels)
 
 ### Changed

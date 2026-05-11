@@ -1315,7 +1315,10 @@ first static local site export has also landed as
 `benchpack registry site --db <sqlite> --out <site-dir>`, writing
 `index.html` and `report.md` from indexed compact rows, and a 2026-05-11
 follow-up added a per-run/per-case comparison matrix of median latency,
-throughput, token, and scoring fields to the HTML view. A first offline
+throughput, token, and scoring fields to the HTML view. A 2026-05-12
+follow-up added `snapshot.json` to that static export, carrying the same
+compact run, comparison, and case-metric data for local review tooling without
+reading source result directories. A first offline
 received-bundle ingestion slice has also landed as
 `benchpack registry bundle import --db <sqlite> <bundle-dir>...`. The first
 duplicate-visibility slice has landed as
@@ -1434,7 +1437,9 @@ Scope:
     2026-05-11** with a comparison matrix derived from indexed `result_rows`,
     showing per-run/per-case median wall time, TTFT, decode TPS, total TPS,
     prompt tokens, cached prompt tokens, output tokens, and scoring counts
-    without reading source result directories.
+    without reading source result directories. **Extended 2026-05-12** with a
+    static `snapshot.json` file containing the same compact run, comparison,
+    and case-metric data as machine-readable JSON for local review tooling.
   - authenticated upload/review for result bundles;
   - public browse and comparison views;
   - optional API for querying normalized results. **First local slice landed
