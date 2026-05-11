@@ -35,6 +35,26 @@ working history and open questions.
 - Direct-edit external-agent evidence still needs live opt-in runs against a
   stronger configured endpoint/model before any default-matrix promotion.
 
+## 2026-05-11 (direct-edit token budget field)
+
+### Changed
+
+- Added `--token-budget-field` to
+  `examples/external-agent/openai-direct-edit-agent.py`.
+- The wrapper still defaults to sending `--max-tokens` as `max_tokens` for
+  local OpenAI-compatible servers, but operators can opt into
+  `max_completion_tokens` for endpoints or models that require that newer
+  OpenAI-style chat-completions field.
+- Updated README, external-agent example docs, specification, and
+  implementation backlog docs. No benchpack manifest, adapter schema, result
+  row, or default matrix behavior changed.
+
+### Open Questions
+
+- Live direct-edit evidence still needs a configured endpoint/token and remains
+  explicit opt-in. This shell had no configured API token, so this change only
+  prepares the larger-budget compatibility path.
+
 ## 2026-05-11 (direct-edit JSON-schema hook)
 
 ### Changed

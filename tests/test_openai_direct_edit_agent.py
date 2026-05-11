@@ -200,6 +200,7 @@ def test_call_chat_completion_omits_response_format_by_default(
         timeout_s=12.5,
         temperature=0.0,
         max_tokens=1024,
+        token_budget_field="max_tokens",
         response_format="default",
     )
 
@@ -209,6 +210,8 @@ def test_call_chat_completion_omits_response_format_by_default(
     assert request.full_url == "https://llm.example.test/v1/chat/completions"
     body = json.loads(request.data.decode("utf-8"))
     assert "response_format" not in body
+    assert body["max_tokens"] == 1024
+    assert "max_completion_tokens" not in body
 
 
 def test_call_chat_completion_sends_json_object_response_format(
@@ -244,12 +247,74 @@ def test_call_chat_completion_sends_json_object_response_format(
         timeout_s=12.5,
         temperature=0.0,
         max_tokens=1024,
+        token_budget_field="max_tokens",
         response_format="json_object",
     )
 
     request, _ = requests[0]
     body = json.loads(request.data.decode("utf-8"))
     assert body["response_format"] == {"type": "json_object"}
+
+
+def test_call_chat_completion_can_send_max_completion_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _load_agent_module()
+    requests: list[Any] = []
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+
+    agent._call_chat_completion(
+        endpoint="https://llm.example.test/v1",
+        api_key="secret",
+        model="test-model",
+        prompt="Fix it.",
+        allowed_paths=("greeter.py",),
+        timeout_s=12.5,
+        temperature=0.0,
+        max_tokens=8192,
+        token_budget_field="max_completion_tokens",
+        response_format="default",
+    )
+
+    request, _ = requests[0]
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["max_completion_tokens"] == 8192
+    assert "max_tokens" not in body
+
+
+def test_call_chat_completion_rejects_unknown_token_budget_field() -> None:
+    agent = _load_agent_module()
+
+    with pytest.raises(ValueError, match="unsupported token budget field"):
+        agent._call_chat_completion(
+            endpoint="https://llm.example.test/v1",
+            api_key="secret",
+            model="test-model",
+            prompt="Fix it.",
+            allowed_paths=("greeter.py",),
+            timeout_s=12.5,
+            temperature=0.0,
+            max_tokens=1024,
+            token_budget_field="max_output_tokens",
+            response_format="default",
+        )
 
 
 def test_call_chat_completion_sends_json_schema_response_format(
@@ -293,6 +358,7 @@ def test_call_chat_completion_sends_json_schema_response_format(
         timeout_s=12.5,
         temperature=0.0,
         max_tokens=1024,
+        token_budget_field="max_tokens",
         response_format="json_schema",
     )
 
@@ -328,6 +394,7 @@ def test_call_chat_completion_rejects_unknown_response_format() -> None:
             timeout_s=12.5,
             temperature=0.0,
             max_tokens=1024,
+            token_budget_field="max_tokens",
             response_format="xml",
         )
 

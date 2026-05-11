@@ -35,11 +35,15 @@ Next actionable slices:
    opt-in request-shape hooks for both JSON mode
    `--response-format json_object` and structured outputs
    `--response-format json_schema`, with the latter constraining the full-file
-   replacement payload and prompt-derived allowed paths. The next work here is
-   live opt-in evidence where the endpoint supports one of those modes, a
-   larger completion budget, or a stronger already-configured agent/model. Keep
-   this as opt-in evidence; do not promote `coding-tasks-external-agent` into
-   defaults from the current mixed verifier outcomes.
+   replacement payload and prompt-derived allowed paths. It also has an
+   explicit completion-budget compatibility knob:
+   `--token-budget-field max_completion_tokens` for endpoints/models that need
+   that newer OpenAI-style request field while preserving the default
+   `max_tokens` request shape. The next work here is live opt-in evidence where
+   the endpoint supports one of those modes, a larger completion budget, or a
+   stronger already-configured agent/model. Keep this as opt-in evidence; do
+   not promote `coding-tasks-external-agent` into defaults from the current
+   mixed verifier outcomes.
 2. Reporting polish only when it answers a concrete review question.
    Direct-edit outcome labels and per-run counts have landed. Remaining
    possible small slices are result-set report ergonomics for already-generated

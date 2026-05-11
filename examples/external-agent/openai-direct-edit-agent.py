@@ -238,14 +238,17 @@ def _call_chat_completion(
     timeout_s: float,
     temperature: float,
     max_tokens: int,
+    token_budget_field: str,
     response_format: str,
 ) -> tuple[dict[str, Any], float]:
+    if token_budget_field not in {"max_tokens", "max_completion_tokens"}:
+        raise ValueError(f"unsupported token budget field: {token_budget_field}")
     request_body = {
         "model": model,
         "messages": _build_messages(prompt, allowed_paths),
         "temperature": temperature,
-        "max_tokens": max_tokens,
         "stream": False,
+        token_budget_field: max_tokens,
     }
     response_format_payload = _response_format_payload(response_format, allowed_paths)
     if response_format_payload is not None:
@@ -401,6 +404,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument(
+        "--token-budget-field",
+        choices=("max_tokens", "max_completion_tokens"),
+        default="max_tokens",
+        help=(
+            "Chat-completions request field used for --max-tokens. Keep the "
+            "portable default max_tokens for local OpenAI-compatible servers; "
+            "use max_completion_tokens for endpoints/models that require the "
+            "newer OpenAI-style field."
+        ),
+    )
+    parser.add_argument(
         "--response-format",
         choices=("default", "json_object", "json_schema"),
         default="default",
@@ -435,6 +449,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
+            token_budget_field=args.token_budget_field,
             response_format=args.response_format,
         )
         payload = _parse_edit_payload(

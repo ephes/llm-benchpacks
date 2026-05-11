@@ -102,10 +102,15 @@ OpenAI-style JSON-object response formatting, add
 assistant payload for the harness-owned task call. When the endpoint supports
 OpenAI-style structured outputs, use `--response-format json_schema` instead;
 that mode sends a strict schema for the full-file replacement payload and
-constrains `files[].path` to the prompt-derived allowed path list. An empty
-`files` array is a valid no-op wrapper response; the benchmark verifier still
-decides whether that no-op passes. Use it from the operator machine when the
-endpoint and token are already configured locally:
+constrains `files[].path` to the prompt-derived allowed path list. The wrapper
+defaults to `--max-tokens 4096`; pass a larger value such as
+`--max-tokens 8192` when direct-edit payloads need more completion room. The
+budget is sent as `max_tokens` by default for local OpenAI-compatible servers;
+add `--token-budget-field max_completion_tokens` only for endpoints or models
+that require the newer OpenAI-style field. An empty `files` array is a valid
+no-op wrapper response; the benchmark verifier still decides whether that
+no-op passes. Use it from the operator machine when the endpoint and token are
+already configured locally:
 
 ```sh
 BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/openai-direct-edit-agent.py\",\"--endpoint\",\"https://llm.django-cast.com/v1\",\"--model\",\"Qwen/Qwen2.5-1.5B-Instruct\",\"--api-key-env\",\"BENCHPACK_HETZNER_OPENAI_TOKEN\"]" \
@@ -119,7 +124,10 @@ BENCHPACK_EXTERNAL_AGENT_ARGV="[\"python3\",\"$PWD/examples/external-agent/opena
 For a JSON-mode experiment, add
 `"--response-format","json_object"` to `BENCHPACK_EXTERNAL_AGENT_ARGV` anywhere
 after the wrapper script path. For a structured-output experiment, use
-`"--response-format","json_schema"` instead.
+`"--response-format","json_schema"` instead. For a larger-budget
+structured-output experiment against an endpoint that expects the newer token
+budget field, add
+`"--max-tokens","8192","--token-budget-field","max_completion_tokens"` as well.
 
 The wrapper records only the environment variable name in commands and context;
 the token value must stay in the local environment or secret store. For the
