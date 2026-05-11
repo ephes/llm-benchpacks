@@ -123,9 +123,9 @@ expected = "Paris"
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
   inline on individual cases as an override. Current executable deterministic
-  modes are `none`, `contains`, `regex`, and `verify-script` for measured
-  `repo-task` executions. Other reserved modes still parse as manifest values
-  but are not implemented by the scorer. See **Scoring** below.
+  modes are `none`, `contains`, `regex`, `json-schema`, and `verify-script` for
+  measured `repo-task` executions. Other reserved modes still parse as manifest
+  values but are not implemented by the scorer. See **Scoring** below.
 
 ### Prompt Files
 
@@ -699,8 +699,21 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `ValueError` when `mode = "regex"` is evaluated without `pattern`.
 
 `json-schema`
-: Reserved; not implemented by the scorer yet. Intended behavior is that output
-  must parse as JSON and validate against the file at `schema`.
+: Output must parse as JSON and validate against the pack-relative JSON schema
+  file declared in `schema`. The runner resolves `schema` inside the pack
+  directory at manifest-load time, reads it as a JSON object, and rejects
+  absolute paths, `..` escapes, missing files, invalid JSON, and non-object
+  schemas. The executable scorer implements the compact deterministic subset
+  used by bundled packs: `type`, `required`, `properties`,
+  `additionalProperties = false`, `items`, `enum`, `const`, string length
+  bounds, and numeric bounds. `const` and `enum` use JSON-value equality:
+  booleans are distinct from numbers, so `true` does not match `1` and `false`
+  does not match `0`. Unknown schema keywords are ignored. Invalid JSON model
+  output or schema-shape mismatches produce a normal scoring failure, not a
+  runner crash. Failed `json-schema` scoring envelopes may include an `error`
+  string describing the invalid JSON or first schema mismatch. This scoring
+  mode checks raw adapter output text only; it does not request native tool
+  calls from an endpoint.
 
 `verify-script`
 : Implemented for measured `repo-task` executions only. The runner resolves
@@ -767,9 +780,10 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 
 Scripts under `verify/` are used by scoring entries that reference them via
 `mode = "verify-script"` and a `script = "verify/..."` path. Implemented inline
-declarative modes (`contains` and `regex`) do not need `verify/` and should be
-preferred for fast deterministic prompt-output checks. `verify-script` is the
-deterministic scoring mode for measured repo-task correctness.
+declarative modes (`contains`, `regex`, and `json-schema`) do not need
+`verify/` and should be preferred for fast deterministic prompt-output checks.
+`verify-script` is the deterministic scoring mode for measured repo-task
+correctness.
 
 ## Requires (TBD)
 

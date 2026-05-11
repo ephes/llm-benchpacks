@@ -21,6 +21,7 @@ from benchpack.packs import (
     InvalidHarnessError,
     InvalidIdError,
     InvalidPromptSourceError,
+    InvalidScoringSchemaError,
     KNOWN_PUBLIC_HARNESS_IDS,
     PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
     PUBLIC_HARNESS_EXTERNAL_AGENT,
@@ -563,6 +564,61 @@ def test_known_public_harness_ids_include_external_agent() -> None:
     assert KNOWN_PUBLIC_HARNESS_IDS == frozenset(
         {PUBLIC_HARNESS_FENCED_PATCH, PUBLIC_HARNESS_EXTERNAL_AGENT}
     )
+
+
+def test_load_pack_loads_json_schema_scoring_file(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "jsonpack"
+version = "0.1.0"
+
+[[cases]]
+id = "json-case"
+kind = "chat"
+prompt = "Return JSON."
+scoring = { mode = "json-schema", schema = "fixtures/shape.schema.json" }
+""",
+    )
+    fixture_dir = pack_dir / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "shape.schema.json").write_text(
+        '{"type":"object","required":["ok"],"properties":{"ok":{"const":true}}}',
+        encoding="utf-8",
+    )
+
+    pack = load_pack(pack_dir)
+
+    scoring = pack.cases[0].scoring
+    assert scoring is not None
+    assert scoring.mode == "json-schema"
+    assert scoring.schema == "fixtures/shape.schema.json"
+    assert scoring.schema_data == {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {"ok": {"const": True}},
+    }
+
+
+def test_load_pack_rejects_json_schema_path_escape(tmp_path: Path) -> None:
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "jsonpack"
+version = "0.1.0"
+
+[[cases]]
+id = "json-case"
+kind = "chat"
+prompt = "Return JSON."
+scoring = { mode = "json-schema", schema = "../shape.schema.json" }
+""",
+    )
+
+    with pytest.raises(InvalidScoringSchemaError, match="escapes"):
+        load_pack(pack_dir)
 
 
 def test_bundled_coding_task_packs_keep_default_fenced_patch_behavior() -> None:
@@ -2169,6 +2225,39 @@ def test_bundled_smoke_chat_pack_has_no_fixtures() -> None:
     assert pack.id == "smoke-chat"
     assert pack.fixtures == []
     assert [case.fixture_refs for case in pack.cases] == [[]]
+
+
+def test_bundled_tool_json_pack_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    pack = load_pack(repo_root / "benchpacks" / "tool-json")
+
+    assert pack.id == "tool-json"
+    assert pack.version == "0.1.0"
+    assert pack.defaults["temperature"] == 0
+    assert pack.defaults["max_tokens"] == 256
+    assert pack.defaults["stream"] is False
+    assert warmup_from_defaults(pack.defaults) == 0
+    assert repetitions_from_defaults(pack.defaults) == 1
+    assert [case.id for case in pack.cases] == [
+        "strict-object",
+        "tool-call-arguments",
+    ]
+    assert all(case.kind == "chat" for case in pack.cases)
+    assert all(case.scoring is not None for case in pack.cases)
+    assert [case.scoring.mode for case in pack.cases if case.scoring] == [
+        "json-schema",
+        "json-schema",
+    ]
+    assert [case.scoring.schema for case in pack.cases if case.scoring] == [
+        "fixtures/strict-object.schema.json",
+        "fixtures/tool-call-arguments.schema.json",
+    ]
+    assert all(case.scoring.schema_data for case in pack.cases if case.scoring)
+    assert "Return exactly one JSON object" in (pack.cases[0].prompt or "")
+    assert "shaped like a tool call" in (pack.cases[1].prompt or "")
+    assert "Markdown fences" in (pack.cases[0].prompt or "")
+    assert pack.scoring is None
+    assert pack.fixtures == []
 
 
 def test_bundled_desktop_django_wrap_pack_contract() -> None:

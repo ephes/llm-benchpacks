@@ -38,6 +38,29 @@ working history and open questions.
   supports that request mode; this change only improves safe telemetry for the
   next opt-in evidence run.
 
+## 2026-05-11 (tool-json pack)
+
+### Changed
+
+- Implemented the previously reserved `json-schema` prompt-output scoring mode
+  with a compact stdlib validator for pack-local schema files.
+- Hardened `const` and `enum` comparisons so JSON booleans do not alias JSON
+  numbers through Python's `True == 1` and `False == 0` equality behavior.
+- Added the bundled `tool-json` pack with two non-streaming chat cases:
+  `strict-object` and `tool-call-arguments`.
+- Kept the pack endpoint-only and formatting-focused. It scores raw JSON
+  adapter output text and does not exercise native tool-call request or
+  response fields.
+- Documented that failed `json-schema` scoring envelopes may include an
+  `error` string in `run.jsonl`.
+- Updated README, specification, architecture, benchpack format docs, and the
+  implementation backlog.
+
+### Open Questions
+
+- Live runs should determine whether `tool-json` is useful enough to include
+  in helper pack sets. It is not a default-matrix promotion.
+
 ## 2026-05-11 (registry site comparison matrix)
 
 ### Changed

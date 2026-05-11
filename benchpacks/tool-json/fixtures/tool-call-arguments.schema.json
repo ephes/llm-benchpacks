@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["tool", "arguments"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": { "const": "create_ticket" },
+    "arguments": {
+      "type": "object",
+      "required": ["title", "severity", "assignee", "due_days"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "const": "Investigate cache parity warning" },
+        "severity": { "enum": ["medium"] },
+        "assignee": { "const": "benchpack" },
+        "due_days": { "const": 3 }
+      }
+    }
+  }
+}

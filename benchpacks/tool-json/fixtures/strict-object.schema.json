@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["task", "name", "email", "priority", "tags"],
+  "additionalProperties": false,
+  "properties": {
+    "task": { "const": "extract_contact" },
+    "name": { "const": "Ada Lovelace" },
+    "email": { "const": "ada@example.org" },
+    "priority": { "enum": ["normal"] },
+    "tags": { "const": ["benchmark", "json"] }
+  }
+}

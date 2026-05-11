@@ -1,0 +1,23 @@
+[pack]
+id = "tool-json"
+version = "0.1.0"
+description = "Strict JSON and tool-call-shaped formatting checks"
+
+[defaults]
+temperature = 0
+max_tokens = 256
+stream = false
+warmup = 0
+repetitions = 1
+
+[[cases]]
+id = "strict-object"
+kind = "chat"
+prompt_file = "prompts/strict-object.md"
+scoring = { mode = "json-schema", schema = "fixtures/strict-object.schema.json" }
+
+[[cases]]
+id = "tool-call-arguments"
+kind = "chat"
+prompt_file = "prompts/tool-call-arguments.md"
+scoring = { mode = "json-schema", schema = "fixtures/tool-call-arguments.schema.json" }

@@ -5,6 +5,7 @@ Parses ``benchpack.toml`` per ``docs/benchpack-format.md`` into typed dataclasse
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -81,6 +82,10 @@ class InvalidHarnessError(PackError):
     """Raised when a case harness declaration is invalid."""
 
 
+class InvalidScoringSchemaError(PackError):
+    """Raised when a json-schema scoring declaration is invalid."""
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.match(value):
         raise InvalidIdError(
@@ -95,6 +100,7 @@ class Scoring:
     expected: str | None = None
     pattern: str | None = None
     schema: str | None = None
+    schema_data: dict[str, Any] | None = None
     script: str | None = None
     timeout_s: float | None = None
     environment: dict[str, str] | None = None
@@ -139,7 +145,11 @@ class Pack:
     fixtures: list[Fixture] = field(default_factory=list)
 
 
-def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
+def _scoring_from_dict(
+    data: dict[str, Any] | None,
+    *,
+    resolved_pack_dir: Path,
+) -> Scoring | None:
     if not data:
         return None
     mode = data.get("mode")
@@ -157,6 +167,12 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
             "scoring.environment is only supported when "
             'scoring.mode = "verify-script"'
         )
+    schema = data.get("schema")
+    schema_data = _scoring_schema_from_value(
+        schema,
+        mode=mode,
+        resolved_pack_dir=resolved_pack_dir,
+    )
     known = {
         "mode",
         "expected",
@@ -171,12 +187,54 @@ def _scoring_from_dict(data: dict[str, Any] | None) -> Scoring | None:
         mode=mode,
         expected=data.get("expected"),
         pattern=data.get("pattern"),
-        schema=data.get("schema"),
+        schema=schema,
+        schema_data=schema_data,
         script=data.get("script"),
         timeout_s=timeout_s,
         environment=environment,
         extra=extra,
     )
+
+
+def _scoring_schema_from_value(
+    value: Any,
+    *,
+    mode: str,
+    resolved_pack_dir: Path,
+) -> dict[str, Any] | None:
+    if mode != "json-schema":
+        return None
+    if not isinstance(value, str) or not value:
+        raise InvalidScoringSchemaError(
+            "scoring.schema must be a non-empty pack-relative path when "
+            'scoring.mode = "json-schema"'
+        )
+
+    schema_path = _resolve_pack_relative_path(
+        value,
+        resolved_pack_dir=resolved_pack_dir,
+        subject="scoring.schema",
+        error_type=InvalidScoringSchemaError,
+    )
+    if not schema_path.is_file():
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} must point to an existing JSON file"
+        )
+    try:
+        loaded = json.loads(schema_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} could not be read"
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} is not valid JSON"
+        ) from exc
+    if not isinstance(loaded, dict):
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} must contain a JSON object schema"
+        )
+    return loaded
 
 
 def _scoring_timeout_from_value(value: Any) -> float | None:
@@ -608,7 +666,10 @@ def load_pack(path: Path | str) -> Pack:
                 id=case_id,
                 kind=case_kind,
                 prompt=prompt,
-                scoring=_scoring_from_dict(entry.get("scoring")),
+                scoring=_scoring_from_dict(
+                    entry.get("scoring"),
+                    resolved_pack_dir=resolved_pack_dir,
+                ),
                 raw=dict(entry),
                 harness=harness,
                 fixture_refs=fixture_refs,
@@ -623,7 +684,10 @@ def load_pack(path: Path | str) -> Pack:
         description=pack_section.get("description", ""),
         defaults=defaults,
         cases=cases,
-        scoring=_scoring_from_dict(data.get("scoring")),
+        scoring=_scoring_from_dict(
+            data.get("scoring"),
+            resolved_pack_dir=resolved_pack_dir,
+        ),
         path=pack_dir,
         fixtures=fixtures,
     )

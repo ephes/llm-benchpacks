@@ -28,6 +28,10 @@ Current posture:
    selected `google_gemma-4-E2B-it-Q4_K_M.gguf` artifact and host lane. Park
    broad runtime-only reruns until a new model target, runtime version, host,
    or comparison question appears.
+4. The reserved `tool-json` pack has landed as an opt-in strict JSON
+   formatting slice with two endpoint-only chat cases and pack-local
+   JSON-schema scoring fixtures. Treat it as formatting evidence only, not
+   native tool-call API evidence or default-matrix promotion.
 
 Next actionable slices:
 

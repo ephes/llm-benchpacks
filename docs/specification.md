@@ -147,7 +147,11 @@ Initial packs:
   fenced patch. The measured case declares
   `harness = { id = "external-agent", timeout_s = 900 }`. It is separate from
   the default fenced-patch pack.
-- `tool-json`: strict JSON and tool-call formatting checks.
+- `tool-json`: strict JSON and tool-call-shaped formatting checks. Version
+  `0.1.0` has two non-streaming chat cases, `strict-object` and
+  `tool-call-arguments`, that require raw JSON with no Markdown or prose and
+  score with pack-local `json-schema` fixtures. It is endpoint-only formatting
+  evidence and does not exercise native tool-call request or response fields.
 
 The bundled `runtime-sweep` pack is versioned as `0.1.0` and contains
 `short`, `medium`, and `long` chat cases with fixed inline prompts. It sets
@@ -187,7 +191,8 @@ top-level `verify-script` scoring.
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
 injected into prompts, mutated, turned into a worktree, used for patch
-extraction, or passed to a verifier.
+extraction, or passed to a verifier. `tool-json` is also a prompt-only `chat`
+pack, using deterministic JSON-schema scoring over adapter output text only.
 
 An initial internal agent-session harness path now exists behind the same
 repo-task executor boundary. It can be supplied only by runner-side code, such
@@ -576,18 +581,21 @@ such as patch diffs or `verify.json` when they are needed to explain a result.
 Full disposable workspaces and large execution logs should normally stay local
 or ignored.
 
-Existing `contains` and `regex` scoring modes score prompt output.
-`verify-script` is implemented only for measured `repo-task` executions: exit
-code `0` means pass, nonzero means fail, timeout means fail with a null verifier
-exit code, and the verifier receives the prepared workspace plus declared
-case/run metadata as command-line inputs. The runner always writes the
-deterministic verifier JSON/stdout/stderr artifact paths for a measured
-verifier attempt. On timeout, stdout/stderr logs are still created, captured
-partial output is preserved when Python exposes it, and the structured verifier
-JSON is created or corrected with `exit_code: null`, `passed: false`,
-`timed_out: true`, and the actual configured `timeout_s` value. If
-`scoring.timeout_s` is absent from the effective `verify-script` scoring table,
-the verifier timeout remains `300.0` seconds. If `scoring.environment` is absent
+Existing `contains`, `regex`, and `json-schema` scoring modes score prompt
+output. `json-schema` parses raw adapter output text as JSON and validates it
+against a pack-local schema subset; malformed JSON or shape mismatches are
+ordinary scoring failures. `verify-script` is implemented only for measured
+`repo-task` executions: exit code `0` means pass, nonzero means fail, timeout
+means fail with a null verifier exit code, and the verifier receives the
+prepared workspace plus declared case/run metadata as command-line inputs. The
+runner always writes the deterministic verifier JSON/stdout/stderr artifact
+paths for a measured verifier attempt. On timeout, stdout/stderr logs are still
+created, captured partial output is preserved when Python exposes it, and the
+structured verifier JSON is created or corrected with `exit_code: null`,
+`passed: false`, `timed_out: true`, and the actual configured `timeout_s`
+value. If `scoring.timeout_s` is absent from the effective `verify-script`
+scoring table, the verifier timeout remains `300.0` seconds. If
+`scoring.environment` is absent
 from the effective `verify-script` scoring table, verifier subprocesses inherit
 the current runner environment. If it is present, its string keys and string
 values are overlaid onto a copy of that environment for the verifier only.

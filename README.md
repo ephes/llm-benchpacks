@@ -55,6 +55,7 @@ uv run benchpack run endpoint-python-correctness --adapter openai-chat --model q
 uv run benchpack run python-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-python-regression --force
 uv run benchpack run django-dashboard-regression-fix --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-dashboard-regression --force
 uv run benchpack run mini-project-completion --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-mini-project --force
+uv run benchpack run tool-json --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-json-format --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
@@ -354,6 +355,11 @@ Bundled packs:
 - `smoke-chat`: non-streaming single-case endpoint smoke test.
 - `runtime-sweep`: streaming short/medium/long runtime measurement pack with one
   warmup and three measured repetitions per case.
+- `tool-json`: non-streaming two-case chat pack for strict JSON and
+  tool-call-shaped formatting checks. It requires raw JSON with no Markdown or
+  prose and scores with pack-local `json-schema` fixtures. This is formatting
+  evidence only; it does not exercise native tool-call request or response
+  fields.
 - `desktop-django-wrap`: streaming prompt-only first Phase 3 coding-agent-shaped
   workload with pack-local prompt files that asks for Django-in-Electron
   wrapping plans, uses regex scoring to require `DDS_WRAP_PLAN` plus fixed
@@ -418,13 +424,15 @@ The first implementation stays small:
 1. A CLI that can run one benchmark pack against one endpoint.
 2. An OpenAI-compatible adapter for `mlx_lm.server`, `llama-server`, vLLM, LM Studio, and similar servers.
 3. An Ollama-native adapter for `/api/generate` so we retain Ollama's native timing fields.
-4. Smoke and runtime-sweep benchmarks, plus Phase 3 coding-agent-shaped packs:
+4. Smoke, runtime-sweep, and JSON-formatting benchmarks, plus Phase 3
+   coding-agent-shaped packs:
    the prompt-only `desktop-django-wrap` starter pack and measured
    repo-mutating fenced unified-diff packs such as `patch-from-failure`,
    `python-regression-fix`, and `django-dashboard-regression-fix`, plus
    `endpoint-python-correctness`, which also allows an explicit replacement
    block fallback, and the opt-in project-completion prototype
-   `mini-project-completion`.
+   `mini-project-completion`, and the endpoint-only `tool-json` formatting
+   pack.
    `desktop-django-wrap` still treats directory
    fixtures as metadata-only; repo-task packs copy their repo fixtures into
    run-owned workspaces, apply the model edit there, and verify the result.

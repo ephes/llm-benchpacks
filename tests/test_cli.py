@@ -243,6 +243,51 @@ mode = "none"
     )
 
 
+def _write_json_schema_pack(tmp_path: Path) -> None:
+    pack_dir = tmp_path / "benchpacks" / "json-format"
+    pack_dir.mkdir(parents=True)
+    fixtures_dir = pack_dir / "fixtures"
+    fixtures_dir.mkdir()
+    (fixtures_dir / "shape.schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "required": ["tool", "arguments"],
+                "additionalProperties": False,
+                "properties": {
+                    "tool": {"const": "create_ticket"},
+                    "arguments": {
+                        "type": "object",
+                        "required": ["severity"],
+                        "additionalProperties": False,
+                        "properties": {"severity": {"enum": ["medium"]}},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (pack_dir / "benchpack.toml").write_text(
+        """
+[pack]
+id = "json-format"
+version = "0.1.0"
+
+[defaults]
+temperature = 0
+max_tokens = 64
+stream = false
+
+[[cases]]
+id = "tool-call"
+kind = "chat"
+prompt = "Return JSON."
+scoring = { mode = "json-schema", schema = "fixtures/shape.schema.json" }
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_two_case_pack(tmp_path: Path, defaults_extra: str = "") -> None:
     pack_dir = tmp_path / "benchpacks" / "smoke-chat"
     pack_dir.mkdir(parents=True)
@@ -518,6 +563,37 @@ def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> Non
     assert record["raw"]["request_path"] == "raw/capital.request.json"
     assert record["resources"].keys() == {"memory_mb", "gpu_memory_mb"}
     assert "repetition" not in record
+
+
+def test_cli_run_records_json_schema_scoring(tmp_path: Path, monkeypatch) -> None:
+    _install_output_adapter(
+        monkeypatch,
+        '{"tool":"create_ticket","arguments":{"severity":"medium"}}',
+    )
+    monkeypatch.chdir(tmp_path)
+    _write_json_schema_pack(tmp_path)
+
+    rc = main(
+        [
+            "run",
+            "json-format",
+            "--adapter",
+            "openai-chat",
+            "--model",
+            "test-model",
+            "--endpoint",
+            "http://example.test/v1",
+            "--host-label",
+            "unit-test",
+        ]
+    )
+    assert rc == 0
+
+    out = next((tmp_path / "results").iterdir())
+    record = json.loads((out / "run.jsonl").read_text().strip())
+    assert record["pack"] == {"id": "json-format", "version": "0.1.0"}
+    assert record["case"] == "tool-call"
+    assert record["scoring"] == {"mode": "json-schema", "passed": True}
 
 
 def test_cli_run_metadata_writes_small_result_artifact(

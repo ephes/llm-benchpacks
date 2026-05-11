@@ -73,6 +73,7 @@ than changing the adapter boundary:
 benchpacks/
   smoke-chat/
   runtime-sweep/
+  tool-json/
   desktop-django-wrap/
   patch-from-failure/
   endpoint-python-correctness/
@@ -456,9 +457,13 @@ to `run.jsonl`:
 - `timing.total_tps` — derived as `tokens.output / timing.wall_s`
 - `scoring` — the result of the configured scoring mode (see
   `docs/benchpack-format.md`); `null` when mode is `none` or absent. Current
-  executable modes are `contains` substring checks and `regex` checks using
-  Python `re.search` with the pack-provided pattern. For measured repo-task
-  `verify-script` rows, the runner sets scoring from the verifier exit code.
+  executable prompt-output modes are `contains` substring checks, `regex`
+  checks using Python `re.search` with the pack-provided pattern, and
+  `json-schema` checks that parse adapter output text as JSON and validate it
+  against a pack-local schema subset. Failed `json-schema` scoring envelopes
+  include `error`, a compact string describing the invalid JSON or first schema
+  mismatch. For measured repo-task `verify-script` rows, the runner sets
+  scoring from the verifier exit code.
 
 Adapters do not produce or read these fields. The reporter is also where pack
 id/version get attached for cross-run comparison.
