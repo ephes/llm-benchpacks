@@ -139,6 +139,8 @@ Current status and boundaries:
   `prefill parity=comparable` for short, medium, and long, with median total
   TPS M5 vs M4 vs Hetzner of 106.99 vs 87.58 vs 72.51 short, 108.70 vs 89.08
   vs 71.93 medium, and 107.65 vs 87.25 vs 68.91 long.
+  The compact summary is
+  `docs/gemma4-26b-strict-gguf-trihost-summary.md`.
 
 Sources:
 
@@ -208,7 +210,8 @@ Latest strict-GGUF preflight note:
   artifact, checksum, llama.cpp builds, context/cache settings, or Hetzner
   production baseline changes. Stronger repo-task packs remain opt-in for this
   lane because deterministic verifier quality was mixed outside the default
-  four-pack.
+  four-pack. The completed 2026-05-12 lane is summarized in
+  `docs/gemma4-26b-strict-gguf-trihost-summary.md`.
 - Keep `docs/qwen36-27b-strict-gguf-trihost-summary.md` current if the narrow
   Qwen3.6 27B strict-GGUF preflight is expanded into a full four-pack matrix
   or if the selected artifact, checksum, llama.cpp builds, context/cache

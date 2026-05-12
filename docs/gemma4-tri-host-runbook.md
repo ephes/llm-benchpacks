@@ -12,6 +12,8 @@ The first campaign mode was strict same-GGUF parity through `llama-server` on
 all three hosts, and that lane now has four-pack evidence for the selected E2B
 Q4_K_M artifact. The follow-up 26B A4B strict-GGUF campaign also has M5, M4,
 and Hetzner evidence with the exact `gemma-4-26B-A4B-it-Q4_K_M.gguf` artifact.
+Use `docs/gemma4-26b-strict-gguf-trihost-summary.md` for the compact
+consumption path for that completed 2026-05-12 lane.
 The fallback mode remains a service-shaped runtime-and-format
 comparison: Apple Silicon uses MLX or GGUF while Hetzner serves Hugging Face
 weights through vLLM. That fallback is operationally useful, but it is not
@@ -101,7 +103,8 @@ Primary mode:
   The 2026-05-12 campaign used `llama-server --reasoning off`, a text-only
   benchmark matrix, and conservative 4K context across M5, M4, and Hetzner.
   The CUDA host fit was measured directly rather than inferred from Apple
-  Silicon.
+  Silicon. The compact campaign summary is
+  `docs/gemma4-26b-strict-gguf-trihost-summary.md`.
 - Alternative verified GGUF sources, to use only if the first candidate is
   rejected during preflight:
   `ggml-org/gemma-4-E2B-it-GGUF` has Q8_0/BF16 files but no Q4_K_M file in

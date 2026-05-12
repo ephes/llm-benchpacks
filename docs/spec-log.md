@@ -16,6 +16,22 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-12 (Gemma 4 26B A4B compact summary)
+
+### Changed
+
+- Added `docs/gemma4-26b-strict-gguf-trihost-summary.md` as the compact
+  consumption path for the completed strict same-GGUF 26B A4B tri-host
+  campaign.
+- Cross-linked the new summary from the Gemma 4 target catalog and tri-host
+  runbook so readers do not need to mine `docs/run-log.md` for the completed
+  lane.
+
+### Open Questions
+
+- No new benchmark questions. Stronger repo-task quality remains mixed and
+  opt-in as recorded in the campaign completion entry below.
+
 ## 2026-05-12 (Gemma 4 26B A4B tri-host completion)
 
 ### Changed
