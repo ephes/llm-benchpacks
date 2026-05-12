@@ -113,18 +113,105 @@ def test_apply_edits_rejects_disallowed_paths(tmp_path: Path) -> None:
     workspace.mkdir()
     (workspace / "greeter.py").write_text("old\n", encoding="utf-8")
 
-    try:
+    with pytest.raises(ValueError, match="disallowed path"):
         agent._apply_edits(
             workspace,
             {"files": [{"path": "tests/test_greeter.py", "content": "bad\n"}]},
             ("greeter.py",),
         )
-    except ValueError as exc:
-        assert "disallowed path" in str(exc)
-    else:
-        raise AssertionError("expected disallowed path rejection")
 
     assert (workspace / "greeter.py").read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_edits_validates_all_files_before_writing(tmp_path: Path) -> None:
+    agent = _load_agent_module()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "greeter.py").write_text("old\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="disallowed path"):
+        agent._apply_edits(
+            workspace,
+            {
+                "files": [
+                    {"path": "greeter.py", "content": "new\n"},
+                    {"path": "tests/test_greeter.py", "content": "bad\n"},
+                ]
+            },
+            ("greeter.py",),
+        )
+
+    assert (workspace / "greeter.py").read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_edits_rejects_duplicate_paths_before_writing(tmp_path: Path) -> None:
+    agent = _load_agent_module()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "greeter.py").write_text("old\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicates path"):
+        agent._apply_edits(
+            workspace,
+            {
+                "files": [
+                    {"path": "greeter.py", "content": "new\n"},
+                    {"path": "greeter.py", "content": "newer\n"},
+                ]
+            },
+            ("greeter.py",),
+        )
+
+    assert (workspace / "greeter.py").read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_edits_restores_originals_after_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _load_agent_module()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    greeter = workspace / "greeter.py"
+    helper = workspace / "helper.py"
+    greeter.write_text("old greeter\n", encoding="utf-8")
+    helper.write_text("old helper\n", encoding="utf-8")
+    original_write_text = Path.write_text
+
+    def flaky_write_text(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
+        if self == helper:
+            self.write_bytes(b"partial helper\n")
+            raise OSError("simulated write failure")
+        return original_write_text(
+            self,
+            data,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+
+    with pytest.raises(ValueError, match="could not apply assistant edit payload"):
+        agent._apply_edits(
+            workspace,
+            {
+                "files": [
+                    {"path": "greeter.py", "content": "new greeter\n"},
+                    {"path": "helper.py", "content": "new helper\n"},
+                ]
+            },
+            ("greeter.py", "helper.py"),
+        )
+
+    assert greeter.read_text(encoding="utf-8") == "old greeter\n"
+    assert helper.read_text(encoding="utf-8") == "old helper\n"
 
 
 def test_workspace_path_rejects_unsafe_paths(tmp_path: Path) -> None:

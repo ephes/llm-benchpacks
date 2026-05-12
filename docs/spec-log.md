@@ -16,6 +16,30 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-12 (direct-edit payload validation)
+
+### Changed
+
+- Hardened `examples/external-agent/openai-direct-edit-agent.py` so it
+  validates the complete direct-edit `files` array before writing replacement
+  content into the prepared workspace.
+- The wrapper now rejects duplicate paths and still rejects disallowed or
+  unsafe paths before any file is mutated.
+- If a filesystem write fails after application begins, the wrapper restores
+  original file contents on a best-effort basis and reports the failed model
+  call through the existing safe telemetry line.
+- Kept this as wrapper-owned output-contract behavior: no benchpack manifest
+  fields, adapter schemas, result rows, default helper matrices, or runner raw
+  artifacts changed.
+- Updated README, specification, architecture, external-agent example docs, and
+  the implementation backlog.
+
+### Open Questions
+
+- Live structured-output evidence still needs an endpoint that supports
+  `response_format.type = "json_schema"`; this hardening only reduces partial
+  mutation risk for wrapper-owned direct-edit runs.
+
 ## 2026-05-12 (registry static site browse filters)
 
 ### Changed

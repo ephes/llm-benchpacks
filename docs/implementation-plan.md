@@ -52,10 +52,13 @@ Next actionable slices:
    telemetry now also records request-shape labels (`response_format`,
    `token_budget_field`) and chat `finish_reason` when available, so future
    JSON-object/structured-output reviews can separate request shape and
-   truncation behavior without storing prompts or responses. Further work here
-   should wait for a structured-output endpoint, a stronger already-configured
-   agent/model, or a concrete review question about the two mutation-visible
-   failures.
+   truncation behavior without storing prompts or responses. A follow-up
+   output-contract hardening slice landed on 2026-05-12: the wrapper now
+   validates the entire `files` array before writing replacements, rejects
+   duplicate or disallowed paths, and restores original file contents if a
+   write fails during application. Further work here should wait for a
+   structured-output endpoint, a stronger already-configured agent/model, or a
+   concrete review question about the two mutation-visible failures.
 2. Reporting polish only when it answers a concrete review question.
    Direct-edit outcome labels, per-run counts, and aggregate result-set counts
    have landed. A follow-up source-vs-generated mutation classifier also

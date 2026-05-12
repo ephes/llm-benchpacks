@@ -423,12 +423,15 @@ non-streaming request, with explicit opt-in `--response-format json_object`
 and `--response-format json_schema` modes for endpoints that support those
 OpenAI-style structured-output request shapes. The JSON-schema mode constrains
 the assistant payload to the direct-edit object shape and the prompt-derived
-allowed path list. The wrapper defaults to `--max-tokens 4096` and sends that
-budget as the portable `max_tokens` request field; operators may increase the
-budget and may opt into `--token-budget-field max_completion_tokens` for
-endpoints or models that require that newer OpenAI-style chat-completions
-field. These modes are wrapper request options only; they do not change
-benchpack manifests, adapter schemas, result rows, or default helper matrices.
+allowed path list. The wrapper validates the complete `files` array before it
+writes any replacement content, rejects duplicate or disallowed paths, and
+restores original file contents if an application write fails. The wrapper
+defaults to `--max-tokens 4096` and sends that budget as the portable
+`max_tokens` request field; operators may increase the budget and may opt into
+`--token-budget-field max_completion_tokens` for endpoints or models that
+require that newer OpenAI-style chat-completions field. These modes are wrapper
+request options only; they do not change benchpack manifests, adapter schemas,
+result rows, or default helper matrices.
 
 Other richer harness artifacts must be explicitly named by a later
 artifact/schema slice before they are allowed. It must not mutate pack-owned

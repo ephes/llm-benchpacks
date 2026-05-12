@@ -105,11 +105,14 @@ assistant payload for the harness-owned task call. When the endpoint supports
 OpenAI-style structured outputs, use `--response-format json_schema` instead;
 that mode sends a strict schema for the full-file replacement payload and
 constrains `files[].path` to the prompt-derived allowed path list. The wrapper
-defaults to `--max-tokens 4096`; pass a larger value such as
-`--max-tokens 8192` when direct-edit payloads need more completion room. The
-budget is sent as `max_tokens` by default for local OpenAI-compatible servers;
-add `--token-budget-field max_completion_tokens` only for endpoints or models
-that require the newer OpenAI-style field. An empty `files` array is a valid
+validates the complete `files` array before writing any replacement content,
+rejects duplicate or disallowed paths, and restores original file contents if a
+write fails during application. It defaults to `--max-tokens 4096`; pass a
+larger value such as `--max-tokens 8192` when direct-edit payloads need more
+completion room. The budget is sent as `max_tokens` by default for local
+OpenAI-compatible servers; add `--token-budget-field max_completion_tokens`
+only for endpoints or models that require the newer OpenAI-style field. An
+empty `files` array is a valid
 no-op wrapper response; the benchmark verifier still decides whether that
 no-op passes. Use it from the operator machine when the endpoint and token are
 already configured locally:

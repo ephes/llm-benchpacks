@@ -344,13 +344,17 @@ def _apply_edits(
     if not isinstance(files, list):
         raise ValueError("assistant edit payload.files must be an array")
     allowed = set(allowed_paths)
-    changed = 0
+    replacements: list[tuple[Path, str, str]] = []
+    seen_paths: set[str] = set()
     for index, item in enumerate(files, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"assistant edit payload.files[{index}] must be an object")
         path = _string(item.get("path"), f"assistant edit payload.files[{index}].path")
         if path not in allowed:
             raise ValueError(f"assistant attempted to edit disallowed path: {path}")
+        if path in seen_paths:
+            raise ValueError(f"assistant edit payload duplicates path: {path}")
+        seen_paths.add(path)
         content = item.get("content")
         if not isinstance(content, str):
             raise ValueError(
@@ -359,10 +363,22 @@ def _apply_edits(
         target = _workspace_path(workspace, path)
         if not target.is_file():
             raise ValueError(f"assistant edit target is not a file: {path}")
-        target.write_text(content, encoding="utf-8")
-        changed += 1
+        replacements.append((target, path, content))
+
+    originals = {target: target.read_bytes() for target, _, _ in replacements}
+    try:
+        for target, _, content in replacements:
+            target.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        for target, original in originals.items():
+            try:
+                target.write_bytes(original)
+            except OSError:
+                pass
+        raise ValueError(f"could not apply assistant edit payload: {exc}") from exc
+
     summary = payload.get("summary")
-    return changed, summary if isinstance(summary, str) and summary else ""
+    return len(replacements), summary if isinstance(summary, str) and summary else ""
 
 
 def _usage_tokens(response: dict[str, Any], key: str) -> int | None:

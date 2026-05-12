@@ -362,6 +362,15 @@ normal adapter calls, do not change adapter envelopes, do not add `run.jsonl`
 fields, and do not write normal `raw/` artifacts unless a later schema slice
 defines that mapping.
 
+The source-controlled `openai-direct-edit-agent.py` example is a live wrapper
+over this public handoff for authenticated OpenAI-compatible endpoints. Its
+direct-edit payload is a JSON object containing full-file replacements for
+prompt-allowed workspace paths. The wrapper validates all replacement entries
+before mutating the workspace, rejects duplicate or disallowed paths, and
+restores original file contents when a filesystem write fails during
+application. These wrapper checks are example-owned output-contract behavior;
+they do not add runner result fields or change adapter envelopes.
+
 External harness process failures divide the same way as current task execution.
 Unsafe paths, unwritable required logs, inability to stop a subprocess process
 group, or failure to preserve the workspace/output boundary are runner failures.
