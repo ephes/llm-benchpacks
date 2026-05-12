@@ -16,6 +16,73 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-12 (Gemma 4 26B A4B tri-host completion)
+
+### Changed
+
+- Preserved the previously dirty M4 checkout in stashes, verified M4 clean at
+  `20667e7`, copied the exact GGUF from M5, and verified SHA-256
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`.
+- Ran M4 direct smoke, `smoke-chat`, `runtime-sweep`,
+  `endpoint-python-correctness`, and the default four-pack matrix with
+  `llama-server --reasoning off` at 4K context. Serving/runtime was healthy;
+  `endpoint-python-correctness` failed as model/task-quality evidence, while
+  the default four-pack passed.
+- Preserved the dirty Hetzner checkout at `38f2017` untouched by cloning a
+  clean detached campaign checkout from a local git bundle at `20667e7`.
+- Downloaded the exact GGUF directly on Hetzner, verified SHA-256, stopped
+  production `llm.service` only for the exclusive GPU window, and confirmed the
+  CUDA `llama-server` memory-fit at 4K context before running smoke/runtime and
+  the default four-pack.
+- Restored Hetzner production afterward and verified `/healthz/` 200,
+  `/readyz/` 200 with `backend_available=true`, unauthenticated `/v1/models`
+  401, no strict-lane listener, and GPU memory back near the production
+  baseline.
+- Pulled back only compact M4 and Hetzner artifacts:
+  `run.jsonl`, `summary.md`, `hardware.json`, and `run-metadata.json`.
+- Ran `benchpack compare` across M5, M4, and Hetzner runtime-sweep directories;
+  prefill parity was `comparable` for short, medium, and long. Median total
+  TPS was 106.99/87.58/72.51 short, 108.70/89.08/71.93 medium, and
+  107.65/87.25/68.91 long for M5/M4/Hetzner.
+
+### Open Questions
+
+- Stronger repo-task quality remains mixed for this artifact: local M5 broader
+  repo-task evidence was 2/5 deterministic verifier passes, and M4
+  `endpoint-python-correctness` failed after a source mutation. Keep stronger
+  coding-task packs opt-in for this lane.
+
+## 2026-05-12 (Gemma 4 26B A4B M5 preflight)
+
+### Changed
+
+- Refreshed the Gemma 4 target catalog for the planned medium-model strict-GGUF
+  campaign with `google/gemma-4-26B-A4B-it` and
+  `ggml-org/gemma-4-26B-A4B-it-GGUF`.
+- Downloaded the pinned `gemma-4-26B-A4B-it-Q4_K_M.gguf` artifact locally,
+  verified SHA-256
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`, and
+  served it through local M5 `llama-server --reasoning off` at
+  `http://127.0.0.1:18083/v1`.
+- Ran local M5 preflight packs with ignored metadata:
+  `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, `patch-from-failure`,
+  `tool-json`, `endpoint-python-correctness`, `python-regression-fix`,
+  `django-dashboard-regression-fix`, and `mini-project-completion`.
+- Recorded the outcome in `docs/run-log.md` and
+  `docs/gemma4-tri-host-runbook.md`: serving/runtime/format/default matrix
+  evidence is healthy, while stronger repo-task evidence is mixed with 2/5
+  deterministic verifier passes.
+- Stopped before remote launch because the M4 checkout was dirty at `38f2017`;
+  remote same-commit work should resume only after that worktree is preserved
+  or intentionally synced.
+
+### Open Questions
+
+- Decide whether the next slice should preserve/sync the M4 worktree and run
+  tri-host runtime evidence despite mixed local repo-task quality, or switch to
+  a different Gemma 4 artifact before spending remote machine time. Superseded
+  later on 2026-05-12 by the tri-host completion entry above.
+
 ## 2026-05-12 (direct-edit payload validation)
 
 ### Changed

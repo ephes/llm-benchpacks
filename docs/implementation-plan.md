@@ -32,6 +32,11 @@ Current posture:
    formatting slice with two endpoint-only chat cases and pack-local
    JSON-schema scoring fixtures. Treat it as formatting evidence only, not
    native tool-call API evidence or default-matrix promotion.
+5. The Gemma 4 26B A4B strict-GGUF lane has completed tri-host evidence for
+   `gemma-4-26B-A4B-it-Q4_K_M.gguf` through `llama-server --reasoning off` at
+   4K context on M5, M4, and Hetzner. Default four-pack evidence is healthy on
+   all three hosts, and Hetzner CUDA memory fit is proven for the narrow
+   exclusive-GPU window. Stronger repo-task quality remains mixed and opt-in.
 
 Next actionable slices:
 
@@ -80,6 +85,11 @@ Next actionable slices:
    tiny project-completion prototype has landed as the opt-in
    `mini-project-completion` pack; do not treat it as default-matrix evidence
    until live runs show it adds useful signal.
+5. Gemma 4 26B A4B follow-up is now documentation/curation only unless a new
+   artifact, runtime version, context setting, or host question appears. Do not
+   rerun the strict-GGUF lane just to repeat the completed 2026-05-12 evidence;
+   stronger repo-task packs remain explicit opt-in because current broader
+   verifier evidence is mixed.
 
 ## Phase 1: Minimal Runner
 

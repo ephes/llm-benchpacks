@@ -10,7 +10,9 @@ status notes here.
 
 The first campaign mode was strict same-GGUF parity through `llama-server` on
 all three hosts, and that lane now has four-pack evidence for the selected E2B
-Q4_K_M artifact. The fallback mode remains a service-shaped runtime-and-format
+Q4_K_M artifact. The follow-up 26B A4B strict-GGUF campaign also has M5, M4,
+and Hetzner evidence with the exact `gemma-4-26B-A4B-it-Q4_K_M.gguf` artifact.
+The fallback mode remains a service-shaped runtime-and-format
 comparison: Apple Silicon uses MLX or GGUF while Hetzner serves Hugging Face
 weights through vLLM. That fallback is operationally useful, but it is not
 strict artifact parity and must be labeled as runtime-and-format in metadata
@@ -79,7 +81,7 @@ Primary mode:
 - Use when the exact GGUF artifact fits and loads correctly on every host.
 - This remains the cleanest hardware/runtime comparison because it avoids
   mixing MLX, GGUF, and Hugging Face/vLLM artifacts.
-- Selected strict-parity artifact:
+- Completed E2B strict-parity artifact:
   `bartowski/google_gemma-4-E2B-it-GGUF` at revision
   `b5e99bd964eaacc27ba484bb2eb3e9f6160b9143`, file
   `google_gemma-4-E2B-it-Q4_K_M.gguf`, base model
@@ -88,6 +90,18 @@ Primary mode:
   matrix unless a future multimodal pack is added. The local M5, M4, and
   Hetzner preflight notes below confirm checksum and conservative load commands
   for this artifact.
+- Completed 26B A4B strict-parity artifact:
+  `ggml-org/gemma-4-26B-A4B-it-GGUF` at revision
+  `ae4d537a6345467d1c86bb5cc0d4505ff3ebe0f3`, file
+  `gemma-4-26B-A4B-it-Q4_K_M.gguf`, base model
+  `google/gemma-4-26B-A4B-it` at revision
+  `462a98a12e28e2cbcfccaf78fe41e3e50235e6ae`. The file is
+  16,796,015,136 bytes with LFS SHA-256
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`.
+  The 2026-05-12 campaign used `llama-server --reasoning off`, a text-only
+  benchmark matrix, and conservative 4K context across M5, M4, and Hetzner.
+  The CUDA host fit was measured directly rather than inferred from Apple
+  Silicon.
 - Alternative verified GGUF sources, to use only if the first candidate is
   rejected during preflight:
   `ggml-org/gemma-4-E2B-it-GGUF` has Q8_0/BF16 files but no Q4_K_M file in
@@ -115,6 +129,118 @@ Secondary/fallback mode:
   matrices.
 
 ## M5 Local Preflight Status
+
+Status as of 2026-05-12 for the follow-up 26B A4B strict same-GGUF candidate:
+
+- Artifact:
+  `ggml-org/gemma-4-26B-A4B-it-GGUF` revision
+  `ae4d537a6345467d1c86bb5cc0d4505ff3ebe0f3`, file
+  `gemma-4-26B-A4B-it-Q4_K_M.gguf`.
+- Local M5 SHA-256:
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`.
+- Local alias: `gemma4-26b-a4b-q4km`.
+- Runtime: `/opt/homebrew/bin/llama-server`, llama.cpp version
+  `9090 (5757c4dcb)`.
+- Load command:
+  `llama-server --model /Users/jochen/models/gguf/gemma4-26b-a4b/gemma-4-26B-A4B-it-Q4_K_M.gguf --alias gemma4-26b-a4b-q4km --host 127.0.0.1 --port 18083 --ctx-size 4096 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui --reasoning off`.
+- Load result: succeeded on local M5 with Metal, offloading 31/31 layers,
+  `n_ctx=4096`, f16 KV caches, prompt cache, `--parallel 1`, and the server
+  listening on `http://127.0.0.1:18083/v1`.
+- Memory note: `llama-server` projected 16,900 MiB of M5 device memory for the
+  model, context, and compute buffers; after load, `ps` reported RSS around
+  16,966,528 KiB. Do not infer Hetzner fit from this because the 20 GB CUDA
+  host also has production baseline memory pressure and CUDA runtime overhead.
+- Direct smoke status: a non-streaming `/v1/chat/completions` request returned
+  exact `GEMMA4_26B_SMOKE_OK` with `finish_reason=stop`.
+- Benchpack status: local M5 `smoke-chat` passed, `runtime-sweep` wrote 9/9
+  `ok=true` rows, `desktop-django-wrap` passed both regex cases,
+  `patch-from-failure` passed, and `tool-json` passed both JSON-schema cases.
+  Runtime-sweep median total TPS was about 106.99 short, 108.70 medium, and
+  107.65 long; TTFT was about 28-32 ms on measured rows.
+- Stronger repo-task status: 2/5 deterministic verifier passes across the local
+  repo-task set. `patch-from-failure` and `python-regression-fix` passed.
+  `endpoint-python-correctness` failed after a source mutation because the
+  hidden quantity-then-SKU ordering check failed.
+  `django-dashboard-regression-fix` and `mini-project-completion` failed with
+  no mutation because their generated diffs were rejected by
+  `git apply --check`.
+- Remote status: M4/Hetzner launch was not attempted in this slice because the
+  M4 checkout was dirty at `38f2017` with edits across docs, runner code, and
+  tests. Preserve or intentionally sync that worktree before a same-commit
+  tri-host run. This was superseded later on 2026-05-12 by preserving the M4
+  work in stashes and completing the M4 and Hetzner legs below.
+- Local metadata:
+  `metadata/m5-gemma4-26b-a4b-llamacpp-strict-preflight-20260512.json`
+  records the machine-local path, command, checksum, load notes, and direct
+  smoke observation. The file is ignored and should not be committed by
+  default.
+
+## M4 And Hetzner 26B A4B Status
+
+Status as of 2026-05-12 for the follow-up 26B A4B strict same-GGUF candidate:
+
+- M4 repo and artifact: the M4 checkout was clean at `20667e7` before launch;
+  prior dirty work was preserved in stashes
+  `pre-gemma4-26b-sync-20260512` and `pre-gemma4-m4-sync-20260507`. The exact
+  GGUF was copied to
+  `/Users/jochen/models/gguf/gemma4-26b-a4b/gemma-4-26B-A4B-it-Q4_K_M.gguf`
+  and SHA-256 matched
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`.
+- M4 runtime: `/opt/homebrew/bin/llama-server`, llama.cpp version
+  `9110 (ef22b3e4a)`, endpoint `http://127.0.0.1:18083/v1`, command
+  `llama-server --model /Users/jochen/models/gguf/gemma4-26b-a4b/gemma-4-26B-A4B-it-Q4_K_M.gguf --alias gemma4-26b-a4b-q4km --host 127.0.0.1 --port 18083 --ctx-size 4096 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui --reasoning off`.
+- M4 load and preflight: all 31/31 layers offloaded to Metal, 4K context,
+  f16 KV caches, prompt cache, and RSS around 16,965,936 KiB. Direct smoke
+  returned exact `GEMMA4_26B_SMOKE_OK`. `smoke-chat` passed,
+  `runtime-sweep` wrote 9/9 `ok=true`, and `endpoint-python-correctness`
+  reached the endpoint with adapter `ok=true` but failed deterministic
+  verification after a source mutation.
+- M4 default four-pack: dry-run output was inspected, then the tmux matrix
+  passed `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure`. Runtime median total TPS was about 87.58 short,
+  89.08 medium, and 87.25 long. Both wrap rows and the patch verifier passed.
+- Hetzner repo and artifact: the existing
+  `/Users/jochen/projects/llm-benchpacks` checkout was dirty at `38f2017` and
+  preserved untouched. A clean detached campaign checkout was cloned from a
+  local git bundle at
+  `/Users/jochen/projects/llm-benchpacks-gemma4-26b-20260512`, checked out at
+  `20667e7`. The exact GGUF was downloaded to
+  `/var/lib/llm/gemma4-26b-a4b-gguf/gemma-4-26B-A4B-it-Q4_K_M.gguf` and
+  SHA-256 matched
+  `88f4a13b0bb95f031a7fad973e10854122fb67ebc34d214d39a2f65053046abc`.
+- Hetzner production window: before the window, `llm.service`,
+  `llm-mgmt.service`, and `caddy.service` were active/enabled, public
+  `/healthz/` returned 200, public `/readyz/` returned
+  `backend_available=true`, unauthenticated `/v1/models` returned 401, and
+  production vLLM used about 18,328 MiB of GPU memory. Only `llm.service` was
+  stopped for the temporary strict-GGUF run.
+- Hetzner runtime: `/opt/llm/lnb011-llama-cpp-a09a00e50/build-cuda/bin/llama-server`,
+  llama.cpp version `9030 (a09a00e50)`, endpoint
+  `http://127.0.0.1:18083/v1`, command
+  `/opt/llm/lnb011-llama-cpp-a09a00e50/build-cuda/bin/llama-server --model /var/lib/llm/gemma4-26b-a4b-gguf/gemma-4-26B-A4B-it-Q4_K_M.gguf --alias gemma4-26b-a4b-q4km --host 127.0.0.1 --port 18083 --ctx-size 4096 --batch-size 1024 --ubatch-size 512 --cache-type-k f16 --cache-type-v f16 --gpu-layers auto --parallel 1 --cache-prompt --no-webui --reasoning off`.
+- Hetzner load and memory fit: CUDA load projected 16,915 MiB device memory
+  against 19,850 MiB free and left about 2,934 MiB free, with all 31/31 layers
+  offloaded, 4K context, f16 KV caches, prompt cache, and `--parallel 1`.
+  `nvidia-smi` reported about 17,116 MiB used after load.
+- Hetzner preflight and default four-pack: direct smoke returned exact
+  `GEMMA4_26B_SMOKE_OK`; preflight `smoke-chat` passed and `runtime-sweep`
+  wrote 9/9 `ok=true`. Dry-run output was inspected, then the default tmux
+  matrix passed `smoke-chat`, `runtime-sweep`, `desktop-django-wrap`, and
+  `patch-from-failure`. Runtime median total TPS was about 72.51 short,
+  71.93 medium, and 68.91 long. Both wrap rows and the patch verifier passed.
+- Compare/report: local `benchpack compare` across M5, M4, and Hetzner
+  runtime-sweep dirs reported `prefill parity=comparable` for short, medium,
+  and long. Median total TPS M5 vs M4 vs Hetzner was 106.99 vs 87.58 vs 72.51
+  short, 108.70 vs 89.08 vs 71.93 medium, and 107.65 vs 87.25 vs 68.91 long.
+- Artifact handling: only compact M4 and Hetzner artifacts (`run.jsonl`,
+  `summary.md`, `hardware.json`, `run-metadata.json`) were pulled back; remote
+  `raw/`, `workspace/`, `patch/`, `task/`, and `verify/` directories stayed on
+  source hosts.
+- Production restoration: the temporary Hetzner `llama-server` was stopped,
+  production `llm.service` was restarted, public `/healthz/` returned 200,
+  public `/readyz/` returned `backend_available=true`, unauthenticated
+  `/v1/models` remained 401, no strict-lane listener remained on port 18083,
+  and GPU memory returned to about 18.3 GiB.
 
 Status as of 2026-05-06 for the first strict same-GGUF candidate only:
 
@@ -710,14 +836,20 @@ that the result is runtime-and-format evidence.
   the smoke/runtime and wrap/patch slices. The remaining work is interpretation
   and any future broader campaign, not first evidence collection for this
   selected artifact.
+- The 26B A4B Q4_K_M follow-up candidate also has checksum/load evidence,
+  conservative 4K `llama-server --reasoning off` memory-fit evidence, and
+  default four-pack passes on M5, M4 Studio, and Hetzner. Remaining work for
+  that lane is only future curation or intentionally broader opt-in repo-task
+  quality evidence.
 - Confirm whether the primary E2B Q4_K_M GGUF candidate is preferable to the
   upstream `ggml-org/gemma-4-E4B-it-GGUF` Q4_K_M alternative after explicit
   quality authorization; the completed E2B four-pack is still compact
   benchmark evidence, not broad model-quality evidence.
 - Apple Gemma 4 thinking behavior is resolved for the strict-GGUF
-  `llama-server --reasoning off` path on M5, M4, and Hetzner. The remaining
-  quality caveat is consistent `patch-from-failure` `verify-script` failure on
-  all three hosts.
+  `llama-server --reasoning off` path on M5, M4, and Hetzner. For the E2B
+  Q4_K_M artifact, the remaining quality caveat is consistent
+  `patch-from-failure` `verify-script` failure on all three hosts; the 26B A4B
+  Q4_K_M campaign passed `patch-from-failure` on all three hosts.
 - For future Hetzner benchmark runs, choose the strict same-GGUF lane versus
   the service-shaped vLLM lane explicitly and record matching metadata before
   stopping production.
