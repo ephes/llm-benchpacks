@@ -32,6 +32,11 @@ and whether the final repository changes pass verification.
   compact 2026-05-05 MLX-vs-llama.cpp-vs-Ollama result summary.
 - [Benchmark Research Backlog](docs/benchmark-research.md): research leads and
   next-work ordering for stronger coding-agent benchmarks.
+- [Hosted Registry PRD](docs/registry-hosted-django-spec.md): dynamic hosted
+  service direction for curated uploads, review, local web development, browse
+  views, APIs, and project layout.
+- [Registry Hosted Site Spec](docs/registry-hosted-site-spec.md): v1 static
+  curated archive fallback scope for `benchmarks.staging.django-cast.com`.
 - [Decisions](docs/decisions.md): durable design decisions.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
@@ -58,14 +63,14 @@ uv run benchpack run mini-project-completion --adapter openai-chat --model qwen3
 uv run benchpack run tool-json --adapter openai-chat --model qwen3-coder:latest --endpoint http://localhost:11434/v1 --host-label local-json-format --force
 uv run benchpack compare results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
 uv run benchpack report results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
-uv run benchpack registry import --db registry/benchpack.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
-uv run benchpack registry report --db registry/benchpack.sqlite --label 2026-04-28-mlx-lm-runtime --label 2026-04-29-llama-server-runtime
-uv run benchpack registry duplicates --db registry/benchpack.sqlite
-uv run benchpack registry query --db registry/benchpack.sqlite --pack runtime-sweep --runtime llama-server --quantization Q4_K_M
-uv run benchpack registry site --db registry/benchpack.sqlite --out registry/site
+uv run benchpack registry import --db registry/llm-benchpacks.sqlite results/2026-04-28-mlx-lm-runtime results/2026-04-29-llama-server-runtime
+uv run benchpack registry report --db registry/llm-benchpacks.sqlite --label 2026-04-28-mlx-lm-runtime --label 2026-04-29-llama-server-runtime
+uv run benchpack registry duplicates --db registry/llm-benchpacks.sqlite
+uv run benchpack registry query --db registry/llm-benchpacks.sqlite --pack runtime-sweep --runtime llama-server --quantization Q4_K_M
+uv run benchpack registry site --db registry/llm-benchpacks.sqlite --out registry/site
 uv run benchpack registry bundle create --out bundles/example --provenance self-reported results/2026-04-28-mlx-lm-runtime
 uv run benchpack registry bundle validate bundles/example
-uv run benchpack registry bundle import --db registry/benchpack.sqlite bundles/example
+uv run benchpack registry bundle import --db registry/llm-benchpacks.sqlite bundles/example
 ```
 
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
@@ -340,6 +345,44 @@ and quantization, the generated `report.md`, and a machine-readable
 `snapshot.json` containing the same compact run, comparison, and case-metric
 data. The export uses SQLite only; source result directories and large
 artifacts are not required.
+
+The preferred hosted direction is now a Django registry service, documented in
+[`docs/registry-hosted-django-spec.md`](docs/registry-hosted-django-spec.md).
+That service should support curated bundle ingestion, validation, operator
+review, registered-user submission, transactional email, public browse pages,
+and read-only APIs while still keeping raw artifacts out of public storage. The
+hosted app should live cleanly in this repo beside the existing runner package,
+expose a local Django dev server, and start with SQLite-backed app state.
+Deployment mechanics should use the same responsibility split as other
+services: product code here, reusable deployment logic in `ops-library`, and
+private staging configuration plus email-provider secrets in `ops-control`.
+`homepage` and `nyxmon` are references for those mechanics only. The static
+export remains a local/offline review path and possible temporary read-only
+fallback.
+
+For the temporary static staging archive, the local Justfile mirrors the
+homepage-style delegation pattern while keeping the generated artifact boundary
+explicit:
+
+```sh
+just deploy-staging
+```
+
+That recipe first checks `BENCHMARKS_SITE_OUT` (defaulting to `registry/site`)
+for a complete generated static site: `index.html`, `report.md`, and
+`snapshot.json`. If those files exist, it delegates that directory to
+`../ops-control` with `BENCHMARKS_STATIC_SITE_SOURCE` set explicitly and does
+not require a registry database. The fallback requires the companion
+`ops-control` checkout to provide a `deploy-benchmarks-static` recipe; if that
+recipe is absent, the shortcut fails before generating or deploying with an
+explicit ops-control preflight message. If the generated site is absent or
+incomplete and `BENCHMARKS_REGISTRY_DB` exists (defaulting to
+`registry/llm-benchpacks.sqlite`), it runs `benchpack registry site` and then
+delegates the generated output. If neither a complete generated site nor the
+registry DB exists, it exits with the curation/import commands needed to create
+one. Use `just registry-site` for explicit DB-backed generation, or
+`just deploy-staging-existing` when you want the existing-site-only path to fail
+instead of regenerating from SQLite.
 
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` creates a
 compact public-sharing bundle from existing result directories. The bundle

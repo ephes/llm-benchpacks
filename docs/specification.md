@@ -1242,6 +1242,24 @@ does not contact endpoints, run packs, mutate bundle contents, require source
 result directories, read omitted raw/workspace/task/verify artifacts, or create
 hosted submission state.
 
+## Hosted Registry Service Direction
+
+The preferred hosted consumption path is a Django service that reuses the
+compact bundle and registry validation contracts above. The hosted service is
+responsible for authenticated ingestion, quarantine/review state, operator
+approval, public browse pages, and read-only APIs for approved compact data.
+It must not publish raw payloads, workspaces, task logs, verifier artifacts,
+credentials, private prompts, or arbitrary unlisted bundle files.
+
+The first hosted service should use SQLite for application state, with the
+database file stored in a persistent server-side path that is not deleted by
+source deployment. PostgreSQL remains a later migration option, not a
+requirement for the first staging service.
+
+The static `benchpack registry site` export remains a local/offline review
+surface and possible temporary read-only fallback. It is not the target hosted
+architecture for submission and review workflows.
+
 ## Result Artifacts
 
 Results are easy to inspect and follow a fixed layout per run:

@@ -2,7 +2,7 @@
 
 ## Active Backlog Queue
 
-Status date: 2026-05-12.
+Status date: 2026-05-18.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
@@ -76,8 +76,33 @@ Next actionable slices:
    site export with a per-run/per-case comparison matrix, browser-side browse
    filters, static snapshot JSON, bundle create/validate, bundle import,
    duplicate inspection, and local normalized-row JSON query have landed.
-   Hosted upload/review, broader hosted APIs, and leaderboard policy should
-   wait for a concrete sharing workflow.
+   The next concrete sharing workflow is now the dynamic Django hosted registry
+   service described in `docs/registry-hosted-django-spec.md`: support user
+   self-registration, transactional email, email-verified compact bundle
+   submissions, validation, review, approved compact rows through browse pages
+   and read-only APIs, a local Django dev server, and deployment of a
+   SQLite-first Django app through a new `ops-library` role plus a thin
+   `ops-control` playbook.
+   Treat `homepage` and `nyxmon` as references for local command and deployment
+   mechanics only; keep the product spec and project layout cleanly
+   `llm-benchpacks`-specific. Keep `benchpack registry site` as a local/offline
+   static export and possible temporary fallback, not the target hosted
+   architecture.
+
+   First implementation slices:
+
+   - Scaffold the Django project layout (`manage.py`, `src/benchpack_web/`,
+     `src/benchpack_registry_web/`), SQLite local settings, `just dev`,
+     `just migrate`, and `just test`.
+   - Add accounts and email: registration, email verification, password reset,
+     local console/locmem email backends, and configurable staging email
+     settings.
+   - Add the submission/review MVP: authenticated compact bundle archive upload,
+     validation through shared `benchpack` helpers, SQLite JSON/text persistence
+     for compact payloads and validation state, operator approve/reject, and
+     read-only public browse/API views over approved rows.
+   - Add deployment after the local service shape is stable: an `ops-library`
+     role for the SQLite-first Django service and a thin `ops-control` playbook.
 4. Research tracks stay mostly parked until live evidence motivates them:
    concurrent/Poisson serving load, energy and cost-per-request, structured
    quantization axes, native CUDA server adapters, resource-aware program

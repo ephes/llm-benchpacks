@@ -16,6 +16,111 @@ working history and open questions.
 - ...
 ```
 
+## 2026-05-18 (hosted registry review follow-up)
+
+### Changed
+
+- Tightened the static fallback preflight so `just deploy-staging` fails clearly
+  when the companion `ops-control` checkout lacks `deploy-benchmarks-static`.
+- Aligned README registry examples on the default
+  `registry/llm-benchpacks.sqlite` path used by the Justfile and hosted
+  registry docs.
+- Demoted stale static-first wording in the static fallback spec.
+- Split the Django hosted-registry direction into concrete first implementation
+  slices: scaffold/local commands, auth/email, submission/review MVP, and
+  deployment.
+- Clarified the Django PRD's settings package, development vs test email
+  backends, and upload size/rate/CSRF open questions.
+
+### Open Questions
+
+- The companion `ops-control` static fallback deploy target is absent in the
+  current checkout; the local shortcut now reports that clearly instead of
+  failing later in `ops-control`.
+
+## 2026-05-13 (hosted registry Django direction)
+
+### Changed
+
+- Chose a dynamic Django service as the preferred hosted registry direction for
+  `benchmarks.staging.django-cast.com`, with this repository owning the app/API
+  behavior, `ops-library` owning reusable deployment logic, and `ops-control`
+  owning private staging configuration and secrets.
+- Added `docs/registry-hosted-django-spec.md` for curated compact bundle
+  ingestion, validation, quarantine/review state, operator approval, public
+  browse pages, and read-only APIs over approved compact data.
+- Reframed the static `benchpack registry site` path as a local/offline review
+  tool and possible temporary read-only fallback rather than the target hosted
+  architecture.
+- Chose SQLite-first hosted app state after checking the deployed `nyxmon`
+  pattern: uv-managed Django, migrations on deploy, persistent SQLite outside
+  destructive source sync paths, Granian/systemd, and Traefik. PostgreSQL stays
+  a migration option, not a first staging dependency.
+- Recorded D-032 for the SQLite-first Django-not-Wagtail service choice and
+  homepage/nyxmon-style deployment split.
+- Reworked the hosted registry document into a clean PRD with product users,
+  first-release scope, local dev server expectations, project layout, data
+  storage, and deployment boundaries. Homepage and Nyxmon are now explicitly
+  reference examples for mechanics only, not product dependencies.
+- Added registered submitters to the product model: users can self-register,
+  verify email ownership, submit compact bundles, and receive transactional
+  email for account and submission/review events. Email-provider credentials
+  are deployment secrets, while local development uses console email and tests
+  use in-memory email.
+- Clarified the hosted submission storage model: the existing directory-style
+  bundle is the validation format, browser uploads can be archives of that
+  format, SQLite JSON/text fields are the default store for compact payloads
+  and validation/review state, and filesystem use is limited to temporary
+  extraction or explicit retained-archive/audit needs.
+
+### Open Questions
+
+- The concrete Django app schema, auth/email implementation choice, validation
+  worker shape, email provider settings, and `ops-library` deployment role
+  still need implementation slices. Unauthenticated uploads and leaderboard
+  ranking remain deferred.
+
+## 2026-05-12 (staging deploy shortcut fix)
+
+### Changed
+
+- Updated the local `just deploy-staging` shortcut so it first reuses a
+  complete generated static site (`index.html`, `report.md`, and
+  `snapshot.json`) without requiring `registry/llm-benchpacks.sqlite`.
+- Kept `just registry-site` as the explicit DB-backed generation command, and
+  made `just deploy-staging` generate from SQLite only when the static site is
+  absent or incomplete and the registry DB exists.
+- Added an actionable no-site/no-DB failure path that points operators to
+  `benchpack registry import`, bundle validation/import, `just registry-site`,
+  and `just deploy-staging`.
+
+### Open Questions
+
+- No live deployment or benchmark run was performed for this shortcut fix.
+
+## 2026-05-12 (hosted registry site spec)
+
+### Changed
+
+- Added `docs/registry-hosted-site-spec.md` for a static, curated hosted
+  registry archive backed by the existing SQLite registry, bundle validation,
+  and `benchpack registry site` export flow.
+- Updated the active backlog to make the first sharing workflow a staging
+  static site, with public uploads, hosted APIs, and leaderboard policy
+  deferred.
+- Chose `benchmarks.staging.django-cast.com` as the v1 staging hostname and
+  kept deployment implementation ownership in `ops-control`.
+- Added homepage-style local Justfile shortcuts for the staging archive:
+  `just deploy-staging` delegates a complete existing `registry/site/` or
+  regenerates it from SQLite before delegating to `ops-control`, while
+  `just deploy-staging-existing` syncs an already generated static site only.
+
+### Open Questions
+
+- Live deployment remains an operator action in `ops-control`; no benchmark
+  runs, generated registry site output, or raw artifacts are committed by this
+  spec slice.
+
 ## 2026-05-12 (Gemma 4 26B A4B compact summary)
 
 ### Changed

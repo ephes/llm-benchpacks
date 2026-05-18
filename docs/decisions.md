@@ -605,3 +605,58 @@ Reason: accepting unmarked replacement content would make the runner guess
 which file a model intended to edit and would weaken workspace safety. A
 path-marked block is still simple enough for endpoint-only models while keeping
 mutation explicit, deterministic, and verifier-driven.
+
+## D-032: Hosted Registry Should Be A SQLite-First Django Service, Not Static-Only
+
+The preferred hosted registry direction is a Django service in this repository,
+deployed through a reusable `ops-library` role and a thin `ops-control`
+playbook. The service should support curated compact bundle ingestion,
+validation, quarantine/review state, operator approval, public read-only browse
+views, and JSON APIs for approved compact data.
+
+Start the hosted service with SQLite for app state, following the deployed
+`nyxmon` pattern: uv-managed Django source sync, migrations on deploy, a
+persistent database file outside destructive sync paths, Granian/systemd, and
+Traefik. Keep a PostgreSQL migration path open, but do not require Postgres for
+the first staging service.
+
+The existing static `benchpack registry site` export remains a local/offline
+review tool and possible temporary read-only publication fallback. It is not the
+target architecture once hosted ingestion/review work starts.
+
+Use Django rather than Wagtail for the first dynamic service. The benchmark
+registry needs upload handling, auth, admin/review workflows, migrations, and
+structured APIs more than CMS editing. Do not embed the service in the homepage
+Wagtail app; homepage and Nyxmon are only references for local command and
+deployment mechanics.
+
+The web app should have a clean `llm-benchpacks` project layout with a local
+Django dev server, migrations, tests, and ignored runtime state. It should
+import reusable validation and registry helpers from `benchpack` rather than
+making the CLI the core integration boundary.
+
+Users should be able to self-register and submit compact benchmark bundles
+after email verification. Transactional email is therefore part of the first
+hosted product surface: account verification, password reset, submission
+receipt, validation failure, approval, and rejection notifications. Local
+development should use Django's console email backend, tests should use the
+in-memory email backend, and neither should require real SMTP/API credentials.
+Staging/production email credentials and sender settings belong in
+`ops-control` secrets.
+
+For web submission, the existing directory-style CLI bundle should be treated as
+the validation format, not necessarily the browser upload shape. Users can
+submit an archive that preserves the compact bundle directory contents. SQLite
+JSON/text fields should be the default persistence layer for uploaded compact
+payloads, validation results, hashes, row summaries, and review state. The
+filesystem should be used only for temporary extraction during validation or for
+retained upload archives if an explicit audit/retention policy later requires
+that.
+
+Reason: result submission and review are application behavior, not just
+deployment plumbing. `ops-library` already provides the right style of Traefik,
+systemd, uv, and SQLite-backed Django deployment primitives, while
+`ops-control` should remain private configuration. Django gives the fastest path
+to robust operator-facing review and public APIs without hand-building an admin
+surface. SQLite is enough for the early operator-curated write pattern and
+avoids adding a database service before public submission volume exists.

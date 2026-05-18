@@ -762,6 +762,17 @@ command does not mutate bundle contents, require source result directories,
 read omitted raw/workspace/task/verify artifacts, contact endpoints, or create
 hosted review state.
 
+The preferred hosted registry architecture is a Django service in this
+repository, not the static export alone. The hosted service should ingest only
+compact bundles or operator-curated compact data, validate them before import,
+store pending submissions in quarantine/review state, and publish only approved
+compact run and row data through server-rendered pages and read-only JSON APIs.
+Start with SQLite for hosted app state, using a persistent server-side database
+file outside destructive source sync paths. Reusable deployment logic belongs in
+`ops-library`; private host configuration, secrets, and staging playbooks belong
+in `ops-control`. The static site export remains a local/offline review and
+fallback publication path.
+
 ## Operational Helper Flow
 
 `scripts/benchpack-tmux-matrix` is an operator convenience wrapper, not a new
