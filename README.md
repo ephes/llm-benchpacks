@@ -466,6 +466,15 @@ Bundled packs:
   agent to edit the prepared workspace directly, then rely on normal workspace
   patch capture and deterministic verifiers. They are not default matrix packs.
 
+Manual external benchmarks:
+
+- `ds4-pi-django-resume-wrap`: real repo-mutating Desktop Django wrap benchmark
+  for `django-resume` using Pi backed by local DS4 / DeepSeek V4 Flash. This is
+  documented in `docs/ds4-pi-django-resume-wrap-benchmark.md` because the
+  current `benchpack run` repo-task executor copies pack-owned fixtures and
+  does not yet model an arbitrary pre-existing `~/workspaces` lab worktree as a
+  first-class measured fixture.
+
 ## Initial Shape
 
 The first implementation stays small:
