@@ -40,6 +40,11 @@ and whether the final repository changes pass verification.
 - [Decisions](docs/decisions.md): durable design decisions.
 - [Spec Log](docs/spec-log.md): dated changes to the spec and open design questions.
 - [Run Log](docs/run-log.md): benchmark run history and result pointers.
+- [DS4 Pi Django-Resume Wrap Benchmark](docs/ds4-pi-django-resume-wrap-benchmark.md):
+  manual external-agent staged Electron wrap of `django-resume`, plus the
+  2026-06-02 Ollama / llama.cpp / MLX / ds4 runtime comparison. The step-by-step
+  demo runbook is a rendered Sphinx page in the `desktop-django-starter` repo at
+  `docs/demo-local-model-wrap.md` (build with `just docs`).
 
 ## Usage
 

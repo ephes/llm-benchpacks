@@ -179,3 +179,54 @@ release repo, ignored generated `.stage/`, emitted lint-clean URL scaffolding,
 guarded packaged-only URL patterns with `getattr(..., False)`, and made seed
 management commands opt-in instead of assuming the starter-only
 `seed_demo_content` command exists.
+
+## Runtime / Model Comparison (2026-06-02)
+
+A follow-up on 2026-06-02 (same host: studio, Apple M4 Max, 128 GB) ran the
+identical staged `django-resume` wrap across four local serving paths to compare
+runtimes and models for daily-development suitability. Each run was driven by Pi
+as a tool-using agent and independently judged by `pi / openai-codex/gpt-5.5`,
+which re-ran the packaged smoke itself. The qwen runs used a shared runner that
+`rm -rf`s and re-`git clone`s the target before every run; the source repo was
+pristine at `ccbd5cf`, and local `git clone` checks out HEAD only, so no
+generated artifacts leaked across runs.
+
+| Serving path | Model / quant | Tool calling | Stage 2 | Stage 3 | Raw decode | Judge |
+|---|---|---|---|---|---|---|
+| Ollama | qwen 3.6 27b GGUF Q4_K_M (`qwen36-27b-tools`) | derived Modelfile needed (imported GGUF had a bare `{{ .Prompt }}` template) | 73.7s | 97.4s | 16.0 tok/s | PASS |
+| llama.cpp `--jinja` | qwen 3.6 27b `Qwen3.6-27B-Q4_K_M.gguf` | native (reads GGUF chat template) | 41.7s | 70.7s | 22.5 tok/s | PASS |
+| MLX `mlx_lm.server` | qwen 3.6 27b `mlx-community/Qwen3.6-27B-4bit` | native (send exact HF repo id as `model`) | 40.0s | 70.2s | 26.9 tok/s | PASS |
+| ds4.c `ds4-server` (non-thinking) | DeepSeek V4 Flash IQ2XXS | native | 28.6s | 70.1s | 29.9 tok/s | PASS |
+| ds4.c `ds4-server` (thinking=high, 2026-06-01) | DeepSeek V4 Flash IQ2XXS | native | 86.38s | 318.01s (ended `finish_reason=error`) | n/a | pass only after manual fixes |
+
+Stage times are wall-clock and include fixed tool execution (uv venv resolve,
+npm install, node tests, packaged smoke), which dominates and compresses the gap
+between runtimes; raw decode (250-word essay, `max_tokens=300`, `temp=0`, warmed)
+isolates model throughput.
+
+Notes for daily-dev model selection:
+
+- **All four reached the same correct outcome** (working packaged Electron app,
+  zero model edits, judge PASS). On this scaffold-covered task the differentiator
+  is speed and reliability, not capability.
+- **Decode order: ds4 (29.9) > MLX (26.9) > llama.cpp (22.5) > Ollama (16.0)
+  tok/s.** For the same qwen weights, MLX and llama.cpp are ~1.7x and ~1.4x faster
+  than Ollama; Ollama also needed Modelfile surgery to enable tool calling.
+- **Thinking mode hurt here:** the same ds4 model in `--thinking high` was ~3x
+  slower on Stage 2 and derailed Stage 3 with a provider error on malformed inline
+  tool output, while non-thinking ds4 was the fastest and cleanest path. For
+  agentic, verification-heavy dev loops with many short tool steps, non-thinking
+  (or low-effort) decoding was strictly better on this task.
+- This is staged-workflow evidence: Stage 1's deterministic scaffold does the
+  mechanical wrapping and the model runs verification-first Stages 2–3, so these
+  numbers measure agentic tool-driving speed/reliability, not from-scratch code
+  authoring.
+
+Reproduction tooling lives in the `desktop-django-starter` checkout under
+`.bench-qwen36/` (`pi-ollama-provider.ts`, `pi-localserver-provider.ts`,
+`pi-ds4local-provider.ts`, `run-staged-wrap.sh`, `RUNTIME-COMPARISON.md`), and the
+qwen runs are also recorded as entries 30–32 in that repo's staged
+`run-log.md`. A step-by-step demo runbook (start each server, clean clone, run
+the stages manually or via the runner, judge, and per-model timings) is a
+rendered Sphinx page in that repo at `docs/demo-local-model-wrap.md` (build with
+`just docs`; linked from the docs index under **Guides**).
