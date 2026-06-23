@@ -175,16 +175,22 @@ app, use the neutral one-shot helper in this repository instead of the legacy
 ```sh
 scripts/run-agent-wrap-oneshot \
   --dry-run \
-  --label gpt55-codex-yolo-django-resume-030-low \
+  --label gpt55-codex-yolo-django-resume-030-none \
   --runner codex-yolo \
   --model gpt-5.5 \
-  --reasoning-effort low
+  --reasoning-effort none
 
 scripts/run-agent-wrap-oneshot \
-  --label gpt55-codex-yolo-django-resume-030-low \
+  --label gpt55-codex-yolo-django-resume-030-none \
   --runner codex-yolo \
   --model gpt-5.5 \
-  --reasoning-effort low
+  --reasoning-effort none
+
+scripts/run-agent-wrap-oneshot \
+  --label opus48-claude-yolo-django-resume-030-low \
+  --runner claude-yolo \
+  --model opus \
+  --claude-effort low
 ```
 
 The helper clones the configured source repo into a disposable target, runs one
@@ -197,7 +203,10 @@ ignored like other generated benchmark output. Historical
 continuity only; avoid reusing those legacy labels for new runs unless the
 comparison plan explicitly needs name continuity. Pass `--force` only when
 intentionally replacing an existing generated target/result pair for the same
-label.
+label. Supported hosted-agent runners are `codex-yolo`, `claude-yolo`, and
+`pi`; direct Codex uses `--reasoning-effort`, where `none` is the no-reasoning
+lane and `low` is separate. Claude Code uses `--claude-effort` because the CLI
+exposes effort levels, not a literal thinking-off switch.
 
 For optional exploratory repo-task evidence, select the coding-task pack set
 explicitly instead of changing the default four-pack matrix:
@@ -383,6 +392,11 @@ and quantization, the generated `report.md`, and a machine-readable
 data. The export uses SQLite only; source result directories and large
 artifacts are not required.
 
+For local browsing, `just site` is the shortest path. It renders the default
+`registry/site` export from `registry/llm-benchpacks.sqlite`; when that database
+is missing, it first imports every local `results/*` directory that contains a
+`run.jsonl`.
+
 The preferred hosted direction is now a Django registry service, documented in
 [`docs/registry-hosted-django-spec.md`](docs/registry-hosted-django-spec.md).
 That service should support curated bundle ingestion, validation, operator
@@ -417,7 +431,8 @@ incomplete and `BENCHMARKS_REGISTRY_DB` exists (defaulting to
 `registry/llm-benchpacks.sqlite`), it runs `benchpack registry site` and then
 delegates the generated output. If neither a complete generated site nor the
 registry DB exists, it exits with the curation/import commands needed to create
-one. Use `just registry-site` for explicit DB-backed generation, or
+one. Use `just site` or `just registry-site` for local generation with automatic
+bootstrap from local `results/*/run.jsonl` directories, or
 `just deploy-staging-existing` when you want the existing-site-only path to fail
 instead of regenerating from SQLite.
 

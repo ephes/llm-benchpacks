@@ -17,7 +17,8 @@ DEFAULT_STARTER = Path.home() / "projects" / "desktop-django-starter"
 DEFAULT_SOURCE = Path.home() / "projects" / "django-resume-bench-main"
 DEFAULT_RESULTS_ROOT = REPO_ROOT / "results" / "agent-wrap-oneshot"
 DEFAULT_PROMPT_RELATIVE = Path("skills/wrap-existing-django-in-electron/prompt.md")
-CODEX_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
+CODEX_REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh")
+CLAUDE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -96,6 +97,22 @@ def _agent_command(args: argparse.Namespace, prompt_text: str) -> tuple[list[str
         ]
         return command, prompt_text, "codex_exit"
 
+    if args.runner == "claude-yolo":
+        command = [
+            args.claude_binary,
+            "-p",
+            "--model",
+            args.model,
+            "--effort",
+            args.claude_effort,
+            "--permission-mode",
+            "bypassPermissions",
+            "--tools",
+            "default",
+            "--no-session-persistence",
+        ]
+        return command, prompt_text, "claude_exit"
+
     command = [
         args.pi_binary,
         "--provider",
@@ -124,6 +141,8 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--provider is required with --runner pi")
     if args.runner == "codex-yolo" and not args.reasoning_effort:
         parser.error("--reasoning-effort is required with --runner codex-yolo")
+    if args.runner == "claude-yolo" and not args.claude_effort:
+        parser.error("--claude-effort is required with --runner claude-yolo")
 
 
 def _validate_paths(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -286,6 +305,11 @@ def _write_summary(
             f"runner=codex-yolo provider=openai model={args.model} "
             f"reasoning_effort={args.reasoning_effort}"
         )
+    elif args.runner == "claude-yolo":
+        runner_line = (
+            f"runner=claude-yolo provider=anthropic model={args.model} "
+            f"claude_effort={args.claude_effort}"
+        )
     else:
         runner_line = (
             f"runner=pi provider={args.provider} model={args.model} "
@@ -318,13 +342,14 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Run the one-shot Django/Electron wrapping agent benchmark.",
     )
     parser.add_argument("--label", required=True)
-    parser.add_argument("--runner", choices=("codex-yolo", "pi"), required=True)
+    parser.add_argument("--runner", choices=("codex-yolo", "claude-yolo", "pi"), required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--provider", help="Pi provider name; required with --runner pi")
     parser.add_argument("--thinking", default="off", help="Pi --thinking value")
     parser.add_argument("--pi-extension", default="none")
     parser.add_argument("--pi-mode")
     parser.add_argument("--reasoning-effort", choices=CODEX_REASONING_EFFORTS)
+    parser.add_argument("--claude-effort", choices=CLAUDE_EFFORTS)
     parser.add_argument("--source", default=str(DEFAULT_SOURCE))
     parser.add_argument("--target")
     parser.add_argument("--starter", default=str(DEFAULT_STARTER))
@@ -332,6 +357,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--results-root", default=str(DEFAULT_RESULTS_ROOT))
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument("--codex-binary", default="codex")
+    parser.add_argument("--claude-binary", default="claude")
     parser.add_argument("--pi-binary", default="pi")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

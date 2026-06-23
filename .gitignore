@@ -11,6 +11,12 @@ node_modules/
 results/*
 !results/.gitkeep
 
+# Local generated registry database and static site.
+registry/*.sqlite
+registry/*.sqlite-shm
+registry/*.sqlite-wal
+registry/site/
+
 # Local benchmark metadata can contain machine-local paths and host details.
 metadata/*.json
 

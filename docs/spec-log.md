@@ -31,6 +31,27 @@ working history and open questions.
   `desktop-django-starter` owns the workload prompt/reference implementation,
   while `llm-benchpacks` owns benchmark orchestration, result artifacts, and
   curated run logs.
+- Added `claude-yolo` as a hosted-agent runner mode for direct Claude Code
+  one-shot runs. It uses Claude Code `--effort` values rather than a literal
+  thinking-off flag, so low effort is the no/low-thinking lane for this runner.
+- Added fresh neutral-runner one-shot results for Claude Code/Opus low and high
+  effort, plus Codex CLI/GPT-5.5 low and high reasoning, all on isolated clones
+  of the `django-resume` 0.3.0 source checkout.
+- Added a fresh neutral-runner Pi/OpenAI Codex GPT-5.5 thinking-off retry
+  against the same `django-resume` 0.3.0 target. This run completed normally in
+  431.7s and passed Node tests plus packaged smoke, replacing the earlier
+  interrupted Pi/off row as the representative off-thinking result while
+  preserving the interrupted row as failure-mode evidence.
+- Added a fresh neutral-runner Codex CLI/GPT-5.5 low-reasoning rerun for the
+  same target. It completed in 438.3s and passed Node tests plus packaged smoke,
+  making it the fastest direct Codex CLI current-target pass while retaining the
+  earlier failed low-reasoning row as variance evidence.
+- Added the actual direct-Codex no-reasoning comparison row,
+  `model_reasoning_effort="none"`, after verifying that literal `off` is
+  rejected by the API and `minimal` is incompatible with the active Codex tool
+  set. The `none` one-shot run completed in 471.4s, passed Node tests, but
+  failed packaged smoke before HTTP checks on an Electron install-integrity
+  error, so it must not be conflated with the successful low-reasoning rerun.
 
 ### Open Questions
 

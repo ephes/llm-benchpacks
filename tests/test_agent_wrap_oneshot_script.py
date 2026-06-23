@@ -80,6 +80,50 @@ def test_dry_run_codex_yolo_uses_llm_benchpacks_results_root() -> None:
     assert "verify: npm --prefix electron run smoke:packaged when declared" in result.stdout
 
 
+def test_dry_run_codex_yolo_allows_reasoning_none() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--label",
+        "gpt55-codex-yolo-main-none",
+        "--runner",
+        "codex-yolo",
+        "--model",
+        "gpt-5.5",
+        "--reasoning-effort",
+        "none",
+        "--prompt",
+        str(PROMPT),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "-c 'model_reasoning_effort=\"none\"'" in result.stdout
+
+
+def test_dry_run_claude_yolo_renders_effort() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--label",
+        "opus48-claude-yolo-main-high",
+        "--runner",
+        "claude-yolo",
+        "--model",
+        "opus",
+        "--claude-effort",
+        "high",
+        "--prompt",
+        str(PROMPT),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "runner: claude-yolo" in result.stdout
+    assert "results/agent-wrap-oneshot/opus48-claude-yolo-main-high" in result.stdout
+    assert (
+        "agent: claude -p --model opus --effort high "
+        "--permission-mode bypassPermissions --tools default --no-session-persistence"
+    ) in result.stdout
+    assert ".bench-qwen36" not in result.stdout
+
+
 def test_dry_run_pi_renders_provider_thinking_and_mode() -> None:
     result = _run_script(
         "--dry-run",
@@ -147,6 +191,24 @@ def test_codex_yolo_requires_explicit_reasoning_effort() -> None:
 
     assert result.returncode == 2
     assert "--reasoning-effort is required with --runner codex-yolo" in result.stderr
+    assert result.stdout == ""
+
+
+def test_claude_yolo_requires_explicit_effort() -> None:
+    result = _run_script(
+        "--dry-run",
+        "--label",
+        "missing-effort",
+        "--runner",
+        "claude-yolo",
+        "--model",
+        "opus",
+        "--prompt",
+        str(PROMPT),
+    )
+
+    assert result.returncode == 2
+    assert "--claude-effort is required with --runner claude-yolo" in result.stderr
     assert result.stdout == ""
 
 
@@ -474,6 +536,41 @@ def test_summary_records_pi_runner_options(tmp_path: Path) -> None:
         "runner=pi provider=anthropic model=claude-opus-4.8 "
         "thinking=off pi_extension=none pi_mode="
     ) in summary
+    assert "outcome=PASS" in summary
+
+
+def test_summary_records_claude_runner_options(tmp_path: Path) -> None:
+    args = SimpleNamespace(
+        label="unit",
+        runner="claude-yolo",
+        model="opus",
+        claude_effort="high",
+        source=tmp_path / "source",
+        target=tmp_path / "target",
+        output=tmp_path,
+    )
+    verification = {
+        "electron_exists": 1,
+        "npm_install_ok": 1,
+        "node_tests": "pass",
+        "smoke_exit": 0,
+        "health200": 1,
+        "root200": 1,
+        "root302": 0,
+        "resume200": 0,
+        "app_served": 1,
+    }
+
+    summary = RUNNER._write_summary(
+        args,
+        exit_label="claude_exit",
+        agent_exit=0,
+        duration_s=1.2,
+        files_changed=3,
+        verification=verification,
+    )
+
+    assert "runner=claude-yolo provider=anthropic model=opus claude_effort=high" in summary
     assert "outcome=PASS" in summary
 
 

@@ -11,7 +11,26 @@ default:
 registry-site:
     #!/usr/bin/env bash
     set -euo pipefail
-    test -f "{{BENCHMARKS_REGISTRY_DB}}" || (echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}"; exit 1)
+
+    if [[ ! -f "{{BENCHMARKS_REGISTRY_DB}}" ]]; then
+      mapfile -t result_dirs < <(
+        find results -mindepth 2 -maxdepth 2 -name run.jsonl -print \
+          | sed 's#/run.jsonl$##' \
+          | sort
+      )
+      if (( ${#result_dirs[@]} == 0 )); then
+        echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}" >&2
+        echo "No importable result directories with run.jsonl found under results/." >&2
+        exit 1
+      fi
+      echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}"
+      echo "Importing ${#result_dirs[@]} result directories into a new registry."
+      mkdir -p "$(dirname "{{BENCHMARKS_REGISTRY_DB}}")"
+      uv run benchpack registry import \
+        --db "{{BENCHMARKS_REGISTRY_DB}}" \
+        "${result_dirs[@]}"
+    fi
+
     mkdir -p "$(dirname "{{BENCHMARKS_SITE_OUT}}")"
     uv run benchpack registry site \
       --db "{{BENCHMARKS_REGISTRY_DB}}" \
