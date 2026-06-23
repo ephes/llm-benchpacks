@@ -660,3 +660,17 @@ systemd, uv, and SQLite-backed Django deployment primitives, while
 to robust operator-facing review and public APIs without hand-building an admin
 surface. SQLite is enough for the early operator-curated write pattern and
 avoids adding a database service before public submission volume exists.
+
+## D-033: One-Shot Agent Wrap Results Live In llm-benchpacks
+
+Keep the hard one-shot Django/Electron agent wrapping runner and new generated
+artifacts in this repository under `scripts/run-agent-wrap-oneshot` and
+`results/agent-wrap-oneshot/`. Keep `desktop-django-starter` as the source of
+the wrap prompt, skill, docs, and reference Electron shell, not the long-term
+benchmark lab.
+
+Reason: the starter repository owns the workload being exercised, while
+benchmark orchestration, model/provider metadata, run logs, and generated result
+artifacts churn with benchmark campaigns. The old
+`desktop-django-starter/.bench-qwen36/` path is retained only as historical
+scratch from the Qwen3.6 campaign.

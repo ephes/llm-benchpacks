@@ -167,6 +167,38 @@ prepare metadata separately. This preset is scoped to the exact
 workflows into default helper behavior. Explicit `--model` or `--endpoint`
 values override the preset defaults; the dry run shows the resolved command.
 
+For the hard from-scratch Django/Electron wrapping benchmark that uses the
+`desktop-django-starter` skill prompt and verifies a real generated Electron
+app, use the neutral one-shot helper in this repository instead of the legacy
+`.bench-qwen36` scratch directory in `desktop-django-starter`:
+
+```sh
+scripts/run-agent-wrap-oneshot \
+  --dry-run \
+  --label gpt55-codex-yolo-django-resume-030-low \
+  --runner codex-yolo \
+  --model gpt-5.5 \
+  --reasoning-effort low
+
+scripts/run-agent-wrap-oneshot \
+  --label gpt55-codex-yolo-django-resume-030-low \
+  --runner codex-yolo \
+  --model gpt-5.5 \
+  --reasoning-effort low
+```
+
+The helper clones the configured source repo into a disposable target, runs one
+unattended agent session against the original wrap prompt, captures the
+model-authored diff before verification mutates the clone, then runs
+`npm --prefix electron install`, Electron Node tests, and packaged smoke. New
+artifacts default to `results/agent-wrap-oneshot/<label>/`, which remains
+ignored like other generated benchmark output. Historical
+`desktop-django-starter/.bench-qwen36/` artifacts are retained in place for
+continuity only; avoid reusing those legacy labels for new runs unless the
+comparison plan explicitly needs name continuity. Pass `--force` only when
+intentionally replacing an existing generated target/result pair for the same
+label.
+
 For optional exploratory repo-task evidence, select the coding-task pack set
 explicitly instead of changing the default four-pack matrix:
 

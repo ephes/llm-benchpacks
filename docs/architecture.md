@@ -70,41 +70,60 @@ than changing the adapter boundary:
 ## Proposed Layout
 
 ```text
-benchpacks/
-  smoke-chat/
-  runtime-sweep/
-  tool-json/
-  desktop-django-wrap/
-  patch-from-failure/
-  endpoint-python-correctness/
-  python-regression-fix/
-  django-dashboard-regression-fix/
-  mini-project-completion/
-src/
-  benchpack/
-    cli.py
-    adapters/
-      ollama_generate.py
-      openai_chat.py
-    packs.py
-    results.py
-    run_metadata.py
-    compare.py
-    report.py
-    registry.py
-    hardware.py
-docs/
-  specification.md
-  architecture.md
-  implementation-plan.md
-  benchpack-format.md
-  hardware-targets.md
-  decisions.md
-  spec-log.md
-  run-log.md
-results/
-  .gitkeep
+./
+  benchpacks/
+    smoke-chat/
+    runtime-sweep/
+    tool-json/
+    desktop-django-wrap/
+    patch-from-failure/
+    endpoint-python-correctness/
+    python-regression-fix/
+    django-dashboard-regression-fix/
+    mini-project-completion/
+  src/
+    benchpack/
+      cli.py
+      adapters/
+        ollama_generate.py
+        openai_chat.py
+      packs.py
+      results.py
+      run_metadata.py
+      compare.py
+      report.py
+      registry.py
+      hardware.py
+  scripts/
+    benchpack-tmux-matrix
+    run-agent-wrap-oneshot
+  config/
+    providers/  # optional ignored local provider snippets, if adopted
+  docs/
+    specification.md
+    architecture.md
+    implementation-plan.md
+    benchpack-format.md
+    hardware-targets.md
+    decisions.md
+    spec-log.md
+    run-log.md
+  results/
+    .gitkeep
+    agent-wrap-oneshot/
 ```
+
+`scripts/run-agent-wrap-oneshot` is intentionally outside the pack runner for
+now. It drives a real external coding agent through the original
+`desktop-django-starter` wrap skill prompt, mutates a disposable checkout, and
+then verifies the generated Electron app. That makes it useful as hard
+agent-workflow evidence, but it is not the prompt-only `desktop-django-wrap`
+pack and does not write `run.jsonl`. New artifacts from that helper live under
+`results/agent-wrap-oneshot/<label>/` in this repository. The
+`desktop-django-starter` repository remains the source of the workload prompt
+and reference Electron shell; historical `.bench-qwen36` artifacts there are
+legacy scratch from the Qwen3.6 campaign and should not be the default result
+root for new runs.
 
 ## Execution Flow
 

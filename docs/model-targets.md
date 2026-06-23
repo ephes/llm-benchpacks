@@ -197,6 +197,30 @@ Latest strict-GGUF preflight note:
   hosts. This is still a narrow preflight, not a full four-pack default matrix
   promotion.
 
+### Hosted Agent/Coding Models
+
+As of 2026-06-23, the most relevant new targets for hosted agent-workflow
+experiments are API-served models rather than local strict-GGUF replacements.
+Keep them separate from Apple/Hetzner local-runtime comparisons.
+
+| Target role | Model/provider ID | Status | Benchmark use | Notes |
+| --- | --- | --- | --- | --- |
+| Current-target OpenAI Codex frontier reference | Pi/OpenAI Codex `gpt-5.5` and Codex CLI/yolo `gpt-5.5`; older one-shot control used the same model on the prior `django-resume` 0.2.0 baseline | Pi model metadata available locally on 2026-06-22: context 272,000, max output 128,000, thinking supported; high/off Pi tool probes passed. Codex CLI 0.141.0 accepted `model_reasoning_effort="low"` and `"high"` on 2026-06-23 | Use as the OpenAI Codex hosted frontier comparison for current `django-resume` 0.3.0 one-shot wrap runs, keeping Pi and direct Codex CLI/yolo rows separate | Current-target hard one-shot `django-resume` run on 2026-06-22 passed through Pi with `--thinking high`: Pi exited 0 in 701.2s, authored a 35-file Electron wrapper from scratch, passed 53 Node tests, and passed packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). Parsed unique-turn usage estimate was about $4.92. The current-target Pi `thinking off` rerun was interrupted after 1240.1s due 8.7 GB raw log growth; its partial wrapper passed Node tests but failed packaged smoke before HTTP checks on an Electron spawn `ENOENT`. Follow-up current-target Codex CLI/yolo runs on 2026-06-23 passed in both reasoning modes tested: low passed in 669.9s with a 39-file wrapper, and high passed in 730.2s with a 39-file wrapper. Both passed 53 Node tests and packaged smoke. Low was faster and less expansive in the target diff on this single pair; high spent more time in broad reference reading and added broader target-side docs/tests. The older 2026-06-03 GPT-5.5 control passed in 432.5s, but used the older 0.2.0 target baseline. |
+| Fast hosted frontier one-shot reference | OpenRouter `anthropic/claude-opus-4.8`; Pi built-in Anthropic ID `claude-opus-4-8` exists but direct Anthropic access was blocked by third-party extra-usage billing on 2026-06-22 | OpenRouter model metadata verified 2026-06-22: text/image model, context length 1,000,000, max completion tokens 128,000; OpenRouter route accepted Pi probes for off and high thinking | Use as a hosted Pi/OpenRouter frontier comparison for one-shot wrap quality and wall-clock, with cost recorded separately from GLM-style hosted runs | First hard one-shot `django-resume` run on 2026-06-22 passed via OpenRouter with thinking off: Pi exited 0 in 612.4s, authored a 36-file Electron wrapper from scratch, passed 53 Node tests, and passed packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). The high-thinking variant failed after 734.3s: it passed 53 Node tests, but packaged smoke failed before HTTP checks with `ModuleNotFoundError: No module named 'desktop_django_starter'`. Parsed unique-turn OpenRouter usage estimates were about $6.22 off and $4.82 high. |
+| Long-horizon hosted agent candidate | OpenRouter `z-ai/glm-5.2`, resolved as `z-ai/glm-5.2-20260616`; upstream HF `zai-org/GLM-5.2` | OpenRouter model metadata verified 2026-06-22: text-only, context length 1,048,576, max completion tokens 32,768, supports tools and reasoning parameters | Use for hosted Pi/OpenRouter one-shot wrap experiments, especially when the question is agent workflow/tool reliability rather than local tokens/sec | First hard one-shot `django-resume` runs on 2026-06-22 passed in both thinking modes tested. Thinking off exited 0 in 1126.4s, authored a 31-file Electron wrapper from scratch, passed Node tests, and passed packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). Thinking high also passed, exiting 0 in 1014.0s with a 27-file wrapper and 40 passing Node tests. A staged run the same day also completed Stage 2/3, but its final Electron wrapper smoke hit a host spawn caveat, so the one-shot rows are the stronger benchmark signal. See `docs/run-log.md`. |
+| Small/free hosted coding model probe | OpenRouter `cohere/north-mini-code:free`; upstream HF `CohereLabs/North-Mini-Code-1.0` | OpenRouter model metadata verified 2026-06-22: text-only, context length 256,000, advertised free pricing, supports tools | Use as a cheap hosted Pi/OpenRouter sanity or efficiency comparison, not as the strongest quality target | Pi tool-call connectivity probe passed on 2026-06-22. No wrap benchmark has been run yet. |
+| Proprietary Qwen hosted agent targets | `qwen3.7-max` and `qwen3.7-plus` through Alibaba Cloud/DashScope-compatible hosted routes when credentials and data policy are acceptable | Not local open-weight replacements. No official Qwen3.7 GGUF/MLX local artifact was verified in this repo on 2026-06-22 | Use only for hosted API comparison lanes, not for the existing Qwen3.6 M4/M5 MLX-vs-llama.cpp-vs-Ollama workflow | `qwen3.7-max` is the text/agent target; `qwen3.7-plus` is the multimodal agent target. Add exact provider, model ID, pricing, context, and credential path before any live run. |
+
+Sources:
+
+- <https://openrouter.ai/z-ai/glm-5.2>
+- <https://openrouter.ai/anthropic/claude-opus-4.8>
+- <https://huggingface.co/blog/zai-org/glm-52-blog>
+- <https://openrouter.ai/cohere/north-mini-code%3Afree>
+- <https://cohere.com/blog/north-mini-code>
+- <https://www.alibabacloud.com/blog/qwen3-7-the-agent-frontier_603154>
+- <https://www.alibabacloud.com/blog/qwen3-7-plus-multimodal-agent-intelligence_603206>
+
 ## Next Catalog Work
 
 - Keep the strict-GGUF tri-host summary current if the selected Gemma 4

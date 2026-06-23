@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Run the hard one-shot Django-to-Electron agent wrapping benchmark."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shlex
+import shutil
+import subprocess
+import time
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_STARTER = Path.home() / "projects" / "desktop-django-starter"
+DEFAULT_SOURCE = Path.home() / "projects" / "django-resume-bench-main"
+DEFAULT_RESULTS_ROOT = REPO_ROOT / "results" / "agent-wrap-oneshot"
+DEFAULT_PROMPT_RELATIVE = Path("skills/wrap-existing-django-in-electron/prompt.md")
+CODEX_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
+LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _resolve_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def _count(pattern: str, path: Path) -> int:
+    if not path.exists():
+        return 0
+    return path.read_text(encoding="utf-8", errors="replace").count(pattern)
+
+
+def _run_to_file(
+    command: list[str],
+    *,
+    cwd: Path,
+    output_path: Path,
+    timeout_s: float | None = None,
+    stdin_text: str | None = None,
+) -> int:
+    run_kwargs = {"input": stdin_text} if stdin_text is not None else {"stdin": subprocess.DEVNULL}
+    with output_path.open("w", encoding="utf-8") as output:
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=cwd,
+                text=True,
+                **run_kwargs,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            # subprocess.run kills and waits for the child before raising.
+            output.write(f"\n[benchpack] timeout after {timeout_s}s\n")
+            return 124
+    return completed.returncode
+
+
+def _run_capture(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _run_quiet(command: list[str], *, cwd: Path) -> int:
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return completed.returncode
+
+
+def _agent_command(args: argparse.Namespace, prompt_text: str) -> tuple[list[str], str | None, str]:
+    if args.runner == "codex-yolo":
+        command = [
+            args.codex_binary,
+            "exec",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-m",
+            args.model,
+            "-c",
+            f'model_reasoning_effort="{args.reasoning_effort}"',
+            "--cd",
+            str(args.target),
+            "-",
+        ]
+        return command, prompt_text, "codex_exit"
+
+    command = [
+        args.pi_binary,
+        "--provider",
+        args.provider,
+        "--model",
+        args.model,
+        "--no-session",
+        "--thinking",
+        args.thinking,
+        "-nc",
+        "-ns",
+        "-np",
+    ]
+    if args.pi_mode:
+        command.extend(["--mode", args.pi_mode])
+    if args.pi_extension != "none":
+        command[1:1] = ["-e", args.pi_extension]
+    command.extend(["-p", prompt_text])
+    return command, None, "pi_exit"
+
+
+def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if not LABEL_RE.fullmatch(args.label):
+        parser.error("--label must be one safe path segment matching [A-Za-z0-9][A-Za-z0-9._-]*")
+    if args.runner == "pi" and not args.provider:
+        parser.error("--provider is required with --runner pi")
+    if args.runner == "codex-yolo" and not args.reasoning_effort:
+        parser.error("--reasoning-effort is required with --runner codex-yolo")
+
+
+def _validate_paths(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    protected_targets = {
+        args.source: "--target must not be the same path as --source",
+        args.starter: "--target must not be the same path as --starter",
+        REPO_ROOT: "--target must not be the llm-benchpacks repository root",
+        args.results_root: "--target must not be the results root",
+        args.output: "--target must not be the same path as the output directory",
+    }
+    for protected_path, message in protected_targets.items():
+        if args.target == protected_path:
+            parser.error(message)
+    if args.target.is_relative_to(args.results_root):
+        parser.error("--target must not be inside the results root")
+
+
+def _prepare_paths(args: argparse.Namespace) -> None:
+    args.starter = _resolve_path(args.starter)
+    args.source = _resolve_path(args.source)
+    args.target = _resolve_path(
+        args.target or (Path.home() / "projects" / f"django-resume-oneshot-{args.label}")
+    )
+    args.results_root = _resolve_path(args.results_root)
+    args.output = _resolve_path(args.results_root / args.label)
+    args.prompt = _resolve_path(args.prompt or (args.starter / DEFAULT_PROMPT_RELATIVE))
+
+
+def _print_dry_run(args: argparse.Namespace, command: list[str]) -> None:
+    print("# run-agent-wrap-oneshot dry run")
+    print(f"label: {args.label}")
+    print(f"runner: {args.runner}")
+    print(f"source: {args.source}")
+    print(f"target: {args.target}")
+    print(f"results: {args.output}")
+    print(f"starter: {args.starter}")
+    print(f"prompt: {args.prompt}")
+    print(f"agent: {shlex.join(command)}")
+    print("verify: npm --prefix electron install")
+    print("verify: node --test <electron/scripts/*.test.cjs when present>")
+    print("verify: npm --prefix electron run smoke:packaged when declared")
+
+
+def _clone_source(args: argparse.Namespace) -> None:
+    if args.output.exists() or args.target.exists():
+        if not args.force:
+            raise SystemExit(
+                "output or target already exists; pass --force to replace generated artifacts"
+            )
+        shutil.rmtree(args.output, ignore_errors=True)
+        shutil.rmtree(args.target, ignore_errors=True)
+    args.output.mkdir(parents=True)
+    completed = _run_capture(["git", "clone", "-q", str(args.source), str(args.target)], cwd=REPO_ROOT)
+    if completed.returncode != 0:
+        shutil.rmtree(args.output, ignore_errors=True)
+        shutil.rmtree(args.target, ignore_errors=True)
+        raise SystemExit(f"git clone failed:\n{completed.stderr}")
+
+
+def _capture_model_diff(target: Path, output: Path) -> int:
+    _run_quiet(["git", "add", "-A"], cwd=target)
+    stat = _run_capture(["git", "diff", "--cached", "--stat"], cwd=target)
+    (output / "diff-stat.txt").write_text(stat.stdout, encoding="utf-8")
+    names = _run_capture(["git", "diff", "--cached", "--name-only"], cwd=target)
+    (output / "files-changed.txt").write_text(names.stdout, encoding="utf-8")
+    _run_quiet(["git", "reset", "-q"], cwd=target)
+    return len([line for line in names.stdout.splitlines() if line.strip()])
+
+
+def _verify(target: Path, output: Path) -> dict[str, str | int]:
+    electron_exists = int((target / "electron" / "package.json").is_file())
+    npm_ok = 0
+    node_tests = "NA"
+    smoke_exit: str | int = "NA"
+    health200 = root200 = root302 = resume200 = app_served = 0
+
+    if electron_exists:
+        npm_ok = int(
+            _run_to_file(
+                ["npm", "--prefix", "electron", "install"],
+                cwd=target,
+                output_path=output / "npm.log",
+            )
+            == 0
+        )
+        test_files = sorted((target / "electron" / "scripts").glob("*.test.cjs"))
+        if test_files:
+            node_tests = (
+                "pass"
+                if _run_to_file(
+                    ["node", "--test", *[str(path) for path in test_files]],
+                    cwd=target,
+                    output_path=output / "nodetests.log",
+                )
+                == 0
+                else "fail"
+            )
+        scripts = _run_capture(["npm", "--prefix", "electron", "run"], cwd=target)
+        if npm_ok and "smoke:packaged" in (scripts.stdout + scripts.stderr):
+            smoke_exit = _run_to_file(
+                ["npm", "--prefix", "electron", "run", "smoke:packaged"],
+                cwd=target,
+                output_path=output / "verify-smoke.log",
+                timeout_s=200,
+            )
+            smoke_log = output / "verify-smoke.log"
+            health200 = _count('GET /health/ HTTP/1.1" 200', smoke_log)
+            root200 = _count('GET / HTTP/1.1" 200', smoke_log)
+            root302 = _count('GET / HTTP/1.1" 302', smoke_log)
+            resume200 = _count('GET /resume/ HTTP/1.1" 200', smoke_log)
+
+    if _is_app_served(smoke_exit, health200, root200, root302, resume200):
+        app_served = 1
+    return {
+        "electron_exists": electron_exists,
+        "npm_install_ok": npm_ok,
+        "node_tests": node_tests,
+        "smoke_exit": smoke_exit,
+        "health200": health200,
+        "root200": root200,
+        "root302": root302,
+        "resume200": resume200,
+        "app_served": app_served,
+    }
+
+
+def _is_app_served(
+    smoke_exit: str | int,
+    health200: int,
+    root200: int,
+    root302: int,
+    resume200: int,
+) -> bool:
+    return (
+        smoke_exit == 0
+        and health200 >= 1
+        and (root200 >= 1 or (root302 >= 1 and resume200 >= 1))
+    )
+
+
+def _outcome(verification: dict[str, str | int]) -> str:
+    # A served app without generated Node checks is not a complete benchmark pass.
+    if verification["app_served"] == 1 and verification["node_tests"] == "pass":
+        return "PASS"
+    return "FAIL"
+
+
+def _write_summary(
+    args: argparse.Namespace,
+    *,
+    exit_label: str,
+    agent_exit: int,
+    duration_s: float,
+    files_changed: int,
+    verification: dict[str, str | int],
+) -> str:
+    outcome = _outcome(verification)
+    if args.runner == "codex-yolo":
+        runner_line = (
+            f"runner=codex-yolo provider=openai model={args.model} "
+            f"reasoning_effort={args.reasoning_effort}"
+        )
+    else:
+        runner_line = (
+            f"runner=pi provider={args.provider} model={args.model} "
+            f"thinking={args.thinking} pi_extension={args.pi_extension} "
+            f"pi_mode={args.pi_mode or ''}"
+        )
+    lines = [
+        f"label={args.label}",
+        runner_line,
+        f"source={args.source} target={args.target} output={args.output}",
+        f"{exit_label}={agent_exit} (124=timeout) duration_seconds={duration_s:.1f}",
+        (
+            "electron_exists={electron_exists} npm_install_ok={npm_install_ok} "
+            "node_tests={node_tests}"
+        ).format(**verification),
+        (
+            "smoke_exit={smoke_exit} health200={health200} root200={root200} "
+            "root302={root302} resume200={resume200} app_served={app_served}"
+        ).format(**verification),
+        f"files_changed={files_changed}",
+        f"outcome={outcome}",
+    ]
+    text = "\n".join(lines) + "\n"
+    (args.output / "summary.txt").write_text(text, encoding="utf-8")
+    return text
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run the one-shot Django/Electron wrapping agent benchmark.",
+    )
+    parser.add_argument("--label", required=True)
+    parser.add_argument("--runner", choices=("codex-yolo", "pi"), required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--provider", help="Pi provider name; required with --runner pi")
+    parser.add_argument("--thinking", default="off", help="Pi --thinking value")
+    parser.add_argument("--pi-extension", default="none")
+    parser.add_argument("--pi-mode")
+    parser.add_argument("--reasoning-effort", choices=CODEX_REASONING_EFFORTS)
+    parser.add_argument("--source", default=str(DEFAULT_SOURCE))
+    parser.add_argument("--target")
+    parser.add_argument("--starter", default=str(DEFAULT_STARTER))
+    parser.add_argument("--prompt")
+    parser.add_argument("--results-root", default=str(DEFAULT_RESULTS_ROOT))
+    parser.add_argument("--timeout", type=int, default=7200)
+    parser.add_argument("--codex-binary", default="codex")
+    parser.add_argument("--pi-binary", default="pi")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    _validate_args(parser, args)
+    _prepare_paths(args)
+    _validate_paths(parser, args)
+
+    if not args.prompt.is_file():
+        parser.error(f"prompt file does not exist: {args.prompt}")
+    prompt_text = args.prompt.read_text(encoding="utf-8")
+    command, stdin_text, exit_label = _agent_command(args, prompt_text)
+
+    if args.dry_run:
+        _print_dry_run(args, command)
+        return 0
+
+    _clone_source(args)
+    start = time.time()
+    agent_exit = _run_to_file(
+        command,
+        cwd=args.target,
+        output_path=args.output / f"{args.runner}.log",
+        timeout_s=args.timeout,
+        stdin_text=stdin_text,
+    )
+    duration_s = time.time() - start
+    files_changed = _capture_model_diff(args.target, args.output)
+    verification = _verify(args.target, args.output)
+    summary = _write_summary(
+        args,
+        exit_label=exit_label,
+        agent_exit=agent_exit,
+        duration_s=duration_s,
+        files_changed=files_changed,
+        verification=verification,
+    )
+    print(summary, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

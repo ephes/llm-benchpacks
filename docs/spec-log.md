@@ -16,6 +16,33 @@ working history and open questions.
 - ...
 ```
 
+## 2026-06-23 (neutral one-shot agent wrap runner)
+
+### Changed
+
+- Added `scripts/run-agent-wrap-oneshot` as the neutral owner for hard
+  from-scratch Django/Electron wrapping benchmarks that use the
+  `desktop-django-starter` skill prompt and reference shell.
+- Moved the default result root for new one-shot agent wrap runs to
+  `results/agent-wrap-oneshot/<label>/` in this repository, leaving
+  `desktop-django-starter/.bench-qwen36/` as historical scratch from the
+  Qwen3.6 campaign.
+- Recorded D-033 to make the ownership split explicit:
+  `desktop-django-starter` owns the workload prompt/reference implementation,
+  while `llm-benchpacks` owns benchmark orchestration, result artifacts, and
+  curated run logs.
+
+### Open Questions
+
+- Historical `.bench-qwen36` artifacts remain in place for continuity. A
+  separate migration/report-bundle pass can copy curated compact artifacts later
+  if a clean archive is needed.
+- Historical `.bench-qwen36/pi-openrouter*.ts` provider snippets were local
+  scratch inputs. If those OpenRouter/Pi variants need reproduction, choose a
+  `llm-benchpacks`-owned location for provider configuration, such as a
+  dedicated helper option or a small ignored `config/providers/` file, before
+  launching new runs.
+
 ## 2026-05-18 (hosted registry review follow-up)
 
 ### Changed
