@@ -18,6 +18,8 @@ registry-site:
       --out "{{BENCHMARKS_SITE_OUT}}" \
       --force
 
+site: registry-site
+
 deploy-staging:
     #!/usr/bin/env bash
     set -euo pipefail
