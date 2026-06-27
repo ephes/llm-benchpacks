@@ -1,6 +1,6 @@
 # Benchmark Research Backlog
 
-Status date: 2026-05-11.
+Status date: 2026-06-27.
 
 This is a research backlog, not an implemented benchmark contract. It records
 candidate directions for stronger coding-agent benchmarks after live evidence
@@ -206,39 +206,48 @@ shape needed.
 
 ### Product Classification And Matching Programs
 
+Detailed design draft: [`docs/product-offer-matching-benchmark.md`](product-offer-matching-benchmark.md).
+
 Candidate data leads:
 
-- [WDC Product Data Corpus and Gold Standard for Large-Scale Product Matching](https://webdatacommons.org/largescaleproductcorpus/v2/index.html):
-  public product matching corpus and gold standard with 26 million offers,
-  16 million clusters, and 4,400 manually verified offer pairs, plus
-  pre-assembled training and validation sets. License, fixture size, and
-  offline reproducibility need validation before implementation.
+- [Kaggle Product Classification and Clustering](https://www.kaggle.com/datasets/pooriamst/product-classification-and-clustering)
+  and [Kaggle Product Clustering, Matching & Classification](https://www.kaggle.com/datasets/lakritidis/product-clustering-matching-classification):
+  first inspection leads because the operator has indicated Kaggle license
+  terms are acceptable for this benchmark. They are still leads only until the
+  actual files, columns, labels, split options, and redistribution terms are
+  inspected.
 - [WDC Products](https://webdatacommons.org/largescaleproductcorpus/wdc-products/index.html):
-  multi-dimensional entity-matching benchmark with pair-wise and multi-class
-  formulations, train/validation/test variants, product attributes such as
-  brand/title/description/price/currency, and reported F1 or micro-F1 metrics.
-  This is a strong candidate for coding-agent-written matcher pipelines.
+  compact multi-dimensional entity-matching benchmark with pair-wise and
+  multi-class formulations, train/validation/test variants, product attributes
+  such as brand/title/description/price/currency, hard cases, unseen-entity
+  dimensions, and reported F1 or micro-F1 metrics. Inspect alongside Kaggle and
+  prefer it if Kaggle lacks clean matching labels or redistributable fixtures.
+- [WDC Product Data Corpus and Gold Standard for Large-Scale Product Matching](https://webdatacommons.org/largescaleproductcorpus/v2/index.html):
+  much larger public product matching corpus and gold standard with 26 million
+  offers, 16 million clusters, and 4,400 manually verified offer pairs, plus
+  pre-assembled training and validation sets. Keep it separate from WDC
+  Products; its size makes it a later target unless a small official fold is
+  straightforward.
 - [WDC-24 Gold Standard for Product Categorization](https://webdatacommons.org/largescaleproductcorpus/wdc-products/categorization/):
   product categorization lead with over 17,000 manually labeled offers across
   24 non-hierarchical categories and published train/validation/test downloads.
   It supports deterministic classification metrics such as micro-F1 and
-  macro-F1, but its schema is not hierarchical.
+  macro-F1, but it should become a separate categorization benchmark rather
+  than being conflated with offer matching.
 - [Shopify product-catalogue](https://huggingface.co/datasets/Shopify/product-catalogue):
   Apache-2.0 Hugging Face dataset with product title, description, image,
   candidate categories, brand, secondhand flag, and ground-truth category. The
   category strings are hierarchical, making it a candidate for hierarchical F1
   or path-aware scoring after split and fixture design are validated.
-- [Kaggle Product Classification and Clustering](https://www.kaggle.com/datasets/pooriamst/product-classification-and-clustering)
-  and [Kaggle Product Clustering, Matching & Classification](https://www.kaggle.com/datasets/lakritidis/product-clustering-matching-classification):
-  candidate leads only. The current browser path did not expose inspectable
-  page content, so access, license, fields, sizes, and splits require manual
-  validation before any implementation decision.
 
-Benchmark idea: do not ask the model to classify products directly. Ask a
-coding agent to write a program or pipeline under fixed constraints, then run
-that program on held-out data and score deterministic metrics such as F1,
-weighted F1, macro/micro F1, hierarchical F1 for taxonomy paths, or matching
-metrics for pairwise/entity-cluster tasks.
+Benchmark idea: do not ask the model to classify or match products directly.
+Ask a coding agent to write a deterministic program or pipeline under fixed
+constraints, then run that program on held-out real-derived data and score
+metrics such as positive-class F1, precision, recall, weighted F1, macro/micro
+F1, hierarchical F1 for taxonomy paths, or matching metrics for
+pairwise/entity-cluster tasks. Synthetic rows are not the starting point; they
+are acceptable only after real schema inspection for verifier/unit-test coverage
+or schema-faithful prompt examples.
 
 Research questions:
 
@@ -246,8 +255,13 @@ Research questions:
 - What license and attribution terms apply to derived fixtures?
 - Can train/test splits be made deterministic and portable without committing
   large corpora?
+- Which split and leakage-audit policy should be required for v1: official
+  folds, offer-disjoint splits, unseen-entity/group splits, stripped
+  identifiers, non-leaking pair ids, or a combination?
 - Should the benchmark allow training during the run, or require a fixed
   no-network inference-only program over supplied data?
+- Which trivial baselines and class-prevalence reports are required before
+  setting the pass/fail F1 threshold?
 - Which metrics should be primary for each task type: match-class F1,
   micro-F1, macro-F1, weighted F1, hierarchical F1, pairwise precision/recall,
   or cluster-level metrics?
