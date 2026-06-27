@@ -1345,7 +1345,9 @@ comparability.
 landed as `benchpack registry import --db <sqlite> <result-dir>...`, the first
 compact public bundle slice has landed as
 `benchpack registry bundle create/validate`, and the first comparability
-indexing slice has landed as SQLite schema version `2`. A first registry-backed
+indexing slice has landed as SQLite schema version `2`. A schema version `3`
+slice has landed for curated one-shot agent-wrap rows in `agent_wrap_runs`,
+with import/query commands and static-site export. A first registry-backed
 report slice has also landed as `benchpack registry report --db <sqlite>`,
 rendering the existing Markdown report medians, warnings, cache rows, and
 `prefill parity` statuses from indexed rows and stored compact metadata. A
@@ -1373,14 +1375,16 @@ not the only copy of benchmark truth.
 Scope:
 
 - Define a result-registry data model before choosing a hosted implementation.
-  **Partially landed 2026-05-08** as local SQLite schema version `2`, with
-  `runs`, `result_rows`, `result_case_stats`, and `registry_meta` tables. The
+  **Partially landed 2026-05-08** as local SQLite schema version `3`, with
+  `runs`, `result_rows`, `result_case_stats`, `agent_wrap_runs`, and
+  `registry_meta` tables. The
   schema captures result-directory identity, row count, `run.jsonl` SHA-256,
   pack ids/versions, adapters, models, endpoints, optional hardware/
   run-metadata JSON, selected host/runtime/model fields, normalized row timing/
   token/scoring/repo-task fields, compact sort-keyed row JSON, explicit
-  comparability anchors from `run-metadata.json`, and per-run/case prompt/
-  cached-token coverage medians. Hosted submitter/provenance metadata,
+  comparability anchors from `run-metadata.json`, per-run/case prompt/
+  cached-token coverage medians, and curated one-shot agent-wrap comparison
+  rows. Hosted submitter/provenance metadata,
   artifact references beyond the canonical local result path, runner version,
   and endpoint-class normalization remain later work.
 - Preserve raw and large artifacts outside the relational core. Store compact
@@ -1468,7 +1472,7 @@ Scope:
     **Landed 2026-05-09** as `benchpack registry site --db <sqlite> --out
     <site-dir>`, which writes a local `index.html` with run/case-metric tables
     plus `report.md` from existing registry-backed report rendering. It reads
-    only SQLite schema version `2` compact rows, supports the same optional
+    only SQLite schema version `3` compact rows, supports the same optional
     `--run-id` and `--label` selectors as registry report, refuses existing
     output paths unless `--force` is supplied, and does not read source
     artifacts, mutate the database, or contact endpoints. **Extended

@@ -676,7 +676,7 @@ writing SQLite rows. Optional `hardware.json` and `run-metadata.json` are read
 only when present; malformed optional metadata fails clearly because the
 registry is being asked to index it.
 
-The local registry is currently schema version `2`. The `runs` table stores one
+The local registry is currently schema version `3`. The `runs` table stores one
 row per canonical result directory path, import timestamp, row count,
 `run.jsonl` SHA-256, compact JSON lists for pack ids/versions, adapters,
 models, and endpoints, optional hardware/run-metadata JSON, and selected host,
@@ -696,6 +696,17 @@ row counts, ok counts, prompt-token coverage and median, cached-prompt-token
 coverage and median, and prefill-TPS coverage and median. Re-importing the
 same result directory updates the run row and replaces its child rows and case
 stats.
+
+Schema version `3` adds `agent_wrap_runs`, a normalized operator-curated table
+for hard one-shot Django/Electron wrapping rows that do not naturally arrive as
+ordinary `run.jsonl` benchpack results. Each row has a stable label plus
+explicit target, model, harness, provider, thinking/effort, wall-clock timing,
+diff size, verification, smoke result, artifact path, legacy-artifact flag, and
+notes columns. The import path is idempotent by label and stores the compact raw
+row JSON for auditability. Re-import also prunes rows from the same
+`dataset_source` when their labels are absent from the current curated file, so
+the table converges to the maintained dataset instead of accumulating stale
+rows.
 
 The importer writes only the configured SQLite database. It does not execute
 packs, load adapters, start runtimes, collect hardware, contact endpoints, read
@@ -722,13 +733,15 @@ registry-backed reports, writes `index.html`, `report.md`, and
 `snapshot.json`, and can use the same optional `--run-id` or `--label`
 selectors. The generated `index.html` contains local run tables, a comparison
 matrix with per-run/per-case median latency, throughput, token, and scoring
-fields, case-metric coverage tables, browser-side filters over the generated
-table rows, and an embedded copy of the Markdown report; `report.md` is
+fields, case-metric coverage tables, an `agent_wrap_runs` table when curated
+one-shot rows have been imported, browser-side filters over the generated table
+rows, and an embedded copy of the Markdown report; `report.md` is
 produced by the existing report renderer. `snapshot.json` is a
 machine-readable static export of the same compact run, comparison, and
-case-metric data for local review tooling; nested comparison and case-metric
-rows carry `run_id` for unambiguous joins back to `runs`, and case-metric rows
-include compact host/runtime/model fields for static filtering. The site
+case-metric data for local review tooling, plus `agent_wrap_runs` for the
+curated one-shot comparison table; nested comparison and case-metric rows carry
+`run_id` for unambiguous joins back to `runs`, and case-metric rows include
+compact host/runtime/model fields for static filtering. The site
 export does not require source result directories, read raw/workspace/task/
 verify artifacts, inspect patch or model-call files, mutate the database, or
 contact endpoints. Existing output paths are refused unless `--force` is
@@ -742,7 +755,7 @@ hosted upload/review exists, without changing import idempotency, deleting
 rows, or treating different `run.jsonl` contents as duplicates.
 
 `benchpack registry query --db <sqlite>` is the first machine-readable local
-query surface over normalized registry rows. It reads schema version `2` in
+query surface over normalized registry rows. It reads schema version `3` in
 SQLite query-only mode and returns a JSON array of compact row objects selected
 by optional run id or label plus exact indexed filters for pack, case, adapter,
 model, host label, runtime name, model quantization, adapter `ok` state, and
@@ -750,6 +763,14 @@ deterministic scoring pass state. It uses only `runs` and `result_rows` columns,
 so it does not require source result directories, read artifact files, mutate
 the database, or contact endpoints. This is a local query aid, not hosted API
 infrastructure or upload/review policy.
+
+`benchpack registry agent-wrap import --db <sqlite>
+data/agent-wrap-oneshot-results.json` imports curated one-shot agent-wrap rows
+into `agent_wrap_runs`. `benchpack registry agent-wrap query --db <sqlite>`
+reads the same table with exact filters for status, harness, provider, model,
+thinking level, and limit. These commands do not inspect target workspaces,
+contact providers, or read generated raw logs; they only normalize and query
+curated comparison metadata.
 
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite

@@ -4,6 +4,7 @@ OPS_CONTROL := env_var_or_default("OPS_CONTROL", "/Users/jochen/projects/ops-con
 PROJECTS_ROOT := env_var_or_default("PROJECTS_ROOT", "/Users/jochen/projects")
 BENCHMARKS_REGISTRY_DB := env_var_or_default("BENCHMARKS_REGISTRY_DB", "registry/llm-benchpacks.sqlite")
 BENCHMARKS_SITE_OUT := env_var_or_default("BENCHMARKS_SITE_OUT", "registry/site")
+AGENT_WRAP_DATA := env_var_or_default("AGENT_WRAP_DATA", "data/agent-wrap-oneshot-results.json")
 
 default:
     @just --list
@@ -18,17 +19,26 @@ registry-site:
           | sed 's#/run.jsonl$##' \
           | sort
       )
-      if (( ${#result_dirs[@]} == 0 )); then
+      if (( ${#result_dirs[@]} == 0 )) && [[ ! -f "{{AGENT_WRAP_DATA}}" ]]; then
         echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}" >&2
         echo "No importable result directories with run.jsonl found under results/." >&2
+        echo "No normalized agent-wrap data found at {{AGENT_WRAP_DATA}}." >&2
         exit 1
       fi
       echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}"
-      echo "Importing ${#result_dirs[@]} result directories into a new registry."
       mkdir -p "$(dirname "{{BENCHMARKS_REGISTRY_DB}}")"
-      uv run benchpack registry import \
+      if (( ${#result_dirs[@]} > 0 )); then
+        echo "Importing ${#result_dirs[@]} result directories into a new registry."
+        uv run benchpack registry import \
+          --db "{{BENCHMARKS_REGISTRY_DB}}" \
+          "${result_dirs[@]}"
+      fi
+    fi
+
+    if [[ -f "{{AGENT_WRAP_DATA}}" ]]; then
+      uv run benchpack registry agent-wrap import \
         --db "{{BENCHMARKS_REGISTRY_DB}}" \
-        "${result_dirs[@]}"
+        "{{AGENT_WRAP_DATA}}"
     fi
 
     mkdir -p "$(dirname "{{BENCHMARKS_SITE_OUT}}")"

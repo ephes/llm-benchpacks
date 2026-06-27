@@ -25,7 +25,7 @@ from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
-REGISTRY_SCHEMA_VERSION = 2
+REGISTRY_SCHEMA_VERSION = 3
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
@@ -144,6 +144,14 @@ class RegistryStaticSiteSummary:
     out_dir: Path
     runs: int
     files: int
+
+
+@dataclass(frozen=True)
+class AgentWrapImportSummary:
+    """Summary for imported normalized one-shot agent-wrap rows."""
+
+    data_path: Path
+    rows_imported: int
 
 
 @dataclass(frozen=True)
@@ -353,18 +361,23 @@ def export_registry_static_site(
             )
 
     try:
-        runs, run_rows, case_rows, metric_rows = _load_registry_site_snapshot(
+        runs, run_rows, case_rows, metric_rows, agent_wrap_rows = _load_registry_site_snapshot(
             db_path,
             run_ids=run_ids,
             labels=labels,
         )
-        report_markdown = render_report(runs)
+        report_markdown = (
+            render_report(runs)
+            if runs
+            else "No imported benchpack result rows are selected.\n"
+        )
         generated_at = datetime.now(UTC).isoformat(timespec="seconds")
         index_html = _render_static_site_html(
             db_path=Path(db_path),
             run_rows=run_rows,
             case_rows=case_rows,
             metric_rows=metric_rows,
+            agent_wrap_rows=agent_wrap_rows,
             report_markdown=report_markdown,
             generated_at=generated_at,
         )
@@ -373,6 +386,7 @@ def export_registry_static_site(
             run_rows=run_rows,
             case_rows=case_rows,
             metric_rows=metric_rows,
+            agent_wrap_rows=agent_wrap_rows,
             generated_at=generated_at,
         )
     except ReportError as exc:
@@ -455,6 +469,78 @@ def import_result_bundles(
     except sqlite3.Error as exc:
         raise RegistryError(f"could not update registry database {db}: {exc}") from exc
     return summaries
+
+
+def import_agent_wrap_results(
+    data_path: Path | str,
+    db_path: Path | str,
+) -> AgentWrapImportSummary:
+    """Import normalized one-shot agent-wrap benchmark rows into SQLite."""
+
+    dataset = _load_and_validate_agent_wrap_dataset(data_path)
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    db = Path(db_path)
+    if db.parent != Path("."):
+        db.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("BEGIN")
+            _ensure_schema(conn)
+            rows = dataset["rows"]
+            _delete_stale_agent_wrap_rows(conn, dataset, rows)
+            for row in rows:
+                _import_agent_wrap_row(conn, dataset, row)
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not update registry database {db}: {exc}") from exc
+    return AgentWrapImportSummary(data_path=Path(data_path), rows_imported=len(rows))
+
+
+def query_agent_wrap_results(
+    db_path: Path | str,
+    *,
+    status: str | None = None,
+    harness: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    thinking: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Query normalized one-shot agent-wrap rows from the registry."""
+
+    _validate_agent_wrap_query_filters(
+        status=status,
+        harness=harness,
+        provider=provider,
+        model=model,
+        thinking=thinking,
+        limit=limit,
+    )
+    if str(db_path) == "":
+        raise RegistryError("registry database path must not be empty")
+    db = Path(db_path)
+    if not db.is_file():
+        raise RegistryError(f"registry database not found: {db}")
+
+    try:
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            conn.row_factory = sqlite3.Row
+            _assert_report_schema(conn, db)
+            rows = _select_agent_wrap_rows(
+                conn,
+                status=status,
+                harness=harness,
+                provider=provider,
+                model=model,
+                thinking=thinking,
+                limit=limit,
+            )
+    except sqlite3.Error as exc:
+        raise RegistryError(f"could not read registry database {db}: {exc}") from exc
+    return [_agent_wrap_row_dict(row) for row in rows]
 
 
 def create_result_bundle(
@@ -783,6 +869,133 @@ def _validate_registry_query_filters(
             raise RegistryError("registry query --limit must be an integer >= 1")
 
 
+def _validate_agent_wrap_query_filters(
+    *,
+    status: str | None,
+    harness: str | None,
+    provider: str | None,
+    model: str | None,
+    thinking: str | None,
+    limit: int | None,
+) -> None:
+    for name, value in (
+        ("--status", status),
+        ("--harness", harness),
+        ("--provider", provider),
+        ("--model", model),
+        ("--thinking", thinking),
+    ):
+        if value is not None and value == "":
+            raise RegistryError(f"registry agent-wrap query {name} value must be non-empty")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise RegistryError("registry agent-wrap query --limit must be an integer >= 1")
+
+
+def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, Any]:
+    path = Path(data_path)
+    try:
+        dataset = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RegistryError(f"could not parse {path}: {exc.msg}") from exc
+    except OSError as exc:
+        raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
+    if not isinstance(dataset, dict):
+        raise RegistryError(f"agent-wrap data must be a JSON object: {path}")
+    if dataset.get("schema_version") != 1:
+        raise RegistryError(f"agent-wrap data schema_version must be 1: {path}")
+    target = dataset.get("target")
+    if not isinstance(target, dict):
+        raise RegistryError(f"agent-wrap data requires target object: {path}")
+    for key in ("project", "version", "commit", "workload"):
+        _agent_wrap_required_string(target, key, "target")
+    rows = dataset.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise RegistryError(f"agent-wrap data requires non-empty rows list: {path}")
+    labels: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise RegistryError(f"agent-wrap row {index} must be an object")
+        label = _agent_wrap_required_string(row, "label", f"row {index}")
+        if label in labels:
+            raise RegistryError(f"duplicate agent-wrap label: {label}")
+        labels.add(label)
+        _validate_agent_wrap_row(row, f"row {index} {label}")
+    return dataset
+
+
+def _validate_agent_wrap_row(row: dict[str, Any], source: str) -> None:
+    _agent_wrap_required_string(row, "date", source)
+    status = _agent_wrap_required_string(row, "status", source)
+    if status not in {"pass", "fail", "interrupted"}:
+        raise RegistryError(f"{source} status must be pass, fail, or interrupted")
+    for object_key in (
+        "model",
+        "harness",
+        "provider",
+        "thinking",
+        "timing",
+        "diff",
+        "verification",
+        "artifact",
+    ):
+        if not isinstance(row.get(object_key), dict):
+            raise RegistryError(f"{source} requires {object_key} object")
+    for key in ("id", "name"):
+        _agent_wrap_required_string(row["model"], key, f"{source} model")
+        _agent_wrap_required_string(row["harness"], key, f"{source} harness")
+        _agent_wrap_required_string(row["provider"], key, f"{source} provider")
+    _agent_wrap_required_string(row["model"], "family", f"{source} model")
+    _agent_wrap_required_string(row, "runner_provider_display", source)
+    thinking = row["thinking"]
+    kind = _agent_wrap_required_string(thinking, "kind", f"{source} thinking")
+    if kind not in {"thinking", "reasoning", "effort"}:
+        raise RegistryError(f"{source} thinking.kind must be thinking, reasoning, or effort")
+    level = _agent_wrap_required_string(thinking, "level", f"{source} thinking")
+    if level not in {"off", "none", "low", "medium", "high"}:
+        raise RegistryError(f"{source} thinking.level is not normalized: {level}")
+    _agent_wrap_required_string(thinking, "display", f"{source} thinking")
+    wall_seconds = row["timing"].get("wall_seconds")
+    if isinstance(wall_seconds, bool) or not isinstance(wall_seconds, (int, float)):
+        raise RegistryError(f"{source} timing.wall_seconds must be numeric")
+    _agent_wrap_required_string(row["timing"], "wall_display", f"{source} timing")
+    for key in ("files_changed", "insertions", "deletions"):
+        _agent_wrap_required_int(row["diff"], key, f"{source} diff")
+    _agent_wrap_required_int(row["verification"], "node_tests", f"{source} verification")
+    smoke = _agent_wrap_required_string(row["verification"], "smoke", f"{source} verification")
+    if smoke not in {"http-ok", "smoke-fail"}:
+        raise RegistryError(f"{source} verification.smoke must be http-ok or smoke-fail")
+    _agent_wrap_required_string(
+        row["verification"], "smoke_display", f"{source} verification"
+    )
+    _agent_wrap_required_string(row["artifact"], "result_dir", f"{source} artifact")
+    if not isinstance(row["artifact"].get("legacy"), bool):
+        raise RegistryError(f"{source} artifact.legacy must be boolean")
+    _agent_wrap_required_string(row, "notes", source)
+
+
+def _agent_wrap_required_string(
+    values: dict[str, Any],
+    key: str,
+    source: str,
+) -> str:
+    value = values.get(key)
+    if not isinstance(value, str) or value == "":
+        raise RegistryError(f"{source} requires non-empty string {key}")
+    return value
+
+
+def _agent_wrap_required_int(
+    values: dict[str, Any],
+    key: str,
+    source: str,
+) -> int:
+    value = values.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RegistryError(f"{source} requires non-negative integer {key}")
+    return value
+
+
 def _load_registry_site_snapshot(
     db_path: Path | str,
     *,
@@ -793,6 +1006,7 @@ def _load_registry_site_snapshot(
     list[sqlite3.Row],
     list[sqlite3.Row],
     list[_SiteComparisonMetric],
+    list[sqlite3.Row],
 ]:
     if str(db_path) == "":
         raise RegistryError("registry database path must not be empty")
@@ -812,15 +1026,16 @@ def _load_registry_site_snapshot(
                 labels=labels,
                 command="registry site",
             )
-            if not selected_rows:
+            if not selected_rows and (run_ids is not None or labels is not None):
                 raise RegistryError("registry site selection matched no runs")
             runs = [_registry_result_run(conn, row) for row in selected_rows]
             selected_ids = [int(row["id"]) for row in selected_rows]
             return (
                 runs,
-                _select_site_run_rows(conn, selected_ids),
-                _select_site_case_rows(conn, selected_ids),
-                _select_site_metric_rows(conn, selected_ids),
+                _select_site_run_rows(conn, selected_ids) if selected_ids else [],
+                _select_site_case_rows(conn, selected_ids) if selected_ids else [],
+                _select_site_metric_rows(conn, selected_ids) if selected_ids else [],
+                _select_agent_wrap_rows(conn),
             )
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
@@ -1017,6 +1232,56 @@ def _select_registry_query_rows(
     ).fetchall()
 
 
+def _select_agent_wrap_rows(
+    conn: sqlite3.Connection,
+    *,
+    status: str | None = None,
+    harness: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    thinking: str | None = None,
+    limit: int | None = None,
+) -> list[sqlite3.Row]:
+    conditions: list[str] = []
+    params: list[object] = []
+    for column, value in (
+        ("status", status),
+        ("harness_id", harness),
+        ("provider_id", provider),
+        ("model_id", model),
+        ("thinking_level", thinking),
+    ):
+        if value is None:
+            continue
+        conditions.append(f"{column} = ?")
+        params.append(value)
+    where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = " LIMIT ?"
+        params.append(limit)
+    return conn.execute(
+        f"""
+        SELECT id, label, dataset_source, imported_at, date, status,
+               target_project, target_version, target_commit, target_workload,
+               model_id, model_name, model_family, harness_id, harness_name,
+               provider_id, provider_name, runner_provider_display,
+               thinking_kind, thinking_level, thinking_display,
+               wall_seconds, wall_display, files_changed, insertions, deletions,
+               node_tests, smoke, smoke_display, result_dir, legacy_artifact,
+               notes, raw_json
+        FROM agent_wrap_runs
+        {where_sql}
+        ORDER BY
+          CASE status WHEN 'pass' THEN 0 WHEN 'fail' THEN 1 ELSE 2 END,
+          wall_seconds,
+          id
+        {limit_sql}
+        """,
+        tuple(params),
+    ).fetchall()
+
+
 def _registry_query_row_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "run_id": int(row["run_id"]),
@@ -1079,12 +1344,68 @@ def _registry_query_row_dict(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _agent_wrap_row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "label": row["label"],
+        "dataset_source": row["dataset_source"],
+        "imported_at": row["imported_at"],
+        "date": row["date"],
+        "status": row["status"],
+        "target": {
+            "project": row["target_project"],
+            "version": row["target_version"],
+            "commit": row["target_commit"],
+            "workload": row["target_workload"],
+        },
+        "model": {
+            "id": row["model_id"],
+            "name": row["model_name"],
+            "family": row["model_family"],
+        },
+        "harness": {
+            "id": row["harness_id"],
+            "name": row["harness_name"],
+        },
+        "provider": {
+            "id": row["provider_id"],
+            "name": row["provider_name"],
+        },
+        "runner_provider_display": row["runner_provider_display"],
+        "thinking": {
+            "kind": row["thinking_kind"],
+            "level": row["thinking_level"],
+            "display": row["thinking_display"],
+        },
+        "timing": {
+            "wall_seconds": row["wall_seconds"],
+            "wall_display": row["wall_display"],
+        },
+        "diff": {
+            "files_changed": row["files_changed"],
+            "insertions": row["insertions"],
+            "deletions": row["deletions"],
+        },
+        "verification": {
+            "node_tests": row["node_tests"],
+            "smoke": row["smoke"],
+            "smoke_display": row["smoke_display"],
+        },
+        "artifact": {
+            "result_dir": row["result_dir"],
+            "legacy": bool(row["legacy_artifact"]),
+        },
+        "notes": row["notes"],
+    }
+
+
 def _render_static_site_html(
     *,
     db_path: Path,
     run_rows: list[sqlite3.Row],
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
+    agent_wrap_rows: list[sqlite3.Row],
     report_markdown: str,
     generated_at: str,
 ) -> str:
@@ -1143,6 +1464,7 @@ def _render_static_site_html(
         '<option value="runs">Runs</option>'
         '<option value="comparison">Comparison Matrix</option>'
         '<option value="cases">Case Metrics</option>'
+        '<option value="agent-wrap">Agent Wrap One-Shot</option>'
         "</select></label>",
         _site_filter_select(
             "filter-pack",
@@ -1167,12 +1489,34 @@ def _render_static_site_html(
         _site_filter_select(
             "filter-model",
             "Model",
-            _site_model_filter_options(run_rows, case_rows, metric_rows),
+            _site_model_filter_options(
+                run_rows, case_rows, metric_rows, agent_wrap_rows
+            ),
         ),
         _site_filter_select(
             "filter-quantization",
             "Quantization",
             _site_quantization_filter_options(run_rows, case_rows, metric_rows),
+        ),
+        _site_filter_select(
+            "filter-result",
+            "Result",
+            _agent_wrap_filter_options(row["status"] for row in agent_wrap_rows),
+        ),
+        _site_filter_select(
+            "filter-harness",
+            "Harness",
+            _agent_wrap_filter_options(row["harness_id"] for row in agent_wrap_rows),
+        ),
+        _site_filter_select(
+            "filter-provider",
+            "Provider",
+            _agent_wrap_filter_options(row["provider_id"] for row in agent_wrap_rows),
+        ),
+        _site_filter_select(
+            "filter-thinking",
+            "Thinking",
+            _agent_wrap_filter_options(row["thinking_level"] for row in agent_wrap_rows),
         ),
         "</div>",
         '<p id="filter-count" class="filter-count"></p>',
@@ -1377,6 +1721,72 @@ def _render_static_site_html(
             "</table>",
             "</div>",
             "</section>",
+            '<section data-registry-section="agent-wrap">',
+            "<h2>Agent Wrap One-Shot Runs</h2>",
+            '<div class="table-wrap">',
+            "<table>",
+            "<thead><tr>"
+            "<th>status</th><th>model</th><th>harness/provider</th>"
+            "<th>thinking</th><th>time</th><th>files</th><th>insertions</th>"
+            "<th>deletions</th><th>node tests</th><th>smoke</th><th>target</th>"
+            "<th>artifact</th><th>notes</th>"
+            "</tr></thead>",
+            "<tbody>",
+        ]
+    )
+    for row in agent_wrap_rows:
+        search_values = [
+            row["label"],
+            row["status"],
+            row["model_id"],
+            row["model_name"],
+            row["model_family"],
+            row["harness_id"],
+            row["harness_name"],
+            row["provider_id"],
+            row["provider_name"],
+            row["runner_provider_display"],
+            row["thinking_kind"],
+            row["thinking_level"],
+            row["thinking_display"],
+            row["target_project"],
+            row["target_version"],
+            row["target_commit"],
+            row["result_dir"],
+            row["notes"],
+        ]
+        lines.append(
+            "<tr class=\"registry-row\""
+            f" data-table=\"agent-wrap\""
+            " data-pack=\"[]\" data-case=\"[]\" data-host=\"[]\" data-runtime=\"[]\""
+            f" data-model=\"{_site_filter_values_attr([row['model_id'], row['model_name']])}\""
+            " data-quantization=\"[]\""
+            f" data-result=\"{_site_filter_values_attr([row['status']])}\""
+            f" data-harness=\"{_site_filter_values_attr([row['harness_id']])}\""
+            f" data-provider=\"{_site_filter_values_attr([row['provider_id']])}\""
+            f" data-thinking=\"{_site_filter_values_attr([row['thinking_level']])}\""
+            f" data-search=\"{_site_search_attr(search_values)}\">"
+            f"<td>{_html(str(row['status']).upper())}</td>"
+            f"<td>{_html(row['model_name'])}</td>"
+            f"<td>{_html(row['runner_provider_display'])}</td>"
+            f"<td>{_html(row['thinking_display'])}</td>"
+            f"<td>{_html(_site_float(row['wall_seconds']))}s<br>{_html(row['wall_display'])}</td>"
+            f"<td>{_html(row['files_changed'])}</td>"
+            f"<td>{_html(row['insertions'])}</td>"
+            f"<td>{_html(row['deletions'])}</td>"
+            f"<td>{_html(row['node_tests'])}</td>"
+            f"<td>{_html(row['smoke_display'])}</td>"
+            f"<td>{_html(row['target_project'] + ' ' + row['target_version'])}</td>"
+            f"<td>{_html(row['result_dir'])}</td>"
+            f"<td>{_html(row['notes'])}</td>"
+            "</tr>"
+        )
+    lines.extend(
+        [
+            "</tbody>",
+            "</table>",
+            "</div>",
+            "</section>",
             "<section>",
             "<h2>Markdown Report</h2>",
             (
@@ -1388,7 +1798,7 @@ def _render_static_site_html(
             "<script>",
             "const registryRows=Array.from(document.querySelectorAll('.registry-row'));",
             "const registrySections=Array.from(document.querySelectorAll('[data-registry-section]'));",
-            "const filterIds=['pack','case','host','runtime','model','quantization'];",
+            "const filterIds=['pack','case','host','runtime','model','quantization','result','harness','provider','thinking'];",
             "const filters={search:document.getElementById('filter-search'),table:document.getElementById('filter-table')};",
             "for(const id of filterIds){filters[id]=document.getElementById('filter-'+id);}",
             "const countEl=document.getElementById('filter-count');",
@@ -1439,6 +1849,7 @@ def _render_static_site_snapshot_json(
     run_rows: list[sqlite3.Row],
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
+    agent_wrap_rows: list[sqlite3.Row],
     generated_at: str,
 ) -> str:
     snapshot = {
@@ -1449,6 +1860,7 @@ def _render_static_site_snapshot_json(
         "runs": [_site_run_row_dict(row) for row in run_rows],
         "comparison_matrix": [_site_metric_row_dict(row) for row in metric_rows],
         "case_metrics": [_site_case_row_dict(row) for row in case_rows],
+        "agent_wrap_runs": [_agent_wrap_row_dict(row) for row in agent_wrap_rows],
         "report_path": STATIC_SITE_REPORT_FILENAME,
     }
     return json.dumps(snapshot, indent=2, sort_keys=True) + "\n"
@@ -1649,6 +2061,7 @@ def _site_model_filter_options(
     run_rows: list[sqlite3.Row],
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
+    agent_wrap_rows: list[sqlite3.Row],
 ) -> list[tuple[str, str]]:
     values: list[object] = []
     for row in run_rows:
@@ -1657,6 +2070,8 @@ def _site_model_filter_options(
         values.extend([row["model_metadata_id"], *_json_list_values(row["models_json"])])
     for row in metric_rows:
         values.extend([row.model_metadata_id, row.model])
+    for row in agent_wrap_rows:
+        values.extend([row["model_id"], row["model_name"]])
     return _site_filter_options(values)
 
 
@@ -1670,6 +2085,10 @@ def _site_quantization_filter_options(
         + [row["model_quantization"] for row in case_rows]
         + [row.model_quantization for row in metric_rows]
     )
+
+
+def _agent_wrap_filter_options(values: Iterable[object]) -> list[tuple[str, str]]:
+    return _site_filter_options(values)
 
 
 def _site_filter_options(values: Iterable[object]) -> list[tuple[str, str]]:
@@ -2156,7 +2575,47 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_wrap_runs (
+          id INTEGER PRIMARY KEY,
+          label TEXT NOT NULL UNIQUE,
+          dataset_source TEXT NOT NULL,
+          imported_at TEXT NOT NULL,
+          date TEXT NOT NULL,
+          status TEXT NOT NULL,
+          target_project TEXT NOT NULL,
+          target_version TEXT NOT NULL,
+          target_commit TEXT NOT NULL,
+          target_workload TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          model_name TEXT NOT NULL,
+          model_family TEXT NOT NULL,
+          harness_id TEXT NOT NULL,
+          harness_name TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          provider_name TEXT NOT NULL,
+          runner_provider_display TEXT NOT NULL,
+          thinking_kind TEXT NOT NULL,
+          thinking_level TEXT NOT NULL,
+          thinking_display TEXT NOT NULL,
+          wall_seconds REAL NOT NULL,
+          wall_display TEXT NOT NULL,
+          files_changed INTEGER NOT NULL,
+          insertions INTEGER NOT NULL,
+          deletions INTEGER NOT NULL,
+          node_tests INTEGER NOT NULL,
+          smoke TEXT NOT NULL,
+          smoke_display TEXT NOT NULL,
+          result_dir TEXT NOT NULL,
+          legacy_artifact INTEGER NOT NULL,
+          notes TEXT NOT NULL,
+          raw_json TEXT NOT NULL
+        )
+        """
+    )
     _ensure_run_columns(conn)
+    _ensure_case_stats_for_existing_runs(conn)
     conn.execute(
         "INSERT OR REPLACE INTO registry_meta(key, value) VALUES (?, ?)",
         ("schema_version", str(REGISTRY_SCHEMA_VERSION)),
@@ -2180,6 +2639,62 @@ def _ensure_run_columns(conn: sqlite3.Connection) -> None:
     for column, declaration in _RUN_COLUMN_DEFINITIONS:
         if column not in existing:
             conn.execute(f"ALTER TABLE runs ADD COLUMN {column} {declaration}")
+
+
+def _ensure_case_stats_for_existing_runs(conn: sqlite3.Connection) -> None:
+    run_ids = [
+        int(row[0])
+        for row in conn.execute(
+            """
+            SELECT id
+            FROM runs
+            WHERE id NOT IN (
+              SELECT DISTINCT run_id FROM result_case_stats
+            )
+            ORDER BY id
+            """
+        ).fetchall()
+    ]
+    for run_id in run_ids:
+        raw_rows = conn.execute(
+            """
+            SELECT raw_json
+            FROM result_rows
+            WHERE run_id = ?
+            ORDER BY row_index
+            """,
+            (run_id,),
+        ).fetchall()
+        records: list[dict[str, Any]] = []
+        for index, raw_row in enumerate(raw_rows, start=1):
+            try:
+                record = json.loads(raw_row[0])
+            except json.JSONDecodeError as exc:
+                raise RegistryError(
+                    f"could not backfill case stats for run_id {run_id} row {index}"
+                ) from exc
+            if not isinstance(record, dict):
+                raise RegistryError(
+                    f"could not backfill case stats for run_id {run_id} row {index}"
+                )
+            records.append(record)
+        if not records:
+            continue
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO result_case_stats(
+              run_id, pack_id, pack_version, case_id, row_count, ok_count,
+              prompt_token_rows, prompt_token_median, cached_prompt_token_rows,
+              cached_prompt_token_median, prefill_tps_rows, prefill_tps_median
+            )
+            VALUES (
+              :run_id, :pack_id, :pack_version, :case_id, :row_count, :ok_count,
+              :prompt_token_rows, :prompt_token_median, :cached_prompt_token_rows,
+              :cached_prompt_token_median, :prefill_tps_rows, :prefill_tps_median
+            )
+            """,
+            _case_stat_values(run_id, records),
+        )
 
 
 def _import_run(
@@ -2299,6 +2814,127 @@ def _import_run(
         result_dir=run.path,
         run_id=run_id,
         rows_imported=len(run.records),
+    )
+
+
+def _import_agent_wrap_row(
+    conn: sqlite3.Connection,
+    dataset: dict[str, Any],
+    row: dict[str, Any],
+) -> None:
+    target = dataset["target"]
+    model = row["model"]
+    harness = row["harness"]
+    provider = row["provider"]
+    thinking = row["thinking"]
+    timing = row["timing"]
+    diff = row["diff"]
+    verification = row["verification"]
+    artifact = row["artifact"]
+    imported_at = datetime.now(UTC).isoformat(timespec="seconds")
+    conn.execute(
+        """
+        INSERT INTO agent_wrap_runs(
+          label, dataset_source, imported_at, date, status,
+          target_project, target_version, target_commit, target_workload,
+          model_id, model_name, model_family, harness_id, harness_name,
+          provider_id, provider_name, runner_provider_display,
+          thinking_kind, thinking_level, thinking_display,
+          wall_seconds, wall_display, files_changed, insertions, deletions,
+          node_tests, smoke, smoke_display, result_dir, legacy_artifact,
+          notes, raw_json
+        )
+        VALUES(
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ON CONFLICT(label) DO UPDATE SET
+          dataset_source=excluded.dataset_source,
+          imported_at=excluded.imported_at,
+          date=excluded.date,
+          status=excluded.status,
+          target_project=excluded.target_project,
+          target_version=excluded.target_version,
+          target_commit=excluded.target_commit,
+          target_workload=excluded.target_workload,
+          model_id=excluded.model_id,
+          model_name=excluded.model_name,
+          model_family=excluded.model_family,
+          harness_id=excluded.harness_id,
+          harness_name=excluded.harness_name,
+          provider_id=excluded.provider_id,
+          provider_name=excluded.provider_name,
+          runner_provider_display=excluded.runner_provider_display,
+          thinking_kind=excluded.thinking_kind,
+          thinking_level=excluded.thinking_level,
+          thinking_display=excluded.thinking_display,
+          wall_seconds=excluded.wall_seconds,
+          wall_display=excluded.wall_display,
+          files_changed=excluded.files_changed,
+          insertions=excluded.insertions,
+          deletions=excluded.deletions,
+          node_tests=excluded.node_tests,
+          smoke=excluded.smoke,
+          smoke_display=excluded.smoke_display,
+          result_dir=excluded.result_dir,
+          legacy_artifact=excluded.legacy_artifact,
+          notes=excluded.notes,
+          raw_json=excluded.raw_json
+        """,
+        (
+            row["label"],
+            str(dataset.get("generated_from") or ""),
+            imported_at,
+            row["date"],
+            row["status"],
+            target["project"],
+            target["version"],
+            target["commit"],
+            target["workload"],
+            model["id"],
+            model["name"],
+            model["family"],
+            harness["id"],
+            harness["name"],
+            provider["id"],
+            provider["name"],
+            row["runner_provider_display"],
+            thinking["kind"],
+            thinking["level"],
+            thinking["display"],
+            float(timing["wall_seconds"]),
+            timing["wall_display"],
+            int(diff["files_changed"]),
+            int(diff["insertions"]),
+            int(diff["deletions"]),
+            int(verification["node_tests"]),
+            verification["smoke"],
+            verification["smoke_display"],
+            artifact["result_dir"],
+            1 if artifact["legacy"] else 0,
+            row["notes"],
+            json.dumps(row, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+
+
+def _delete_stale_agent_wrap_rows(
+    conn: sqlite3.Connection,
+    dataset: dict[str, Any],
+    rows: list[dict[str, Any]],
+) -> None:
+    source = str(dataset.get("generated_from") or "")
+    labels = [row["label"] for row in rows]
+    if not labels:
+        return
+    placeholders = ",".join("?" for _ in labels)
+    conn.execute(
+        f"""
+        DELETE FROM agent_wrap_runs
+        WHERE dataset_source = ?
+          AND label NOT IN ({placeholders})
+        """,
+        (source, *labels),
     )
 
 

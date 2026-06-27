@@ -16,6 +16,67 @@ working history and open questions.
 - ...
 ```
 
+## 2026-06-27 (product offer matching benchmark draft)
+
+### Changed
+
+- Added `docs/product-offer-matching-benchmark.md` as a real-data-first design
+  draft for an opt-in coding-agent benchmark where the model writes a
+  deterministic product-offer matcher and the verifier scores hidden
+  real-derived examples with positive-class F1.
+- Prioritized inspecting Kaggle product matching/clustering leads and compact
+  WDC Products before any synthetic fixture design. The much larger WDC Product
+  Data Corpus remains a later candidate, and categorization datasets are kept
+  separate from offer matching.
+- Captured leakage controls for pairwise matching: offer-disjoint or
+  unseen-entity splits by default, stripped product/cluster identifiers,
+  non-leaking pair ids, verifier-owned hidden labels, explicit class prevalence,
+  trivial baselines, and verifier JSON metrics.
+
+### Open Questions
+
+- Which inspected source has the best combination of clean matching labels,
+  redistribution terms, compact fixture size, and non-trivial hard negatives:
+  Kaggle or WDC Products?
+
+## 2026-06-27 (one-shot registry normalization)
+
+### Changed
+
+- Added `data/agent-wrap-oneshot-results.json` as the curated normalized seed
+  for hard one-shot `django-resume` agent-wrap results, with stable labels,
+  explicit target, model, harness, provider, thinking, timing, diff,
+  verification, artifact, and notes fields.
+- Bumped the local SQLite registry to schema version `3` with an
+  `agent_wrap_runs` table for those normalized one-shot rows. The table is
+  imported by `benchpack registry agent-wrap import`, queried by
+  `benchpack registry agent-wrap query`, and rendered into the static registry
+  site plus `snapshot.json`.
+- Updated `just registry-site` to import the curated agent-wrap dataset before
+  rendering, so a fresh registry can still produce the one-shot comparison site
+  even when no normal `run.jsonl` result directories are present.
+- Kept the browser-side filters, now backed by SQLite data for result,
+  harness, provider, model, thinking mode, and free-text search.
+
+### Open Questions
+
+- Decide whether future hard one-shot rows should be entered first as curated
+  `agent_wrap_runs` seed rows, or produced directly by the neutral runner as a
+  compact importable result bundle with equivalent normalized metadata.
+
+## 2026-06-24 (Pipy one-shot agent wrap probe)
+
+### Changed
+
+- Added the first hard one-shot `django-resume` wrap row through Pipy's native
+  tool-loop harness. The run used `/Users/jochen/projects/pipy` because
+  `~/src/pipy` was absent, `openai-codex/gpt-5.5`, `--thinking off`,
+  `--tool-budget 200`, a fresh disposable target checkout, and the
+  desktop-starter prompt with absolute read-root paths.
+- The Pipy run passed in 1003.5s with 35 changed files, 53 passing Node tests,
+  and packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). It is recorded
+  as a separate harness lane from Pi and Codex CLI/yolo.
+
 ## 2026-06-23 (neutral one-shot agent wrap runner)
 
 ### Changed
@@ -52,6 +113,16 @@ working history and open questions.
   set. The `none` one-shot run completed in 471.4s, passed Node tests, but
   failed packaged smoke before HTTP checks on an Electron install-integrity
   error, so it must not be conflated with the successful low-reasoning rerun.
+- Added moderate-thinking one-shot rows for direct Codex CLI/GPT-5.5 and
+  direct Claude Code/Opus 4.8. Codex `model_reasoning_effort="medium"` passed
+  in 741.9s with 55 Node tests and packaged smoke. Claude Code `--effort
+  medium` passed in 871.0s with 53 Node tests and packaged smoke after one
+  transient Claude API 500 launch failure before edits.
+- Added direct Claude Code/Sonnet 4.6 one-shot rows for low, medium, and high
+  effort on the same `django-resume` 0.3.0 target. All three passed packaged
+  smoke: low in 1136.1s, medium in 1554.8s, and high in 1276.6s. One initial
+  low-effort launch hit a transient Claude 529 overload before edits and was
+  discarded as infrastructure noise.
 
 ### Open Questions
 

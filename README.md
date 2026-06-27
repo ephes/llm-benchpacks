@@ -208,6 +208,28 @@ label. Supported hosted-agent runners are `codex-yolo`, `claude-yolo`, and
 lane and `low` is separate. Claude Code uses `--claude-effort` because the CLI
 exposes effort levels, not a literal thinking-off switch.
 
+The curated normalized one-shot rows live in
+`data/agent-wrap-oneshot-results.json` and import into the local SQLite
+registry with:
+
+```sh
+uv run benchpack registry agent-wrap import \
+  --db registry/llm-benchpacks.sqlite \
+  data/agent-wrap-oneshot-results.json
+
+uv run benchpack registry agent-wrap query \
+  --db registry/llm-benchpacks.sqlite \
+  --harness codex-yolo \
+  --model gpt-5.5 \
+  --status pass
+```
+
+`just registry-site` imports that curated dataset into `agent_wrap_runs` before
+rendering the SQLite-backed static site, so the browser table and
+`snapshot.json` can filter/query normalized result, harness, provider, model,
+and thinking-mode fields from the database. `docs/run-log.md` remains the
+narrative source for benchmark context and caveats.
+
 For optional exploratory repo-task evidence, select the coding-task pack set
 explicitly instead of changing the default four-pack matrix:
 

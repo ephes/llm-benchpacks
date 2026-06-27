@@ -512,6 +512,11 @@ scoring, and repo-task verifier state. Schema version `2` adds nullable
 comparability anchors from explicit run metadata plus per-run/case prompt/cache
 coverage medians so future views can show artifact/runtime mode, pack version,
 prompt-token, and cache-token caveats without parsing every source artifact.
+Schema version `3` adds `agent_wrap_runs` for curated hard one-shot
+Django/Electron wrapping rows whose comparison metadata is useful but whose
+historical artifacts do not all arrive as ordinary `run.jsonl` benchpack
+results. Those rows are imported idempotently by stable label and queried from
+SQLite by status, harness, provider, model, and thinking level.
 The first registry-backed report slice adds
 `benchpack registry report --db <sqlite>`, which reconstructs report inputs
 from indexed `raw_json` rows plus stored hardware and run-metadata JSON. It

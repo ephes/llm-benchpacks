@@ -50,9 +50,11 @@ from .registry import (
     create_result_bundle,
     export_registry_static_site,
     find_registry_duplicate_runs,
+    import_agent_wrap_results,
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
+    query_agent_wrap_results,
     query_registry_results,
     validate_result_bundle,
 )
@@ -547,6 +549,39 @@ def _cmd_registry_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_registry_agent_wrap_import(args: argparse.Namespace) -> int:
+    try:
+        summary = import_agent_wrap_results(args.data, args.db)
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    row_word = "row" if summary.rows_imported == 1 else "rows"
+    print(
+        "imported {rows} agent-wrap {row_word} from {data_path}".format(
+            rows=summary.rows_imported,
+            row_word=row_word,
+            data_path=summary.data_path,
+        )
+    )
+    return 0
+
+
+def _cmd_registry_agent_wrap_query(args: argparse.Namespace) -> int:
+    try:
+        rows = query_agent_wrap_results(
+            args.db,
+            status=args.status,
+            harness=args.harness,
+            provider=args.provider,
+            model=args.model,
+            thinking=args.thinking,
+            limit=args.limit,
+        )
+    except RegistryError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(rows, indent=2, sort_keys=True))
+    return 0
+
+
 def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
     try:
         summary = create_result_bundle(
@@ -901,6 +936,67 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Bundle directories containing benchpack-bundle.json",
     )
+    registry_agent_wrap = registry_sub.add_parser(
+        "agent-wrap",
+        help="Import or query normalized one-shot agent-wrap rows",
+    )
+    registry_agent_wrap_sub = registry_agent_wrap.add_subparsers(
+        dest="registry_agent_wrap_command",
+        required=True,
+    )
+    registry_agent_wrap_import = registry_agent_wrap_sub.add_parser(
+        "import",
+        help="Import normalized one-shot agent-wrap rows into SQLite",
+    )
+    registry_agent_wrap_import.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to create or update",
+    )
+    registry_agent_wrap_import.add_argument(
+        "data",
+        help="Normalized agent-wrap JSON dataset",
+    )
+    registry_agent_wrap_query = registry_agent_wrap_sub.add_parser(
+        "query",
+        help="Query normalized one-shot agent-wrap rows as JSON",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--db",
+        required=True,
+        help="SQLite registry database path to read",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--status",
+        default=None,
+        help="Filter by normalized status: pass, fail, or interrupted",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--harness",
+        default=None,
+        help="Filter by normalized harness id",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--provider",
+        default=None,
+        help="Filter by normalized provider id",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--model",
+        default=None,
+        help="Filter by normalized model id",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--thinking",
+        default=None,
+        help="Filter by normalized thinking level",
+    )
+    registry_agent_wrap_query.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of rows to return",
+    )
     registry_site = registry_sub.add_parser(
         "site",
         help="Generate a static read-only site from indexed registry rows",
@@ -965,6 +1061,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.registry_bundle_command == "import":
                 return _cmd_registry_bundle_import(args)
             parser.error(f"unknown registry bundle command: {args.registry_bundle_command}")
+        if args.registry_command == "agent-wrap":
+            if args.registry_agent_wrap_command == "import":
+                return _cmd_registry_agent_wrap_import(args)
+            if args.registry_agent_wrap_command == "query":
+                return _cmd_registry_agent_wrap_query(args)
+            parser.error(
+                f"unknown registry agent-wrap command: {args.registry_agent_wrap_command}"
+            )
         if args.registry_command == "site":
             return _cmd_registry_site(args)
         parser.error(f"unknown registry command: {args.registry_command}")

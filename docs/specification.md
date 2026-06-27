@@ -1009,7 +1009,7 @@ boolean `ok`, `timing` object, `tokens` object, optional positive integer
 when present. Optional `run-metadata.json` uses the same permissive validation
 as `benchpack run --run-metadata` and `benchpack report`.
 
-The SQLite schema version is `2`, recorded in `PRAGMA user_version` and a
+The SQLite schema version is `3`, recorded in `PRAGMA user_version` and a
 `registry_meta` row. The schema stores:
 
 - one `runs` row per canonical result-directory path, with import time,
@@ -1023,6 +1023,9 @@ The SQLite schema version is `2`, recorded in `PRAGMA user_version` and a
 - one `result_case_stats` row per imported run/pack-version/case, with row
   counts, ok counts, prompt-token coverage and median, cached-prompt-token
   coverage and median, and prefill-TPS coverage and median.
+- one `agent_wrap_runs` row per curated hard one-shot Django/Electron wrapping
+  result, with stable label, target, model, harness, provider, thinking/effort,
+  wall-clock timing, diff size, verification, artifact, and notes columns.
 
 Schema version `2` also promotes registry-facing comparability anchors from
 optional `run-metadata.json` into nullable `runs` columns: `comparison_mode`,
@@ -1034,6 +1037,12 @@ fields are indexing aids for future comparison views. They do not change
 case-level prompt/cache parity checks. Empty strings in these optional string
 anchors are indexed as absent (`NULL`), matching the registry's nullable-field
 semantics for missing metadata.
+
+Schema version `3` adds the `agent_wrap_runs` table for curated one-shot
+agent-wrap rows that do not arrive through ordinary `run.jsonl` benchpack
+execution. Import is idempotent by row label, prunes rows from the same
+dataset source when their labels disappear from the current source file, and
+stores compact raw row JSON for auditability.
 
 The `runs.host_hostname` and `runs.host_platform` filter columns come from
 `hardware.json`. The run-label and repo-commit host filters come from
@@ -1060,7 +1069,7 @@ benchpack registry duplicates --db <sqlite-db>
 ```
 
 `benchpack registry duplicates` is a read-only inspection command over an
-existing schema version `2` registry. It groups imported `runs` rows by the
+existing schema version `3` registry. It groups imported `runs` rows by the
 registry-stored `run_jsonl_sha256` value and prints only groups where more than one
 run has identical `run.jsonl` contents. Each duplicate entry includes the
 registry run id, label, row count, import time, and indexed result-directory
@@ -1084,7 +1093,7 @@ benchpack registry query --db <sqlite-db> [--ok true|false] [--scoring-passed tr
 ```
 
 `benchpack registry query` is a read-only JSON query over an existing schema
-version `2` registry. With no selectors, it searches every imported run ordered
+version `3` registry. With no selectors, it searches every imported run ordered
 by registry id and row index. `--run-id` and `--label` mirror the registry
 report selectors and are mutually exclusive. Additional filters match indexed
 normalized fields exactly: pack id, case id, adapter id, model id, host label,
@@ -1103,6 +1112,30 @@ directories to exist, mutate the database, read `raw/`, workspaces, task logs,
 verifier artifacts, patch files, or model-call logs, contact endpoints, infer
 missing metadata, or create hosted upload/review state.
 
+### `benchpack registry agent-wrap`
+
+```text
+benchpack registry agent-wrap import --db <sqlite-db> <agent-wrap-json>
+benchpack registry agent-wrap query --db <sqlite-db> [--status <status>] [--harness <id>]
+benchpack registry agent-wrap query --db <sqlite-db> [--provider <id>] [--model <id>] [--thinking <level>]
+benchpack registry agent-wrap query --db <sqlite-db> [--limit <n>]
+```
+
+`benchpack registry agent-wrap import` validates a normalized curated one-shot
+agent-wrap dataset and writes it into the SQLite `agent_wrap_runs` table. The
+source dataset schema version is `1`; each row must carry explicit target,
+status, model, harness, provider, thinking/effort, timing, diff, verification,
+artifact, and notes fields. Labels are unique within the dataset and are the
+database idempotency key. Re-import converges rows for the same dataset source
+to the current file by deleting source-matched labels that are no longer
+present.
+
+`benchpack registry agent-wrap query` emits a JSON array selected from
+`agent_wrap_runs`, ordered by pass/fail/interrupted status and wall-clock time.
+Filters match normalized status, harness id, provider id, model id, and
+thinking level exactly. The command reads SQLite in query-only mode and does
+not require source result directories or generated target workspaces to exist.
+
 ### `benchpack registry report`
 
 ```text
@@ -1116,7 +1149,7 @@ registry id. `--run-id` may be repeated to select specific run ids, and
 `--label` may be repeated to select runs by registry label; the two selector
 types are mutually exclusive.
 
-The command reads schema version `2` registry data: `result_rows.raw_json`
+The command reads schema version `3` registry data: `result_rows.raw_json`
 provides normalized result records, and `runs.hardware_json` plus
 `runs.run_metadata_json` provide report-facing host and user-supplied runtime
 metadata when they were indexed. It reuses the normal report renderer, so row
@@ -1150,14 +1183,16 @@ The output directory contains:
 
 - `index.html`, a local browser view with dense run tables, a comparison matrix
   of per-run/per-case median latency, throughput, token, and scoring fields,
-  case-metric coverage tables, browser-side filters for pack, case, host,
-  runtime, model, quantization, and table type, and an embedded copy of the
-  generated Markdown report;
+  case-metric coverage tables, imported agent-wrap one-shot rows when present,
+  browser-side filters for pack, case, host, runtime, model, quantization,
+  result, harness, provider, thinking level, and table type, and an embedded
+  copy of the generated Markdown report;
 - `report.md`, the same registry-backed Markdown report produced through the
   existing report renderer;
 - `snapshot.json`, a machine-readable static snapshot with schema version `1`,
   the registry schema version, generation time, source database name, compact
-  run metadata, comparison-matrix rows, case-metric rows, and the report path.
+  run metadata, comparison-matrix rows, case-metric rows, imported
+  `agent_wrap_runs`, and the report path.
   Comparison-matrix and case-metric entries include the registry `run_id` so
   consumers can join them back to `runs` even when run labels collide.
   Case-metric entries also include compact host, runtime, and model metadata
@@ -1166,9 +1201,9 @@ The output directory contains:
   `snapshot.json` `schema_version` remains `1` because no existing field shape
   changed.
 
-The static site reads schema version `2` registry data only. It uses compact
-`runs`, `result_rows`, and `result_case_stats` data and does not require source
-result directories to exist. It does not read raw payloads,
+The static site reads schema version `3` registry data only. It uses compact
+`runs`, `result_rows`, `result_case_stats`, and `agent_wrap_runs` data and does
+not require source result directories to exist. It does not read raw payloads,
 workspaces, task logs, verifier artifacts, patch files, or model-call logs; it
 does not mutate the database or source results; and it does not contact
 endpoints. Existing output directories are refused unless `--force` is

@@ -19,9 +19,11 @@ from benchpack.registry import (
     create_result_bundle,
     export_registry_static_site,
     find_registry_duplicate_runs,
+    import_agent_wrap_results,
     import_result_bundles,
     import_result_dirs,
     load_registry_report_runs,
+    query_agent_wrap_results,
     query_registry_results,
     validate_result_bundle,
 )
@@ -352,7 +354,7 @@ def test_registry_report_rejects_stale_schema_database(tmp_path: Path) -> None:
             """
         )
 
-    with pytest.raises(RegistryError, match="requires schema version 2"):
+    with pytest.raises(RegistryError, match="requires schema version 3"):
         load_registry_report_runs(db_path)
 
 
@@ -613,6 +615,121 @@ def test_registry_query_returns_empty_list_when_row_filters_match_nothing(
     assert rows == []
 
 
+def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> None:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    db_path = tmp_path / "registry.sqlite"
+
+    summary = import_agent_wrap_results(data_path, db_path)
+    second = import_agent_wrap_results(data_path, db_path)
+
+    assert summary.rows_imported == 21
+    assert second.rows_imported == 21
+    rows = query_agent_wrap_results(
+        db_path,
+        status="pass",
+        harness="pipy",
+        model="gpt-5.5",
+        thinking="off",
+    )
+    assert len(rows) == 1
+    assert rows[0]["label"] == "pipy-gpt55-django-resume-030-off"
+    assert rows[0]["provider"]["id"] == "openai-codex"
+    assert rows[0]["timing"]["wall_seconds"] == 1003.5
+
+    pass_rows = query_agent_wrap_results(db_path, status="pass")
+    assert len(pass_rows) == 17
+    assert pass_rows[0]["label"] == "gpt55-pi-django-resume-030-off"
+    with sqlite3.connect(db_path) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM agent_wrap_runs").fetchone()[0]
+        fastest = conn.execute(
+            "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds LIMIT 1"
+        ).fetchone()[0]
+    assert count == 21
+    assert fastest == "gpt55-pi-django-resume-030-off"
+
+
+def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
+    tmp_path: Path,
+) -> None:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    db_path = tmp_path / "registry.sqlite"
+    import_agent_wrap_results(data_path, db_path)
+    dataset = json.loads(data_path.read_text(encoding="utf-8"))
+    removed_label = dataset["rows"][-1]["label"]
+    dataset["rows"] = dataset["rows"][:-1]
+    pruned_path = tmp_path / "agent-wrap-pruned.json"
+    pruned_path.write_text(json.dumps(dataset), encoding="utf-8")
+
+    import_agent_wrap_results(pruned_path, db_path)
+
+    rows = query_agent_wrap_results(db_path)
+    assert len(rows) == 20
+    assert removed_label not in {row["label"] for row in rows}
+
+
+def test_registry_schema_setup_backfills_missing_case_stats(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DELETE FROM result_case_stats")
+    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+
+    import_agent_wrap_results(data_path, db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        stats = conn.execute(
+            """
+            SELECT pack_id, case_id, row_count, ok_count
+            FROM result_case_stats
+            """
+        ).fetchall()
+    assert stats == [("runtime-sweep", "short", 1, 1)]
+
+
+def test_registry_agent_wrap_cli_import_and_query(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    db_path = tmp_path / "registry.sqlite"
+
+    assert main(
+        [
+            "registry",
+            "agent-wrap",
+            "import",
+            "--db",
+            str(db_path),
+            str(data_path),
+        ]
+    ) == 0
+    assert "imported 21 agent-wrap rows" in capsys.readouterr().out
+
+    assert main(
+        [
+            "registry",
+            "agent-wrap",
+            "query",
+            "--db",
+            str(db_path),
+            "--harness",
+            "claude-yolo",
+            "--provider",
+            "anthropic",
+            "--thinking",
+            "medium",
+            "--limit",
+            "1",
+        ]
+    ) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["label"] == "opus48-claude-yolo-django-resume-030-medium"
+
+
 def test_registry_query_rejects_run_id_and_label_together(tmp_path: Path) -> None:
     result_dir = tmp_path / "run-a"
     _write_result_dir(result_dir)
@@ -746,7 +863,7 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert "# benchpack report" in report
     assert "| run-a | short | 1 | 1 | 1.250 |" in report
     assert snapshot["schema_version"] == 1
-    assert snapshot["registry_schema_version"] == 2
+    assert snapshot["registry_schema_version"] == 3
     assert snapshot["source_database"] == "registry.sqlite"
     assert snapshot["report_path"] == "report.md"
     assert snapshot["runs"][0]["label"] == "run-a"
@@ -782,6 +899,33 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
         "id": "gemma4-e2b-q4km",
         "quantization": "Q4_K_M",
     }
+    assert snapshot["agent_wrap_runs"] == []
+
+
+def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
+    tmp_path: Path,
+) -> None:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    db_path = tmp_path / "registry.sqlite"
+    import_agent_wrap_results(data_path, db_path)
+
+    summary = export_registry_static_site(db_path, tmp_path / "site")
+
+    html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    report = (tmp_path / "site" / "report.md").read_text(encoding="utf-8")
+    snapshot = json.loads(
+        (tmp_path / "site" / "snapshot.json").read_text(encoding="utf-8")
+    )
+    assert summary.runs == 0
+    assert "<h2>Agent Wrap One-Shot Runs</h2>" in html
+    assert 'data-table="agent-wrap"' in html
+    assert '<option value="gpt-5.5">gpt-5.5</option>' in html
+    assert '<option value="claude-opus-4.8">claude-opus-4.8</option>' in html
+    assert "Pipy / openai-codex" in html
+    assert "filter-harness" in html
+    assert "No imported benchpack result rows are selected." in report
+    assert len(snapshot["agent_wrap_runs"]) == 21
+    assert snapshot["agent_wrap_runs"][0]["label"] == "gpt55-pi-django-resume-030-off"
 
 
 def test_registry_static_site_export_requires_force_for_existing_output(
@@ -1014,7 +1158,7 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
     import_result_dirs([result_dir], db_path)
 
     with sqlite3.connect(db_path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
         run = conn.execute(
             """
             SELECT comparison_mode, runtime_endpoint, runtime_options_json,
@@ -1025,6 +1169,9 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
         stats_count = conn.execute(
             "SELECT COUNT(*) FROM result_case_stats"
         ).fetchone()[0]
+        agent_wrap_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_wrap_runs'"
+        ).fetchone()
     assert run == (
         "runtime-and-format",
         "https://example.test/v1",
@@ -1033,6 +1180,7 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
         "main",
     )
     assert stats_count == 1
+    assert agent_wrap_table == ("agent_wrap_runs",)
 
 
 def test_registry_import_rolls_back_schema_upgrade_on_sqlite_failure(
