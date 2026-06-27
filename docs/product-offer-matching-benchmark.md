@@ -1,6 +1,8 @@
 # Product Offer Matching Program Benchmark
 
-Status: design draft, not implemented.
+Status: initial implementation landed in `benchpacks/product-offer-matching/`
+with Python and Rust direct-edit external-agent cases. Live GPT-5.5 versus
+Qwen3.6 Pi benchmark results are tracked separately in `docs/run-log.md`.
 
 This document specifies an opt-in benchmark direction for evaluating coding
 agents on product-offer matching. The central trick is deliberate: the model is
@@ -71,9 +73,15 @@ straightforward. WDC categorization resources are also interesting, but they
 should become a separate product-categorization benchmark, not be confused with
 offer matching.
 
-These dataset names are leads, not yet verified source contracts. Before
-implementation, inspect the actual downloaded files or official fold metadata
-and record:
+The initial implementation selected WDC Products 20pair because the public page
+documents real-world product entity matching, pairwise train/validation/test
+sets, offer-disjoint splitting, and the exact pairwise JSONL fields. The
+implemented fixture uses `20pair.zip`, `wdcproducts20cc80rnd000un_train_small`
+for visible training rows, and `wdcproducts20cc80rnd000un_gs` for hidden
+labels. Raw WDC offer ids and cluster ids are stripped from matcher inputs.
+
+For later fixture revisions or additional lanes, inspect the actual downloaded
+files or official fold metadata and record:
 
 - license and attribution requirements;
 - file names, encodings, row counts, and column names;
@@ -121,7 +129,7 @@ Initial pack id:
 product-offer-matching
 ```
 
-Initial case ids:
+Implemented case ids:
 
 ```text
 pairwise-real-small-python
@@ -159,7 +167,7 @@ benchpacks/product-offer-matching/
     build-fixture-from-kaggle.py # optional, if raw data is not committed
 ```
 
-Sketch manifest:
+Implemented manifest shape:
 
 ```toml
 [pack]
@@ -179,7 +187,7 @@ id = "pairwise-real-small-python"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-python.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "fenced-patch", timeout_s = 30 }
+harness = { id = "external-agent", timeout_s = 1200 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 30 }
 
 [[cases]]
@@ -187,7 +195,7 @@ id = "pairwise-real-small-rust"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-rust.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "fenced-patch", timeout_s = 30 }
+harness = { id = "external-agent", timeout_s = 1200 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 30 }
 
 [[fixtures]]
@@ -197,17 +205,11 @@ path = "fixtures/matcher-repo"
 description = "Small real-data product offer matching repository fixture"
 ```
 
-A direct-edit external-agent variant should use the same fixture and verifier
-with:
-
-```toml
-harness = { id = "external-agent", timeout_s = 900 }
-```
-
-Keep that variant explicit and opt-in. It is the lane to use for Pi-hosted
-agent comparisons, including GPT-5.5 versus Qwen3.6, so both models edit the
-same prepared workspace fixture and are judged by the same deterministic
-verifier.
+This pack is the direct-edit external-agent lane used for Pi-hosted agent
+comparisons, including GPT-5.5 versus Qwen3.6, so both models edit the same
+prepared workspace fixture and are judged by the same deterministic verifier.
+If a fenced-patch endpoint-only variant becomes useful, add it as a separate
+explicit pack or case rather than changing this lane's direct-edit semantics.
 
 ## Fixture-Building Requirements
 
@@ -215,7 +217,18 @@ The fixture builder must be deterministic and must document the source dataset
 version. It should take raw downloaded data outside git and write a compact
 benchmark fixture.
 
-Recommended properties for the first compact real fixture:
+Implemented first compact real fixture:
+
+- 200 visible training pairs: 50 positive, 75 hard negative, and 75 easy
+  negative rows sampled from WDC Products `20cc80rnd000un_train_small`;
+- 120 hidden test pairs: 30 positive, 60 hard negative, and 30 easy negative
+  rows sampled from WDC Products `20cc80rnd000un_gs`;
+- evaluation positive prevalence is `0.25`;
+- deterministic seed `20260627`;
+- local sequential `pair_id` values that do not expose raw WDC offer ids;
+- hidden labels remain verifier-owned in `verify/hidden_labels.csv`.
+
+Recommended properties for future compact real fixtures:
 
 - hundreds to a few thousand training pairs;
 - hundreds to a few thousand hidden test pairs;

@@ -1,0 +1,33 @@
+[pack]
+id = "product-offer-matching"
+version = "0.1.0"
+description = "Direct-edit coding-agent benchmark for WDC-derived product offer matching in Python and Rust"
+
+[defaults]
+temperature = 0
+max_tokens = 64
+stream = false
+warmup = 0
+repetitions = 1
+
+[[fixtures]]
+id = "matcher-repo"
+kind = "repo"
+path = "fixtures/matcher-repo"
+description = "Small WDC-derived product-offer matching repo fixture"
+
+[[cases]]
+id = "pairwise-real-small-python"
+kind = "repo-task"
+prompt_file = "prompts/pairwise-real-small-python.md"
+fixture_refs = ["matcher-repo"]
+harness = { id = "external-agent", timeout_s = 1200 }
+scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }
+
+[[cases]]
+id = "pairwise-real-small-rust"
+kind = "repo-task"
+prompt_file = "prompts/pairwise-real-small-rust.md"
+fixture_refs = ["matcher-repo"]
+harness = { id = "external-agent", timeout_s = 1200 }
+scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }

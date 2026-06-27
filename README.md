@@ -302,6 +302,23 @@ locally and use the public
 `https://llm.django-cast.com/v1` path; do not require Codex, Claude, Ollama, or
 this repository to be installed on the server.
 
+For opt-in Pi-backed direct-edit evidence on the real-derived product-offer
+matching pack, use `examples/external-agent/pi-agent.py`. The pack has Python
+and Rust implementation cases over the same WDC-derived fixture and verifier:
+
+```sh
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.py", "--model", "openai-codex/gpt-5.5", "--thinking", "off"]' \
+  uv run benchpack run product-offer-matching --adapter ollama-generate --model qwen3-coder:latest --host-label product-offer-pi-gpt55 --force
+```
+
+The normal adapter call is retained for runner compatibility; interpret the
+product-offer run through the external-agent model-call telemetry and verifier
+JSON. The Pi wrapper runs Pi without file-system tools, embeds only the
+prompt-allowed editable file plus visible workspace data files, parses a JSON
+full-file replacement response, and applies only prompt-allowed repo-relative
+paths. The verifier reports positive-class F1, precision, recall, accuracy,
+confusion counts, prevalence, and the pass threshold.
+
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When
 `--run-metadata <json-file>` is supplied, the runner also validates that JSON
@@ -533,6 +550,13 @@ Bundled packs:
   output across `notes/store.py` and `notes/cli.py`; verification remains
   deterministic and stdlib-only with visible and hidden execution checks. This
   is an opt-in project-completion prototype, not a default matrix pack.
+- `product-offer-matching`: opt-in direct-edit external-agent `repo-task` pack
+  with Python and Rust implementation cases over a compact WDC Products
+  20pair-derived fixture. The agent edits either `matcher.py` or `matcher.rs`;
+  the verifier runs the program on hidden labels and records positive-class F1,
+  precision, recall, accuracy, and confusion counts. It is not a default matrix
+  pack and should be interpreted through deterministic verifier output, not
+  LLM-as-judge scoring.
 - `patch-from-failure-external-agent`, `python-regression-fix-external-agent`,
   and `django-dashboard-regression-fix-external-agent`: opt-in direct-edit
   external-agent variants of the bundled repo-task fixtures. They select

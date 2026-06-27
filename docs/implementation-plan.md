@@ -1187,7 +1187,11 @@ Scope:
 - Research product classification, product matching, and price-comparison
   style tasks where the coding agent writes a program or pipeline and the
   runner evaluates held-out F1, weighted F1, hierarchical F1, pairwise
-  matching metrics, or cluster metrics.
+  matching metrics, or cluster metrics. **Initial product-offer matching pack
+  landed 2026-06-27** as `product-offer-matching`, a direct-edit
+  external-agent pack with Python and Rust implementation cases over a compact
+  WDC Products 20pair-derived fixture and deterministic positive-class F1
+  scoring.
 - Research resource-aware scoring for agent-written programs: wall time, peak
   process memory, GPU memory when available, timeouts, memory-limit verdicts,
   runtime errors, compile errors, and whether those remain separate metrics or
@@ -1225,7 +1229,11 @@ matrix promotion remains deferred; future endpoint-only work should be tied to
 a different endpoint, model, or promotion question rather than rerunning the
 validated strict-GGUF lane. The first small project-completion prototype has
 also landed as `mini-project-completion`, keeping deterministic
-`verify-script` scoring and the existing fenced-patch runner path.
+`verify-script` scoring and the existing fenced-patch runner path. The first
+real-derived product-offer matching program benchmark has also landed as
+`product-offer-matching`, using the public `external-agent` harness so Pi or
+another direct-edit agent can implement Python and Rust matchers in disposable
+workspaces before deterministic F1 verification.
 
 Scope:
 
@@ -1250,6 +1258,13 @@ Scope:
   deterministic verifier with visible plus hidden parser/report/filter/CLI
   execution checks. It is opt-in and not part of the default matrix or tmux
   helper pack sets.
+- `product-offer-matching` pack. **Landed 2026-06-27** as an opt-in
+  direct-edit external-agent benchmark over WDC Products 20pair-derived CSV
+  fixtures. It has `pairwise-real-small-python` and
+  `pairwise-real-small-rust` cases, a reusable
+  `examples/external-agent/pi-agent.py` wrapper for Pi-backed runs, hidden
+  verifier labels, and deterministic positive-class F1 scoring with
+  precision/recall/confusion metrics in the verifier JSON.
 - Disposable worktree setup. **Landed** through measured repo-task workspace
   preparation and artifact recording.
 - Model output to patch extraction. **Landed** through the default fenced

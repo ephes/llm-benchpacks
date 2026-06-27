@@ -140,6 +140,24 @@ Initial packs:
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`. It is the first small
   project-completion prototype and is not part of the default matrix.
+- `product-offer-matching`: opt-in direct-edit external-agent `repo-task` pack
+  over a compact real-derived WDC Products 20pair fixture. Version `0.1.0` has
+  two measured cases, `pairwise-real-small-python` and
+  `pairwise-real-small-rust`. The Python case asks the agent to edit
+  `matcher.py` using only the Python standard library. The Rust case asks the
+  agent to edit a single `matcher.rs` that compiles with `rustc` and the Rust
+  standard library only. Both cases declare
+  `harness = { id = "external-agent", timeout_s = 1200 }`, copy the same
+  matcher repo fixture into a run-owned workspace, expose visible
+  `data/train.csv` and unlabeled `data/test_pairs.csv`, keep hidden labels
+  under `verify/`, capture the workspace patch, and run a deterministic
+  `verify-script` that executes the generated matcher and reports
+  positive-class F1, precision, recall, accuracy, confusion counts,
+  prevalence, and a `0.70` F1 pass threshold. This pack is not part of the
+  default matrix and does not use LLM-as-judge scoring. The bundled
+  `examples/external-agent/pi-agent.py` wrapper for this live lane runs Pi
+  without file-system tools and applies only JSON full-file replacements for
+  prompt-allowed paths.
 - `django-dashboard-regression-fix-external-agent`: explicit external-agent
   variant of the same workload. Version `0.1.1` uses the same fixture and
   verifier as `django-dashboard-regression-fix`, but the prompt tells the

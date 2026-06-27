@@ -4493,3 +4493,24 @@ working history and open questions.
   CLI on the host and copy results back?
 - How much of `desktop-django-starter` should be vendored into the wrap benchmark
   versus referenced as an external checkout?
+## 2026-06-27
+
+### Changed
+
+- Added the opt-in `product-offer-matching` direct-edit external-agent
+  benchmark pack. Version `0.1.0` contains Python and Rust implementation
+  cases over the same compact WDC Products 20pair-derived fixture, hidden
+  verifier labels, deterministic positive-class F1 scoring, and a reusable
+  `examples/external-agent/pi-agent.py` wrapper for Pi-backed live runs. The
+  wrapper runs Pi without file-system tools and applies only JSON full-file
+  replacements for prompt-allowed paths.
+- Documented the initial product-offer fixture source and calibration:
+  `20pair.zip`, `wdcproducts20cc80rnd000un_train_small` for visible training,
+  `wdcproducts20cc80rnd000un_gs` for hidden labels, 200 train rows, 120 hidden
+  test rows, 25% hidden positive prevalence, and a `0.70` F1 pass threshold.
+
+### Open Questions
+
+- Whether the first WDC-derived fixture is too hard or too small for stable
+  model ranking remains a live-benchmark question. Use verifier metrics, not
+  pass/fail alone, when comparing GPT-5.5 and Qwen3.6.

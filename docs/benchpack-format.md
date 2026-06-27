@@ -286,8 +286,9 @@ strings. The runner rejects manifests that violate this at load time.
   repo-task warmups, task environment configuration, pack-level harness
   defaults, or production external agent-harness behavior. Bundled repo-task
   examples currently include `patch-from-failure`, `python-regression-fix`,
-  `django-dashboard-regression-fix`, and the opt-in project-completion
-  prototype `mini-project-completion`.
+  `django-dashboard-regression-fix`, the opt-in project-completion prototype
+  `mini-project-completion`, and the opt-in direct-edit external-agent
+  `product-offer-matching` pack with Python and Rust matcher cases.
 
 `replay`
 : A recorded request sequence.
