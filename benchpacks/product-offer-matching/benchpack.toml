@@ -21,7 +21,7 @@ id = "pairwise-real-small-python"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-python.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "external-agent", timeout_s = 1200 }
+harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }
 
 [[cases]]
@@ -29,5 +29,5 @@ id = "pairwise-real-small-rust"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-rust.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "external-agent", timeout_s = 1200 }
+harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }

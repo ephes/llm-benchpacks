@@ -147,14 +147,16 @@ Initial packs:
   `matcher.py` using only the Python standard library. The Rust case asks the
   agent to edit a single `matcher.rs` that compiles with `rustc` and the Rust
   standard library only. Both cases declare
-  `harness = { id = "external-agent", timeout_s = 1200 }`, copy the same
+  `harness = { id = "external-agent", timeout_s = 3600 }`, copy the same
   matcher repo fixture into a run-owned workspace, expose visible
   `data/train.csv` and unlabeled `data/test_pairs.csv`, keep hidden labels
   under `verify/`, capture the workspace patch, and run a deterministic
   `verify-script` that executes the generated matcher and reports
   positive-class F1, precision, recall, accuracy, confusion counts,
-  prevalence, and a `0.70` F1 pass threshold. This pack is not part of the
-  default matrix and does not use LLM-as-judge scoring. The bundled
+  prevalence, and a `0.70` F1 pass threshold. The longer harness timeout is
+  deliberate for local long-context Pi/Qwen runs that must prefill the embedded
+  real-data fixture. This pack is not part of the default matrix and does not
+  use LLM-as-judge scoring. The bundled
   `examples/external-agent/pi-agent.py` wrapper for this live lane runs Pi
   without file-system tools and applies only JSON full-file replacements for
   prompt-allowed paths.

@@ -307,7 +307,7 @@ matching pack, use `examples/external-agent/pi-agent.py`. The pack has Python
 and Rust implementation cases over the same WDC-derived fixture and verifier:
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.py", "--model", "openai-codex/gpt-5.5", "--thinking", "off"]' \
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.py", "--model", "openai-codex/gpt-5.5", "--thinking", "off", "--timeout-s", "3600"]' \
   uv run benchpack run product-offer-matching --adapter ollama-generate --model qwen3-coder:latest --host-label product-offer-pi-gpt55 --force
 ```
 
@@ -316,8 +316,10 @@ product-offer run through the external-agent model-call telemetry and verifier
 JSON. The Pi wrapper runs Pi without file-system tools, embeds only the
 prompt-allowed editable file plus visible workspace data files, parses a JSON
 full-file replacement response, and applies only prompt-allowed repo-relative
-paths. The verifier reports positive-class F1, precision, recall, accuracy,
-confusion counts, prevalence, and the pass threshold.
+paths. Keep the wrapper `--timeout-s` aligned with the pack's 3600-second
+external-agent harness timeout for long-context local Pi/Qwen runs. The verifier
+reports positive-class F1, precision, recall, accuracy, confusion counts,
+prevalence, and the pass threshold.
 
 Each `benchpack run` invocation writes `results/<date>-<host-label>/` containing
 `run.jsonl`, `summary.md`, `hardware.json`, and `raw/`. When

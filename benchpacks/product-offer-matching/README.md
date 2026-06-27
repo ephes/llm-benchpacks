@@ -16,6 +16,8 @@ Pack version: `0.1.0`.
 Both cases use the public `external-agent` harness. The normal adapter call is
 kept as a runner compatibility step; benchmark interpretation should use the
 external-agent model-call telemetry and verifier output.
+The harness timeout is 3600 seconds per case to accommodate long-context local
+Pi/Qwen runs that prefill the embedded real-data fixture.
 
 The bundled Pi wrapper, `examples/external-agent/pi-agent.py`, runs Pi without
 file-system tools. It embeds the prompt-allowed editable file and visible
@@ -89,7 +91,7 @@ runtime seconds, and threshold details into its JSON artifact.
 ## Example Command
 
 ```sh
-BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.py", "--model", "openai-codex/gpt-5.5", "--thinking", "off"]' \
+BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.py", "--model", "openai-codex/gpt-5.5", "--thinking", "off", "--timeout-s", "3600"]' \
   uv run benchpack run product-offer-matching --adapter ollama-generate --model qwen3-coder:latest --host-label product-offer-pi-gpt55 --force
 ```
 

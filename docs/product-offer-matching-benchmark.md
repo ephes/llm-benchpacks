@@ -187,7 +187,7 @@ id = "pairwise-real-small-python"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-python.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "external-agent", timeout_s = 1200 }
+harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 30 }
 
 [[cases]]
@@ -195,7 +195,7 @@ id = "pairwise-real-small-rust"
 kind = "repo-task"
 prompt_file = "prompts/pairwise-real-small-rust.md"
 fixture_refs = ["matcher-repo"]
-harness = { id = "external-agent", timeout_s = 1200 }
+harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 30 }
 
 [[fixtures]]
@@ -210,6 +210,9 @@ comparisons, including GPT-5.5 versus Qwen3.6, so both models edit the same
 prepared workspace fixture and are judged by the same deterministic verifier.
 If a fenced-patch endpoint-only variant becomes useful, add it as a separate
 explicit pack or case rather than changing this lane's direct-edit semantics.
+The pack-level external-agent timeout is intentionally 3600 seconds because
+local long-context Pi/Qwen runs must prefill the embedded real-data fixture
+before producing a JSON file-replacement payload.
 
 ## Fixture-Building Requirements
 

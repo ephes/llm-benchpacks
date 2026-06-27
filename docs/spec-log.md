@@ -16,6 +16,19 @@ working history and open questions.
 - ...
 ```
 
+## 2026-06-27 (product offer matching long-context timeout)
+
+### Changed
+
+- Raised the opt-in `product-offer-matching` external-agent harness timeout
+  from 1200 to 3600 seconds for both Python and Rust cases after local
+  Pi/Qwen3.6 long-context runs showed the embedded real-data fixture can exceed
+  the previous pack-level timeout before the agent returns its JSON replacement
+  payload.
+- Updated the root README, pack README, product-offer design doc, and
+  specification so the manifest, example Pi wrapper command, and long-context
+  timeout rationale stay aligned.
+
 ## 2026-06-27 (product offer matching benchmark draft)
 
 ### Changed
