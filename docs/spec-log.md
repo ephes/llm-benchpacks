@@ -16,6 +16,31 @@ working history and open questions.
 - ...
 ```
 
+## 2026-06-28 (product offer clustering fixture)
+
+### Changed
+
+- Replaced the active `product-offer-matching` benchmark lane with a
+  PriceRunner-derived product-offer clustering fixture sourced from the Kaggle
+  `lakritidis/product-clustering-matching-classification` dataset mirror and
+  the equivalent UCI archive. The implemented fixture now contains 10,003
+  labeled training offers, 25,308 unlabeled hidden-test offers, and 20,000
+  hidden eval pairs for precision/recall curves.
+- Changed the measured cases from WDC pairwise matching to
+  `cluster-pricerunner-python` and `cluster-pricerunner-rust`. Agents now edit
+  `clusterer.py` or `clusterer.rs` and must output offer-level clusters plus
+  eval-pair scores.
+- Added `verify/score_clusters.py`, which reports B-cubed cluster metrics,
+  pairwise cluster metrics, eval-pair precision/recall curves, average
+  precision, offers per second, eval pairs per second, peak RSS, and a combined
+  quality/throughput/memory score.
+
+### Open Questions
+
+- Live model results are needed before deciding whether the current pass
+  thresholds are well calibrated. Treat pass/fail as secondary to the metric
+  JSON and PR-curve artifacts while this lane is being calibrated.
+
 ## 2026-06-27 (product offer matching long-context timeout)
 
 ### Changed
@@ -33,7 +58,7 @@ working history and open questions.
 
 ### Changed
 
-- Added `docs/product-offer-matching-benchmark.md` as a real-data-first design
+- Added `docs/benchmarks/product-offer-matching/index.md` as a real-data-first design
   draft for an opt-in coding-agent benchmark where the model writes a
   deterministic product-offer matcher and the verifier scores hidden
   real-derived examples with positive-class F1.
@@ -4521,9 +4546,27 @@ working history and open questions.
   `20pair.zip`, `wdcproducts20cc80rnd000un_train_small` for visible training,
   `wdcproducts20cc80rnd000un_gs` for hidden labels, 200 train rows, 120 hidden
   test rows, 25% hidden positive prevalence, and a `0.70` F1 pass threshold.
+- Extended the product-offer verifier contract to accept optional `scores.csv`,
+  write full precision/recall curve CSV artifacts, report average precision,
+  sample peak process RSS, compute pairs per second, accept flat scalar
+  `metrics.json`, and emit a transparent combined score from F1, AP,
+  throughput, and memory.
+- Added deterministic fixture-builder switches for larger WDC pairwise slices,
+  including all-row train/test generation, explicit source file selection, and
+  sampled-count controls. The documented large-pairwise rerun uses 19,015
+  visible training pairs and 4,500 hidden test pairs.
+- Changed the Pi external-agent wrapper to prompt with bounded CSV previews so
+  generated programs read full data files at runtime rather than embedding full
+  large fixtures in the model prompt. The wrapper now tolerates fenced JSON
+  payloads with preamble text and a narrow class of truncated final JSON
+  containers.
 
 ### Open Questions
 
 - Whether the first WDC-derived fixture is too hard or too small for stable
   model ranking remains a live-benchmark question. Use verifier metrics, not
   pass/fail alone, when comparing GPT-5.5 and Qwen3.6.
+- The pairwise WDC lane still does not measure blocking. A separate
+  entity-resolution lane with tens of thousands of offers is required before
+  candidate generation, clustering, memory pressure, or offers/s claims are
+  meaningful.

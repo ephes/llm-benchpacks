@@ -1,0 +1,51 @@
+[project]
+site_name = "llm-benchpacks"
+site_description = "Benchmark packs, runbooks, and curated benchmark results for local LLM runtimes."
+site_author = "llm-benchpacks contributors"
+nav = [
+  { "Home" = "index.md" },
+  { "Benchmarks" = [
+    { "Overview" = "benchmarks/index.md" },
+    { "Product-Offer Matching" = [
+      { "Overview" = "benchmarks/product-offer-matching/index.md" },
+      { "Literature" = "benchmarks/product-offer-matching/literature.md" },
+      { "PriceRunner Rerun 2026-06-28" = "benchmarks/product-offer-matching/pricerunner-rerun-20260628.md" },
+      { "Archive: WDC Pairwise Rerun" = "benchmarks/product-offer-matching/archive-large-pairwise-rerun-20260627.md" },
+      { "Archive: GPT-5.5 Pairwise Report" = "benchmarks/product-offer-matching/archive-gpt55-pairwise-report.md" },
+    ] },
+    { "Django Resume Electron Wrap" = [
+      { "Overview" = "benchmarks/django-resume-electron-wrap/index.md" },
+      { "Legacy DS4/Pi Staged Benchmark" = "benchmarks/django-resume-electron-wrap/legacy-ds4-pi-wrap-benchmark.md" },
+      { "Legacy DS4 Goal Prompt" = "benchmarks/django-resume-electron-wrap/legacy-ds4-goal-prompt.md" },
+    ] },
+  ] },
+  { "Core" = [
+    { "Specification" = "specification.md" },
+    { "Architecture" = "architecture.md" },
+    { "Benchpack Format" = "benchpack-format.md" },
+    { "Hardware Targets" = "hardware-targets.md" },
+    { "Model Target Catalog" = "model-targets.md" },
+    { "Decisions" = "decisions.md" },
+  ] },
+  { "Planning And Logs" = [
+    { "Implementation Plan" = "implementation-plan.md" },
+    { "Spec Log" = "spec-log.md" },
+    { "Run Log" = "run-log.md" },
+    { "Benchmark Research Backlog" = "benchmark-research.md" },
+  ] },
+  { "Runbooks And Summaries" = [
+    { "Apple Silicon M4/M5 Runbook" = "apple-silicon-m4-m5-runbook.md" },
+    { "Gemma 4 Tri-host Runbook" = "gemma4-tri-host-runbook.md" },
+    { "Qwen3.6 M4/M5 Benchmark Summary" = "qwen36-m4-m5-benchmark-summary.md" },
+    { "Qwen3.6 27B Strict-GGUF Tri-host Summary" = "qwen36-27b-strict-gguf-trihost-summary.md" },
+    { "Gemma 4 Strict-GGUF Tri-host Summary" = "gemma4-strict-gguf-trihost-summary.md" },
+    { "Gemma 4 26B A4B Strict-GGUF Tri-host Summary" = "gemma4-26b-strict-gguf-trihost-summary.md" },
+  ] },
+  { "Registry" = [
+    { "Hosted Registry PRD" = "registry-hosted-django-spec.md" },
+    { "Registry Hosted Site Spec" = "registry-hosted-site-spec.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"

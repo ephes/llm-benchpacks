@@ -138,16 +138,39 @@ def _read_workspace_file(workspace: Path, relative_path: str) -> str:
     return target.read_text(encoding="utf-8")
 
 
-def _data_context(workspace: Path) -> str:
+def _preview_text(path: Path, *, max_rows: int) -> tuple[str, int, bool]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return "", 0, False
+    keep = max(1, max_rows + 1)
+    preview = "\n".join(lines[:keep])
+    data_rows = max(0, len(lines) - 1)
+    truncated = len(lines) > keep
+    return preview, data_rows, truncated
+
+
+def _data_context(workspace: Path, *, preview_rows: int) -> str:
     chunks: list[str] = []
-    for relative_path in ["data/train.csv", "data/test_pairs.csv"]:
+    for relative_path in [
+        "data/train.csv",
+        "data/test_pairs.csv",
+        "data/train_offers.csv",
+        "data/test_offers.csv",
+        "data/eval_pairs.csv",
+    ]:
         target = workspace / relative_path
         if not target.is_file():
             continue
-        text = target.read_text(encoding="utf-8")
+        text, data_rows, truncated = _preview_text(target, max_rows=preview_rows)
+        suffix = (
+            f"\n--- PREVIEW ONLY: {relative_path} has {data_rows} data rows; "
+            "the generated program must read the full workspace file at runtime. ---"
+            if truncated
+            else f"\n--- COMPLETE FILE: {relative_path} has {data_rows} data rows. ---"
+        )
         chunks.append(
             f"--- BEGIN READ-ONLY WORKSPACE FILE {relative_path} ---\n"
-            f"{text}\n"
+            f"{text}{suffix}\n"
             f"--- END READ-ONLY WORKSPACE FILE {relative_path} ---"
         )
     return "\n\n".join(chunks)
@@ -171,6 +194,7 @@ def _build_prompt(
     prompt: str,
     workspace: Path,
     allowed_paths: tuple[str, ...],
+    data_preview_rows: int,
 ) -> str:
     allowed = "\n".join(f"- {path}" for path in allowed_paths)
     return (
@@ -189,7 +213,7 @@ def _build_prompt(
         "Task prompt:\n"
         f"{prompt}\n\n"
         f"{_allowed_file_context(workspace, allowed_paths)}\n\n"
-        f"{_data_context(workspace)}\n"
+        f"{_data_context(workspace, preview_rows=data_preview_rows)}\n"
     )
 
 
@@ -218,14 +242,52 @@ def _write_telemetry(
 
 def _parse_edit_payload(content: str) -> dict[str, Any]:
     text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if len(lines) >= 3 and lines[0].startswith("```") and lines[-1] == "```":
-            text = "\n".join(lines[1:-1]).strip()
+    fenced = _extract_fenced_json(text)
+    if fenced is not None:
+        text = fenced
     try:
         return _object(json.loads(text), "pi edit payload")
     except json.JSONDecodeError as exc:
+        repaired = _repair_truncated_json(text)
+        if repaired is not None:
+            try:
+                return _object(json.loads(repaired), "pi edit payload")
+            except json.JSONDecodeError:
+                pass
         raise ValueError(f"could not parse pi edit payload JSON: {exc}") from exc
+
+
+def _extract_fenced_json(text: str) -> str | None:
+    match = re.search(r"```(?:json)?\s*\n(.*?)\n```", text, flags=re.DOTALL)
+    if match is None:
+        return None
+    return match.group(1).strip()
+
+
+def _repair_truncated_json(text: str) -> str | None:
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for char in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append("}" if char == "{" else "]")
+        elif char in "}]":
+            if not stack or stack[-1] != char:
+                return None
+            stack.pop()
+    if in_string or escape or not stack:
+        return None
+    return text + "".join(reversed(stack))
 
 
 def _apply_edits(
@@ -278,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--thinking", default="off")
     parser.add_argument("--timeout-s", type=float, default=900.0)
+    parser.add_argument("--data-preview-rows", type=int, default=40)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--case", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -297,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
             prompt=prompt,
             workspace=workspace,
             allowed_paths=allowed_paths,
+            data_preview_rows=max(0, int(args.data_preview_rows)),
         )
     except (OSError, ValueError) as exc:
         return _fail(str(exc))

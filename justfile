@@ -9,6 +9,14 @@ AGENT_WRAP_DATA := env_var_or_default("AGENT_WRAP_DATA", "data/agent-wrap-onesho
 default:
     @just --list
 
+docs-server port="8000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Serving docs at http://127.0.0.1:{{port}}"
+    uv run --with zensical zensical serve \
+      --config-file zensical.toml \
+      --dev-addr "127.0.0.1:{{port}}"
+
 registry-site:
     #!/usr/bin/env bash
     set -euo pipefail

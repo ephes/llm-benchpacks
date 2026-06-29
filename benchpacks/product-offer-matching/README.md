@@ -1,16 +1,16 @@
 # product-offer-matching
 
-Opt-in direct-edit `repo-task` benchmark for product-offer matching programs.
-The measured agent edits one matcher implementation, then the verifier runs it
-against hidden WDC-derived labels and scores positive-class F1.
+Opt-in direct-edit `repo-task` benchmark for product-offer clustering programs.
+The measured agent edits one clusterer implementation, then the verifier runs it
+against hidden PriceRunner-derived product clusters and eval-pair labels.
 
 Pack version: `0.1.0`.
 
 ## Cases
 
-- `pairwise-real-small-python`: implement `matcher.py` using the Python
+- `cluster-pricerunner-python`: implement `clusterer.py` using the Python
   standard library.
-- `pairwise-real-small-rust`: implement `matcher.rs` as a single file that
+- `cluster-pricerunner-rust`: implement `clusterer.rs` as a single file that
   compiles with `rustc` and uses only the Rust standard library.
 
 Both cases use the public `external-agent` harness. The normal adapter call is
@@ -20,73 +20,99 @@ The harness timeout is 3600 seconds per case to accommodate long-context local
 Pi/Qwen runs that prefill the embedded real-data fixture.
 
 The bundled Pi wrapper, `examples/external-agent/pi-agent.py`, runs Pi without
-file-system tools. It embeds the prompt-allowed editable file and visible
-workspace data files in the prompt, requires a JSON full-file replacement
-response, and applies only paths listed in the benchmark prompt's allowed edit
-section.
+file-system tools. It embeds the prompt-allowed editable file and a bounded
+preview of visible workspace data files in the prompt, requires a JSON full-file
+replacement response, and applies only paths listed in the benchmark prompt's
+allowed edit section. The generated program must read the full CSV files from
+the workspace at runtime.
 
 ## Fixture
 
-The fixture is a compact CSV task derived from WDC Products 20pair
-`wdcproducts20cc80rnd000un`, downloaded from:
+The fixture is a cluster-labeled CSV task derived from the PriceRunner Product
+Classification and Clustering dataset, also mirrored on Kaggle as:
 
-`https://data.dws.informatik.uni-mannheim.de/largescaleproductcorpus/data/wdc-products/20pair.zip`
+- `https://www.kaggle.com/datasets/lakritidis/product-clustering-matching-classification/data`
 
-The derived files use:
+The same data can be downloaded without Kaggle credentials from the UCI Machine
+Learning Repository:
 
-- `wdcproducts20cc80rnd000un_train_small.json.gz` for visible training rows.
-- `wdcproducts20cc80rnd000un_gs.json.gz` for hidden test labels.
+- `https://archive.ics.uci.edu/dataset/837/product%2Bclassification%2Band%2Bclustering`
 
-Raw WDC offer ids and cluster ids are stripped from matcher inputs. `pair_id`
-values are local sequential ids, not WDC ids. The fixture keeps WDC offer
-attributes such as brand, title, description, price, and currency.
+Raw source product ids are replaced with local `offer_id` values after
+deterministically shuffling train and test rows. Visible training offers keep
+`cluster_id` and `cluster_label`; prediction offers hide the cluster labels.
+The deterministic split is by true product cluster, so visible training
+products and hidden test products are disjoint. Public row order and sequential
+`offer_id` assignment must not encode source product-cluster order.
 
 Derived fixture shape:
 
-- `data/train.csv`: 200 visible labeled pairs, 50 positive and 150 negative.
-- `data/test_pairs.csv`: 120 unlabeled prediction pairs.
-- `verify/hidden_labels.csv`: 120 verifier-owned labels, 30 positive and 90
-  negative.
+- `data/train_offers.csv`: 10,003 visible labeled offers from 3,709 product
+  clusters.
+- `data/test_offers.csv`: 25,308 unlabeled prediction offers from 9,524 hidden
+  product clusters.
+- `data/eval_pairs.csv`: 20,000 unlabeled eval pairs sampled from hidden test
+  offers, with 5,000 positive and 15,000 negative pairs.
+- `verify/hidden_test_clusters.csv`: verifier-owned hidden product cluster for
+  every test offer.
+- `verify/hidden_eval_pair_labels.csv`: verifier-owned labels for
+  `data/eval_pairs.csv`.
 
-The WDC Products page describes the upstream benchmark as real-world product
-entity matching with pairwise splits and offer-disjoint train/validation/test
-records. This pack is a small derived benchmark fixture, not a reproduction of
-the full WDC Products benchmark.
+The upstream PriceRunner data contains 35,311 offers, 13,233 product clusters,
+306 merchants, and 10 product categories. It is explicitly intended for product
+classification, clustering, and entity matching.
 
 ## Verification
 
-`verify/score_pairwise.py` runs the implementation with:
+`verify/score_clusters.py` runs the implementation with:
 
 ```sh
-python matcher.py --train data/train.csv --predict data/test_pairs.csv --output predictions.csv
+python clusterer.py --train data/train_offers.csv --predict data/test_offers.csv --output clusters.csv --pair-input data/eval_pairs.csv --pair-scores pair_scores.csv
 ```
 
 or, for Rust:
 
 ```sh
-rustc matcher.rs -O -o <verifier-temp>/matcher-rust
-<verifier-temp>/matcher-rust --train data/train.csv --predict data/test_pairs.csv --output predictions.csv
+rustc clusterer.rs -O -o <verifier-temp>/clusterer-rust
+<verifier-temp>/clusterer-rust --train data/train_offers.csv --predict data/test_offers.csv --output clusters.csv --pair-input data/eval_pairs.csv --pair-scores pair_scores.csv
 ```
 
-The output CSV must contain `pair_id,label` with one prediction for every test
-pair and labels limited to `0` or `1`. The verifier fails on malformed output,
+`clusters.csv` must contain `offer_id,cluster_id` with one prediction for every
+test offer. `pair_scores.csv` must contain `pair_id,score` with one finite
+numeric score for every eval pair. The verifier fails on malformed output,
 missing ids, duplicate ids, unknown ids, extra ids, non-zero process exit,
-timeout, empty patch, or F1 below the threshold.
+timeout, empty patch, or cluster metrics below the thresholds.
+
+Implementations may also write:
+
+- `metrics.json` as a flat scalar object with implementation-owned timing or
+  count fields.
+
+The verifier records B-cubed cluster precision/recall/F1, pairwise cluster
+precision/recall/F1, eval-pair operating point from the final clusters, a full
+precision/recall curve from `pair_scores.csv`, wall time, offers per second,
+eval pairs per second, and peak process RSS. It also emits a transparent
+combined score:
+
+```text
+100 * (0.35*bcubed_f1 + 0.25*pairwise_cluster_f1
+       + 0.25*average_precision
+       + 0.10*min(offers_per_second/10000,1)
+       + 0.05*min(1024/peak_rss_mb,1))
+```
+
+This score is quality-dominant and should not be treated as a production
+business metric. It exists to keep memory and throughput visible in benchmark
+comparisons.
 
 Primary pass threshold:
 
-- positive-class F1 must be at least `0.70`.
+- B-cubed F1 must be at least `0.70`.
+- Pairwise cluster F1 must be at least `0.20`.
 
-Calibration notes from the generated fixture:
-
-- Always-negative F1: `0.000`.
-- Always-positive F1: `0.400`.
-- Best simple token-Jaccard threshold over hidden rows: about `0.645`.
-- Best simple token-Jaccard threshold selected on visible training rows and
-  evaluated on hidden rows: about `0.657`.
-
-The verifier writes precision, recall, accuracy, confusion counts, prevalence,
-runtime seconds, and threshold details into its JSON artifact.
+The verifier writes cluster metrics, eval-pair metrics, precision/recall curve
+metadata, runtime seconds, system metrics, and combined score details into its
+JSON artifact.
 
 ## Example Command
 

@@ -141,25 +141,27 @@ Initial packs:
   `scoring.mode = "verify-script"`. It is the first small
   project-completion prototype and is not part of the default matrix.
 - `product-offer-matching`: opt-in direct-edit external-agent `repo-task` pack
-  over a compact real-derived WDC Products 20pair fixture. Version `0.1.0` has
-  two measured cases, `pairwise-real-small-python` and
-  `pairwise-real-small-rust`. The Python case asks the agent to edit
-  `matcher.py` using only the Python standard library. The Rust case asks the
-  agent to edit a single `matcher.rs` that compiles with `rustc` and the Rust
+  over a PriceRunner-derived product-offer clustering fixture. Version `0.1.0`
+  has two measured cases, `cluster-pricerunner-python` and
+  `cluster-pricerunner-rust`. The Python case asks the agent to edit
+  `clusterer.py` using only the Python standard library. The Rust case asks the
+  agent to edit a single `clusterer.rs` that compiles with `rustc` and the Rust
   standard library only. Both cases declare
-  `harness = { id = "external-agent", timeout_s = 3600 }`, copy the same
-  matcher repo fixture into a run-owned workspace, expose visible
-  `data/train.csv` and unlabeled `data/test_pairs.csv`, keep hidden labels
-  under `verify/`, capture the workspace patch, and run a deterministic
-  `verify-script` that executes the generated matcher and reports
-  positive-class F1, precision, recall, accuracy, confusion counts,
-  prevalence, and a `0.70` F1 pass threshold. The longer harness timeout is
-  deliberate for local long-context Pi/Qwen runs that must prefill the embedded
-  real-data fixture. This pack is not part of the default matrix and does not
-  use LLM-as-judge scoring. The bundled
+  `harness = { id = "external-agent", timeout_s = 3600 }`, copy the same repo
+  fixture into a run-owned workspace, expose visible `data/train_offers.csv`,
+  unlabeled `data/test_offers.csv`, and unlabeled `data/eval_pairs.csv`, keep
+  hidden test cluster labels and eval-pair labels under `verify/`, capture the
+  workspace patch, and run a deterministic `verify-script` that executes the
+  generated clusterer. The verifier reports B-cubed cluster metrics, pairwise
+  cluster metrics, an eval-pair precision/recall curve and average precision
+  from `pair_scores.csv`, process RSS, offers per second, eval pairs per
+  second, and a transparent combined score. The longer harness timeout is
+  deliberate for local long-context Pi/Qwen runs that must prefill the
+  real-data fixture preview. This pack is not part of the default matrix and
+  does not use LLM-as-judge scoring. The bundled
   `examples/external-agent/pi-agent.py` wrapper for this live lane runs Pi
-  without file-system tools and applies only JSON full-file replacements for
-  prompt-allowed paths.
+  without file-system tools, embeds only bounded CSV previews, and applies only
+  JSON full-file replacements for prompt-allowed paths.
 - `django-dashboard-regression-fix-external-agent`: explicit external-agent
   variant of the same workload. Version `0.1.1` uses the same fixture and
   verifier as `django-dashboard-regression-fix`, but the prompt tells the

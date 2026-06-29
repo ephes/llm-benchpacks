@@ -1,7 +1,7 @@
 [pack]
 id = "product-offer-matching"
 version = "0.1.0"
-description = "Direct-edit coding-agent benchmark for WDC-derived product offer matching in Python and Rust"
+description = "Direct-edit coding-agent benchmark for PriceRunner product-offer clustering in Python and Rust"
 
 [defaults]
 temperature = 0
@@ -14,20 +14,20 @@ repetitions = 1
 id = "matcher-repo"
 kind = "repo"
 path = "fixtures/matcher-repo"
-description = "Small WDC-derived product-offer matching repo fixture"
+description = "PriceRunner-derived product-offer clustering repo fixture"
 
 [[cases]]
-id = "pairwise-real-small-python"
+id = "cluster-pricerunner-python"
 kind = "repo-task"
-prompt_file = "prompts/pairwise-real-small-python.md"
+prompt_file = "prompts/cluster-pricerunner-python.md"
 fixture_refs = ["matcher-repo"]
 harness = { id = "external-agent", timeout_s = 3600 }
-scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }
+scoring = { mode = "verify-script", script = "verify/score_clusters.py", timeout_s = 90 }
 
 [[cases]]
-id = "pairwise-real-small-rust"
+id = "cluster-pricerunner-rust"
 kind = "repo-task"
-prompt_file = "prompts/pairwise-real-small-rust.md"
+prompt_file = "prompts/cluster-pricerunner-rust.md"
 fixture_refs = ["matcher-repo"]
 harness = { id = "external-agent", timeout_s = 3600 }
-scoring = { mode = "verify-script", script = "verify/score_pairwise.py", timeout_s = 60 }
+scoring = { mode = "verify-script", script = "verify/score_clusters.py", timeout_s = 90 }

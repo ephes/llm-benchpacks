@@ -1,3 +1,5 @@
+# Legacy DS4 Goal Prompt
+
 Wrap `django-resume` in Electron using Pi backed by local DS4 / DeepSeek V4 Flash, starting from the prepared clean lab workspace at `~/workspaces/ds4-pi-django-resume`.
 
 Done when:

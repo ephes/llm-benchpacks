@@ -206,7 +206,7 @@ shape needed.
 
 ### Product Classification And Matching Programs
 
-Detailed design draft: [`docs/product-offer-matching-benchmark.md`](product-offer-matching-benchmark.md).
+Detailed design draft: [Product-Offer Matching](benchmarks/product-offer-matching/index.md).
 
 Candidate data leads:
 

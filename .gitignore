@@ -16,6 +16,7 @@ registry/*.sqlite
 registry/*.sqlite-shm
 registry/*.sqlite-wal
 registry/site/
+site/
 
 # Local benchmark metadata can contain machine-local paths and host details.
 metadata/*.json
