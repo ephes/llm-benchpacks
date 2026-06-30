@@ -93,8 +93,8 @@ parallel to the PriceRunner `fixtures/matcher-repo/data/`):
 
 Public (workspace) files:
 
-- `train_offers.csv` — `offer_id, title, shop_name, price_eur, category_label,
-  image_url, cluster_id, cluster_label` (visible labels).
+- `train_offers.csv` — `offer_id, title, shop_name, price_eur, brand,
+  category_label, image_url, cluster_id, cluster_label` (visible labels).
 - `test_offers.csv` — same columns **minus** `cluster_id, cluster_label`.
 - `eval_pairs.csv` — `pair_id, offer_id_left, offer_id_right`.
 
