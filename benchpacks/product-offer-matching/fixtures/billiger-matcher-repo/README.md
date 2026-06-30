@@ -10,12 +10,13 @@ eval pair scored 0.0). Replace it with a real product matcher.
 ## Data (`data/`)
 
 - `train_offers.csv` — visible labeled offers:
-  `offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label`
+  `offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label`
 - `test_offers.csv` — unlabeled offers to cluster (same columns minus
   `cluster_id,cluster_label`).
 - `eval_pairs.csv` — `pair_id,offer_id_left,offer_id_right`.
 
 Offers with the same `cluster_id` are the same real product. Data is derived from
 billiger.de; `category_label` is an aggregator classifier output (a feature, not
-ground truth), and no structured GTIN/EAN is present. Training and test products
-are disjoint.
+ground truth), and no structured GTIN/EAN is present. `image_url` is excluded
+because the only image available is the canonical product image, which is a
+cluster-id proxy (D-038). Training and test products are disjoint.

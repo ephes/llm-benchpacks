@@ -774,3 +774,26 @@ should test multi-signal product matching. Billiger adds price and image signals
 on a harder, denser fixture (decision D-036), so it supersedes PriceRunner as the
 primary lane. Prompts are lightly guided so the benchmark measures programming
 ability, not entity-resolution recall.
+
+## D-038: Strip image_url From The Published Offers (It Is A Cluster-Id Proxy)
+
+`image_url` is removed from the published `train_offers`/`test_offers` the matcher
+sees. The billiger scrape only captured the **canonical product image** (one image
+per variant/product page), copied to every offer in that cluster, so `image_url`
+is constant within a gold cluster and unique across clusters (~99.7% / 100%
+measured). Clustering by `image_url` therefore recovers the gold labels almost
+exactly — a `GROUP BY image_url` shortcut, not entity resolution. It stays in the
+raw scrape for provenance but is filtered out at fixture-build time.
+
+This is the same class of leak as a reliable identifier (GTIN, D-035). Images are
+only a legitimate matching signal as **real per-merchant photos**, which differ by
+shop; we do not have those, so no image signal ships until we do.
+
+Evidence: GPT-5.5 (under both the `pi` and `codex` tool-using harnesses)
+independently found and exploited the shortcut, scoring ~0.999 B-cubed F1
+(combined ~98–100). Opus 4.8 did honest title/attribute matching and scored ~0.51,
+which is the representative result for the leak-free fixture.
+
+Reason: a fixture-artifact identifier trivializes the task and rewards shortcut
+discovery over matching; stripping it restores the intended multi-signal
+(title/price/brand/category) difficulty.

@@ -36,12 +36,16 @@ Each offer carries multiple signals beyond the title. Visible training offers
 have columns:
 
 ```text
-offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label
+offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label
 ```
 
 Prediction (test) offers carry the same columns minus the two cluster columns
 (`cluster_id` and `cluster_label`), which are hidden. `category_label` is a
 classifier output rather than a verbatim source field, and the data has no GTIN.
+`image_url` is **excluded** from the published offers: the scrape only has the
+canonical billiger product image (one per cluster), so it leaks the gold cluster
+id like a reliable identifier and is stripped, the same way GTIN is (decisions
+D-035 and D-038).
 
 Raw source ids are replaced with local `offer_id` values after deterministically
 shuffling train and test rows. The deterministic split is by true product
@@ -63,9 +67,10 @@ Derived fixture shape (from 31,330 input offers, 31,187 kept):
   `data/eval_pairs.csv`.
 
 Unlike the title-only PriceRunner predecessor (decision D-034), the billiger
-fixture carries price (`price_eur`) and image (`image_url`) signals in addition
-to title, shop, brand, and category, so it supports multi-signal product
-matching.
+fixture adds a genuine **price** (`price_eur`) signal alongside title, shop,
+brand, and category, so it supports multi-signal product matching. An image
+signal would also help, but only as real per-merchant photos; the canonical
+product image we have is a cluster-id proxy and is excluded (D-038).
 
 ## Verification
 

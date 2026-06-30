@@ -40,23 +40,25 @@ The benchmark should answer:
 
 The implemented fixture is derived from billiger.de product offers and lives at
 `benchpacks/product-offer-matching/fixtures/billiger-matcher-repo`. Each offer
-carries multiple signals: title, shop name, price (`price_eur`), brand, a
-classifier-produced `category_label`, and an `image_url`, plus product cluster
-id/label on visible training rows. The data has no GTIN.
+carries multiple signals: title, shop name, price (`price_eur`), brand, and a
+classifier-produced `category_label`, plus product cluster id/label on visible
+training rows. The data has no GTIN, and `image_url` is excluded (see below).
 
 Visible training offers have columns:
 
 ```text
-offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label
+offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label
 ```
 
 Prediction (test) offers carry the same columns minus the two cluster columns,
 which are hidden.
 
 Unlike the title-only PriceRunner predecessor (decision D-034), which carried no
-price or image fields, the billiger fixture adds price and image signals, so it
+price or image fields, the billiger fixture adds a genuine **price** signal, so it
 supports a multi-signal product-matching benchmark rather than a title-only
-entity-matching lane.
+entity-matching lane. An image signal would help only as real per-merchant
+photos; the canonical product image in the scrape is a cluster-id proxy and is
+excluded from the published offers (decision D-038, like GTIN in D-035).
 
 The fixture builder is:
 

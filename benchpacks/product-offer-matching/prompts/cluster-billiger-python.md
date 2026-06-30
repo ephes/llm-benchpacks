@@ -28,13 +28,13 @@ The offers carry several fields; which of them to use is your decision.
 `data/train_offers.csv` columns:
 
 ```text
-offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label
+offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label
 ```
 
 `data/test_offers.csv` columns:
 
 ```text
-offer_id,title,shop_name,price_eur,brand,category_label,image_url
+offer_id,title,shop_name,price_eur,brand,category_label
 ```
 
 `data/eval_pairs.csv` columns:

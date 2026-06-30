@@ -201,10 +201,14 @@ def sample_eval_pairs(
     return pair_rows, label_rows
 
 
+# image_url is deliberately excluded from the published offers: it is the canonical
+# billiger product image (one per cluster), so it leaks the gold cluster id like a
+# reliable identifier (decision D-038, analogous to GTIN in D-035). It stays in the
+# raw scrape for provenance but never reaches the matcher.
 TRAIN_FIELDS = ["offer_id", "title", "shop_name", "price_eur", "brand",
-                "category_label", "image_url", "cluster_id", "cluster_label"]
+                "category_label", "cluster_id", "cluster_label"]
 TEST_FIELDS = ["offer_id", "title", "shop_name", "price_eur", "brand",
-               "category_label", "image_url"]
+               "category_label"]
 
 
 def write_fixture_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:

@@ -211,8 +211,9 @@ def test_build_writes_all_outputs_with_anti_leakage(tmp_path):
     report = json.loads((data_dir.parent / "build-report.json").read_text())
 
     assert "cluster_id" not in test[0] and "cluster_label" not in test[0]
+    assert "image_url" not in test[0] and "image_url" not in train[0]  # leak: stripped (D-038)
     assert set(train[0]) == {"offer_id", "title", "shop_name", "price_eur", "brand",
-                             "category_label", "image_url", "cluster_id", "cluster_label"}
+                             "category_label", "cluster_id", "cluster_label"}
     assert {r["offer_id"] for r in hidden} == {r["offer_id"] for r in test}
     assert {r["cluster_id"] for r in train}.isdisjoint({r["cluster_id"] for r in hidden})
     pairs = mod.read_offers(data_dir / "eval_pairs.csv")

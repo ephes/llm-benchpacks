@@ -137,14 +137,14 @@ def test_pi_agent_previews_billiger_cluster_data_files(tmp_path: Path) -> None:
     data = workspace / "data"
     data.mkdir(parents=True)
     (data / "train_offers.csv").write_text(
-        "offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label\n"
-        "o00001,alpha,shopA,100.00,BrandA,Phones,http://img,c00001,Alpha\n"
-        "o00002,beta,shopB,110.00,BrandB,Phones,http://img,c00002,Beta\n",
+        "offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label\n"
+        "o00001,alpha,shopA,100.00,BrandA,Phones,c00001,Alpha\n"
+        "o00002,beta,shopB,110.00,BrandB,Phones,c00002,Beta\n",
         encoding="utf-8",
     )
     (data / "test_offers.csv").write_text(
-        "offer_id,title,shop_name,price_eur,brand,category_label,image_url\n"
-        "o00003,gamma,shopC,120.00,BrandC,Phones,http://img\n",
+        "offer_id,title,shop_name,price_eur,brand,category_label\n"
+        "o00003,gamma,shopC,120.00,BrandC,Phones\n",
         encoding="utf-8",
     )
     (data / "eval_pairs.csv").write_text(
