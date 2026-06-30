@@ -49,3 +49,47 @@ def test_unit_tokens_extracts_storage():
     assert mod.unit_tokens("iPhone 17 256GB") == {"256gb"}
     assert mod.unit_tokens("Galaxy 12 GB RAM 512 GB Black") == {"12gb", "512gb"}
     assert mod.unit_tokens("Sony WH-1000XM5") == set()
+
+
+def _offer(oid, title, cid, label, price="100.00", brand="Apple", cat="Handys"):
+    return {"offer_id": oid, "title": title, "shop_name": "shopX", "price_eur": price,
+            "brand": brand, "category_label": cat, "image_url": "http://img",
+            "cluster_id": cid, "cluster_label": label, "source_query": "q"}
+
+
+def test_clean_offers_drops_cross_model_conflict():
+    mod = load_builder()
+    rows = [
+        _offer("b1", "Samsung Galaxy S26 Ultra 256GB", "c1", "Galaxy S26 Ultra 256 GB", brand="Samsung"),
+        _offer("b2", "Samsung Galaxy S26 Ultra 256GB Black", "c1", "Galaxy S26 Ultra 256 GB", brand="Samsung"),
+        _offer("b3", "Samsung Galaxy S25 Ultra 256GB", "c1", "Galaxy S26 Ultra 256 GB", brand="Samsung"),
+    ]
+    kept, report = mod.clean_offers(rows)
+    kept_ids = {r["offer_id"] for r in kept}
+    assert kept_ids == {"b1", "b2"}  # b3 (S25 in S26 cluster) dropped
+    assert report["dropped_model_conflict"] == 1
+
+
+def test_clean_offers_drops_unit_conflict():
+    mod = load_builder()
+    rows = [
+        _offer("b1", "iPhone 17 256GB", "c1", "iPhone 17 256 GB"),
+        _offer("b2", "iPhone 17 256GB white", "c1", "iPhone 17 256 GB"),
+        _offer("b3", "iPhone 17 512GB", "c1", "iPhone 17 256 GB"),
+    ]
+    kept, report = mod.clean_offers(rows)
+    assert {r["offer_id"] for r in kept} == {"b1", "b2"}
+    assert report["dropped_unit_conflict"] == 1
+
+
+def test_clean_offers_keeps_terse_and_price_outlier():
+    mod = load_builder()
+    rows = [
+        _offer("b1", "Apple iPhone 17 256GB Nebelblau", "c1", "iPhone 17 256 GB", price="800.00"),
+        _offer("b2", "iPhone 17", "c1", "iPhone 17 256 GB", price="810.00"),          # terse: keep
+        _offer("b3", "Apple iPhone 17 256GB", "c1", "iPhone 17 256 GB", price="3000.00"),  # outlier: keep
+    ]
+    kept, report = mod.clean_offers(rows)
+    assert {r["offer_id"] for r in kept} == {"b1", "b2", "b3"}
+    assert report["flagged_degenerate_title"] >= 1
+    assert report["flagged_price_outlier"] >= 1
