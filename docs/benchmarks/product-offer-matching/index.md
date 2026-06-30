@@ -1,7 +1,7 @@
 # Product Offer Clustering Benchmark
 
 Status: current implementation lives in `benchpacks/product-offer-matching/`
-as a direct-edit external-agent benchmark over a PriceRunner-derived
+as a direct-edit external-agent benchmark over a billiger.de-derived
 cluster-labeled offer fixture.
 
 Related material for this benchmark:
@@ -38,44 +38,43 @@ The benchmark should answer:
 
 ## Dataset
 
-The implemented fixture is derived from the PriceRunner Product Classification
-and Clustering dataset, mirrored on Kaggle as:
+The implemented fixture is derived from billiger.de product offers and lives at
+`benchpacks/product-offer-matching/fixtures/billiger-matcher-repo`. Each offer
+carries multiple signals: title, shop name, price (`price_eur`), brand, a
+classifier-produced `category_label`, and an `image_url`, plus product cluster
+id/label on visible training rows. The data has no GTIN.
 
-- `https://www.kaggle.com/datasets/lakritidis/product-clustering-matching-classification/data`
+Visible training offers have columns:
 
-The same source data is downloadable without Kaggle credentials from UCI:
+```text
+offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label
+```
 
-- `https://archive.ics.uci.edu/dataset/837/product%2Bclassification%2Band%2Bclustering`
+Prediction (test) offers carry the same columns minus the two cluster columns,
+which are hidden.
 
-The upstream file contains 35,311 product offers, 13,233 product clusters, 306
-merchants, and 10 categories. Fields include product title, merchant id, product
-cluster id/label, and category id/label.
-
-**Limitation — title-only, no price or images.** This data is text-only. It
-carries no price and no image fields, and neither is recoverable; they are
-absent at the source, not dropped by the fixture builder. Since price and images
-are central signals for realistic product matching, this Kaggle/UCI dataset is
-not suitable for a multi-signal product-matching benchmark — the pack is a
-title-only entity-matching lane only. A price- and image-bearing dataset is
-required for any price-aware or multimodal lane. See decision D-034.
+Unlike the title-only PriceRunner predecessor (decision D-034), which carried no
+price or image fields, the billiger fixture adds price and image signals, so it
+supports a multi-signal product-matching benchmark rather than a title-only
+entity-matching lane.
 
 The fixture builder is:
 
 ```text
-benchpacks/product-offer-matching/scripts/build-fixture-from-pricerunner.py
+benchpacks/product-offer-matching/scripts/build-fixture-from-billiger.py
 ```
 
-It consumes the raw downloaded zip outside git and writes a deterministic
-derived fixture. Raw source `Product ID` values are replaced with local
-`offer_id` values after train and test rows are deterministically shuffled.
-Training and test splits are disjoint by true product cluster, and public row
-order plus sequential local ids must not encode source product-cluster order.
+It consumes the raw billiger offer export outside git and writes a deterministic
+derived fixture. Raw source ids are replaced with local `offer_id` values after
+train and test rows are deterministically shuffled. Training and test splits are
+disjoint by true product cluster, and public row order plus sequential local ids
+must not encode source product-cluster order.
 
-Current derived fixture shape:
+Current derived fixture shape (from 31,330 input offers, 31,187 kept):
 
-- `data/train_offers.csv`: 10,003 visible labeled offers from 3,709 product
+- `data/train_offers.csv`: 9,362 visible labeled offers from 1,385 product
   clusters.
-- `data/test_offers.csv`: 25,308 unlabeled prediction offers from 9,524 hidden
+- `data/test_offers.csv`: 21,825 unlabeled prediction offers from 3,265 hidden
   product clusters.
 - `data/eval_pairs.csv`: 20,000 unlabeled eval pairs sampled from hidden test
   offers, with 5,000 positive and 15,000 negative pairs.
@@ -108,8 +107,8 @@ is clustering a set of offers into inferred products.
 Implemented case ids:
 
 ```text
-cluster-pricerunner-python
-cluster-pricerunner-rust
+cluster-billiger-python
+cluster-billiger-rust
 ```
 
 Implemented layout:
@@ -119,10 +118,10 @@ benchpacks/product-offer-matching/
   benchpack.toml
   README.md
   prompts/
-    cluster-pricerunner-python.md
-    cluster-pricerunner-rust.md
+    cluster-billiger-python.md
+    cluster-billiger-rust.md
   fixtures/
-    matcher-repo/
+    billiger-matcher-repo/
       README.md
       clusterer.py
       clusterer.rs
@@ -135,7 +134,7 @@ benchpacks/product-offer-matching/
     hidden_test_clusters.csv
     hidden_eval_pair_labels.csv
   scripts/
-    build-fixture-from-pricerunner.py
+    build-fixture-from-billiger.py
 ```
 
 Both cases use `harness = { id = "external-agent", timeout_s = 3600 }` because

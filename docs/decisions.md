@@ -759,3 +759,18 @@ an enormous scrape or reports saturated, non-discriminating system numbers. The
 baseline lives at `benchpacks/product-offer-matching/scripts/baseline-clusterer.py`
 and the finding is recorded in `dataset-sourcing-analysis.md`; it belongs in the
 methodology `benchmark-constraints.md` resourcing/constraints notes.
+
+## D-037: Billiger Replaces PriceRunner As The Product-Offer-Matching Pack
+
+The runnable `product-offer-matching` pack uses the billiger.de-derived fixture
+(`fixtures/billiger-matcher-repo`, cases `cluster-billiger-{python,rust}`) instead
+of the title-only PriceRunner fixture. The PriceRunner lane is removed from the
+live pack but preserved in git history and under `results/`. The verifier
+(`verify/score_clusters.py`) is reused unchanged; only the data, hidden labels,
+cases, prompts, and docs differ.
+
+Reason: PriceRunner is text-only (no price or images — D-034), while the benchmark
+should test multi-signal product matching. Billiger adds price and image signals
+on a harder, denser fixture (decision D-036), so it supersedes PriceRunner as the
+primary lane. Prompts are lightly guided so the benchmark measures programming
+ability, not entity-resolution recall.
