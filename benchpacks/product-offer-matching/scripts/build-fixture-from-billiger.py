@@ -184,3 +184,79 @@ def sample_eval_pairs(
         pair_rows.append({"pair_id": pid, "offer_id_left": a["offer_id"], "offer_id_right": b["offer_id"]})
         label_rows.append({"pair_id": pid, "label": str(lab)})
     return pair_rows, label_rows
+
+
+TRAIN_FIELDS = ["offer_id", "title", "shop_name", "price_eur", "brand",
+                "category_label", "image_url", "cluster_id", "cluster_label"]
+TEST_FIELDS = ["offer_id", "title", "shop_name", "price_eur", "brand",
+               "category_label", "image_url"]
+
+
+def write_fixture_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def build(in_path: Path, out_dir: Path, train_fraction: float, n_pos: int,
+          n_hard_neg: int, n_easy_neg: int, seed: int = SEED) -> dict:
+    rng = random.Random(seed)
+    raw = read_offers(in_path)
+    kept, report = clean_offers(raw)
+
+    train_clusters, test_clusters = choose_split(kept, train_fraction, rng)
+    train_src = [r for r in kept if r["cluster_id"] in train_clusters]
+    test_src = [r for r in kept if r["cluster_id"] in test_clusters]
+
+    # Train and test share one global id namespace so their offer/cluster ids never
+    # collide (test ids start above train's), keeping the splits unambiguously disjoint.
+    train = anonymize(train_src, rng)
+    train_cluster_count = len({r["cluster_id"] for r in train})
+    test = anonymize(test_src, rng, offer_start=len(train), cluster_start=train_cluster_count)
+
+    pair_rows, label_rows = sample_eval_pairs(test, n_pos, n_hard_neg, n_easy_neg, rng)
+
+    write_fixture_csv(out_dir / "train_offers.csv", train, TRAIN_FIELDS)
+    write_fixture_csv(out_dir / "test_offers.csv", test, TEST_FIELDS)
+    write_fixture_csv(out_dir / "eval_pairs.csv", pair_rows,
+                      ["pair_id", "offer_id_left", "offer_id_right"])
+    write_fixture_csv(out_dir / "verify" / "hidden_test_clusters.csv",
+                      [{"offer_id": r["offer_id"], "cluster_id": r["cluster_id"]} for r in test],
+                      ["offer_id", "cluster_id"])
+    write_fixture_csv(out_dir / "verify" / "hidden_eval_pair_labels.csv", label_rows,
+                      ["pair_id", "label"])
+
+    report.update({
+        "train_offers": len(train), "test_offers": len(test),
+        "train_clusters": len(train_clusters), "test_clusters": len(test_clusters),
+        "eval_pairs": len(pair_rows),
+        "eval_pos": sum(1 for r in label_rows if r["label"] == "1"),
+        "eval_neg": sum(1 for r in label_rows if r["label"] == "0"),
+        "seed": seed, "train_fraction": train_fraction,
+    })
+    (out_dir / "build-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return report
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in", dest="in_path", type=Path,
+                    default=Path("benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv"))
+    ap.add_argument("--out-dir", type=Path,
+                    default=Path("benchpacks/product-offer-matching/fixtures/billiger"))
+    ap.add_argument("--train-fraction", type=float, default=0.30)
+    ap.add_argument("--pos", type=int, default=5000)
+    ap.add_argument("--hard-neg", type=int, default=9000)
+    ap.add_argument("--easy-neg", type=int, default=6000)
+    ap.add_argument("--seed", type=int, default=SEED)
+    args = ap.parse_args()
+    report = build(args.in_path, args.out_dir, args.train_fraction, args.pos,
+                   args.hard_neg, args.easy_neg, args.seed)
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

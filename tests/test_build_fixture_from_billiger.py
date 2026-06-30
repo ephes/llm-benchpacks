@@ -164,3 +164,56 @@ def test_sample_eval_pairs_composition_and_labels():
             neg += 1
             assert a["cluster_id"] != b["cluster_id"]      # negative => different cluster
     assert pos == 6 and neg == 10
+
+
+def _synthetic_raw(n_clusters=30, per=5):
+    rows = []
+    cats = [("Apple", "Handys"), ("Bosch", "Kaffee"), ("MSI", "Grafikkarten")]
+    for c in range(n_clusters):
+        brand, cat = cats[c % len(cats)]
+        for k in range(per):
+            rows.append(_offer(f"b{c}_{k}", f"{brand} model{c} item {k}", f"src{c}",
+                               f"model{c} L", price=f"{100 + c}.00", brand=brand, cat=cat))
+    return rows
+
+
+def test_build_writes_all_outputs_with_anti_leakage(tmp_path):
+    mod = load_builder()
+    raw = tmp_path / "raw.csv"
+    fields = ["offer_id", "title", "shop_name", "price_eur", "brand", "category_label",
+              "image_url", "cluster_id", "cluster_label", "source_query"]
+    write_csv(raw, _synthetic_raw(), fields)
+    out = tmp_path / "fixture"
+
+    mod.build(raw, out, train_fraction=0.30, n_pos=20, n_hard_neg=20, n_easy_neg=10, seed=1)
+
+    train = mod.read_offers(out / "train_offers.csv")
+    test = mod.read_offers(out / "test_offers.csv")
+    hidden = mod.read_offers(out / "verify" / "hidden_test_clusters.csv")
+    pair_labels = mod.read_offers(out / "verify" / "hidden_eval_pair_labels.csv")
+    report = json.loads((out / "build-report.json").read_text())
+
+    # anti-leakage: test offers carry no gold columns
+    assert "cluster_id" not in test[0] and "cluster_label" not in test[0]
+    assert set(train[0]) == {"offer_id", "title", "shop_name", "price_eur", "brand",
+                             "category_label", "image_url", "cluster_id", "cluster_label"}
+    # hidden labels cover exactly the test offers
+    assert {r["offer_id"] for r in hidden} == {r["offer_id"] for r in test}
+    # train/test products disjoint (no shared new cluster id)
+    assert {r["cluster_id"] for r in train}.isdisjoint({r["cluster_id"] for r in hidden})
+    # pair files line up
+    pairs = mod.read_offers(out / "eval_pairs.csv")
+    assert {p["pair_id"] for p in pairs} == {p["pair_id"] for p in pair_labels}
+    assert report["kept_offers"] <= report["input_offers"]
+
+
+def test_build_is_deterministic(tmp_path):
+    mod = load_builder()
+    raw = tmp_path / "raw.csv"
+    fields = ["offer_id", "title", "shop_name", "price_eur", "brand", "category_label",
+              "image_url", "cluster_id", "cluster_label", "source_query"]
+    write_csv(raw, _synthetic_raw(), fields)
+    mod.build(raw, tmp_path / "a", 0.30, 20, 20, 10, seed=1)
+    mod.build(raw, tmp_path / "b", 0.30, 20, 20, 10, seed=1)
+    assert (tmp_path / "a" / "train_offers.csv").read_text() == (tmp_path / "b" / "train_offers.csv").read_text()
+    assert (tmp_path / "a" / "eval_pairs.csv").read_text() == (tmp_path / "b" / "eval_pairs.csv").read_text()
