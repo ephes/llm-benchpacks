@@ -136,3 +136,31 @@ def test_anonymize_offsets_shift_id_namespace():
     out = mod.anonymize(rows, random.Random(2), offer_start=100, cluster_start=5)
     assert {int(r["offer_id"][1:]) for r in out} == {101, 102}
     assert all(int(r["cluster_id"][1:]) > 5 for r in out)
+
+
+def test_sample_eval_pairs_composition_and_labels():
+    mod = load_builder()
+    # 4 clusters of 4 offers across 2 (brand,category) blocks and 2 categories
+    rows = []
+    specs = [("c1", "Apple", "Handys"), ("c2", "Apple", "Handys"),
+             ("c3", "Bosch", "Kaffee"), ("c4", "Bosch", "Kaffee")]
+    for cid, brand, cat in specs:
+        for k in range(4):
+            rows.append(_offer(f"o_{cid}_{k}", f"{brand} {cid} item", cid, f"{cid} L",
+                               brand=brand, cat=cat))
+    pairs, labels = mod.sample_eval_pairs(rows, n_pos=6, n_hard_neg=6, n_easy_neg=4,
+                                          rng=random.Random(3))
+    label_by_id = {row_l["pair_id"]: row_l["label"] for row_l in labels}
+    assert len(pairs) == len(labels) == 16
+    idx = {r["offer_id"]: r for r in rows}
+    pos = neg = 0
+    for p in pairs:
+        a, b = idx[p["offer_id_left"]], idx[p["offer_id_right"]]
+        lab = label_by_id[p["pair_id"]]
+        if lab == "1":
+            pos += 1
+            assert a["cluster_id"] == b["cluster_id"]      # positive => same cluster
+        else:
+            neg += 1
+            assert a["cluster_id"] != b["cluster_id"]      # negative => different cluster
+    assert pos == 6 and neg == 10

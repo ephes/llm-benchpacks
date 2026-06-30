@@ -123,3 +123,64 @@ def anonymize(rows: list[dict], rng: random.Random,
             cluster_map[src] = f"c{cluster_start + len(cluster_map) + 1:05d}"
         out.append({**r, "offer_id": f"o{offer_start + i:05d}", "cluster_id": cluster_map[src]})
     return out
+
+
+def sample_eval_pairs(
+    rows: list[dict], n_pos: int, n_hard_neg: int, n_easy_neg: int, rng: random.Random
+) -> tuple[list[dict], list[dict]]:
+    """Sample eval pairs from test offers: positives within a cluster, hard
+    negatives from the same (brand, category) different cluster, easy negatives
+    across categories. Returns (pair_rows, label_rows) with hidden labels."""
+    by_cluster: dict[str, list[dict]] = defaultdict(list)
+    by_bc: dict[tuple, list[dict]] = defaultdict(list)
+    by_cat: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_cluster[r["cluster_id"]].append(r)
+        by_bc[(r["brand"], r["category_label"])].append(r)
+        by_cat[r["category_label"]].append(r)
+
+    pos_pool: list[tuple[dict, dict]] = []
+    for members in by_cluster.values():
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                pos_pool.append((members[i], members[j]))
+    rng.shuffle(pos_pool)
+    positives = pos_pool[:n_pos]
+
+    seen: set[tuple[str, str]] = set()
+
+    def _key(a: dict, b: dict) -> tuple[str, str]:
+        return tuple(sorted([a["offer_id"], b["offer_id"]]))
+
+    hard: list[tuple[dict, dict]] = []
+    bc_keys = [k for k, v in by_bc.items() if len({r["cluster_id"] for r in v}) > 1]
+    attempts = 0
+    while len(hard) < n_hard_neg and bc_keys and attempts < n_hard_neg * 200:
+        attempts += 1
+        a, b = rng.sample(by_bc[rng.choice(bc_keys)], 2)
+        if a["cluster_id"] == b["cluster_id"] or _key(a, b) in seen:
+            continue
+        seen.add(_key(a, b))
+        hard.append((a, b))
+
+    easy: list[tuple[dict, dict]] = []
+    cat_keys = list(by_cat)
+    attempts = 0
+    while len(easy) < n_easy_neg and len(cat_keys) > 1 and attempts < n_easy_neg * 200:
+        attempts += 1
+        c1, c2 = rng.sample(cat_keys, 2)
+        a, b = rng.choice(by_cat[c1]), rng.choice(by_cat[c2])
+        if _key(a, b) in seen:
+            continue
+        seen.add(_key(a, b))
+        easy.append((a, b))
+
+    labeled = [(p, 1) for p in positives] + [(p, 0) for p in hard + easy]
+    rng.shuffle(labeled)
+    pair_rows: list[dict] = []
+    label_rows: list[dict] = []
+    for i, ((a, b), lab) in enumerate(labeled, 1):
+        pid = f"ep{i:06d}"
+        pair_rows.append({"pair_id": pid, "offer_id_left": a["offer_id"], "offer_id_right": b["offer_id"]})
+        label_rows.append({"pair_id": pid, "label": str(lab)})
+    return pair_rows, label_rows
