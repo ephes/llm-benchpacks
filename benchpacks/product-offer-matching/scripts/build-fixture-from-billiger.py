@@ -215,8 +215,8 @@ def write_fixture_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> No
         writer.writerows(rows)
 
 
-def build(in_path: Path, out_dir: Path, train_fraction: float, n_pos: int,
-          n_hard_neg: int, n_easy_neg: int, seed: int = SEED) -> dict:
+def build(in_path: Path, data_dir: Path, verify_dir: Path, train_fraction: float,
+          n_pos: int, n_hard_neg: int, n_easy_neg: int, seed: int = SEED) -> dict:
     rng = random.Random(seed)
     raw = read_offers(in_path)
     kept, report = clean_offers(raw)
@@ -233,14 +233,14 @@ def build(in_path: Path, out_dir: Path, train_fraction: float, n_pos: int,
 
     pair_rows, label_rows = sample_eval_pairs(test, n_pos, n_hard_neg, n_easy_neg, rng)
 
-    write_fixture_csv(out_dir / "train_offers.csv", train, TRAIN_FIELDS)
-    write_fixture_csv(out_dir / "test_offers.csv", test, TEST_FIELDS)
-    write_fixture_csv(out_dir / "eval_pairs.csv", pair_rows,
+    write_fixture_csv(data_dir / "train_offers.csv", train, TRAIN_FIELDS)
+    write_fixture_csv(data_dir / "test_offers.csv", test, TEST_FIELDS)
+    write_fixture_csv(data_dir / "eval_pairs.csv", pair_rows,
                       ["pair_id", "offer_id_left", "offer_id_right"])
-    write_fixture_csv(out_dir / "verify" / "hidden_test_clusters.csv",
+    write_fixture_csv(verify_dir / "hidden_test_clusters.csv",
                       [{"offer_id": r["offer_id"], "cluster_id": r["cluster_id"]} for r in test],
                       ["offer_id", "cluster_id"])
-    write_fixture_csv(out_dir / "verify" / "hidden_eval_pair_labels.csv", label_rows,
+    write_fixture_csv(verify_dir / "hidden_eval_pair_labels.csv", label_rows,
                       ["pair_id", "label"])
 
     report.update({
@@ -251,7 +251,9 @@ def build(in_path: Path, out_dir: Path, train_fraction: float, n_pos: int,
         "eval_neg": sum(1 for r in label_rows if r["label"] == "0"),
         "seed": seed, "train_fraction": train_fraction,
     })
-    (out_dir / "build-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    data_dir.parent.mkdir(parents=True, exist_ok=True)
+    (data_dir.parent / "build-report.json").write_text(json.dumps(report, indent=2) + "\n",
+                                                       encoding="utf-8")
     return report
 
 
@@ -259,16 +261,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", type=Path,
                     default=Path("benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv"))
-    ap.add_argument("--out-dir", type=Path,
-                    default=Path("benchpacks/product-offer-matching/fixtures/billiger"))
+    ap.add_argument("--data-dir", type=Path,
+                    default=Path("benchpacks/product-offer-matching/fixtures/billiger-matcher-repo/data"))
+    ap.add_argument("--verify-dir", type=Path,
+                    default=Path("benchpacks/product-offer-matching/verify"))
     ap.add_argument("--train-fraction", type=float, default=0.30)
     ap.add_argument("--pos", type=int, default=5000)
     ap.add_argument("--hard-neg", type=int, default=9000)
     ap.add_argument("--easy-neg", type=int, default=6000)
     ap.add_argument("--seed", type=int, default=SEED)
     args = ap.parse_args()
-    report = build(args.in_path, args.out_dir, args.train_fraction, args.pos,
-                   args.hard_neg, args.easy_neg, args.seed)
+    report = build(args.in_path, args.data_dir, args.verify_dir, args.train_fraction,
+                   args.pos, args.hard_neg, args.easy_neg, args.seed)
     print(json.dumps(report, indent=2))
     return 0
 
