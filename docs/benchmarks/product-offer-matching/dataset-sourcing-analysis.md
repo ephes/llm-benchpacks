@@ -258,15 +258,41 @@ image, GTIN, shipping, condition, and per-offer shop on top of varied titles and
 category. The two fields that cannot be cleanly recovered are the merchant's
 separate description and the merchant's raw (pre-classification) category.
 
+## Pilot result (2026-06-30)
+
+A minimal one-category pilot scraper
+(`benchpacks/product-offer-matching/scripts/scrape-billiger-pilot.py`) ran against
+the smartphone category (10 baseproducts × 3 variants, 41 polite requests). Sample
+output: `benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv`.
+
+Results:
+
+- **300 offers across 30 clusters, 10 offers/cluster, 100% price and image
+  coverage.** The initial HTML carries ~10 offers per variant, so the lazy-load
+  segment endpoint (open question 3) is **not needed** for a useful fixture.
+- Each row has: raw merchant title, shop, price, brand, category label, image URL,
+  and the billiger variant `product_id` as the cluster key.
+- **Title noise is real and useful.** For the iPhone 17 256 GB Nebelblau cluster,
+  titles range from a terse `iPhone 17` (Moblify) to
+  `Apple iPhone 17 256GB Blau Blue Nebelblau NEU nur E-SIM, kein Sim-Kartenschacht`
+  (ebay) to `Apple iPhone 17 (256 GB, Mist Blue, 6.30", Dual SIM, 5G)` (Galaxus,
+  using "Mist Blue" where billiger says "Nebelblau").
+- **Concrete evidence for the multimodal motivation.** Some merchants (e.g.
+  Moblify) list a bare `iPhone 17` identically across the blue/white/lavender
+  clusters; title-only matching cannot disambiguate these, but price and image can.
+
+This confirms the scrape route end-to-end and validates that real billiger.de data
+makes a harder, signal-richer matching task than the title-only PriceRunner fixture.
+
 ## Open questions (resolve before building)
 
 1. ~~**Per-merchant title variance**~~ — *resolved by the probe: present and
    genuinely noisy on billiger.de.*
 2. ~~**JSON-LD / markup completeness**~~ — *resolved: price, image, GTIN, brand,
    shop, and category are all recoverable from billiger.de (see table above).*
-3. **Full offer-list extraction** — locate the lazy-load segment endpoint and
-   confirm every merchant offer (with per-offer price + raw title) is retrievable,
-   or decide that the initial-HTML 4–8 offers per cluster suffice.
+3. ~~**Full offer-list extraction**~~ — *resolved by the pilot: initial HTML
+   carries ~10 offers per cluster, enough for a fixture; the lazy-load segment
+   endpoint is only needed if much deeper offer coverage is later required.*
 4. **WDC price/image coverage** — what fraction of WDC product offers actually
    carry a usable price and image? (Decides whether option 2 remains a fallback.)
 5. **Reproducibility contract** — confirm the fixture (not just scripts) is
