@@ -166,7 +166,7 @@ Each option is judged against:
 | Price signal | Yes, per offer | Sparse / incidental | Yes |
 | Image signal | Yes, per product | Sparse / incidental | No |
 | Per-merchant title variance | Confirmed (billiger) | Yes | Limited (2 sources) |
-| Gold cluster labels | Pre-solved per page (GTIN13) | From identifiers, variable | Yes |
+| Gold cluster labels | Pre-solved per page (billiger product_id) | From identifiers, variable | Yes |
 | Popularity/category control | Yes (decisive) | No | No |
 | Extraction effort to first sample | Low–moderate | Moderate–high | Very low |
 | Anti-bot / access friction | High (idealo/geizhals); low (billiger) | Low | None |
@@ -203,7 +203,8 @@ browser would be required. `billiger.de` serves full HTML to a plain request
 
 - `/baseproducts/<id>` is the product model (schema.org `ProductGroup`) holding
   variant `Product`s; each variant carries a normalised name, brand, a CDN image
-  URL, a **GTIN13**, and an `AggregateOffer` with low price and `offerCount`.
+  URL, a stable billiger **product_id**, a GTIN13, and an `AggregateOffer` with
+  low price and `offerCount`.
 - `/products/<id>` and `/pricelist/<id>` expose the individual merchant offers.
 - A base64 `data-econda-clickout-params` payload per offer decodes to structured
   fields: product id, normalised name, category id + hierarchical category path,
@@ -227,10 +228,10 @@ canonical string, so the clustering task is not trivialised.
 | Shop name + id | Yes | `/shops/<id>`, clickout payload |
 | Condition (new/used) | Yes | offer-list attribute |
 | Brand | Yes | clickout payload + JSON-LD |
-| GTIN/EAN | Yes (variant level) | JSON-LD `gtin13` — clean cluster key |
+| GTIN/EAN | Yes (variant level) | JSON-LD `gtin13` — noisy auxiliary attribute, not the cluster key |
 | Image | Yes (variant level) | JSON-LD CDN URL |
 | billiger category | Yes | clickout payload: hierarchical path + ids |
-| Cluster label | Yes | baseproduct/variant id + GTIN |
+| Cluster label | Yes | billiger `product_id` (variant) — the reliable key |
 | Offer description (separate field) | Partial | no distinct field; titles are description-rich |
 | Merchant raw category (pre-classification) | No | consumed internally, not re-exposed |
 | Merchant deeplink (real shop URL) | No | behind a tokenised clickout redirect |
@@ -241,6 +242,10 @@ canonical string, so the clustering task is not trivialised.
   classifier**, not a raw merchant signal. It is usable as a clean `category_label`
   (as PriceRunner's is), but it must not be treated as ground truth; using it as a
   feature means feeding models another model's predictions.
+- **GTIN is not a reliable cluster key.** Merchant-feed GTIN/EAN values are often
+  wrong, so they should be treated as a noisy auxiliary attribute, not the gold
+  label. billiger's own variant `product_id` — the output of billiger's matching
+  pipeline — is the reliable cluster key and is what the fixture should use.
 - There is **no distinct offer-description field**; merchant titles carry
   description-like content but a separate description is not publicly rendered.
 - The full offer list is **lazy-loaded** (≈4–8 offers in the initial HTML versus
@@ -280,9 +285,11 @@ separate description and the merchant's raw (pre-classification) category.
 2. **Commit the derived, anonymised fixture plus a snapshot/manifest**, never raw
    HTML or images — mirroring the existing PriceRunner pack so reproducibility is
    preserved despite a live source.
-3. **Use GTIN13 as the cluster key** where present — it is a cleaner gold label
-   than PriceRunner had — and keep billiger's category only as a `category_label`,
-   not as ground truth (it is a classifier output).
+3. **Use billiger's variant `product_id` as the cluster key** — it is the output
+   of billiger's matching pipeline and far more reliable than merchant-feed GTINs,
+   which are often wrong (keep GTIN only as a noisy auxiliary attribute). Keep
+   billiger's category only as a `category_label`, not as ground truth (it is a
+   classifier output).
 4. **Time-box a parallel WDC coverage check** (open question 4) as the
    reproducible, license-clean fallback if the scrape route is later abandoned.
 5. **Keep Abt-Buy / Amazon-Google in reserve** as a low-effort price-aware *text*
