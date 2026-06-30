@@ -69,7 +69,8 @@ competitions. (Provenance: Shopee specifics are from two corroborating recap
 write-ups — [GO Inc.](https://techblog.goinc.jp/entry/2021/05/27/090000),
 [Shiwagi](https://masatakashiwagi.com/blog/kaggle-shopee-solution/) — because the
 Kaggle discussion pages and ACM full text were not directly fetchable; treat as
-secondary but cross-checked.)
+secondary but cross-checked. The SIGMOD2020 winner row is verified against the
+primary paper.)
 
 | Technique | What it is | Reuse for | Status |
 |---|---|---|---|
@@ -77,7 +78,7 @@ secondary but cross-checked.)
 | Two-stage embed → re-rank | Shopee 1st–3rd: ArcFace/CurricularFace/Triplet embeddings → cosine-KNN candidates → 2nd-stage **LightGBM / GAT / CatBoost** over ~500 pair features (top-K cosine stats, PageRank/graph metrics, text edit-distance). | pair-scoring — the proven product image+text architecture. | listed |
 | Graph cluster cleanup | Shopee 2nd: drop non-reciprocal (non-mutual-KNN) edges, threshold-vote edges, recursively prune highest-**betweenness** edges to split over-merges; 3rd: agglomerative merge to a target cluster size. | clustering — turning a noisy KNN graph into clean clusters; controls over-merge. | listed |
 | Union-find + transitive closure | SIGMOD2020: labels are transitively closed, so clustering = connected components over predicted-match edges; **self-training** folds high-confidence pairs back in. | clustering — the baseline pair→cluster step; matches clustering.md. | listed |
-| Sorted-integer-set blocking | SIGMOD2020 winner: represent each record as a sorted set of hashed tokens for very fast set-overlap/Jaccard blocking + matching under a time budget. | blocking — cheap, scalable candidate generation. | listed |
+| Mock labels + sorted-integer-set matching | SIGMOD2020 **winner** ([paper](https://ceur-ws.org/Vol-2726/paper2.pdf)): build a catalog of ~2,800 "mock labels" (per-entity keyword sets, mainly brand+model tokens) offline, then represent each label and each offer title as a **sorted integer set** and assign an offer to a label by a set-**subset** test (dropping subset-labels to disambiguate `eos 7d` vs `eos 7d mark ii`). Set intersections are extremely fast — 0.61s for ~30k offers, the tiebreaker since all finalists hit F=0.99. | **catalog-linkage matching (warm-start regime)** + fast set-ops; the "mock labels" map onto our catalog-side canonical codes (signals.md, index.md regimes). | listed |
 | Unit-mismatch filtering | Shopee + SIGMOD: rule-based reject when quantity/unit tokens disagree (50ml vs 100ml). | signals — the negative-veto our pilot evidence also supports (`findings-pilot.md`). | listed |
 
 ## Clustering
