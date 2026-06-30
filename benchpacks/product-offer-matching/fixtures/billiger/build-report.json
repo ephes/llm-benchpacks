@@ -1,0 +1,19 @@
+{
+  "input_offers": 31330,
+  "kept_offers": 31017,
+  "dropped_model_conflict": 8,
+  "dropped_unit_conflict": 305,
+  "flagged_price_outlier": 2064,
+  "flagged_degenerate_title": 141,
+  "dropped_total": 313,
+  "detectable_noise_rate": 0.01,
+  "train_offers": 9307,
+  "test_offers": 21710,
+  "train_clusters": 1384,
+  "test_clusters": 3265,
+  "eval_pairs": 20000,
+  "eval_pos": 5000,
+  "eval_neg": 15000,
+  "seed": 20260630,
+  "train_fraction": 0.3
+}
