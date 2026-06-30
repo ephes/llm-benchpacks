@@ -76,6 +76,33 @@ rule system from rotting.
 - The verifier rejects malformed CSVs, missing/duplicate/unknown ids, non-finite
   scores, empty patches, process failures, and timeouts.
 
+## Task regimes and fixture splits
+
+The two regimes (index.md) need *different fixture splits*, and conflating them
+breaks the test:
+
+- **Cold-start (batch dedup) lane.** Train and test products are **disjoint by
+  design** — test products are unseen, which is what makes it a generalization
+  test (the current pack does this). A catalog-linkage shortcut would correctly
+  answer "new" for *every* test offer here, so this split is wrong for the
+  warm-start regime.
+- **Warm-start (catalog-linkage) lane.** Needs **overlap on purpose.** The
+  catalog is the known products with their member offers; the incoming offers
+  must mix (a) offers that genuinely belong to catalog products (linkable) with
+  (b) offers from genuinely new products (must be flagged new). The known/new
+  ratio is a difficulty knob and must be reported, since it sets the base rates
+  the new-entity metrics (evaluation.md) are read against. Output convention: each
+  offer is assigned an existing catalog id or a *fresh predicted new-product id*
+  (grouping novel offers it judges to be the same product), never a single shared
+  `"new"` sentinel — see evaluation.md.
+
+Anti-leakage still holds in the warm-start lane, with one clarification:
+precomputing from the **visible catalog** — per-product canonical codes,
+identifier dictionaries (signals.md, blocking.md), embeddings — is legitimate and
+encouraged, because the catalog is training-side data, not hidden labels. What
+stays prohibited is reading the verifier-held assignment labels (which product
+each test offer truly belongs to, or whether it is truly new).
+
 ## Stage decomposition
 
 The implementation should expose the pipeline stages (blocking → scoring →
@@ -132,6 +159,9 @@ Per-lane caps make impractical algorithms fail rather than win on score
 - The canonical hard-case fixture contents and size.
 - How strictly to enforce stage decomposition vs accept a fused matcher with
   reduced systems credit.
+- Whether the warm-start (catalog-linkage) lane is built now or kept as
+  documented methodology only — and, if built, the known/new ratio and catalog
+  size for its split.
 
 ## References
 

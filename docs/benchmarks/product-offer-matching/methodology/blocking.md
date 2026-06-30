@@ -68,6 +68,50 @@ Weight candidate edges by how many blocks two offers co-occur in (and how large
 those blocks are), then drop low-weight edges. Useful as a second stage on top
 of schema-agnostic token blocking.
 
+### Identifier-dictionary matching (catalog-linkage regime)
+
+This blocker exists only in the **warm-start regime** (index.md): when an
+established catalog of products is available, candidate generation becomes a
+dictionary lookup instead of an all-pairs reduction.
+
+Build, offline, a dictionary `code → {product_id}` of canonical model codes
+mined from each catalog product's member offers (signals.md, *catalog-side
+canonical codes*). Then, for each incoming offer title, find which dictionary
+codes occur in it. Because the codes are short patterns and a title is a short
+text, this is the classic **multi-pattern substring matching** problem, solved by
+an **Aho-Corasick automaton**: build one automaton over all codes
+(`O(Σ code lengths)`), then scan each title once in `O(title length + matches)`.
+A 10k-code dictionary is trivial to build and scans at hundreds of MB/s.
+
+Aho-Corasick matches *exactly*, so the spacing/dash robustness does not come for
+free — it comes from canonicalizing first. Apply the same normalization to
+**both** the dictionary codes and the incoming title (signals.md: strip
+separators, lowercase, canonicalize units) before building and scanning. On that
+shared canonical stream, AC's word-boundary-free matching then lets a code hit
+even though the raw titles wrote it differently (`S928B/DS` vs `S928B` both
+reduce to `s928b`). If codes and titles are *not* reduced to the same form, exact
+matching will miss the intended variants — the robustness is in the
+canonicalization, not in AC.
+
+The hit set *is* the candidate set: an offer whose title contains product X's
+code yields candidates `{X}` (often size 0 or 1), so reduction ratio is extreme
+and downstream scoring is nearly free. Caveats that keep it from being brittle:
+
+- **Substring false positives** (`A31` inside `A310`; `S928B` inside
+  `S928B/DS`): require a minimum code length/specificity and prefer
+  longest-match; optionally check word-ish boundaries.
+- **Ambiguous codes** that map to many products are non-discriminating; keep the
+  value a *set* and down-weight high-fan-out codes.
+- **No hit** (terse titles, genuinely new products): fall through to a
+  recall-oriented fallback blocker (ANN / q-gram) and the new-entity path
+  (evaluation.md). Identifier-dictionary matching is a high-precision *first*
+  pass, not the whole blocker.
+
+A generalized **suffix automaton / suffix tree built over the titles** is the
+dual structure (index the text, query arbitrary patterns) and supports general
+substring/q-gram blocking; for the specific "which of my N codes is in this
+title" question, Aho-Corasick over the codes is simpler and faster.
+
 ## How we measure it
 
 Blocking is measured on the candidate set *before* scoring, against gold pairs.
@@ -131,5 +175,7 @@ Diagnostics worth recording:
   Data*, ACM CSUR 2020 — `../literature.md` Tier 1.
 - Hernandez & Stolfo, *The Merge/Purge Problem*, SIGMOD 1995 — `../literature.md`
   Tier 2.
+- Aho & Corasick, *Efficient String Matching: An Aid to Bibliographic Search*,
+  CACM 1975 — the multi-pattern automaton behind identifier-dictionary matching.
 - Shopee top solutions (ANN over metric-learned embeddings) — see
   `resources.md`.

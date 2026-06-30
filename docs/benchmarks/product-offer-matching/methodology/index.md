@@ -79,6 +79,38 @@ Cross-cutting concerns wrap every stage:
 - **[resources.md](resources.md)** — reusable code, libraries, datasets, and the
   landing zone for the deeper auto-research pass.
 
+## Two matching regimes
+
+The same five stages run in two very different settings, and the methodology
+covers both:
+
+- **Batch deduplication (cold start).** A flat set of offers with no prior
+  products; partition it into clusters. Symmetric pairwise scoring plus graph
+  clustering (clustering.md). This is the default the pipeline above describes.
+- **Catalog linkage (warm start / incremental).** An established set of products,
+  each with member offers, already exists; new offers arrive and must be
+  *assigned* to a known product **or flagged as a new product**. Asymmetric: a
+  query offer against an indexed catalog. Known elsewhere as record linkage /
+  entity linking against a reference set, or online/incremental ER when offers
+  stream in.
+
+They reuse the same stages but weight them differently:
+
+| Aspect | Batch dedup | Catalog linkage |
+|---|---|---|
+| Decision | partition all offers | assign each offer → known product or "new" |
+| Cost | ~all-pairs, needs blocking | index catalog once; per-offer lookup is cheap |
+| Precompute | none | per-product canonical codes, embeddings, **identifier dictionaries** (blocking.md, signals.md) |
+| Clustering | full graph clustering | usually none (assign, don't re-partition) |
+| Evaluation | B-cubed / pairwise over a partition | assignment accuracy + new-entity detection (evaluation.md) |
+| Order | order-free | order-sensitive *if* new offers can spawn products mid-batch |
+
+The two compose: a batch dedup run **bootstraps** the catalog, after which cheap
+incremental linkage handles the ongoing offer stream. Stage docs flag where a
+method is regime-specific (e.g. identifier-dictionary blocking is a warm-start
+technique). The fixture-split consequences of the warm-start regime are in
+benchmark-constraints.md.
+
 ## Document skeleton
 
 Every stage/concern document follows the same skeleton so later auto-research

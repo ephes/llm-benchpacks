@@ -143,6 +143,32 @@ LCS is the opposite — a noisy signal the matcher must work to extract and
 reconcile — so it stays. The benchmark strips the clean field and keeps the
 messy string.
 
+### Catalog-side canonical codes (warm-start regime)
+
+In the catalog-linkage regime (index.md) the codes can be mined offline from the
+*known* products and turned into a reusable index — the precompute the cold-start
+regime cannot do:
+
+1. **Per-offer extraction** (step 1 above) over every member offer of a known
+   product.
+2. **Aggregate to a per-product canonical code.** Take the consensus across the
+   product's member offers: a code that appears in several members is
+   high-confidence; a code in only one terse outlier title is not. This
+   cross-member vote *denoises* the per-single-title extraction — exactly what a
+   flat regime lacks. LCS across pairs of member titles is a good discovery
+   method for the shared canonical string when no single title is clean.
+3. **Build the dictionary** `code → {product_id}` over all products (keep a *set*
+   value: a platform code may map to several products, and such high-fan-out
+   codes are down-weighted).
+
+A new offer is then linked by finding which dictionary codes occur in its title —
+a multi-pattern scan (Aho-Corasick), which is both a high-precision blocker and a
+strong link signal (blocking.md, *identifier-dictionary matching*). This is not
+the GTIN/EAN shortcut D-035 strips: the dictionary is derived from the
+catalog/training clusters, not from hidden test labels, and the codes are the
+noisy in-title strings the matcher had to extract — a legitimate production
+technique.
+
 ## Price
 
 For price-bearing sources, price is a medium-strength signal best used as a

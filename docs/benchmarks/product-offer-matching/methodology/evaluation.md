@@ -120,6 +120,47 @@ Defined in blocking.md (pair completeness, reduction ratio, pairs quality).
 Reported in the systems table because blocking is a recall ceiling and a cost
 lever at once.
 
+## Catalog-linkage metrics (warm-start regime)
+
+The cluster metrics above score a *partition* and are the right surface for batch
+deduplication. The warm-start regime (index.md) instead assigns each incoming
+offer to a known product **or** declares it new, so it is scored like an
+open-world classification/retrieval task.
+
+**Output convention (required).** Each offer is assigned an id that is either an
+existing catalog product id or a **fresh predicted new-product id**. A system
+that declares an offer new must still *group* the novel offers it believes are
+the same product under a shared predicted id — a single `"new"` sentinel for all
+novel offers is invalid, because it collapses unrelated new products into one
+cluster, while making each novel offer its own singleton splits repeated offers
+of the same new product. Requiring predicted new-product ids makes both the
+linkage metrics and the cluster metrics below well-defined.
+
+The metrics:
+
+- **Assignment accuracy.** Fraction of offers given the correct decision —
+  linked to their true catalog product, or correctly flagged new.
+- **Link precision@1 / top-1 accuracy** over offers whose true product *is* in
+  the catalog: did the top candidate point to the right product?
+- **New-entity detection (open-world).** Precision/recall of the known-vs-new
+  decision. The actionable confusion breakdown:
+  - *known→correct*: linked to the right catalog product;
+  - *known→wrong*: linked to the wrong catalog product (false link);
+  - *known→missed*: should have linked, but flagged new (misses a known product);
+  - *new→correct*: novel product correctly flagged new;
+  - *new→mislinked*: novel product wrongly linked to a known product.
+- **Macro vs micro** over catalog products, as in the cluster metrics, so a few
+  popular products do not dominate.
+
+After assignment, the offers form clusters — every offer sharing an assigned id,
+whether an existing catalog id or a predicted new-product id (per the output
+convention above) — so **B-cubed and pairwise can be computed on the result
+too**, useful for comparing a warm-start system against a cold-start one on the
+same data. The predicted-new-id convention is what keeps this well-defined:
+distinct novel products stay separate and repeated offers of one novel product
+stay together. Report both: the linkage metrics describe the decision the system
+actually made; the cluster metrics make it comparable across regimes.
+
 ## Systems metrics
 
 From `../literature.md`: wall time (total and per stage when reported),
