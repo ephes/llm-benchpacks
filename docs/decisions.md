@@ -700,3 +700,26 @@ for any multimodal or price-aware lane.
 Reason: keep the limitation explicit so the title-only fixture is not mistaken
 for a faithful product-matching benchmark, and so future work scopes a richer
 dataset rather than extending text-only PriceRunner data.
+
+## D-035: Filter GTIN/EAN Out Of The Product-Matching Benchmark
+
+Structured catalog identifiers — GTIN, EAN, and any reliable MPN *field* — are
+removed from the offer data the matcher sees before a product-matching benchmark
+runs. When a reliable identifier is present, matching collapses to a `GROUP BY
+identifier` lookup rather than an entity-resolution problem, so leaving it in
+lets a matcher shortcut the answer and measures nothing about resolution.
+
+The rule applies to structured fields only. In-title model tokens that an
+extractor (e.g. longest-common-substring over normalized titles) recovers from
+noisy merchant titles are kept — they are the matching challenge, not a shortcut.
+GTIN/EAN may still be used verifier-side during fixture building as a label-noise
+cross-check (flagging offers whose GTIN disagrees with the reliable cluster key),
+and are then stripped from the published offers. GTIN is never a gold label; the
+cluster key is the reliable product id, which merchant feeds frequently get
+wrong. Any identifier-only lookup ceiling, if wanted, lives in a separate and
+clearly labeled baseline lane, never in the matching lanes.
+
+Reason: a reliable identifier trivializes matching, so the benchmark must test
+resolution from noisier signals. Documented in the methodology knowledge base
+(`benchmarks/product-offer-matching/methodology/signals.md`,
+`benchmark-constraints.md`, `data-quality.md`).
