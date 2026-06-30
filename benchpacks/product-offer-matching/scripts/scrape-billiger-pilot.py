@@ -129,7 +129,13 @@ def _category_leaf(path: str) -> str:
 
 
 def scrape(
-    category_url: str, n_base: int, n_variant: int, max_requests: int, query: str = ""
+    category_url: str,
+    n_base: int,
+    n_variant: int,
+    max_requests: int,
+    query: str = "",
+    max_offers: int | None = None,
+    skip_base: int = 0,
 ) -> list[dict]:
     requests_made = 0
 
@@ -146,8 +152,8 @@ def scrape(
     cat_html = get(category_url)
     if not cat_html:
         sys.exit("category fetch failed")
-    bases = baseproduct_links(cat_html, n_base)
-    print(f"    found {len(bases)} baseproducts")
+    bases = baseproduct_links(cat_html, skip_base + n_base)[skip_base:]
+    print(f"    using {len(bases)} baseproducts (skip {skip_base})")
 
     variant_paths: list[str] = []
     variant_seen: set[str] = set()
@@ -196,6 +202,9 @@ def scrape(
         print(f"[3] ({j}/{len(variant_paths)}) cluster {cluster_id}: {len(offers)} offers")
         if requests_made >= max_requests:
             break
+        if max_offers is not None and len(rows) >= max_offers:
+            print(f"    reached per-category offer budget ({max_offers})")
+            break
 
     print(f"\nrequests made: {requests_made}")
     return rows
@@ -229,19 +238,50 @@ def main() -> None:
         help="comma-separated billiger.de search terms, one category each",
     )
     ap.add_argument("--baseproducts", type=int, default=12)
+    ap.add_argument(
+        "--skip-baseproducts",
+        type=int,
+        default=0,
+        help="skip the first N baseproducts per category (for topping up beyond a prior run)",
+    )
     ap.add_argument("--variants-per-base", type=int, default=3)
     ap.add_argument("--max-requests", type=int, default=55, help="per search term")
+    ap.add_argument("--delay", type=float, default=1.5, help="seconds between requests")
+    ap.add_argument(
+        "--target-offers",
+        type=int,
+        default=0,
+        help="soft floor: stop after the variant/category that reaches at least this "
+        "many total offers (0 = no cap). May overshoot by one cluster's offers, since "
+        "whole clusters are kept intact rather than truncated mid-cluster.",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
+    global DELAY_S
+    DELAY_S = args.delay
+
     queries = [q.strip() for q in args.searchstrings.split(",") if q.strip()]
+    target = args.target_offers or None
     all_rows: list[dict] = []
     for query in queries:
         url = f"{BASE}/search?searchstring={urllib.parse.quote(query)}"
-        print(f"\n##### category: {query!r} #####")
+        print(f"\n##### category: {query!r} ({len(all_rows)} offers so far) #####")
+        remaining = (target - len(all_rows)) if target else None
         all_rows.extend(
-            scrape(url, args.baseproducts, args.variants_per_base, args.max_requests, query)
+            scrape(
+                url,
+                args.baseproducts,
+                args.variants_per_base,
+                args.max_requests,
+                query,
+                max_offers=remaining,
+                skip_base=args.skip_baseproducts,
+            )
         )
+        if target and len(all_rows) >= target:
+            print(f"\nreached global target of {target} offers")
+            break
     if not all_rows:
         sys.exit("no rows scraped")
 
