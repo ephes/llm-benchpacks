@@ -723,3 +723,39 @@ Reason: a reliable identifier trivializes matching, so the benchmark must test
 resolution from noisier signals. Documented in the methodology knowledge base
 (`benchmarks/product-offer-matching/methodology/signals.md`,
 `benchmark-constraints.md`, `data-quality.md`).
+
+## D-036: Tiered Fixture — Real Quality Set, Amplified Scale Set
+
+Quality/difficulty metrics (B-cubed, pairwise cluster F1, average precision) are
+measured on a real scraped offer set; system metrics (offers per second, peak
+RSS, blocking behaviour at scale) are measured on a much larger amplified set
+derived from it. The two lanes have different size requirements and must not be
+conflated.
+
+Evidence from the billiger.de pilot at 10,825 offers / 1,485 clusters: a
+deliberately simple title-only baseline (brand+category blocking, title-token
+Jaccard, union-find) tops out at B-cubed F1 ≈ 0.41 and pairwise F1 ≈ 0.12 —
+*failing* both pass thresholds (0.70 / 0.20). So the quality lane is already hard
+and discriminating at ~10k, with large headroom for price/image/embedding
+signals. But the system-metric terms *saturate* at this size: an isolated
+clusterer run uses peak RSS ≈ 50 MB so `min(1024/rss_mb, 1)` = 1.000, and
+~12–13k offers/s (above the 10,000 cap) so `min(offers_per_second/10000, 1)` =
+1.000. That makes 15% of
+the combined score
+(0.10 throughput + 0.05 memory) dead weight at 10k — it returns 1.000 for every
+implementation and discriminates nothing.
+
+Therefore: keep the real set for quality (optionally deepened toward ~30–50k by
+saturating dense product families, not by adding breadth), and measure system
+metrics on a deterministic, block-structure-preserving amplification of the real
+offers to 100k–1M rows. Do not brute-scrape to 1M — the supply of *popular*
+products is shallow and the long tail adds singletons and noise, not signal.
+Report the lanes separately and never average a saturated system term into a
+small-scale quality comparison.
+
+Reason: throughput and memory are scale-dependent and meaningless at 10k, while
+matching quality is already hard there; sizing both lanes the same either wastes
+an enormous scrape or reports saturated, non-discriminating system numbers. The
+baseline lives at `benchpacks/product-offer-matching/scripts/baseline-clusterer.py`
+and the finding is recorded in `dataset-sourcing-analysis.md`; it belongs in the
+methodology `benchmark-constraints.md` resourcing/constraints notes.

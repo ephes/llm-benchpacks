@@ -307,6 +307,34 @@ lists and are the ones to use.
 This confirms the scrape route end-to-end and validates that real billiger.de data
 makes a harder, signal-richer matching task than the title-only PriceRunner fixture.
 
+## Baseline and sizing (is 10k enough?)
+
+A deliberately simple baseline
+(`benchpacks/product-offer-matching/scripts/baseline-clusterer.py` — brand+category
+blocking, title-token Jaccard, union-find) was run on the 10,825-offer set to read
+both difficulty and the system-metric behaviour at this size:
+
+- **Difficulty is real.** The title-only baseline tops out at **B-cubed F1 ≈ 0.41**
+  and **pairwise F1 ≈ 0.12** (best of thresholds 0.3–0.7) — *failing* both pass
+  thresholds (0.70 / 0.20). Precision collapses when the many sibling products
+  (e.g. 83 TV size-variants, 35 RTX-5070 boards, 103 Samsung phones in one block)
+  get merged; recall collapses when terse titles (`iPhone 17`) miss verbose ones.
+  So matching is **not** unrealistically easy at 10k — there is large headroom for
+  price/image/embedding signals, which makes it a good discriminating lane.
+- **System metrics saturate.** One isolated clusterer run (CSV load + tokenize +
+  block + match, measured in a clean subprocess) uses peak RSS ≈ 50 MB so the
+  memory term `min(1024/rss_mb, 1)` = 1.000, and ~12–13k offers/s (above the
+  10,000 cap) so the
+  throughput term `min(offers_per_second/10000, 1)` = 1.000. Both return 1.000 for
+  even a naive Python baseline, so **15% of the combined score is dead weight at
+  10k** and measures nothing about a real system's memory or throughput.
+
+Conclusion: **10k is enough for the quality lane and insufficient for the
+system-metric lanes.** This motivates the tiered design (decision D-036): keep the
+real set for quality (optionally deepened to ~30–50k by saturating dense families),
+and measure offers/s, memory, and blocking-at-scale on a block-structure-preserving
+amplification to 100k–1M rows rather than brute-scraping the shallow popular tail.
+
 ## Open questions (resolve before building)
 
 1. ~~**Per-merchant title variance**~~ — *resolved by the probe: present and
