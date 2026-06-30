@@ -1,7 +1,7 @@
 [pack]
 id = "product-offer-matching"
 version = "0.1.0"
-description = "Direct-edit coding-agent benchmark for PriceRunner product-offer clustering in Python and Rust"
+description = "Direct-edit coding-agent benchmark for billiger.de product-offer clustering in Python and Rust"
 
 [defaults]
 temperature = 0
@@ -11,23 +11,23 @@ warmup = 0
 repetitions = 1
 
 [[fixtures]]
-id = "matcher-repo"
+id = "billiger-matcher-repo"
 kind = "repo"
-path = "fixtures/matcher-repo"
-description = "PriceRunner-derived product-offer clustering repo fixture"
+path = "fixtures/billiger-matcher-repo"
+description = "billiger.de-derived product-offer clustering repo fixture"
 
 [[cases]]
-id = "cluster-pricerunner-python"
+id = "cluster-billiger-python"
 kind = "repo-task"
-prompt_file = "prompts/cluster-pricerunner-python.md"
-fixture_refs = ["matcher-repo"]
+prompt_file = "prompts/cluster-billiger-python.md"
+fixture_refs = ["billiger-matcher-repo"]
 harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_clusters.py", timeout_s = 90 }
 
 [[cases]]
-id = "cluster-pricerunner-rust"
+id = "cluster-billiger-rust"
 kind = "repo-task"
-prompt_file = "prompts/cluster-pricerunner-rust.md"
-fixture_refs = ["matcher-repo"]
+prompt_file = "prompts/cluster-billiger-rust.md"
+fixture_refs = ["billiger-matcher-repo"]
 harness = { id = "external-agent", timeout_s = 3600 }
 scoring = { mode = "verify-script", script = "verify/score_clusters.py", timeout_s = 90 }

@@ -20,8 +20,8 @@ def test_product_offer_matching_pack_loads_with_external_agent_cases() -> None:
 
     assert pack.id == "product-offer-matching"
     assert [case.id for case in pack.cases] == [
-        "cluster-pricerunner-python",
-        "cluster-pricerunner-rust",
+        "cluster-billiger-python",
+        "cluster-billiger-rust",
     ]
     assert [case.harness.id for case in pack.cases if case.harness] == [
         "external-agent",
@@ -33,7 +33,7 @@ def test_product_offer_python_stub_verifier_writes_cluster_metrics(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
-    shutil.copytree(PACK_DIR / "fixtures" / "matcher-repo", workspace)
+    shutil.copytree(PACK_DIR / "fixtures" / "billiger-matcher-repo", workspace)
     patch = tmp_path / "patch.diff"
     patch.write_text("placeholder patch\n", encoding="utf-8")
     output = tmp_path / "verify.json"
@@ -45,13 +45,13 @@ def test_product_offer_python_stub_verifier_writes_cluster_metrics(
             "--workspace",
             str(workspace),
             "--case",
-            "cluster-pricerunner-python",
+            "cluster-billiger-python",
             "--pack-id",
             "product-offer-matching",
             "--pack-version",
             "0.1.0",
             "--source-fixture-id",
-            "matcher-repo",
+            "billiger-matcher-repo",
             "--patch",
             str(patch),
             "--output",
@@ -78,7 +78,7 @@ def test_product_offer_python_stub_verifier_writes_cluster_metrics(
         "pairwise_cluster_f1_min": 0.2,
     }
     assert payload["prediction_errors"] == []
-    assert payload["system_metrics"]["test_offers"] == 25308
+    assert payload["system_metrics"]["test_offers"] == 21825
     assert payload["system_metrics"]["eval_pairs"] == 20000
 
 
@@ -91,7 +91,7 @@ def test_product_offer_hidden_clusters_are_not_public_order_contiguous() -> None
         left == right for left, right in zip(cluster_ids, cluster_ids[1:])
     )
 
-    assert len(cluster_ids) == 25308
+    assert len(cluster_ids) == 21825
     assert adjacent_same / (len(cluster_ids) - 1) < 0.01
     assert len(set(cluster_ids[:100])) > 90
 
@@ -126,7 +126,7 @@ def test_pi_agent_rejects_disallowed_replacement_path(tmp_path: Path) -> None:
     assert (workspace / "clusterer.py").read_text(encoding="utf-8") == "print('old')\n"
 
 
-def test_pi_agent_previews_pricerunner_cluster_data_files(tmp_path: Path) -> None:
+def test_pi_agent_previews_billiger_cluster_data_files(tmp_path: Path) -> None:
     spec = importlib.util.spec_from_file_location("benchpack_pi_agent", PI_AGENT_PATH)
     assert spec is not None
     assert spec.loader is not None
@@ -137,14 +137,14 @@ def test_pi_agent_previews_pricerunner_cluster_data_files(tmp_path: Path) -> Non
     data = workspace / "data"
     data.mkdir(parents=True)
     (data / "train_offers.csv").write_text(
-        "offer_id,title,merchant_id,category_id,category_label,cluster_id,cluster_label\n"
-        "o00001,alpha,1,10,Phones,c00001,Alpha\n"
-        "o00002,beta,2,10,Phones,c00002,Beta\n",
+        "offer_id,title,shop_name,price_eur,brand,category_label,image_url,cluster_id,cluster_label\n"
+        "o00001,alpha,shopA,100.00,BrandA,Phones,http://img,c00001,Alpha\n"
+        "o00002,beta,shopB,110.00,BrandB,Phones,http://img,c00002,Beta\n",
         encoding="utf-8",
     )
     (data / "test_offers.csv").write_text(
-        "offer_id,title,merchant_id,category_id,category_label\n"
-        "o00003,gamma,3,10,Phones\n",
+        "offer_id,title,shop_name,price_eur,brand,category_label,image_url\n"
+        "o00003,gamma,shopC,120.00,BrandC,Phones,http://img\n",
         encoding="utf-8",
     )
     (data / "eval_pairs.csv").write_text(
