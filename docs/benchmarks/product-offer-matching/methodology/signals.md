@@ -78,6 +78,14 @@ whitespace; and canonicalize **measurement units** so `32 GB`, `32gb`,
 leverage because storage/size/generation tokens are exactly what distinguish
 variants of the same model.
 
+Keep normalization *light*, though. Practitioner experience
+(findings-domain-knowledge.md) found elaborate linguistic preprocessing —
+regex rule sets, lemmatization — did not help much; the matching came from
+**structural string matching (LCS)** and TF-IDF similarity. Normalize enough to
+make the LCS/identifier step robust (case, unicode, separators, units), then let
+structural and learned-text similarity do the work rather than building a large
+rule base.
+
 ## Identifier extraction (per-offer model codes + LCS alignment)
 
 The strongest text signal is usually a model number or part code buried in the
@@ -182,10 +190,18 @@ For price-bearing sources, price is a medium-strength signal best used as a
   generations) and is distorted by promotions, bundles, and used/refurbished
   condition. So price disambiguates *within* a candidate set; it rarely confirms
   a match alone.
+- **Price can decouple from product identity entirely.** Practitioner experience
+  (findings-domain-knowledge.md): a subsidized **contract phone** is listed at a
+  near-zero price, and a phone **accessory** (cover, battery) can sit at a similar
+  low price — so price not only fails to confirm a match, it actively *misleads*
+  exactly where the products are hard to tell apart. The lesson: weight price
+  **category-conditionally**, and never let it dominate where pricing is decoupled
+  (subsidies, bundles, accessories).
 
 > **Example.** Adjacent phone generations can have nearly identical street
 > prices, so a price-only check cannot separate them — but a conflicting model
-> identifier can.
+> identifier can. Worse, a contract phone and a phone case can share a low price,
+> so price alone may merge a phone with its accessory.
 
 ## Image
 

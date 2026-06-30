@@ -48,7 +48,12 @@ classifier (logistic regression, gradient-boosted trees, random forest) on
 labeled pairs. Logistic regression gives calibrated-ish probabilities and
 interpretable coefficients; gradient-boosted trees capture interactions (e.g. "high
 title similarity *and* identifier conflict → non-match"). This is the workhorse
-for tabular ER and a good dependency-enabled default.
+for tabular ER and a good dependency-enabled default. Interactions matter for
+**category-conditional** weighting: practitioner experience
+(findings-domain-knowledge.md) shows price is decisive for most goods but
+*misleading* for subsidized contract phones and accessories, so the price
+feature should be conditioned on category (a tree learns this; a single global
+price weight cannot).
 
 ### Transformer cross-encoder
 

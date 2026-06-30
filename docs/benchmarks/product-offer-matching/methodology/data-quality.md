@@ -47,8 +47,11 @@ data. Each pass *flags*; the drop-vs-keep policy (below) decides the action.
    storage/size/generation unit tokens. Catches variant collapse.
 3. **Price-outlier check.** Flag offers whose price is far from the cluster's
    robust center (e.g. > k·MAD from the median). Catches some junk offers and
-   wrong placements — but note its blind spot: it misses mislabels between
-   similarly priced products (the S25/S26 case).
+   wrong placements — but note its blind spots: it misses mislabels between
+   similarly priced products (the S25/S26 case), and it *mis-fires* where price is
+   decoupled from product identity — a subsidized **contract phone** looks like a
+   price outlier of its own cluster, and an **accessory** can sit at a phone-like
+   price (findings-domain-knowledge.md). Gate the price check by category.
 4. **Degenerate-title filter.** Flag offers with titles too short or lacking any
    distinguishing token to be matchable (bare `iPhone 17` across color variants).
    These are not necessarily noise — they are the hard cases — so flag, don't

@@ -140,6 +140,7 @@ and found code have an obvious slot:
 | [benchmark-constraints.md](benchmark-constraints.md) | Implementation constraints | grounded |
 | [resources.md](resources.md) | Code / datasets / auto-research | seeded |
 | [findings-pilot.md](findings-pilot.md) | Empirical signal/baseline analysis (billiger pilot) | evaluated |
+| [findings-domain-knowledge.md](findings-domain-knowledge.md) | Practitioner domain knowledge (billiger matcher) | evaluated |
 
 ## How this feeds the auto-research phase
 

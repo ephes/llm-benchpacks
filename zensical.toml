@@ -19,6 +19,7 @@ nav = [
         { "Benchmark Constraints" = "benchmarks/product-offer-matching/methodology/benchmark-constraints.md" },
         { "Resources" = "benchmarks/product-offer-matching/methodology/resources.md" },
         { "Findings: Billiger Pilot" = "benchmarks/product-offer-matching/methodology/findings-pilot.md" },
+        { "Findings: Domain Knowledge" = "benchmarks/product-offer-matching/methodology/findings-domain-knowledge.md" },
       ] },
       { "Literature" = "benchmarks/product-offer-matching/literature.md" },
       { "Dataset Sourcing Analysis" = "benchmarks/product-offer-matching/dataset-sourcing-analysis.md" },

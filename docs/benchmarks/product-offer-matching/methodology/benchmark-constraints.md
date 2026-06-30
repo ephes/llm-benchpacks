@@ -41,9 +41,11 @@ Concretely, a strong submission provides:
   (cf. the isolation/clarity principle: understandable and testable in
   isolation).
 - **A small labeled fixture of canonical hard cases** (same-brand adjacent
-  models, unit-variant pairs, cross-language titles, terse titles) that the suite
-  runs against, so the matcher's behavior on the known-hard categories is
-  asserted, not assumed.
+  models, unit-variant pairs, cross-language titles, terse titles, and the
+  price-decoupled cases practitioner experience flags — **contract vs
+  no-contract phones** and **phone vs accessory**, see
+  findings-domain-knowledge.md) that the suite runs against, so the matcher's
+  behavior on the known-hard categories is asserted, not assumed.
 
 This mirrors Magellan's view of EM as a workflow with debugging and per-component
 testing (`../literature.md` Tier 1), and it is what keeps an incrementally-built
