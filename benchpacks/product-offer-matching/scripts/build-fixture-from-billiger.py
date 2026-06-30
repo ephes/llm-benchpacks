@@ -24,7 +24,7 @@ SEED = 20260630
 _MODEL_RE = re.compile(
     r"\b(galaxy s\d{2}|galaxy a\d{2}|iphone ?\d{1,2}e?|redmi note \d+|pixel \d+|rtx ?\d{4}|rx ?\d{4})\b"
 )
-_UNIT_RE = re.compile(r"\b(\d+ ?tb|\d+ ?gb)\b")
+_STORAGE_RE = re.compile(r"(\d[\d.,]*)\s?(tb|gb)\b")
 
 
 def read_offers(path: Path) -> list[dict]:
@@ -36,8 +36,23 @@ def model_tokens(text: str) -> set[str]:
     return {re.sub(r"\s+", "", m) for m in _MODEL_RE.findall(text.lower())}
 
 
-def unit_tokens(text: str) -> set[str]:
-    return {re.sub(r"\s+", "", m) for m in _UNIT_RE.findall(text.lower())}
+def storage_caps(text: str) -> set[int]:
+    """Normalized STORAGE capacities (in GB) found in a title, for unit-conflict
+    detection. Converts TB->GB, strips thousands separators, collapses the
+    1000/1024 (and 2000/2048) TB ambiguity, and excludes RAM (sub-64 GB
+    magnitudes, or a capacity immediately followed by "RAM")."""
+    t = text.lower()
+    caps: set[int] = set()
+    for m in _STORAGE_RE.finditer(t):
+        digits = m.group(1).replace(".", "").replace(",", "")
+        if not digits.isdigit():
+            continue
+        gb = int(digits) * 1000 if m.group(2) == "tb" else int(digits)
+        if gb < 64 or t[m.end():m.end() + 5].lstrip().startswith("ram"):
+            continue  # likely RAM, not storage
+        gb = {1024: 1000, 2048: 2000}.get(gb, gb)
+        caps.add(gb)
+    return caps
 
 
 def clean_offers(rows: list[dict]) -> tuple[list[dict], dict]:
@@ -52,7 +67,7 @@ def clean_offers(rows: list[dict]) -> tuple[list[dict], dict]:
     for offers in by_cluster.values():
         label = offers[0]["cluster_label"]
         lab_model = model_tokens(label)
-        lab_unit = unit_tokens(label)
+        lab_caps = storage_caps(label)
         prices = [float(o["price_eur"]) for o in offers if o["price_eur"]]
         med = statistics.median(prices) if prices else 0.0
         mad = statistics.median([abs(p - med) for p in prices]) if prices else 0.0
@@ -61,8 +76,8 @@ def clean_offers(rows: list[dict]) -> tuple[list[dict], dict]:
             if lab_model and o_model and o_model.isdisjoint(lab_model):
                 dropped_model += 1
                 continue
-            o_unit = unit_tokens(o["title"])
-            if lab_unit and o_unit and o_unit.isdisjoint(lab_unit):
+            o_caps = storage_caps(o["title"])
+            if lab_caps and o_caps and o_caps.isdisjoint(lab_caps):
                 dropped_unit += 1
                 continue
             if o["price_eur"] and mad and abs(float(o["price_eur"]) - med) > 5 * mad:

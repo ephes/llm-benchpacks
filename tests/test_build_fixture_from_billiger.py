@@ -44,11 +44,26 @@ def test_model_tokens_extracts_and_normalizes():
     assert mod.model_tokens("no model here") == set()
 
 
-def test_unit_tokens_extracts_storage():
+def test_storage_caps_normalizes_tb_separators_and_excludes_ram():
     mod = load_builder()
-    assert mod.unit_tokens("iPhone 17 256GB") == {"256gb"}
-    assert mod.unit_tokens("Galaxy 12 GB RAM 512 GB Black") == {"12gb", "512gb"}
-    assert mod.unit_tokens("Sony WH-1000XM5") == set()
+    assert mod.storage_caps("iPhone 17 256GB") == {256}
+    assert mod.storage_caps("Galaxy S26 Ultra 1 TB") == {1000}
+    assert mod.storage_caps("Samsung Galaxy S26 Ultra (1024 GB, Black)") == {1000}  # 1024 -> 1000
+    assert mod.storage_caps("Galaxy 1.000 GB SSD") == {1000}                        # thousands sep
+    assert mod.storage_caps("Galaxy S26 12 GB RAM 512 GB") == {512}                 # RAM excluded
+    assert mod.storage_caps("Sony WH-1000XM5") == set()
+
+
+def test_clean_offers_keeps_tb_equivalent_storage():
+    mod = load_builder()
+    rows = [
+        _offer("b1", "Samsung Galaxy S26 Ultra 1 TB", "c1", "Galaxy S26 Ultra 1 TB", brand="Samsung"),
+        _offer("b2", "Samsung Galaxy S26 Ultra 1024 GB Black", "c1", "Galaxy S26 Ultra 1 TB", brand="Samsung"),
+        _offer("b3", "Samsung Galaxy S26 Ultra 1.000 GB", "c1", "Galaxy S26 Ultra 1 TB", brand="Samsung"),
+    ]
+    kept, report = mod.clean_offers(rows)
+    assert {r["offer_id"] for r in kept} == {"b1", "b2", "b3"}  # all 1TB-equivalent
+    assert report["dropped_unit_conflict"] == 0
 
 
 def _offer(oid, title, cid, label, price="100.00", brand="Apple", cat="Handys"):
