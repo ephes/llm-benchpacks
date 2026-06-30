@@ -8,6 +8,17 @@ nav = [
     { "Overview" = "benchmarks/index.md" },
     { "Product-Offer Matching" = [
       { "Overview" = "benchmarks/product-offer-matching/index.md" },
+      { "Methodology" = [
+        { "Overview" = "benchmarks/product-offer-matching/methodology/index.md" },
+        { "Blocking And Candidate Generation" = "benchmarks/product-offer-matching/methodology/blocking.md" },
+        { "Signals And Feature Extraction" = "benchmarks/product-offer-matching/methodology/signals.md" },
+        { "Pair Scoring And Metric Learning" = "benchmarks/product-offer-matching/methodology/pair-scoring.md" },
+        { "Graph Clustering" = "benchmarks/product-offer-matching/methodology/clustering.md" },
+        { "Evaluation Metrics" = "benchmarks/product-offer-matching/methodology/evaluation.md" },
+        { "Data Quality And Label Noise" = "benchmarks/product-offer-matching/methodology/data-quality.md" },
+        { "Benchmark Constraints" = "benchmarks/product-offer-matching/methodology/benchmark-constraints.md" },
+        { "Resources" = "benchmarks/product-offer-matching/methodology/resources.md" },
+      ] },
       { "Literature" = "benchmarks/product-offer-matching/literature.md" },
       { "Dataset Sourcing Analysis" = "benchmarks/product-offer-matching/dataset-sourcing-analysis.md" },
       { "PriceRunner Rerun 2026-06-28" = "benchmarks/product-offer-matching/pricerunner-rerun-20260628.md" },

@@ -6,6 +6,9 @@ cluster-labeled offer fixture.
 
 Related material for this benchmark:
 
+- [Methodology knowledge base](methodology/index.md) — dataset-agnostic
+  pipeline methodology (blocking, signals, scoring, clustering, evaluation,
+  data quality, constraints, resources)
 - [Literature and redesign notes](literature.md)
 - [Dataset sourcing analysis (price + image sources)](dataset-sourcing-analysis.md)
 - [PriceRunner rerun, 2026-06-28](pricerunner-rerun-20260628.md)
