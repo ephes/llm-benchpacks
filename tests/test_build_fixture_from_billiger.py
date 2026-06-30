@@ -107,3 +107,32 @@ def test_choose_split_is_cluster_disjoint_and_hits_ratio():
     assert train_clusters | test_clusters == {f"c{c}" for c in range(20)}
     train_offers = sum(1 for r in rows if r["cluster_id"] in train_clusters)
     assert 25 <= train_offers <= 40  # ~30% of 100, whole-cluster granularity
+
+
+def test_anonymize_reassigns_ids_and_preserves_cluster_grouping():
+    mod = load_builder()
+    rows = [
+        _offer("bA", "t1", "src1", "L1"),
+        _offer("bB", "t2", "src1", "L1"),
+        _offer("bC", "t3", "src2", "L2"),
+    ]
+    out = mod.anonymize(rows, random.Random(2))
+    # new opaque ids
+    assert all(r["offer_id"].startswith("o") for r in out)
+    assert all(r["cluster_id"].startswith("c") for r in out)
+    assert len({r["offer_id"] for r in out}) == 3
+    # offers from the same source cluster share one new cluster id; different sources differ.
+    # t1,t2 came from src1; t3 from src2.
+    new_by_title = {r["title"]: r["cluster_id"] for r in out}
+    assert new_by_title["t1"] == new_by_title["t2"]
+    assert new_by_title["t1"] != new_by_title["t3"]
+    # title/price/brand carried through
+    assert {r["title"] for r in out} == {"t1", "t2", "t3"}
+
+
+def test_anonymize_offsets_shift_id_namespace():
+    mod = load_builder()
+    rows = [_offer("bA", "t1", "src1", "L1"), _offer("bC", "t3", "src2", "L2")]
+    out = mod.anonymize(rows, random.Random(2), offer_start=100, cluster_start=5)
+    assert {int(r["offer_id"][1:]) for r in out} == {101, 102}
+    assert all(int(r["cluster_id"][1:]) > 5 for r in out)

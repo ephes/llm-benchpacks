@@ -103,3 +103,23 @@ def choose_split(rows: list[dict], train_fraction: float, rng: random.Random) ->
         n += len(by_cluster[cid])
     test = set(clusters) - train
     return train, test
+
+
+def anonymize(rows: list[dict], rng: random.Random,
+              offer_start: int = 0, cluster_start: int = 0) -> list[dict]:
+    """Shuffle rows and reassign opaque sequential offer/cluster ids so public row
+    order and id sequence do not encode source cluster structure. New cluster ids
+    are assigned in shuffled-encounter order; offers of one source cluster keep a
+    shared new cluster id. `offer_start`/`cluster_start` offset the numbering so a
+    later split (test) does not reuse an earlier split's (train) ids — the two
+    splits share one global id namespace. Other columns are carried through."""
+    shuffled = list(rows)
+    rng.shuffle(shuffled)
+    cluster_map: dict[str, str] = {}
+    out: list[dict] = []
+    for i, r in enumerate(shuffled, 1):
+        src = r["cluster_id"]
+        if src not in cluster_map:
+            cluster_map[src] = f"c{cluster_start + len(cluster_map) + 1:05d}"
+        out.append({**r, "offer_id": f"o{offer_start + i:05d}", "cluster_id": cluster_map[src]})
+    return out
