@@ -1,11 +1,12 @@
 # Resources: Code, Libraries, Datasets
 
 Reusable code, libraries, and datasets for the product-matching pipeline, plus
-the landing zone for the deeper auto-research pass. This is **seeded** — two
-light web passes on 2026-06-30 (a general sweep, then a per-stage code-first
-pass) collected the entries below; the auto-research phase will evaluate (not
-just list) them and record results in the relevant stage docs. Every entry
-answers one question: *would we reuse this, and for what stage/decision?*
+the landing zone for the deeper auto-research pass. This is **seeded** — web
+passes on 2026-06-30 (a general sweep, a per-stage code-first pass, and a
+solved-instances deep-read of product-ER competitions) collected the entries
+below; the auto-research phase will evaluate (not just list) them and record
+results in the relevant stage docs. Every entry answers one question: *would we
+reuse this, and for what stage/decision?*
 
 Status legend: `listed` = found, not yet evaluated; `evaluated` = run/assessed by
 the auto-research pass with notes; `in-use` = referenced by an actual benchmark
@@ -61,6 +62,24 @@ Official 1st/2nd-place writeups are linked from `../literature.md` Tier 1 #8.
 | [cr21/Shopee-Product-Matching](https://github.com/cr21/Shopee-Product-Matching) | Already cited in `../literature.md`; ML pipeline writeup. | listed |
 | [jingxuanyang/Shopee-Product-Matching](https://github.com/jingxuanyang/Shopee-Product-Matching) | Documented pattern-recognition project. | listed |
 
+## Techniques from solved instances
+
+Concrete, reusable techniques extracted from the top solutions of two product-ER
+competitions. (Provenance: Shopee specifics are from two corroborating recap
+write-ups — [GO Inc.](https://techblog.goinc.jp/entry/2021/05/27/090000),
+[Shiwagi](https://masatakashiwagi.com/blog/kaggle-shopee-solution/) — because the
+Kaggle discussion pages and ACM full text were not directly fetchable; treat as
+secondary but cross-checked.)
+
+| Technique | What it is | Reuse for | Status |
+|---|---|---|---|
+| Iterative Neighborhood Blending (INB) | Shopee 1st: build a cosine-KNN graph (faiss, k≈51), re-aggregate each item's embedding as a similarity-weighted blend of its neighbors, re-run KNN, iterate ~2×. Query-expansion / label-propagation over the graph. | signals/pair-scoring — embedding refinement that lifts any KNN matcher before clustering. | listed |
+| Two-stage embed → re-rank | Shopee 1st–3rd: ArcFace/CurricularFace/Triplet embeddings → cosine-KNN candidates → 2nd-stage **LightGBM / GAT / CatBoost** over ~500 pair features (top-K cosine stats, PageRank/graph metrics, text edit-distance). | pair-scoring — the proven product image+text architecture. | listed |
+| Graph cluster cleanup | Shopee 2nd: drop non-reciprocal (non-mutual-KNN) edges, threshold-vote edges, recursively prune highest-**betweenness** edges to split over-merges; 3rd: agglomerative merge to a target cluster size. | clustering — turning a noisy KNN graph into clean clusters; controls over-merge. | listed |
+| Union-find + transitive closure | SIGMOD2020: labels are transitively closed, so clustering = connected components over predicted-match edges; **self-training** folds high-confidence pairs back in. | clustering — the baseline pair→cluster step; matches clustering.md. | listed |
+| Sorted-integer-set blocking | SIGMOD2020 winner: represent each record as a sorted set of hashed tokens for very fast set-overlap/Jaccard blocking + matching under a time budget. | blocking — cheap, scalable candidate generation. | listed |
+| Unit-mismatch filtering | Shopee + SIGMOD: rule-based reject when quantity/unit tokens disagree (50ml vs 100ml). | signals — the negative-veto our pilot evidence also supports (`findings-pilot.md`). | listed |
+
 ## Clustering
 
 | Tool | What it gives | Status |
@@ -84,11 +103,13 @@ Official 1st/2nd-place writeups are linked from `../literature.md` Tier 1 #8.
 
 | Dataset | Signals | Use here | Status |
 |---|---|---|---|
-| [WDC Products](https://webdatacommons.org/largescaleproductcorpus/wdc-products/) | title/brand/desc/specs; sparse price/image | Multi-dimensional EM benchmark; pairwise + multi-class. | listed |
-| [CompERBench / Abt-Buy, Amazon-Google](http://data.dws.informatik.uni-mannheim.de/benchmarkmatchingtasks/index.html) | text + price, no image | Price-aware *text* lane in reserve. | listed |
+| [WDC Products](https://webdatacommons.org/largescaleproductcorpus/wdc-products/) ([paper](https://arxiv.org/abs/2301.09521)) | title/brand/desc, numeric price; no image | Best off-the-shelf eval harness: 27 variants over corner-cases / **unseen-entities** / dev-size; pairwise + multi-class. The unseen-entity axis measures generalization, not memorization. | listed |
+| [WDC LSPM v2](http://webdatacommons.org/largescaleproductcorpus/v2/) ([paper](https://www.uni-mannheim.de/media/Einrichtungen/dws/Files_Research/Web-based_Systems/pub/ECNLP_19_PrimpeliPeetersBizer.pdf)) | title (raw+norm), desc, brand, GTIN/MPN, specTableContent; sparse price; no image | Large real web offers keyed by **GTIN/MPN clusters** — mirrors our "product_id as cluster key". 4,400-pair hand-verified gold standard; training sets Small→XLarge. | listed |
+| [Magellan / DeepMatcher datasets](https://sites.google.com/site/anhaidgroup/useful-stuff/the-magellan-data-repository) (Abt-Buy, Amazon-Google, Walmart-Amazon) | title, desc, brand, **price**, model; hand-labeled candidate pairs; no image | Ready gold pairs *with price* to validate a scorer; standard EM numbers exist for calibration. **But** some sets are saturated/leaky ([re-eval](https://arxiv.org/pdf/2307.01231)) — prefer WDC unseen-entity splits for a stress test. | listed |
+| [SIGMOD2020 / Alaska](https://transactional.blog/sigmod-contest/2020) ([Alaska paper](https://arxiv.org/abs/2101.11259), [starter](https://github.com/transactionalblog/sigmod-contest-2020)) | ~30k camera specs as (attr, value) lists from 24 sources; labeled match pairs; no image | Spec-style product ER for a third validation domain; F-measure-on-pairs protocol; accessories as known hard non-matches. | listed |
 | [Shopee Price Match](https://www.kaggle.com/competitions/shopee-product-matching) | per-offer image + title | The multimodal reference (per-offer images). | listed |
 | PriceRunner (UCI/Kaggle) | title-only | Current title-only pack (`../index.md`). | in-use |
-| billiger.de pilot | title + price + product-level image | Current scrape pilot (`../dataset-sourcing-analysis.md`). | in-use |
+| billiger.de pilot | title + price + product-level image | Current scrape pilot (`../dataset-sourcing-analysis.md`, `findings-pilot.md`). | in-use |
 
 ## Auto-research landing zone
 

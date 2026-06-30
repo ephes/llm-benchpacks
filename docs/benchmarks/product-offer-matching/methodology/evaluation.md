@@ -211,6 +211,11 @@ tables (quality / systems / combined) as in `../literature.md`.
   the B-cubed metric; the MUC/B-cubed/CEAF family carries over from coreference
   evaluation.
 - WDC Products (pairwise + multi-class formulations) — `../literature.md`
-  Tier 1.
+  Tier 1. Its **unseen-entities** axis (test products absent from training)
+  measures generalization, not memorization — the right stress test, and the
+  reason to prefer it over the partly-saturated Magellan sets
+  ([critical re-evaluation](https://arxiv.org/pdf/2307.01231); `resources.md`).
+- SIGMOD2020/Alaska — F-measure-on-pairs protocol over product specs
+  (`resources.md`).
 - Metric implementations: `bcubed` (PyPI), scikit-learn `v_measure_score` and
   related, RunOrVeith/BCUBED (fast) — see `resources.md`.

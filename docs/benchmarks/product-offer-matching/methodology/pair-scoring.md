@@ -140,3 +140,7 @@ isolation. See evaluation.md for how pair metrics sit alongside cluster metrics.
 - `resources.md` for `dedupe` (Fellegi-Sunter + active learning),
   `py_entitymatching` (rule + ML matchers), Ditto/DeepMatcher repos, Jellyfish,
   and Shopee metric-learning solutions.
+- Solved-instance pipeline (`resources.md`, *Techniques from solved instances*):
+  the Shopee two-stage recipe — ArcFace/CurricularFace embeddings → cosine-KNN
+  candidates → 2nd-stage LightGBM/GAT re-ranker over ~500 pair features — is the
+  proven product image+text scoring architecture.

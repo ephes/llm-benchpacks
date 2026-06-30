@@ -147,3 +147,8 @@ its input was.
 - `resources.md` for clustering implementations (scikit-learn agglomerative/
   spectral, `markov_clustering`, igraph/Leiden, scikit-network, hdbscan) and
   pyJedAI's built-in ER clustering (partitioning / center / merge-center).
+- Solved-instance cleanup techniques (`resources.md`, *Techniques from solved
+  instances*): union-find + transitive closure (SIGMOD2020), and from Shopee —
+  mutual-KNN edge filtering, betweenness-edge pruning to split over-merges,
+  agglomerative merge-to-target-size, and Iterative Neighborhood Blending to
+  refine embeddings before clustering.
