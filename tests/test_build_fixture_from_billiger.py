@@ -93,3 +93,17 @@ def test_clean_offers_keeps_terse_and_price_outlier():
     assert {r["offer_id"] for r in kept} == {"b1", "b2", "b3"}
     assert report["flagged_degenerate_title"] >= 1
     assert report["flagged_price_outlier"] >= 1
+
+
+def test_choose_split_is_cluster_disjoint_and_hits_ratio():
+    mod = load_builder()
+    rows = []
+    for c in range(20):  # 20 clusters x 5 offers = 100 offers
+        for k in range(5):
+            rows.append(_offer(f"b{c}_{k}", "iPhone 17", f"c{c}", "iPhone 17"))
+    rng = random.Random(1)
+    train_clusters, test_clusters = mod.choose_split(rows, 0.30, rng)
+    assert train_clusters.isdisjoint(test_clusters)
+    assert train_clusters | test_clusters == {f"c{c}" for c in range(20)}
+    train_offers = sum(1 for r in rows if r["cluster_id"] in train_clusters)
+    assert 25 <= train_offers <= 40  # ~30% of 100, whole-cluster granularity

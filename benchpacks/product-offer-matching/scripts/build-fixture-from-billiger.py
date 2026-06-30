@@ -83,3 +83,23 @@ def clean_offers(rows: list[dict]) -> tuple[list[dict], dict]:
         "detectable_noise_rate": round((dropped_model + dropped_unit) / max(len(rows), 1), 4),
     }
     return kept, report
+
+
+def choose_split(rows: list[dict], train_fraction: float, rng: random.Random) -> tuple[set[str], set[str]]:
+    """Cold-start split: accumulate whole clusters into train until ~train_fraction
+    of offers; the rest are test. Train/test products are disjoint by construction."""
+    by_cluster: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_cluster[r["cluster_id"]].append(r)
+    clusters = list(by_cluster)
+    rng.shuffle(clusters)
+    target = train_fraction * len(rows)
+    train: set[str] = set()
+    n = 0
+    for cid in clusters:
+        if n >= target:
+            break
+        train.add(cid)
+        n += len(by_cluster[cid])
+    test = set(clusters) - train
+    return train, test
