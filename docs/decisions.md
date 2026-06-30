@@ -679,3 +679,24 @@ benchmark orchestration, model/provider metadata, run logs, and generated result
 artifacts churn with benchmark campaigns. The old
 `desktop-django-starter/.bench-qwen36/` path is retained only as historical
 scratch from the Qwen3.6 campaign.
+
+## D-034: PriceRunner Data Lacks Price And Image Signals
+
+The PriceRunner Product Classification and Clustering dataset (Kaggle
+`lakritidis/product-clustering-matching-classification`, UCI 837) is text-only:
+its sole columns are product title, merchant id, and category id/label, plus the
+cluster id/label. It carries no price and no image fields, and neither can be
+recovered — they are absent at the source, not dropped by
+`build-fixture-from-pricerunner.py`.
+
+Because price (same-product offers cluster tightly; large gaps are strong
+negative evidence) and images (visual disambiguation of variants) are central
+signals for realistic product matching, this Kaggle dataset is not suitable as
+the basis for a multi-signal product-matching benchmark. The existing
+`product-offer-matching` pack remains valid only as a title-only entity-matching
+lane and must be labeled as such; a price- and image-bearing dataset is required
+for any multimodal or price-aware lane.
+
+Reason: keep the limitation explicit so the title-only fixture is not mistaken
+for a faithful product-matching benchmark, and so future work scopes a richer
+dataset rather than extending text-only PriceRunner data.

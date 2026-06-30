@@ -62,6 +62,18 @@ The upstream PriceRunner data contains 35,311 offers, 13,233 product clusters,
 306 merchants, and 10 product categories. It is explicitly intended for product
 classification, clustering, and entity matching.
 
+### Limitation: title-only, no price or images
+
+This dataset is text-only. Its sole offer columns are product title, merchant
+id, and category id/label. It carries **no price and no image fields**, and
+neither can be recovered — they are absent at the source, not dropped by the
+fixture builder. Price (same-product offers cluster tightly; large gaps are
+strong negative evidence) and images (visual disambiguation of variants) are
+central signals for realistic product matching, so this pack is a **title-only
+entity-matching lane**, not a faithful multi-signal product-matching benchmark.
+A price- and image-bearing dataset is required for any price-aware or multimodal
+lane. See decision D-034.
+
 ## Verification
 
 `verify/score_clusters.py` runs the implementation with:

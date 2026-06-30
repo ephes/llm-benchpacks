@@ -7,6 +7,7 @@ cluster-labeled offer fixture.
 Related material for this benchmark:
 
 - [Literature and redesign notes](literature.md)
+- [Dataset sourcing analysis (price + image sources)](dataset-sourcing-analysis.md)
 - [PriceRunner rerun, 2026-06-28](pricerunner-rerun-20260628.md)
 - [Archived WDC large pairwise rerun, 2026-06-27](archive-large-pairwise-rerun-20260627.md)
 - [Archived GPT-5.5 pairwise report](archive-gpt55-pairwise-report.md)
@@ -46,6 +47,14 @@ The same source data is downloadable without Kaggle credentials from UCI:
 The upstream file contains 35,311 product offers, 13,233 product clusters, 306
 merchants, and 10 categories. Fields include product title, merchant id, product
 cluster id/label, and category id/label.
+
+**Limitation — title-only, no price or images.** This data is text-only. It
+carries no price and no image fields, and neither is recoverable; they are
+absent at the source, not dropped by the fixture builder. Since price and images
+are central signals for realistic product matching, this Kaggle/UCI dataset is
+not suitable for a multi-signal product-matching benchmark — the pack is a
+title-only entity-matching lane only. A price- and image-bearing dataset is
+required for any price-aware or multimodal lane. See decision D-034.
 
 The fixture builder is:
 

@@ -9,6 +9,7 @@ nav = [
     { "Product-Offer Matching" = [
       { "Overview" = "benchmarks/product-offer-matching/index.md" },
       { "Literature" = "benchmarks/product-offer-matching/literature.md" },
+      { "Dataset Sourcing Analysis" = "benchmarks/product-offer-matching/dataset-sourcing-analysis.md" },
       { "PriceRunner Rerun 2026-06-28" = "benchmarks/product-offer-matching/pricerunner-rerun-20260628.md" },
       { "Archive: WDC Pairwise Rerun" = "benchmarks/product-offer-matching/archive-large-pairwise-rerun-20260627.md" },
       { "Archive: GPT-5.5 Pairwise Report" = "benchmarks/product-offer-matching/archive-gpt55-pairwise-report.md" },
