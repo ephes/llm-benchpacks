@@ -177,5 +177,10 @@ Diagnostics worth recording:
   Tier 2.
 - Aho & Corasick, *Efficient String Matching: An Aid to Bibliographic Search*,
   CACM 1975 — the multi-pattern automaton behind identifier-dictionary matching.
+- *How to reduce the search space of Entity Resolution: with Blocking or Nearest
+  Neighbor search?*, 2022. [arXiv](https://arxiv.org/abs/2202.12521) — directly
+  compares classic blocking vs ANN retrieval, the choice this doc frames.
 - Shopee top solutions (ANN over metric-learned embeddings) — see
   `resources.md`.
+- Implementations: pyJedAI (end-to-end blocking + meta-blocking), pyahocorasick,
+  datasketch (MinHash LSH), faiss / hnswlib (ANN) — see `resources.md`.

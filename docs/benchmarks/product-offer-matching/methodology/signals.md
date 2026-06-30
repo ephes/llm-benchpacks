@@ -285,3 +285,5 @@ weight and which thresholds to seed.
 - Wilke & Rahm, *Towards Multi-Modal Entity Resolution for Product Matching*,
   2021 — image signal; `../literature.md` Tier 4.
 - Shopee top solutions (image+text metric learning, KNN) — `resources.md`.
+- Implementations: `quantulum3` / `pint` for unit extraction and canonicalization,
+  `pyahocorasick` for the identifier dictionary — see `resources.md`.

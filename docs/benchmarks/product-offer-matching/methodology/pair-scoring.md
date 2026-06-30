@@ -131,6 +131,12 @@ isolation. See evaluation.md for how pair metrics sit alongside cluster metrics.
 - Li et al., *Ditto*, PVLDB 2020; Mudgal et al., *DeepMatcher*, SIGMOD 2018 —
   `../literature.md` Tier 1.
 - Peeters & Bizer, *R-SupCon*, 2022 — `../literature.md` Tier 1.
+- Zhang et al., *Jellyfish: Instruction-Tuning Local LLMs for Data Preprocessing*,
+  EMNLP 2024. [ACL](https://aclanthology.org/2024.emnlp-main.497.pdf) — a local
+  fine-tuned LLM matcher competitive with GPT-4 on EM; relevant if a direct-LLM
+  matcher lane is added. Recent work reports fine-tuned *small* models beat
+  general LLMs on EM, reinforcing the small-specialized-model framing in
+  `../literature.md` Tier 3.
 - `resources.md` for `dedupe` (Fellegi-Sunter + active learning),
-  `py_entitymatching` (rule + ML matchers), Ditto/DeepMatcher repos, and Shopee
-  metric-learning solutions.
+  `py_entitymatching` (rule + ML matchers), Ditto/DeepMatcher repos, Jellyfish,
+  and Shopee metric-learning solutions.

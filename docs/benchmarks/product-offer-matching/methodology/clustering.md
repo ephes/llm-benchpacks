@@ -145,4 +145,5 @@ its input was.
   — `../literature.md` Tier 1.
 - HierGAT, 2022 — `../literature.md` Tier 3.
 - `resources.md` for clustering implementations (scikit-learn agglomerative/
-  spectral, `markov_clustering`, igraph/Leiden).
+  spectral, `markov_clustering`, igraph/Leiden, scikit-network, hdbscan) and
+  pyJedAI's built-in ER clustering (partitioning / center / merge-center).

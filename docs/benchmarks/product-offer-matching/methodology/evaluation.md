@@ -207,5 +207,10 @@ tables (quality / systems / combined) as in `../literature.md`.
   Tier 2.
 - Draisbach et al., 2019; Bhattacharya & Getoor, 2007 — cluster-quality framing;
   `../literature.md` Tier 1.
+- Bagga & Baldwin, *Algorithms for Scoring Coreference Chains*, 1998 — origin of
+  the B-cubed metric; the MUC/B-cubed/CEAF family carries over from coreference
+  evaluation.
 - WDC Products (pairwise + multi-class formulations) — `../literature.md`
   Tier 1.
+- Metric implementations: `bcubed` (PyPI), scikit-learn `v_measure_score` and
+  related, RunOrVeith/BCUBED (fast) — see `resources.md`.
