@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -127,7 +128,9 @@ def _category_leaf(path: str) -> str:
     return re.sub(r"\s*\[\d+\]\s*$", "", leaf).strip()
 
 
-def scrape(category_url: str, n_base: int, n_variant: int, max_requests: int) -> list[dict]:
+def scrape(
+    category_url: str, n_base: int, n_variant: int, max_requests: int, query: str = ""
+) -> list[dict]:
     requests_made = 0
 
     def get(url: str) -> str | None:
@@ -161,7 +164,6 @@ def scrape(category_url: str, n_base: int, n_variant: int, max_requests: int) ->
             break
 
     rows: list[dict] = []
-    offer_seq = 0
     for j, vp in enumerate(variant_paths, 1):
         target_id = _url_product_id(vp)
         html = get(BASE + vp)
@@ -178,10 +180,8 @@ def scrape(category_url: str, n_base: int, n_variant: int, max_requests: int) ->
         category_label = _category_leaf(offers[0]["category_path"])
         image_url = _image_url(html)
         for o in offers:
-            offer_seq += 1
             rows.append(
                 {
-                    "offer_id": f"b{offer_seq:05d}",
                     "title": o["merchant_title"],
                     "shop_name": o["shop_name"],
                     "price_eur": o["price"],
@@ -190,6 +190,7 @@ def scrape(category_url: str, n_base: int, n_variant: int, max_requests: int) ->
                     "image_url": image_url,
                     "cluster_id": cluster_id,
                     "cluster_label": cluster_label,
+                    "source_query": query,
                 }
             )
         print(f"[3] ({j}/{len(variant_paths)}) cluster {cluster_id}: {len(offers)} offers")
@@ -222,23 +223,41 @@ def summarise(rows: list[dict]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--category-url", default=f"{BASE}/search?searchstring=smartphone")
-    ap.add_argument("--baseproducts", type=int, default=10)
+    ap.add_argument(
+        "--searchstrings",
+        default="smartphone",
+        help="comma-separated billiger.de search terms, one category each",
+    )
+    ap.add_argument("--baseproducts", type=int, default=12)
     ap.add_argument("--variants-per-base", type=int, default=3)
-    ap.add_argument("--max-requests", type=int, default=45)
+    ap.add_argument("--max-requests", type=int, default=55, help="per search term")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
-    rows = scrape(args.category_url, args.baseproducts, args.variants_per_base, args.max_requests)
-    if not rows:
+    queries = [q.strip() for q in args.searchstrings.split(",") if q.strip()]
+    all_rows: list[dict] = []
+    for query in queries:
+        url = f"{BASE}/search?searchstring={urllib.parse.quote(query)}"
+        print(f"\n##### category: {query!r} #####")
+        all_rows.extend(
+            scrape(url, args.baseproducts, args.variants_per_base, args.max_requests, query)
+        )
+    if not all_rows:
         sys.exit("no rows scraped")
+
+    # Assign globally unique offer ids across all categories (cluster_id is the
+    # billiger product_id and is already globally unique, so it needs no remap).
+    for seq, row in enumerate(all_rows, 1):
+        row["offer_id"] = f"b{seq:05d}"
+    fieldnames = ["offer_id"] + [k for k in all_rows[0] if k != "offer_id"]
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()), lineterminator="\n")
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(rows)
-    print(f"\nwrote {len(rows)} offers -> {args.out}")
-    summarise(rows)
+        writer.writerows(all_rows)
+    print(f"\nwrote {len(all_rows)} offers from {len(queries)} categories -> {args.out}")
+    summarise(all_rows)
 
 
 if __name__ == "__main__":

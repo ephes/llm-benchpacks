@@ -260,18 +260,33 @@ separate description and the merchant's raw (pre-classification) category.
 
 ## Pilot result (2026-06-30)
 
-A minimal one-category pilot scraper
-(`benchpacks/product-offer-matching/scripts/scrape-billiger-pilot.py`) ran against
-the smartphone category (10 baseproducts × 3 variants, 41 polite requests). Sample
-output: `benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv`.
+A pilot scraper
+(`benchpacks/product-offer-matching/scripts/scrape-billiger-pilot.py`) ran across
+five categories — smartphones, TVs, headphones, laptops, and coffee machines
+(`--searchstrings`, 12 baseproducts × 3 variants each, polite per-category request
+cap). Sample output:
+`benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv`. A
+companion viewer (`scripts/build-billiger-viewer.py`) renders the clusters as a
+static HTML page for visual inspection.
 
 Results:
 
-- **300 offers across 30 clusters, 10 offers/cluster, 100% price and image
-  coverage.** The initial HTML carries ~10 offers per variant, so the lazy-load
-  segment endpoint (open question 3) is **not needed** for a useful fixture.
+- **1,280 offers across 158 clusters (3 singletons), ~8.1 offers/cluster, 100%
+  price and image coverage.** The initial HTML carries ~8–10 offers per variant,
+  so the lazy-load segment endpoint (open question 3) is **not needed** for a
+  useful fixture.
 - Each row has: raw merchant title, shop, price, brand, category label, image URL,
-  and the billiger variant `product_id` as the cluster key.
+  the source search term, and the billiger variant `product_id` as the cluster key.
+- **Cluster quality is high but not perfect.** A title-vs-label model-token scan
+  found exactly one cross-model mislabel in the whole sample (~0.08%): an ebay
+  offer titled `Samsung Galaxy S25 Ultra - 256 GB - Titanium Black` sits in the
+  `Galaxy S26 Ultra 256 GB Black` cluster (`cluster_id` 5566514751). Billiger's
+  matching (or the merchant feed) attached an S25 offer to the S26 product, and
+  this propagates into the gold label. Price-based outlier checks miss it because
+  S25/S26 prices nearly coincide. Takeaway: billiger gold clusters carry rare but
+  real label noise, so a production fixture builder needs a validation/filter pass
+  (e.g. flag offers whose model token is disjoint from the cluster label); the
+  pilot CSV is left as a faithful raw scrape and deliberately keeps this case.
 - **Title noise is real and useful.** For the iPhone 17 256 GB Nebelblau cluster,
   titles range from a terse `iPhone 17` (Moblify) to
   `Apple iPhone 17 256GB Blau Blue Nebelblau NEU nur E-SIM, kein Sim-Kartenschacht`
@@ -280,6 +295,11 @@ Results:
 - **Concrete evidence for the multimodal motivation.** Some merchants (e.g.
   Moblify) list a bare `iPhone 17` identically across the blue/white/lavender
   clusters; title-only matching cannot disambiguate these, but price and image can.
+
+Sourcing caveat: broad appliance search terms (e.g. `waschmaschine`, `kühlschrank`)
+resolve to a category-overview page with few `/baseproducts/` links; concrete
+product terms (`smartphone`, `laptop`, `kaffeevollautomat`, …) return flat product
+lists and are the ones to use.
 
 This confirms the scrape route end-to-end and validates that real billiger.de data
 makes a harder, signal-richer matching task than the title-only PriceRunner fixture.
@@ -300,6 +320,11 @@ makes a harder, signal-richer matching task than the title-only PriceRunner fixt
    sample.
 6. **Image storage policy** — store URLs only, perceptual hashes, or derived
    embeddings rather than raw images.
+7. **Gold-label validation pass** — the pilot found ~0.08% cross-model label noise
+   in billiger gold clusters (an S25 offer in an S26 cluster). The production
+   fixture builder should validate/flag offers whose model token is disjoint from
+   the cluster label, and decide whether to drop them or keep them as realistic
+   label noise.
 
 ## Recommendation
 
