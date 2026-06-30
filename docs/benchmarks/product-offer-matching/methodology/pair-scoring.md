@@ -105,7 +105,9 @@ isolation. See evaluation.md for how pair metrics sit alongside cluster metrics.
 
 - Reward scorers that **learn** weights/probabilities over those that hardcode a
   single threshold; the Fellegi-Sunter and classifier baselines are the bar to
-  beat.
+  beat. Cross-dataset evidence (findings-pilot.md) shows the *strongest* signal
+  shifts between datasets — price on the billiger pilot, text on Amazon-Google —
+  so per-dataset learned weights matter rather than a fixed signal priority.
 - Require an operating threshold chosen without hidden labels, and report the
   calibration gap as a generalization diagnostic.
 - Keep exact-identifier matching in a separate baseline lane; do not let it leak

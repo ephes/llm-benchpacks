@@ -26,9 +26,11 @@ uv run --with scikit-learn --with numpy \
    splits **71% of gold clusters**, because same-product offers share only a
    **median 0.34 token Jaccard** — titles for one product are lexically very
    different. This is a recall problem.
-3. **Price is the single strongest signal** (ROC-AUC **0.905**), above every text
-   similarity, and the title-only baseline ignores it. Adding a price guard alone
-   lifts B-cubed F1 from 0.409 to **0.463** (+13%).
+3. **Price is the single strongest signal here** (ROC-AUC **0.905**), above every
+   text similarity, and the title-only baseline ignores it. Adding a price guard
+   alone lifts B-cubed F1 from 0.409 to **0.463** (+13%). But price's dominance is
+   *data-dependent* — on an independent benchmark text edged it out (see
+   *Cross-dataset check* below), so its weight should be learned, not assumed.
 4. **IDF weighting is a cheap text win.** TF-IDF word cosine (AUC **0.890**) beats
    raw token Jaccard (0.826); swapping Jaccard → TF-IDF cosine costs little.
 5. **Identifier codes are high-precision but low-coverage and noisy at token
@@ -124,6 +126,41 @@ slightly *hurts* (it links wrong pairs through noisy token codes). The two
 helpful signals are largely independent (one prunes by price, the other by code
 disagreement), so stacking them — on top of TF-IDF text — is the obvious next
 matcher to measure.
+
+## Cross-dataset check (Amazon-Google)
+
+To test whether the separability findings and the ROC-AUC / AP machinery
+generalize off our own data, the same per-signal analysis was run on the
+independent Amazon-Google entity-matching benchmark (price-bearing; 11,460
+labeled pairs, 10.2% match rate). Reproduce with
+`analyze-amazon-google-signals.py` (download instructions in its docstring).
+
+| Signal | ROC-AUC | Avg precision |
+|---|---|---|
+| title char-3gram cosine | **0.859** | 0.415 |
+| price similarity `1/(1+relgap)` | 0.816 | 0.281 |
+| title token Jaccard | 0.813 | 0.357 |
+
+Lessons, and what carries back to methodology:
+
+- **The machinery generalizes.** AUC/AP behave sensibly on an unrelated dataset;
+  char-n-gram again beats raw token Jaccard, as on the pilot.
+- **Price is strong on both, but not always strongest.** Price AUC is 0.816 here
+  vs 0.905 on billiger. The difference is the data-generating process: billiger
+  is many merchants listing the *same physical item* (prices cluster tightly, so
+  price is very discriminative), while Amazon-Google lists different
+  editions/bundles at wildly different prices ($5099 vs $29.99 for "the same"
+  software). **Takeaway: price is a strong *complementary* signal whose weight
+  must be learned per dataset, not assumed dominant** — which is why pair-scoring
+  should weight signals, not hardcode one.
+- **AP is base-rate-dependent; AUC is not.** AP collapses here (0.28–0.42) purely
+  because the match rate is 10.2% vs the pilot's 40.5% — concrete support for the
+  evaluation.md rule to always report the base rate beside AP and prefer
+  base-rate-robust reads.
+
+Caveat: Amazon-Google is a two-source software-product benchmark with pre-blocked
+labeled pairs (not a multi-source clustering task), so it anchors the *signal*
+analysis, not the end-to-end clustering.
 
 ## Caveats
 
