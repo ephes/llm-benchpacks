@@ -136,8 +136,11 @@ def scrape(
     query: str = "",
     max_offers: int | None = None,
     skip_base: int = 0,
+    seen_variants: set[str] | None = None,
 ) -> list[dict]:
     requests_made = 0
+    if seen_variants is None:
+        seen_variants = set()
 
     def get(url: str) -> str | None:
         nonlocal requests_made
@@ -156,14 +159,19 @@ def scrape(
     print(f"    using {len(bases)} baseproducts (skip {skip_base})")
 
     variant_paths: list[str] = []
-    variant_seen: set[str] = set()
+    queued: set[str] = set()  # dedup within this category's queue only
     for i, bp in enumerate(bases, 1):
         html = get(BASE + bp)
         if not html:
             continue
         vs = variant_links(html, n_variant)
-        fresh = [v for v in vs if v not in variant_seen]
-        variant_seen.update(fresh)
+        # Skip products already fetched by an earlier search term (seen_variants is
+        # shared across categories). Use a per-category `queued` set to avoid
+        # queueing a variant twice here, but do NOT mark seen_variants yet — a
+        # queued variant that is never fetched (request cap / fetch failure) must
+        # stay eligible for a later search term.
+        fresh = [v for v in vs if v not in seen_variants and v not in queued]
+        queued.update(fresh)
         variant_paths.extend(fresh)
         print(f"[2] ({i}/{len(bases)}) {bp} -> {len(vs)} variants ({len(fresh)} new)")
         if requests_made >= max_requests:
@@ -175,6 +183,7 @@ def scrape(
         html = get(BASE + vp)
         if not html:
             continue
+        seen_variants.add(vp)  # mark globally seen only after a successful fetch
         # Keep only offers whose own payload cluster_id matches this page's target
         # product; the page also carries clickouts for recommendations/ads that
         # belong to other products and must not be mislabelled into this cluster.
@@ -263,6 +272,7 @@ def main() -> None:
 
     queries = [q.strip() for q in args.searchstrings.split(",") if q.strip()]
     target = args.target_offers or None
+    seen_variants: set[str] = set()  # shared across categories: fetch each product once
     all_rows: list[dict] = []
     for query in queries:
         url = f"{BASE}/search?searchstring={urllib.parse.quote(query)}"
@@ -277,6 +287,7 @@ def main() -> None:
                 query,
                 max_offers=remaining,
                 skip_base=args.skip_baseproducts,
+                seen_variants=seen_variants,
             )
         )
         if target and len(all_rows) >= target:

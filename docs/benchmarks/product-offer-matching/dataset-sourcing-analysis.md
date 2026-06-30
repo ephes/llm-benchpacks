@@ -262,25 +262,28 @@ separate description and the merchant's raw (pre-classification) category.
 
 A pilot scraper
 (`benchpacks/product-offer-matching/scripts/scrape-billiger-pilot.py`) ran across
-15 categories — smartphones, tablets, laptops, GPUs, TVs, smartwatches, coffee
-machines, monitors, SSDs, air fryers, e-bikes, headphones, robot vacuums,
-printers, and dishwashers (`--searchstrings`, popular products per category,
-polite per-category request cap, `--target-offers` global stop, and
-`--skip-baseproducts` to top up beyond a prior run without re-fetching). Sample
-output: `benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv`.
+~50 billiger categories via broad category terms plus family-drill search terms
+(e.g. `iphone`, `xiaomi`, `rtx 5070`, `lenovo thinkpad`, `mähroboter`,
+`elektrische zahnbürste`) that surface deep sibling sets. The scraper captures all
+variants per product (`--variants-per-base`), dedups variant fetches across search
+terms, and supports `--target-offers`/`--skip-baseproducts` for resumable runs.
+Sample output: `benchpacks/product-offer-matching/pilot-data/billiger-pilot-offers.csv`.
 A companion viewer (`scripts/build-billiger-viewer.py`) renders the clusters as a
 static HTML page for visual inspection.
 
 Results:
 
-- **10,825 offers across 1,485 clusters (63 singletons), ~7.3 offers/cluster, 100%
-  price and image coverage**, balanced across 15 categories. The initial HTML
-  carries ~8–10 offers per variant, so the lazy-load segment endpoint (open
-  question 3) is **not needed** for a useful fixture.
+- **31,330 offers across 4,653 clusters (308 singletons), ~6.7 offers/cluster, 100%
+  price and image coverage**, spanning 50 billiger categories. (Deepened from an
+  initial 10.8k by capturing every variant per product and drilling confusable
+  families; billiger's popular-product well caps breadth near ~30–35k without
+  descending into the long tail.) The initial HTML carries ~7–10 offers per
+  variant, so the lazy-load segment endpoint (open question 3) is **not needed**
+  for a useful fixture.
 - Each row has: raw merchant title, shop, price, brand, category label, image URL,
   the source search term, and the billiger variant `product_id` as the cluster key.
 - **Cluster quality is high but not perfect.** A crude title-vs-label model-token
-  heuristic flags ~0.44% of offers as possible cross-model mismatches; manual
+  heuristic flags ~0.38% of offers as possible cross-model mismatches; manual
   inspection shows these are a mix of genuine source mislabels (e.g. an ebay
   `Samsung Galaxy S25 Ultra` offer in the `Galaxy S26 Ultra 256 GB Black` cluster
   `5566514751`, or a Galaxy A55 offer in a Galaxy S24 cluster) and heuristic false
@@ -311,28 +314,33 @@ makes a harder, signal-richer matching task than the title-only PriceRunner fixt
 
 A deliberately simple baseline
 (`benchpacks/product-offer-matching/scripts/baseline-clusterer.py` — brand+category
-blocking, title-token Jaccard, union-find) was run on the 10,825-offer set to read
-both difficulty and the system-metric behaviour at this size:
+blocking, title-token Jaccard, union-find) was run to read both difficulty and the
+system-metric behaviour, first on the initial 10.8k set and again after deepening
+to 31,330 offers:
 
-- **Difficulty is real.** The title-only baseline tops out at **B-cubed F1 ≈ 0.41**
-  and **pairwise F1 ≈ 0.12** (best of thresholds 0.3–0.7) — *failing* both pass
-  thresholds (0.70 / 0.20). Precision collapses when the many sibling products
-  (e.g. 83 TV size-variants, 35 RTX-5070 boards, 103 Samsung phones in one block)
-  get merged; recall collapses when terse titles (`iPhone 17`) miss verbose ones.
-  So matching is **not** unrealistically easy at 10k — there is large headroom for
-  price/image/embedding signals, which makes it a good discriminating lane.
-- **System metrics saturate.** One isolated clusterer run (CSV load + tokenize +
-  block + match, measured in a clean subprocess) uses peak RSS ≈ 50 MB so the
-  memory term `min(1024/rss_mb, 1)` = 1.000, and ~12–13k offers/s (above the
-  10,000 cap) so the
-  throughput term `min(offers_per_second/10000, 1)` = 1.000. Both return 1.000 for
-  even a naive Python baseline, so **15% of the combined score is dead weight at
-  10k** and measures nothing about a real system's memory or throughput.
+- **Difficulty is real and rises with depth.** On the 31k set the title-only
+  baseline tops out at **B-cubed F1 ≈ 0.40** and **pairwise F1 ≈ 0.03** (best of
+  thresholds 0.3–0.7) — *failing* both pass thresholds (0.70 / 0.20) and slightly
+  harder than the 10.8k set (≈ 0.41 / 0.12). Precision collapses when the many
+  sibling products (the densest brand+category blocks now hold 344 / 227 / 221
+  products; 88% of products sit among ≥10 siblings) get merged; recall collapses
+  when terse titles (`iPhone 17`) miss verbose ones. So matching is **not**
+  unrealistically easy — there is large headroom for price/image/embedding signals,
+  which makes it a good discriminating lane.
+- **Memory still saturates; throughput begins to discriminate.** One isolated
+  clusterer run uses peak RSS ≈ 50 MB (10.8k) to ≈ 107 MB (31k), so the memory term
+  `min(1024/rss_mb, 1)` stays at 1.000 — still non-discriminating. Throughput,
+  however, falls from ~12–13k offers/s at 10.8k (saturating the 10,000 cap) to
+  **≈ 4,700 offers/s at 31k** (term ≈ 0.47, **no longer saturated**): the naive
+  O(n²)-within-block baseline is finally slow enough that the metric penalises it.
+  A well-blocked implementation would still clear the cap, so throughput now does
+  its intended job — separating non-scalable approaches from scalable ones — while
+  memory remains dead weight until a much larger (amplified) scale set.
 
-Conclusion: **10k is enough for the quality lane and insufficient for the
-system-metric lanes.** This motivates the tiered design (decision D-036): keep the
-real set for quality (optionally deepened to ~30–50k by saturating dense families),
-and measure offers/s, memory, and blocking-at-scale on a block-structure-preserving
+Conclusion: **the real set is enough for the quality lane (hard and discriminating)
+and for throughput discrimination once deepened, but memory still needs scale.**
+This motivates the tiered design (decision D-036): keep the real set for quality,
+and measure memory and blocking-at-scale on a block-structure-preserving
 amplification to 100k–1M rows rather than brute-scraping the shallow popular tail.
 
 ## Open questions (resolve before building)
