@@ -165,11 +165,11 @@ Each option is judged against:
 |---|---|---|---|
 | Price signal | Yes, per offer | Sparse / incidental | Yes |
 | Image signal | Yes, per product | Sparse / incidental | No |
-| Per-merchant title variance | Likely (verify) | Yes | Limited (2 sources) |
-| Gold cluster labels | Pre-solved per page | From identifiers, variable | Yes |
+| Per-merchant title variance | Confirmed (billiger) | Yes | Limited (2 sources) |
+| Gold cluster labels | Pre-solved per page (GTIN13) | From identifiers, variable | Yes |
 | Popularity/category control | Yes (decisive) | No | No |
 | Extraction effort to first sample | Low–moderate | Moderate–high | Very low |
-| Anti-bot / access friction | High | Low | None |
+| Anti-bot / access friction | High (idealo/geizhals); low (billiger) | Low | None |
 | Reproducibility | Weak (needs snapshot) | Strong | Strong |
 | Legal / ToS exposure | Higher (accepted) | Low | Low |
 | Maintenance | Higher | Low | Low |
@@ -189,33 +189,103 @@ Each option is judged against:
   non-redistributed research sample. That makes scraping viable to *consider*, but
   the residual risk and maintenance cost remain real cons, not zeros.
 
+## Feasibility probe: billiger.de (2026-06-30)
+
+A single-page probe (a handful of polite, unauthenticated `curl` requests)
+tested the scrape route against the candidate aggregators.
+
+**Access.** `geizhals.at` is behind a Cloudflare managed challenge
+(`cf-mitigated: challenge`); plain HTTP requests are blocked and a real headless
+browser would be required. `billiger.de` serves full HTML to a plain request
+(HTTP 200, no challenge) and is the practical target.
+
+**Structure.** billiger.de maps almost directly onto the existing pack shape:
+
+- `/baseproducts/<id>` is the product model (schema.org `ProductGroup`) holding
+  variant `Product`s; each variant carries a normalised name, brand, a CDN image
+  URL, a **GTIN13**, and an `AggregateOffer` with low price and `offerCount`.
+- `/products/<id>` and `/pricelist/<id>` expose the individual merchant offers.
+- A base64 `data-econda-clickout-params` payload per offer decodes to structured
+  fields: product id, normalised name, category id + hierarchical category path,
+  brand, shop id, shop name, and per-offer price.
+
+**Key confirmation — the matching signal is present.** For one identical variant
+(Galaxy S24 Ultra, 512 GB, Titanium Black) merchants wrote genuinely different
+titles, e.g. `Samsung Galaxy S24 Ultra 512GB 12RAM S928B/DS Titanium Black`
+vs. `Samsung Galaxy S24 Ultra S928B 5G 512GB titanium black EU - Schwarz/Silber`
+vs. an Amazon listing packing camera/S-Pen/warranty text. Per-offer prices for
+that same variant ranged roughly €819–€1439. Titles are not normalised to one
+canonical string, so the clustering task is not trivialised.
+
+**Recoverable per-offer fields** (versus a typical merchant feed CSV):
+
+| Feed field | Recoverable | Source |
+|---|---|---|
+| Merchant title (raw, varied) | Yes | offer rows — the matching signal |
+| Price (per merchant) | Yes | clickout payload + offer row |
+| Shipping cost | Yes | offer row |
+| Shop name + id | Yes | `/shops/<id>`, clickout payload |
+| Condition (new/used) | Yes | offer-list attribute |
+| Brand | Yes | clickout payload + JSON-LD |
+| GTIN/EAN | Yes (variant level) | JSON-LD `gtin13` — clean cluster key |
+| Image | Yes (variant level) | JSON-LD CDN URL |
+| billiger category | Yes | clickout payload: hierarchical path + ids |
+| Cluster label | Yes | baseproduct/variant id + GTIN |
+| Offer description (separate field) | Partial | no distinct field; titles are description-rich |
+| Merchant raw category (pre-classification) | No | consumed internally, not re-exposed |
+| Merchant deeplink (real shop URL) | No | behind a tokenised clickout redirect |
+
+**Caveats.**
+
+- The category billiger exposes is the **output of billiger's own text
+  classifier**, not a raw merchant signal. It is usable as a clean `category_label`
+  (as PriceRunner's is), but it must not be treated as ground truth; using it as a
+  feature means feeding models another model's predictions.
+- There is **no distinct offer-description field**; merchant titles carry
+  description-like content but a separate description is not publicly rendered.
+- The full offer list is **lazy-loaded** (≈4–8 offers in the initial HTML versus
+  an `offerCount` of 13–19), so recovering every offer per product needs the
+  segment endpoint. For a benchmark sample this is likely unnecessary — even 4–8
+  offers per cluster exceeds PriceRunner's ≈2.7 average.
+
+**Net.** billiger.de yields **more than the PriceRunner CSV had** — it adds price,
+image, GTIN, shipping, condition, and per-offer shop on top of varied titles and a
+category. The two fields that cannot be cleanly recovered are the merchant's
+separate description and the merchant's raw (pre-classification) category.
+
 ## Open questions (resolve before building)
 
-1. **Per-merchant title variance** on a real product page — is the matching
-   signal actually present, or are offers normalised to one title? (Single-page
-   probe answers this.)
-2. **JSON-LD completeness** per candidate site — do `Product`/`Offer` blocks
-   include price, image, merchant, and breadcrumb category as structured fields?
-3. **WDC price/image coverage** — what fraction of WDC product offers actually
-   carry a usable price and image? (Decides whether option 2 is even feasible.)
-4. **Reproducibility contract** — confirm the fixture (not just scripts) is
+1. ~~**Per-merchant title variance**~~ — *resolved by the probe: present and
+   genuinely noisy on billiger.de.*
+2. ~~**JSON-LD / markup completeness**~~ — *resolved: price, image, GTIN, brand,
+   shop, and category are all recoverable from billiger.de (see table above).*
+3. **Full offer-list extraction** — locate the lazy-load segment endpoint and
+   confirm every merchant offer (with per-offer price + raw title) is retrievable,
+   or decide that the initial-HTML 4–8 offers per cluster suffice.
+4. **WDC price/image coverage** — what fraction of WDC product offers actually
+   carry a usable price and image? (Decides whether option 2 remains a fallback.)
+5. **Reproducibility contract** — confirm the fixture (not just scripts) is
    committed, and define the snapshot/manifest format that pins a regenerable
    sample.
-5. **Image storage policy** — store URLs only, perceptual hashes, or derived
+6. **Image storage policy** — store URLs only, perceptual hashes, or derived
    embeddings rather than raw images.
 
 ## Recommendation
 
-1. **Pilot the scrape route** on the friendliest aggregator first (**geizhals.at**
-   or **billiger.de** — cleaner JSON-LD and lighter defences than idealo). Start
-   with a single-page probe to settle open questions 1 and 2 before any build.
+1. **Pilot the scrape route on billiger.de** — the probe confirmed it as the
+   practical target (geizhals.at is behind a Cloudflare challenge; idealo is the
+   most defended). The remaining build-blocker is open question 3: confirm the
+   lazy-load offer-segment endpoint, or accept the initial-HTML 4–8 offers per
+   cluster.
 2. **Commit the derived, anonymised fixture plus a snapshot/manifest**, never raw
    HTML or images — mirroring the existing PriceRunner pack so reproducibility is
    preserved despite a live source.
-3. **Time-box a parallel WDC coverage check** (open question 3). If WDC price+image
-   coverage turns out to be dense enough, prefer it — it is reproducible and
-   license-clean. If it is as sparse as expected, the scrape pilot is the path.
-4. **Keep Abt-Buy / Amazon-Google in reserve** as a low-effort price-aware *text*
+3. **Use GTIN13 as the cluster key** where present — it is a cleaner gold label
+   than PriceRunner had — and keep billiger's category only as a `category_label`,
+   not as ground truth (it is a classifier output).
+4. **Time-box a parallel WDC coverage check** (open question 4) as the
+   reproducible, license-clean fallback if the scrape route is later abandoned.
+5. **Keep Abt-Buy / Amazon-Google in reserve** as a low-effort price-aware *text*
    lane if the multimodal goal is deferred.
 
 Net: scraping is the lower-effort path to the specific signals we want and the
