@@ -131,6 +131,13 @@ The recall–cost trade-off is a curve, not a point: sweep the blocking paramete
 (window size, k, threshold, n-gram length) and plot PC against RR (or against
 candidate count). A good blocker dominates: higher PC at equal RR.
 
+> **Example (billiger pilot).** `(brand, category)` blocking reached pair
+> completeness 1.000 at RR 0.976 (losing zero gold pairs), while first-title-token
+> blocking still lost ~22% of gold pairs (PC 0.779) at worse reduction. Blocking
+> was *not* the bottleneck — the matcher was. Max block size 783 already signals
+> that this key needs refinement or ANN at the larger systems scale. See
+> [findings-pilot.md](findings-pilot.md).
+
 Diagnostics worth recording:
 
 - the largest blocks and their keys (giant blocks are usually a common brand or

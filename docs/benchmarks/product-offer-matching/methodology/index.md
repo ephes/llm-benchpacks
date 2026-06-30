@@ -139,6 +139,7 @@ and found code have an obvious slot:
 | [data-quality.md](data-quality.md) | Label noise + cleanup | grounded |
 | [benchmark-constraints.md](benchmark-constraints.md) | Implementation constraints | grounded |
 | [resources.md](resources.md) | Code / datasets / auto-research | seeded |
+| [findings-pilot.md](findings-pilot.md) | Empirical signal/baseline analysis (billiger pilot) | evaluated |
 
 ## How this feeds the auto-research phase
 
@@ -152,6 +153,15 @@ When a representative sample is collected, the auto-research pass will:
 
 Until then, the empirical sections specify the method and leave the numbers to
 that pass.
+
+The first such result is recorded in
+[findings-pilot.md](findings-pilot.md): a signal & baseline analysis on the
+billiger pilot (blocking recall, per-signal separability, baseline error
+analysis, ablations). Headline: blocking is solved on this data
+(`(brand, category)` pair completeness 1.000), the baseline fails by *splitting*
+71% of clusters (same-product titles share only median 0.34 Jaccard), and price
+is the strongest single signal (AUC 0.905) — so the indicated direction is
+multi-signal matching, not better blocking.
 
 ## Related material
 

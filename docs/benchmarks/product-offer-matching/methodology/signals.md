@@ -255,6 +255,14 @@ The output of this analysis is a per-signal table: AUC / AP / chosen threshold /
 behavior on hard slices. That table tells pair-scoring.md which features to
 weight and which thresholds to seed.
 
+> **Example (billiger pilot).** On real candidate pairs, separability ranked
+> price (ROC-AUC 0.905) > TF-IDF word cosine (0.890) > char-3gram (0.838) > token
+> Jaccard (0.826). Shared-code had low AUC and modest AP (0.555) but high
+> precision when present (~85% of shared-code pairs are matches), and token-level
+> code extraction misfired on 21.4% of true matches (false "conflicts") —
+> evidence for the LCS/Aho-Corasick normalization above. See
+> [findings-pilot.md](findings-pilot.md).
+
 ## Benchmark implications
 
 - Provide normalization and identifier-extraction as *described capabilities*,
