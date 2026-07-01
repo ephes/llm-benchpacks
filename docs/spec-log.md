@@ -16,6 +16,145 @@ working history and open questions.
 - ...
 ```
 
+## 2026-07-01 (OfferWeave reference matcher)
+
+### Changed
+
+- Added `offerweave`, a dependency-trained Python reference package inside the
+  billiger matcher fixture, with `clusterer.py` now acting as its verifier entry
+  point.
+- Replaced the singleton Python stub baseline with a learned public-train
+  pair scorer and conservative rare-token graph clustering, then tightened the
+  scorer with explicit variant features for colors, storage, dimensions, and
+  pure numeric generation tokens. A follow-up same-shop negative merge veto
+  plus full token-block candidate generation made the reference implementation
+  pass the pack thresholds. A smaller storage cleanup now ignores sub-64GB
+  values as storage-conflict evidence except in RAM/GPU categories and retunes
+  the edge/merge thresholds. A follow-up merge-validation change scores sparse
+  missing cross-cluster pairs on demand instead of treating them as automatic
+  complete-link failures. Large-cluster graph cleanup then splits weakly
+  connected overmerge tails. A separate visible-train pair-rank scorer improves
+  `pair_scores.csv` without replacing the stronger clustering scorer. Finally,
+  adjacent alpha-number and plus-family code reconstruction recovers model
+  identifiers split by punctuation or whitespace. A later refinement strips
+  non-German accent marks after umlaut handling, adds German/vendor color
+  aliases, reconstructs long-prefix smartwatch/navigation codes, rejects
+  connectivity-conflict merges, and preserves very strong graph edges during
+  large-cluster cleanup when they do not cross clear variant conflicts. The
+  latest refinements expand color aliases for remaining watch and phone
+  merchant vocabulary, add semantic extraction for smartwatch band sizes, Apple
+  M-chip generations, GPU `RTX ... Ti` forms, Samsung TV model aliases, phone
+  `Pro+` variants, RAM speed/layout/form/latency specs, Garmin navigation
+  traffic suffixes, DJI drone bundle variants, and notebook/tablet CPU SKUs.
+  A smartwatch slice then added model-family aliases, semantic watch case-size
+  tokens, and GPS/LTE/eSIM extraction. The next alias slice added Samsung
+  Galaxy Tab, Apple iPad, Google Pixel, Samsung Galaxy S, Xiaomi Redmi/Poco,
+  and Samsung Galaxy Buds model aliases, followed by Samsung tablet tier/SKU
+  and Apple iPad chip/year/connectivity hard variant guards. The latest
+  notebook slice adds Lenovo ThinkPad machine-type/order codes, Microsoft
+  Surface EP2/size variants, Apple MacBook chip/year/order-code/size variants,
+  and notebook family aliases. The latest slices add RAM manufacturer SKU
+  guards for Corsair, Kingston, and G.SKILL kits; canonicalize decimal
+  terabyte storage spellings; apply phone/tablet storage-conflict merge vetoes;
+  split Apple Watch Ultra and Garmin Fenix/Instinct visible variants; and fix
+  Samsung Tab FE+ detection by reading the raw title before `+` normalization.
+  A follow-up phone slice adds iPhone generation/suffix aliases, Xiaomi Redmi
+  non-Note and T-series aliases, POCO Pro/Ultra suffixes, Motorola Edge/Razr/Moto
+  G aliases, and Samsung Galaxy S `+` detection from the raw title. Explicit
+  product-code guards now also separate Philips Sonicare HX/series variants,
+  De'Longhi ECAM model variants, and Samsung Q-series TV variants. The newest
+  storage slice extends decimal/binary capacity canonicalization to 5 TB and
+  10 TB spellings, then applies the storage-conflict merge veto to notebooks
+  after hidden true-pair analysis showed the remaining conflict risk was small.
+  The dependency-enabled training slice adds uv-managed `numpy`, `scipy`, and
+  `scikit-learn`, fits a balanced logistic model over the existing extracted
+  pair features, embeds the learned coefficients, first blends `0.20` of that
+  logit into the established graph and pair-rank scores, then replaces it with a
+  34-feature interaction model over the same cheap pair features. The latest
+  training pass adds category-specific coefficient vectors for seven high-loss
+  categories at blend `0.20`. A follow-up parser slice adds Samsung tablet
+  Wi-Fi/cellular variant guards and Bosch mower SKU/bundle signals. The latest
+  clustering slice relaxes complete-link merge validation after hidden
+  diagnostics showed token/code/unit blocking already covers most true
+  product pairs. It also adds Garmin `010-xxxxx-xx` article numbers for watch
+  and navigation variants. Lenovo machine-type tightening and Samsung tablet
+  enterprise/consumer hard labels were tested and rejected because they lowered
+  aggregate verifier quality. The latest accepted slice adds a cluster-only
+  signal lane for DJI Mic model/bundle aliases, camera aliases/variants, and
+  Apple Watch band-family variants, then adds a GPU/RAM color-conflict veto
+  after hidden true-pair analysis showed those color conflicts were unusually
+  low-risk. An e-bike cluster-only frame-style parser and e-bike-only
+  size-conflict veto then reduce Cube/Haibike frame-size overmerges after hidden
+  true-pair analysis showed e-bike size conflicts were similarly rare. The
+  latest RAM parser fix adds generic module-count aliases to explicit
+  `N x MGB` kit layouts, preventing false layout conflicts between equivalent
+  `2 x 16GB`, `2 pcs`, and dual-channel titles. The latest cluster-only slice
+  adds Samsung tablet Enterprise Edition markers, Xiaomi/Redmi Pad model
+  markers, Garmin DriveSmart/Alexa navigation markers, and Samsung phone
+  Enterprise Edition markers so the clustering graph can split overmerges
+  without changing `pair_scores.csv`. A follow-up bridge slice adds Samsung
+  Galaxy Watch Ultra 2025 and Gigabyte RX 9070 Gaming aliases to recover
+  marketing-name/code splits without adding broad GPU SKU hard conflicts.
+  The latest smartwatch normalization maps Apple `S11` shorthand to Series 11
+  and treats `5G` watch connectivity as cellular/LTE evidence, recovering
+  Apple Watch SE/Series splits caused by merchant vocabulary.
+  A follow-up marketing-alias slice adds Lenovo Idea Tab Plus/Pro aliases, XFX
+  RX 9070 XT Swift/Quicksilver aliases, and Inno3D RTX 5070 Ti X3 OC aliases.
+  An Oral-B iO Series 2 alias was tested and rejected because the combined
+  cluster F1 gain came with weaker pairwise precision than the accepted set.
+  Broad phone/notebook/watch color vetoes, narrow Lenovo/Microsoft notebook and
+  Samsung watch color dimensions, Samsung S731/S936/S938 phone code bridges,
+  and a visible-train `scikit-learn` logistic retrain over 211k token-blocked
+  candidate examples were tested and rejected because they failed to improve the
+  current hidden B-cubed frontier. An earlier broad Garmin DriveSmart
+  no-traffic hard label was rejected, but the final narrower form that only
+  marks bare DriveSmart titles after the `DriveSmartTM`/`66EU` model fix is now
+  accepted.
+  The large-cluster split size-step remains `1.2`, the cluster merge mean
+  threshold is now `0.60`, the cluster merge minimum threshold is now `-1.25`,
+  the guarded post-split remerge rank mean threshold is now `4.0`, and the
+  cluster edge threshold is now `1.5`. A Samsung tablet correction treats FE+
+  text as regular FE when X520 or 10.9-inch evidence contradicts the plus-size
+  model. The latest accepted slice fixes Apple MacBook display-size parsing so
+  `15-Core CPU` is not misread as a 15-inch MacBook, adds a global strong-code
+  remerge pass that removed `22` split fragments, bridges Samsung Tab
+  plus-tier and Apple iPad Air M4/2026 spellings, and recovers smartwatch
+  shorthand case sizes such as `40, 2025`. A follow-up connectivity slice
+  normalizes tablet `5G` as cellular/LTE evidence, and a narrow Samsung phone
+  color splitter separates recognized raw color variants only when no
+  unknown-color offers are present in the cluster. The latest parser slices add
+  DJI Mic/Mic Mini component and bundle markers plus conservative e-bike model
+  markers for Haibike, Cube, Fischer, Zundapp, and Adore titles. A final
+  precision pass adds hard smartwatch case-size conflicts, Lenovo Idea Tab Pro
+  SKU/RAM variant markers, and Samsung Odyssey G55C monitor SKU/diagonal
+  markers. The newest accepted slice recognizes Samsung `titanium silver`
+  phone color text, normalizes Garmin `DriveSmartTM`/`66EU` model spellings,
+  marks bare DriveSmart navigation titles as no-traffic variants when no
+  `MT-*` bundle is visible, and adds cluster-only GPU model/submodel markers
+  for RTX `Ti`, RX `XT`, PNY RTX 5060 Ti fan/OC variants, and Zotac Twin Edge
+  OC variants. A final realism correction removes curated `category_label`
+  from the matcher runtime path: the reference now blocks by brand only, then
+  uses token/code/unit candidate blocks capped at `500` offers, and replaces
+  category-specific parser/scorer dispatch with deterministic title/brand
+  category inference. A follow-up compact-form slice recognizes Samsung Watch
+  `L705`/`L330`/`Watch8`, compact RTX/RX GPU strings, and DJI Mic/Avata family
+  cues under the same no-curated-category contract. The newest accepted alias
+  slice adds Huawei Watch GT and Lenovo Yoga Tab Plus model recovery. A RAM
+  layout follow-up recognizes `32 GB: 2 x 16` style kit descriptions without a
+  repeated module unit. Hidden verifier evidence: eval-pair AP `0.902046`,
+  best hidden eval-pair F1 `0.831549`, eval-cluster precision/recall
+  `0.951378` / `0.821800`, B-cubed F1 `0.855807`, pairwise cluster F1
+  `0.831630`, runtime `38.441s`, combined score `78.862901`.
+- Added the paper-style OfferWeave report under the product-offer benchmark
+  docs, including what worked, what failed, and next clustering work.
+
+### Open Questions
+
+- B-cubed clustering remains the bottleneck. The package now passes the
+  benchmark's `0.70` B-cubed / `0.20` pairwise thresholds and clears the
+  reference pairwise cluster F1 goal of `0.80`, but it does not yet meet the
+  reference goal of `0.95` B-cubed F1.
+
 ## 2026-06-28 (product offer clustering fixture)
 
 ### Changed

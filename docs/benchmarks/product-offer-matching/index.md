@@ -9,6 +9,9 @@ Related material for this benchmark:
 - [Methodology knowledge base](methodology/index.md) — dataset-agnostic
   pipeline methodology (blocking, signals, scoring, clustering, evaluation,
   data quality, constraints, resources)
+- [OfferWeave reference matcher](offerweave-reference.md) —
+  dependency-trained reference implementation report, including hidden verifier
+  metrics and failure analysis
 - [Literature and redesign notes](literature.md)
 - [Dataset sourcing analysis (price + image sources)](dataset-sourcing-analysis.md)
 - [PriceRunner rerun, 2026-06-28](pricerunner-rerun-20260628.md)
@@ -169,8 +172,10 @@ rustc clusterer.rs -O -o <verifier-temp>/clusterer-rust
   --pair-scores pair_scores.csv
 ```
 
-The first Python lane uses only the Python standard library. The first Rust lane
-uses one `clusterer.rs` file compiled directly with `rustc`.
+The bundled Python reference uses the project `uv` environment for dependencies
+such as `numpy`, `scipy`, `scikit-learn`, and `rapidfuzz`, while keeping the
+verifier runtime path deterministic with embedded coefficients. The first Rust
+lane still uses one `clusterer.rs` file compiled directly with `rustc`.
 
 ## Scoring
 

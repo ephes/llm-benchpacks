@@ -29,7 +29,7 @@ def test_product_offer_matching_pack_loads_with_external_agent_cases() -> None:
     ]
 
 
-def test_product_offer_python_stub_verifier_writes_cluster_metrics(
+def test_product_offer_python_reference_verifier_writes_cluster_metrics(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -62,17 +62,61 @@ def test_product_offer_python_stub_verifier_writes_cluster_metrics(
         text=True,
     )
 
-    assert completed.returncode == 1
+    assert completed.returncode == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["passed"] is False
-    assert payload["metrics"]["bcubed"]["precision"] == 1.0
-    assert payload["metrics"]["bcubed"]["f1"] < 0.70
-    assert payload["metrics"]["pairwise_cluster"]["f1"] == 0.0
+    assert payload["passed"] is True
+    assert payload["program_metrics"]["package"] == "offerweave"
+    assert payload["program_metrics"]["oracle_category_blocking"] is False
+    assert payload["program_metrics"]["blocking_key"] == "brand"
+    assert payload["program_metrics"]["category_source"] == "title_brand_inference"
+    assert payload["program_metrics"]["curated_category_features"] is False
+    assert payload["program_metrics"]["compact_category_inference_signals"] is True
+    assert payload["program_metrics"]["samsung_watch_sku_aliases"] is True
+    assert payload["program_metrics"]["huawei_watch_gt_aliases"] is True
+    assert payload["program_metrics"]["lenovo_yoga_tab_aliases"] is True
+    assert payload["metrics"]["bcubed"]["precision"] > 0.75
+    assert payload["metrics"]["bcubed"]["f1"] > 0.8558
+    assert payload["metrics"]["pairwise_cluster"]["f1"] > 0.8316
     assert payload["metrics"]["eval_pair_operating_point_from_clusters"][
         "positive_prevalence"
     ] == 0.25
     assert payload["combined_score"]["formula"].startswith("100 *")
-    assert payload["combined_score"]["components"]["average_precision"] > 0.0
+    assert payload["combined_score"]["components"]["average_precision"] > 0.9020
+    assert payload["pr_curve"]["best_hidden"]["f1"] > 0.80
+    assert payload["program_metrics"]["candidate_pairs"] > 3_900_000
+    assert payload["program_metrics"]["candidate_token_block_max"] == 500
+    assert payload["program_metrics"]["pair_rank_features"] == 23
+    assert payload["program_metrics"]["post_split_clusters"] >= 106
+    assert payload["program_metrics"]["post_remerge_clusters"] >= 20
+    assert payload["program_metrics"]["weak_cluster_split_size_step"] == 1.2
+    assert payload["program_metrics"]["strong_split_keep_threshold"] == 5.0
+    assert payload["program_metrics"]["cluster_edge_threshold"] == 1.5
+    assert payload["program_metrics"]["cluster_merge_mean_threshold"] == 0.6
+    assert payload["program_metrics"]["cluster_merge_min_threshold"] == -1.25
+    assert payload["program_metrics"]["post_remerge_rank_mean_threshold"] == 4.0
+    assert payload["program_metrics"]["global_remerge_clusters"] >= 23
+    assert payload["program_metrics"]["global_remerge_rank_mean_threshold"] == 2.0
+    assert payload["program_metrics"]["global_remerge_rank_min_threshold"] == -1.0
+    assert payload["program_metrics"]["global_remerge_graph_mean_threshold"] == 0.0
+    assert payload["program_metrics"]["global_remerge_token_block_max"] == 80
+    assert payload["program_metrics"]["samsung_phone_color_split_clusters"] >= 14
+    assert payload["program_metrics"]["samsung_phone_raw_color_splits"] is True
+    assert payload["program_metrics"]["learned_cluster_blend"] == 0.2
+    assert payload["program_metrics"]["learned_cluster_features"] == 34
+    assert payload["program_metrics"]["learned_cluster_category_models"] == 7
+    assert payload["program_metrics"]["cluster_only_signal_families"] == 15
+    assert payload["program_metrics"]["tablet_cluster_only_signals"] is True
+    assert payload["program_metrics"]["lenovo_tablet_variant_signals"] is True
+    assert payload["program_metrics"]["samsung_monitor_variant_signals"] is True
+    assert payload["program_metrics"]["watch_case_hard_conflicts"] is True
+    assert payload["program_metrics"]["garmin_navtraffic_none_signals"] is True
+    assert payload["program_metrics"]["samsung_titanium_silver_color_key"] is True
+    assert payload["program_metrics"]["gpu_cluster_variant_signals"] is True
+    assert payload["program_metrics"]["color_hard_conflict_categories"] == 2
+    assert payload["program_metrics"]["size_hard_conflict_categories"] == 1
+    assert payload["program_metrics"]["ram_layout_module_aliases"] is True
+    assert payload["program_metrics"]["ram_colon_layout_aliases"] is True
+    assert payload["program_metrics"]["predicted_clusters"] < 4_050
     assert payload["thresholds"] == {
         "bcubed_f1_min": 0.7,
         "pairwise_cluster_f1_min": 0.2,

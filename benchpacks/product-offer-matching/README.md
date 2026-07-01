@@ -6,10 +6,19 @@ against hidden billiger.de-derived product clusters and eval-pair labels.
 
 Pack version: `0.1.0`.
 
+The Python fixture now includes `offerweave`, a dependency-trained reference
+matcher package invoked by `clusterer.py`. It clears the hidden eval-pair
+average-precision target and now passes the pack's B-cubed and pairwise
+clustering thresholds. It clears the reference pairwise cluster F1 target of
+`0.80`, but it is still below the B-cubed reference goal of `0.95`. See
+`docs/benchmarks/product-offer-matching/offerweave-reference.md` for the
+paper-style report and current metrics.
+
 ## Cases
 
-- `cluster-billiger-python`: implement `clusterer.py` using the Python
-  standard library.
+- `cluster-billiger-python`: implement `clusterer.py`; the bundled
+  `offerweave` reference uses the project `uv` environment and embedded
+  coefficients trained with `numpy`/`scikit-learn`.
 - `cluster-billiger-rust`: implement `clusterer.rs` as a single file that
   compiles with `rustc` and uses only the Rust standard library.
 
@@ -41,7 +50,10 @@ offer_id,title,shop_name,price_eur,brand,category_label,cluster_id,cluster_label
 
 Prediction (test) offers carry the same columns minus the two cluster columns
 (`cluster_id` and `cluster_label`), which are hidden. `category_label` is a
-classifier output rather than a verbatim source field, and the data has no GTIN.
+classifier output rather than a verbatim source field; do not treat it as a
+production-realistic input. The bundled reference does not read it at runtime:
+it infers product family/category from title and brand, then blocks by brand
+plus capped token/code/unit candidate blocks. The data has no GTIN.
 `image_url` is **excluded** from the published offers: the scrape only has the
 canonical billiger product image (one per cluster), so it leaks the gold cluster
 id like a reliable identifier and is stripped, the same way GTIN is (decisions
@@ -68,7 +80,9 @@ Derived fixture shape (from 31,330 input offers, 31,187 kept):
 
 Unlike the title-only PriceRunner predecessor (decision D-034), the billiger
 fixture adds a genuine **price** (`price_eur`) signal alongside title, shop,
-brand, and category, so it supports multi-signal product matching. An image
+brand, and classifier category metadata, so it supports multi-signal product
+matching. The category metadata is retained for transparency and comparison,
+but the reference implementation treats it as non-production metadata. An image
 signal would also help, but only as real per-merchant photos; the canonical
 product image we have is a cluster-id proxy and is excluded (D-038).
 

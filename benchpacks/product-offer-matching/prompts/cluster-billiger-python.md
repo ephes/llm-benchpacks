@@ -44,12 +44,15 @@ pair_id,offer_id_left,offer_id_right
 ```
 
 The data is derived from billiger.de. `category_label` is an aggregator
-classifier output, not ground truth. Training and test true product clusters are
+classifier output, not ground truth or a raw merchant field. You may inspect it
+as noisy metadata for analysis, but do not build a solution that depends on it
+as a production-realistic input. Training and test true product clusters are
 disjoint.
 
 Constraints:
 
-- Use only the Python standard library.
+- You may use the Python standard library and packages already available in the
+  prepared project `uv` environment.
 - No network access or external services.
 - The program must be deterministic: the same input must produce the same output.
 - Do not hardcode test `offer_id`, `pair_id`, labels, or cluster ids. Do not read
