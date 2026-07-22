@@ -230,3 +230,50 @@ qwen runs are also recorded as entries 30–32 in that repo's staged
 the stages manually or via the runner, judge, and per-model timings) is a
 rendered Sphinx page in that repo at `docs/demo-local-model-wrap.md` (build with
 `just docs`; linked from the docs index under **Guides**).
+
+## M5 MLX thinking-high (2026-06-03)
+
+The 2026-06-02 comparison above was run on the M4 Studio, and on `django-resume`
+the MLX cell was run *non-thinking* (thinking-high on this target had only been
+tried on ds4, which derailed). This run fills that gap: the **same staged
+`django-resume` wrap, driven through MLX in `--thinking high`, on the M5 Max
+MacBook Pro** (`atlas.local`, 64 GB) — less memory than the Studio but a faster
+GPU. To keep long thinking traces from being truncated mid-stage (the suspected
+cause of the earlier ds4 derail), MLX was served through a big-context Pi
+provider (`.bench-qwen36/pi-mlx-256k-provider.ts`, id `mlx256k`,
+`contextWindow=262144` / `max_tokens=16384`) instead of the default MLX entry's
+32k/8k.
+
+| Host / serving path | Model / quant | Thinking | Stage 2 | Stage 3 | Outcome |
+|---|---|---|---|---|---|
+| M4 Studio, MLX `mlx_lm.server` | qwen 3.6 27b `mlx-community/Qwen3.6-27B-4bit` | off | 40.0s | 70.2s | PASS (zero edits) |
+| **M5 MBP, MLX `mlx_lm.server` (256k ctx)** | qwen 3.6 27b `mlx-community/Qwen3.6-27B-4bit` | **high** | **24.7s** | **54.5s** | **PASS (zero edits)** |
+| M4 Studio, ds4.c `ds4-server` (2026-06-01) | DeepSeek V4 Flash IQ2XXS | high | 86.38s | 318.01s (`finish_reason=error`) | pass only after manual fixes |
+
+Findings:
+
+- **Thinking-high on MLX was clean** — Stage 2 and Stage 3 both exited 0 as
+  verification-only zero-edit passes, independent packaged smoke returned
+  `GET /health/` 200, `GET /` 302 into the app, and `GET /resume/` 200, and the
+  Electron suite passed 53/53. The model emitted real reasoning traces (confirmed
+  by a control probe), so this is genuinely thinking-high, not a silent no-op.
+- **The faster GPU dominated:** M5 thinking-high (24.7s / 54.5s) was *faster*
+  than M4 non-thinking (40.0s / 70.2s) despite the extra reasoning. On this
+  scaffold-covered, verification-heavy task, thinking-high neither bloated the
+  wall-clock nor derailed.
+- This corroborates the django-wiki/cast conclusion that the 2026-06-01 ds4
+  thinking-high *resume* derail was an under-covered-target / output-truncation
+  property, not thinking mode: with the mature resume scaffold **and** a roomy
+  output budget, MLX thinking-high stayed clean.
+
+Faithfulness and caveats: the staged scaffold needed studio's **unpushed**
+`desktop-django-starter` HEAD `5711b07` (the older `805f621` pin fails Stage 1's
+`prepare-electron-scaffold.cjs` checksum guard), fetched from studio over SSH;
+the MLX weights were rsynced from studio after an unauthenticated HuggingFace
+download stalled. This is a single run with no repeats; raw decode tok/s was not
+isolated (wall-clock includes fixed uv/npm/node/smoke tool time); power and
+thermal were not controlled; MLX 4-bit is not bit-identical to the GGUF lanes;
+and the judge here was the orchestrating agent's independent re-verification, not
+the studio `pi / openai-codex/gpt-5.5` judge. Artifacts:
+`.bench-qwen36/results-mlx-m5-thinkhigh/` in the `desktop-django-starter`
+checkout.
