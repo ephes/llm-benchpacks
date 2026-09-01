@@ -13,376 +13,1162 @@
       "label": "gpt55-pi-django-resume-030-off",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Pi / OpenAI Codex",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, neutral runner"},
-      "timing": {"wall_seconds": 431.7, "wall_display": "7m12s"},
-      "diff": {"files_changed": 35, "insertions": 7767, "deletions": 140},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-pi-django-resume-030-off/", "legacy": false},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 431.7,
+        "wall_display": "7m12s"
+      },
+      "diff": {
+        "files_changed": 35,
+        "insertions": 7767,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-pi-django-resume-030-off/",
+        "legacy": false
+      },
       "notes": "Fresh Pi/off retry completed normally and passed packaged smoke; fastest current-target pass."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-low-rerun1",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "low", "display": "reasoning low, neutral rerun"},
-      "timing": {"wall_seconds": 438.3, "wall_display": "7m18s"},
-      "diff": {"files_changed": 37, "insertions": 8179, "deletions": 0},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-low-rerun1/", "legacy": false},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "low",
+        "display": "reasoning low, neutral rerun"
+      },
+      "timing": {
+        "wall_seconds": 438.3,
+        "wall_display": "7m18s"
+      },
+      "diff": {
+        "files_changed": 37,
+        "insertions": 8179,
+        "deletions": 0
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-low-rerun1/",
+        "legacy": false
+      },
       "notes": "Fresh Codex low rerun passed packaged smoke; fastest direct Codex CLI current-target pass."
     },
     {
       "label": "opus48-openrouter-main-off",
       "date": "2026-06-22",
       "status": "pass",
-      "model": {"id": "claude-opus-4.8", "name": "Claude Opus 4.8", "family": "anthropic"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openrouter", "name": "OpenRouter"},
+      "model": {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
       "runner_provider_display": "Pi / OpenRouter",
-      "thinking": {"kind": "thinking", "level": "off", "display": "off"},
-      "timing": {"wall_seconds": 612.4, "wall_display": "10m12s"},
-      "diff": {"files_changed": 36, "insertions": 7513, "deletions": 135},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-opus48-openrouter-main-off/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "off"
+      },
+      "timing": {
+        "wall_seconds": 612.4,
+        "wall_display": "10m12s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 7513,
+        "deletions": 135
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-opus48-openrouter-main-off/",
+        "legacy": true
+      },
       "notes": "Fastest Opus 4.8 current-target pass; highest approximate OpenRouter cost among successful hosted rows."
     },
     {
       "label": "gpt55-codex-yolo-main-low",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "low", "display": "reasoning low"},
-      "timing": {"wall_seconds": 669.9, "wall_display": "11m10s"},
-      "diff": {"files_changed": 39, "insertions": 8385, "deletions": 137},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-codex-yolo-main-low/", "legacy": true},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "low",
+        "display": "reasoning low"
+      },
+      "timing": {
+        "wall_seconds": 669.9,
+        "wall_display": "11m10s"
+      },
+      "diff": {
+        "files_changed": 39,
+        "insertions": 8385,
+        "deletions": 137
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-codex-yolo-main-low/",
+        "legacy": true
+      },
       "notes": "Earlier direct Codex low pass from the legacy artifact root; slower than the fresh Pi/off and Codex-low rerun rows."
     },
     {
       "label": "gpt55-main-high",
       "date": "2026-06-22",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Pi / OpenAI Codex",
-      "thinking": {"kind": "thinking", "level": "high", "display": "thinking high"},
-      "timing": {"wall_seconds": 701.2, "wall_display": "11m41s"},
-      "diff": {"files_changed": 35, "insertions": 8049, "deletions": 143},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-main-high/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "thinking high"
+      },
+      "timing": {
+        "wall_seconds": 701.2,
+        "wall_display": "11m41s"
+      },
+      "diff": {
+        "files_changed": 35,
+        "insertions": 8049,
+        "deletions": 143
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-main-high/",
+        "legacy": true
+      },
       "notes": "Clean Pi/GPT-5.5 pass; parsed unique-turn usage estimate about $4.92."
     },
     {
       "label": "gpt55-codex-yolo-main-high",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "high", "display": "reasoning high"},
-      "timing": {"wall_seconds": 730.2, "wall_display": "12m10s"},
-      "diff": {"files_changed": 39, "insertions": 8484, "deletions": 140},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-codex-yolo-main-high/", "legacy": true},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "high",
+        "display": "reasoning high"
+      },
+      "timing": {
+        "wall_seconds": 730.2,
+        "wall_display": "12m10s"
+      },
+      "diff": {
+        "files_changed": 39,
+        "insertions": 8484,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-codex-yolo-main-high/",
+        "legacy": true
+      },
       "notes": "Slightly slower than Codex low reasoning on this single pair; broader target-side docs/tests."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-medium",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "medium", "display": "reasoning medium, neutral runner"},
-      "timing": {"wall_seconds": 741.9, "wall_display": "12m22s"},
-      "diff": {"files_changed": 39, "insertions": 7401, "deletions": 140},
-      "verification": {"node_tests": 55, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-medium/", "legacy": false},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "medium",
+        "display": "reasoning medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 741.9,
+        "wall_display": "12m22s"
+      },
+      "diff": {
+        "files_changed": 39,
+        "insertions": 7401,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 55,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
       "notes": "Moderate reasoning pass; slower than low rerun and slightly faster than neutral high."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-high",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "high", "display": "reasoning high, neutral runner"},
-      "timing": {"wall_seconds": 776.2, "wall_display": "12m56s"},
-      "diff": {"files_changed": 38, "insertions": 8380, "deletions": 138},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-high/", "legacy": false},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "high",
+        "display": "reasoning high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 776.2,
+        "wall_display": "12m56s"
+      },
+      "diff": {
+        "files_changed": 38,
+        "insertions": 8380,
+        "deletions": 138
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-high/",
+        "legacy": false
+      },
       "notes": "Fresh neutral-runner repeat. Passed packaged smoke; slower than same-session Codex low failed run."
     },
     {
       "label": "opus48-claude-yolo-django-resume-030-medium",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-opus-4.8", "name": "Claude Opus 4.8", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "medium", "display": "effort medium, neutral runner"},
-      "timing": {"wall_seconds": 871.0, "wall_display": "14m31s"},
-      "diff": {"files_changed": 34, "insertions": 7487, "deletions": 134},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-medium/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "medium",
+        "display": "effort medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 871.0,
+        "wall_display": "14m31s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 7487,
+        "deletions": 134
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
       "notes": "Fastest direct Claude Code/yolo row so far; first launch hit transient API 500 before retry."
     },
     {
       "label": "pipy-gpt55-django-resume-030-off",
       "date": "2026-06-24",
       "status": "pass",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "pipy", "name": "Pipy"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pipy",
+        "name": "Pipy"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Pipy / openai-codex",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, native tool loop"},
-      "timing": {"wall_seconds": 1003.5, "wall_display": "16m44s"},
-      "diff": {"files_changed": 35, "insertions": 7339, "deletions": 141},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/pipy-gpt55-django-resume-030-off/", "legacy": false},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, native tool loop"
+      },
+      "timing": {
+        "wall_seconds": 1003.5,
+        "wall_display": "16m44s"
+      },
+      "diff": {
+        "files_changed": 35,
+        "insertions": 7339,
+        "deletions": 141
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/pipy-gpt55-django-resume-030-off/",
+        "legacy": false
+      },
       "notes": "First Pipy native-tool-loop row; passed packaged smoke, slower than Pi/off and direct Codex rows."
     },
     {
       "label": "glm52-main-high",
       "date": "2026-06-22",
       "status": "pass",
-      "model": {"id": "glm-5.2", "name": "GLM-5.2", "family": "z-ai"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openrouter", "name": "OpenRouter"},
+      "model": {
+        "id": "glm-5.2",
+        "name": "GLM-5.2",
+        "family": "z-ai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
       "runner_provider_display": "Pi / OpenRouter",
-      "thinking": {"kind": "thinking", "level": "high", "display": "thinking high"},
-      "timing": {"wall_seconds": 1014.0, "wall_display": "16m54s"},
-      "diff": {"files_changed": 27, "insertions": 6696, "deletions": 135},
-      "verification": {"node_tests": 40, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-glm52-main-high/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "thinking high"
+      },
+      "timing": {
+        "wall_seconds": 1014.0,
+        "wall_display": "16m54s"
+      },
+      "diff": {
+        "files_changed": 27,
+        "insertions": 6696,
+        "deletions": 135
+      },
+      "verification": {
+        "node_tests": 40,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-glm52-main-high/",
+        "legacy": true
+      },
       "notes": "High thinking was faster than GLM thinking off on this single run; estimated cost about $1.51."
     },
     {
       "label": "opus48-claude-yolo-django-resume-030-low",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-opus-4.8", "name": "Claude Opus 4.8", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "low", "display": "effort low, neutral runner"},
-      "timing": {"wall_seconds": 1053.0, "wall_display": "17m33s"},
-      "diff": {"files_changed": 38, "insertions": 7679, "deletions": 135},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-low/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "low",
+        "display": "effort low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1053.0,
+        "wall_display": "17m33s"
+      },
+      "diff": {
+        "files_changed": 38,
+        "insertions": 7679,
+        "deletions": 135
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-low/",
+        "legacy": false
+      },
       "notes": "First direct Claude Code/yolo row; low effort is the closest no/low-thinking lane."
     },
     {
       "label": "glm52-main-off",
       "date": "2026-06-22",
       "status": "pass",
-      "model": {"id": "glm-5.2", "name": "GLM-5.2", "family": "z-ai"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openrouter", "name": "OpenRouter"},
+      "model": {
+        "id": "glm-5.2",
+        "name": "GLM-5.2",
+        "family": "z-ai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
       "runner_provider_display": "Pi / OpenRouter",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off"},
-      "timing": {"wall_seconds": 1126.4, "wall_display": "18m46s"},
-      "diff": {"files_changed": 31, "insertions": 6689, "deletions": 129},
-      "verification": {"node_tests": 31, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-glm52-main-off/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off"
+      },
+      "timing": {
+        "wall_seconds": 1126.4,
+        "wall_display": "18m46s"
+      },
+      "diff": {
+        "files_changed": 31,
+        "insertions": 6689,
+        "deletions": 129
+      },
+      "verification": {
+        "node_tests": 31,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-glm52-main-off/",
+        "legacy": true
+      },
       "notes": "Slow GLM pass; lowest approximate hosted cost among successful rows."
     },
     {
       "label": "opus48-claude-yolo-django-resume-030-high",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-opus-4.8", "name": "Claude Opus 4.8", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "high", "display": "effort high, neutral runner"},
-      "timing": {"wall_seconds": 1131.3, "wall_display": "18m51s"},
-      "diff": {"files_changed": 34, "insertions": 6688, "deletions": 136},
-      "verification": {"node_tests": 33, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-high/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "high",
+        "display": "effort high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1131.3,
+        "wall_display": "18m51s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 6688,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 33,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus48-claude-yolo-django-resume-030-high/",
+        "legacy": false
+      },
       "notes": "Passed, but slower than Claude Code low effort and same-session Codex high."
     },
     {
       "label": "sonnet46-claude-yolo-django-resume-030-low",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-sonnet-4.6",
+        "name": "Claude Sonnet 4.6",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "low", "display": "effort low, neutral runner"},
-      "timing": {"wall_seconds": 1136.1, "wall_display": "18m56s"},
-      "diff": {"files_changed": 35, "insertions": 7312, "deletions": 138},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-low/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "low",
+        "display": "effort low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1136.1,
+        "wall_display": "18m56s"
+      },
+      "diff": {
+        "files_changed": 35,
+        "insertions": 7312,
+        "deletions": 138
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-low/",
+        "legacy": false
+      },
       "notes": "Fastest Sonnet 4.6 row; first launch hit transient Claude 529 before retry."
     },
     {
       "label": "sonnet46-claude-yolo-django-resume-030-high",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-sonnet-4.6",
+        "name": "Claude Sonnet 4.6",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "high", "display": "effort high, neutral runner"},
-      "timing": {"wall_seconds": 1276.6, "wall_display": "21m17s"},
-      "diff": {"files_changed": 34, "insertions": 7309, "deletions": 133},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-high/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "high",
+        "display": "effort high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1276.6,
+        "wall_display": "21m17s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 7309,
+        "deletions": 133
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-high/",
+        "legacy": false
+      },
       "notes": "Passed; slower than Sonnet low but faster than Sonnet medium."
     },
     {
       "label": "sonnet46-claude-yolo-django-resume-030-medium",
       "date": "2026-06-23",
       "status": "pass",
-      "model": {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "family": "anthropic"},
-      "harness": {"id": "claude-yolo", "name": "Claude Code"},
-      "provider": {"id": "anthropic", "name": "Anthropic"},
+      "model": {
+        "id": "claude-sonnet-4.6",
+        "name": "Claude Sonnet 4.6",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
       "runner_provider_display": "Claude Code / yolo",
-      "thinking": {"kind": "effort", "level": "medium", "display": "effort medium, neutral runner"},
-      "timing": {"wall_seconds": 1554.8, "wall_display": "25m55s"},
-      "diff": {"files_changed": 33, "insertions": 7213, "deletions": 137},
-      "verification": {"node_tests": 47, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-medium/", "legacy": false},
+      "thinking": {
+        "kind": "effort",
+        "level": "medium",
+        "display": "effort medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1554.8,
+        "wall_display": "25m55s"
+      },
+      "diff": {
+        "files_changed": 33,
+        "insertions": 7213,
+        "deletions": 137
+      },
+      "verification": {
+        "node_tests": 47,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/sonnet46-claude-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
       "notes": "Slowest successful current-target pass so far; fewer model-authored Node tests than low/high."
     },
     {
       "label": "qwen38-pi-llamacpp-256k-medium",
       "date": "2026-08-31",
       "status": "pass",
-      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
       "runner_provider_display": "Pi / llama.cpp local",
-      "thinking": {"kind": "thinking", "level": "medium", "display": "reasoning_effort medium, set explicitly"},
-      "timing": {"wall_seconds": 5570.0, "wall_display": "92m50s"},
-      "diff": {"files_changed": 36, "insertions": 7622, "deletions": 120},
-      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium/", "legacy": false},
-      "notes": "First pass by a local open-weight model on this benchmark; exited cleanly rather than timing out. Decisive variable was reasoning_effort=medium, not the model or the quant. Single unreplicated run."
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 5570.0,
+        "wall_display": "92m50s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 7622,
+        "deletions": 120
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium/",
+        "legacy": false
+      },
+      "notes": "First pass by a local open-weight model on this benchmark; exited cleanly rather than timing out. Decisive variable was reasoning_effort=medium, not the model or the quant. Did not replicate: the confirmation cell qwen38-pi-llamacpp-256k-medium-rerun1 failed the packaged smoke, so the medium lane is 1-for-2."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-none",
       "date": "2026-06-23",
       "status": "fail",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "none", "display": "reasoning none, neutral runner"},
-      "timing": {"wall_seconds": 471.4, "wall_display": "7m51s"},
-      "diff": {"files_changed": 33, "insertions": 7377, "deletions": 0},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-none/", "legacy": false},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "none",
+        "display": "reasoning none, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 471.4,
+        "wall_display": "7m51s"
+      },
+      "diff": {
+        "files_changed": 33,
+        "insertions": 7377,
+        "deletions": 0
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-none/",
+        "legacy": false
+      },
       "notes": "Direct-Codex no-reasoning comparison for Pi/off; failed on Electron install integrity before HTTP checks."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-low",
       "date": "2026-06-23",
       "status": "fail",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "codex-yolo", "name": "Codex CLI"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Codex CLI / yolo",
-      "thinking": {"kind": "reasoning", "level": "low", "display": "reasoning low, neutral runner"},
-      "timing": {"wall_seconds": 491.9, "wall_display": "8m12s"},
-      "diff": {"files_changed": 34, "insertions": 8141, "deletions": 2},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-low/", "legacy": false},
+      "thinking": {
+        "kind": "reasoning",
+        "level": "low",
+        "display": "reasoning low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 491.9,
+        "wall_display": "8m12s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 8141,
+        "deletions": 2
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt55-codex-yolo-django-resume-030-low/",
+        "legacy": false
+      },
       "notes": "Fast agent phase, but independent smoke failed on Electron install integrity before HTTP checks."
     },
     {
       "label": "opus48-openrouter-main-high",
       "date": "2026-06-22",
       "status": "fail",
-      "model": {"id": "claude-opus-4.8", "name": "Claude Opus 4.8", "family": "anthropic"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openrouter", "name": "OpenRouter"},
+      "model": {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
       "runner_provider_display": "Pi / OpenRouter",
-      "thinking": {"kind": "thinking", "level": "high", "display": "thinking high"},
-      "timing": {"wall_seconds": 734.3, "wall_display": "12m14s"},
-      "diff": {"files_changed": 32, "insertions": 3384, "deletions": 132},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-opus48-openrouter-main-high/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "thinking high"
+      },
+      "timing": {
+        "wall_seconds": 734.3,
+        "wall_display": "12m14s"
+      },
+      "diff": {
+        "files_changed": 32,
+        "insertions": 3384,
+        "deletions": 132
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-opus48-openrouter-main-high/",
+        "legacy": true
+      },
       "notes": "Packaged backend leaked a starter dependency: ModuleNotFoundError: desktop_django_starter."
     },
     {
       "label": "qwen38-pi-llamacpp-256k-off",
       "date": "2026-08-31",
       "status": "fail",
-      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
       "runner_provider_display": "Pi / llama.cpp local",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, chat-template kwarg"},
-      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
-      "diff": {"files_changed": 38, "insertions": 7749, "deletions": 3},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off/", "legacy": false},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, chat-template kwarg"
+      },
+      "timing": {
+        "wall_seconds": 7200.0,
+        "wall_display": "120m00s"
+      },
+      "diff": {
+        "files_changed": 38,
+        "insertions": 7749,
+        "deletions": 3
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off/",
+        "legacy": false
+      },
       "notes": "First local open-weight Qwen3.8 row; killed by the 7200s runner timeout. Staging failed because .stage/backend/src was not a Python project. No transcript captured (--pi-mode unset), see D-039."
     },
     {
       "label": "qwen38-pi-llamacpp-256k-high",
       "date": "2026-08-31",
       "status": "fail",
-      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
       "runner_provider_display": "Pi / llama.cpp local",
-      "thinking": {"kind": "thinking", "level": "high", "display": "thinking high"},
-      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
-      "diff": {"files_changed": 37, "insertions": 7708, "deletions": 136},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-high/", "legacy": false},
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "thinking high"
+      },
+      "timing": {
+        "wall_seconds": 7200.0,
+        "wall_display": "120m00s"
+      },
+      "diff": {
+        "files_changed": 37,
+        "insertions": 7708,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-high/",
+        "legacy": false
+      },
       "notes": "Killed by the 7200s runner timeout. Its own generated stage-backend.cjs threw a TypeError because it assumed fs.cpSync passes a Dirent to filter. It never ran its own packaged smoke once, and stopped editing files with 51% of the budget unspent. A post-hoc counterfactual correcting only that two-line signature made the packaged app serve, so the distance to pass was a single defect."
     },
     {
       "label": "qwen38-pi-llamacpp-256k-off-prewarmed",
       "date": "2026-08-31",
       "status": "fail",
-      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
       "runner_provider_display": "Pi / llama.cpp local",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, Electron pre-warmed"},
-      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
-      "diff": {"files_changed": 46, "insertions": 7608, "deletions": 138},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off-prewarmed/", "legacy": false},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, Electron pre-warmed"
+      },
+      "timing": {
+        "wall_seconds": 7200.0,
+        "wall_display": "120m00s"
+      },
+      "diff": {
+        "files_changed": 46,
+        "insertions": 7608,
+        "deletions": 138
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off-prewarmed/",
+        "legacy": false
+      },
       "notes": "First cell where stage-backend succeeded, clearing the step that killed runs A and B. It did attempt self-verification and deadlocked on its own invented desktop-dev-smoke target, which passes the smoke flag as an env var while its launcher reads argv; the packaged smoke separately hung because its exit is bound solely to did-finish-load with no failure path."
     },
     {
       "label": "gpt55-main-off-interrupted",
       "date": "2026-06-22",
       "status": "interrupted",
-      "model": {"id": "gpt-5.5", "name": "GPT-5.5", "family": "openai"},
-      "harness": {"id": "pi", "name": "Pi"},
-      "provider": {"id": "openai-codex", "name": "OpenAI Codex"},
+      "model": {
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
       "runner_provider_display": "Pi / OpenAI Codex",
-      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off"},
-      "timing": {"wall_seconds": 1240.1, "wall_display": "20m40s"},
-      "diff": {"files_changed": 37, "insertions": 8259, "deletions": 140},
-      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
-      "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-main-off/", "legacy": true},
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off"
+      },
+      "timing": {
+        "wall_seconds": 1240.1,
+        "wall_display": "20m40s"
+      },
+      "diff": {
+        "files_changed": 37,
+        "insertions": 8259,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "Smoke fail"
+      },
+      "artifact": {
+        "result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-gpt55-main-off/",
+        "legacy": true
+      },
       "notes": "Stopped because raw JSON stream grew to 8.7 GB while the run remained in a self-debug loop."
+    },
+    {
+      "label": "qwen38-pi-llamacpp-256k-medium-rerun1",
+      "date": "2026-08-31",
+      "status": "fail",
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 3567.3,
+        "wall_display": "59m27s"
+      },
+      "diff": {
+        "files_changed": 33,
+        "insertions": 7537,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "smoke-fail",
+        "smoke_display": "smoke exit 1, ModuleNotFoundError example.packaged_settings"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium-rerun1/",
+        "legacy": false
+      },
+      "notes": "Confirmation cell for the medium-lane PASS; did not replicate. Exited cleanly in 59.5 min with 53/53 node tests, staged the backend, but Django died booting packaged mode on a settings module the staging step never ships (ModuleNotFoundError: example.packaged_settings) - the campaign's one-pathology signature: two components disagreeing about an interface on a never-executed path."
+    },
+    {
+      "label": "laguna-xs21-pi-llamacpp-256k-think",
+      "date": "2026-09-01",
+      "status": "fail",
+      "model": {
+        "id": "laguna-xs-2.1",
+        "name": "Laguna XS 2.1 Q4_K_M (33B-A3B MoE)",
+        "family": "laguna"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpplaguna",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "enable_thinking=true (binary toggle, no effort levels; normalized as high)"
+      },
+      "timing": {
+        "wall_seconds": 1910.1,
+        "wall_display": "31m50s"
+      },
+      "diff": {
+        "files_changed": 178,
+        "insertions": 40477,
+        "deletions": 3
+      },
+      "verification": {
+        "node_tests": 35,
+        "smoke": "smoke-fail",
+        "smoke_display": "smoke exit 0 with zero HTTP checks (false success)"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/laguna-xs21-pi-llamacpp-256k-think/",
+        "legacy": false
+      },
+      "notes": "First non-Qwen local open-weight cell and first MoE cell. Fastest self-terminating run and largest diff in the table, but zero executions of its own smoke; will-quit handler hardcodes app.exit(0), so the startup failure (unstaged backend) reported success and only the verifier's app_served gate caught it. Counterfactual: one npm-script path fix stages the backend and boots Django, but the Electron shell issued no HTTP requests across two manual smokes."
     }
   ]
 }

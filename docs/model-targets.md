@@ -284,10 +284,12 @@ Benchmark evidence:
   signature - two lines - made its packaged app build, launch, and serve. The
   failing prewarmed cell did attempt self-verification and deadlocked because
   its own check had no failure path. The passing cell ran 15 smokes.
-- The PASS is one unreplicated run and a confirmation cell was still in flight
-  when this entry was written. Two of the four cells also predate the D-040
-  Electron environment fix. Do not promote Qwen3.8-27B to "reliably passes"
-  on this evidence.
+- The PASS **did not replicate**: the confirmation cell
+  `qwen38-pi-llamacpp-256k-medium-rerun1` failed its packaged smoke
+  (`ModuleNotFoundError: example.packaged_settings`, recorded 2026-09-01),
+  putting the medium lane at 1-for-2. Two of the four original cells also
+  predate the D-040 Electron environment fix. Do not promote Qwen3.8-27B to
+  "reliably passes" on this evidence.
 - This is agent-workflow evidence on one workload from single runs per cell. It
   is not a runtime throughput result and not a replacement for the Qwen3.6
   strict-GGUF preflight lane.

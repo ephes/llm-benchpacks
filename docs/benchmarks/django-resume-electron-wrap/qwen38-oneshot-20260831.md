@@ -40,6 +40,21 @@ this report was written and its result is not yet known. Runs A and B also
 predate the Electron environment fix, so they are not strictly comparable to
 Runs C and D.
 
+**Addendum 2026-09-01: the confirmation cell FAILED — the PASS did not
+replicate.** `qwen38-pi-llamacpp-256k-medium-rerun1` completed 2026-08-31
+21:07: `pi_exit=0` in 3567.3s (59.5 min, a clean self-termination 33 minutes
+faster than Run D), 53/53 Node tests, 33 files changed (+7537/-136), but the
+packaged smoke exited 1 with all HTTP counters 0. `stage-backend` staged the
+backend, and Django died booting packaged mode on `ModuleNotFoundError: No
+module named 'example.packaged_settings'` — the launcher names a settings
+module the staging step never ships, the same one-pathology signature as
+every other failure in this campaign. The transcript shows two
+`just desktop-dev-smoke` (dev-mode) runs and no packaged-smoke execution, so
+the defect survived to the verifier. The medium lane is therefore **1-for-2**:
+`reasoning_effort=medium` remains decisive for avoiding the xhigh/off failure
+modes, but is not sufficient for a reliable pass. See the rerun1 row in
+`docs/run-log.md`.
+
 ## Setup
 
 Host and runtime:
@@ -665,10 +680,11 @@ Reading of that table:
   the host Electron install by hand, which the benchmark contract expects the
   agent to handle. It measures distance-to-pass; it does not convert either
   cell into a pass, and neither cell's recorded outcome changes.
-- **The PASS is unreplicated.** Run D is a single observation. A confirmation
-  run of the same configuration, `qwen38-pi-llamacpp-256k-medium-rerun1`, was
-  in progress when this was written and is not reported here. Do not treat
-  Qwen3.8-27B as a reliable pass on this benchmark until that lands.
+- **The PASS did not replicate.** Run D is a single observation, and the
+  confirmation run `qwen38-pi-llamacpp-256k-medium-rerun1` has since FAILED
+  its packaged smoke (see the 2026-09-01 addendum above), putting the medium
+  lane at 1-for-2. Do not treat Qwen3.8-27B as a reliable pass on this
+  benchmark.
 - **Runs A and B predate the Electron fix.** They ran against a host where the
   Electron binary never installed; Runs C and D ran with the fix in place. A/B
   and C/D are therefore not strictly comparable, and part of the A-B-to-C-D
