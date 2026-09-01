@@ -164,6 +164,191 @@ Sources:
 - <https://huggingface.co/mlx-community/gemma-4-e2b-it-4bit>
 - <https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit>
 
+### Qwen3.8
+
+Qwen3.8-27B dense is the current local open-weight Qwen target for
+agent-shaped coding workloads. It was released around 2026-08-13 under
+Apache 2.0 and first benchmarked in this repo on 2026-08-31.
+
+- Dense target: `Qwen/Qwen3.8-27B`.
+- llama.cpp/Ollama GGUF default: `ggml-org/Qwen3.8-27B-GGUF`, file
+  `Qwen3.8-27B-Q4_K_M.gguf`.
+
+Runtime compatibility, verified on 2026-08-31:
+
+- Qwen3.8 declares `model_type: "qwen3_5"` and
+  `Qwen3_5ForConditionalGeneration` with 64 layers, hidden size 5120, 24
+  attention heads, 4 KV heads, and `max_position_embeddings` 262144. That is
+  the same architecture string and the same geometry as Qwen3.6-27B, so the
+  existing local `llama.cpp` and `mlx-lm` builds load it with no runtime
+  upgrade. Plan Qwen3.8 campaigns as drop-in on hosts that already serve
+  Qwen3.6-27B.
+- Throughput equivalence measured on 2026-09-01: `runtime-sweep` at 4-bit,
+  thinking off, puts every Qwen3.8-27B cell within ~4% of the matching
+  Qwen3.6-27B dense cell on both hosts and both runtimes — llama.cpp ~21
+  (M4 Max) / ~23-24 (M5 Max) median total tok/s, MLX ~25 (M4) / ~30 (M5).
+  MLX wins decode by ~20-25%; llama.cpp wins prefill and TTFT. So the
+  drop-in claim holds for short-context throughput, not just loading. See
+  the 2026-09-01 `docs/run-log.md` row for flags, caveats, and the
+  long-context qualifier.
+- The internals are not the same. 48 of the 64 layers are GatedDeltaNet linear
+  attention and carry no KV cache; only 16 are full attention. KV cost at 262k
+  context is therefore far below a conventional 27B. Treat any Qwen3.6-vs-3.8
+  long-context or memory-pressure comparison as confounded by this even when
+  `--ctx-size` and KV quantization flags are identical.
+- Variant landscape, researched 2026-08-31: the Qwen org publishes exactly three
+  distinct Qwen3.8 base models - `Qwen3.8-27B` (dense VLM, apache-2.0),
+  `Qwen3.8-2.4T-A95B` (MoE, the Max open release, license `qwen3.8-max`, not
+  locally runnable), and `Qwen3.8-Flash-Next` (MoE VLM, `model_type
+  qwen4_exp`, ~180B total / ~6B active, license `qwen-community-1.0`). **There
+  is no Qwen3.8-Coder** and none has been announced; anything under that name
+  on Hugging Face is a community quant.
+- Flash-Next needs a newer llama.cpp than the 27B does. Homebrew's llama.cpp
+  (0.3.0, build 10621, `c1d0e7a00`) lacks the `qwen4exp` arch - verified by
+  `strings libllama.dylib | grep -c qwen4exp` returning 0 - and Homebrew has
+  nothing newer. A source build at commit `774ee0e` (build 200) contains both
+  ggml-org/llama.cpp#27742 "model: add Qwen3.8-Flash-Next (qwen4exp)" (merged
+  2026-08-27, `6c84c7d`) and the follow-up #27880 "qwen4exp: reduce number of
+  graph splits" (`6fe7498`), and the new binary was verified to contain
+  `qwen4exp`. The Homebrew install is untouched and the source build is for
+  Flash-Next only. All 27B cells so far used the Homebrew binary; keep later
+  27B cells on it for parity.
+
+Verified artifact state:
+
+- `ggml-org/Qwen3.8-27B-GGUF`, file `Qwen3.8-27B-Q4_K_M.gguf`,
+  18,973,870,432 bytes, downloaded to
+  `/Users/jochen/models/gguf/qwen3.8-27b/` and served successfully by
+  `llama-server` build 10621 (`c1d0e7a00`) at `--ctx-size 262144` with q8_0
+  KV cache on the M4 Studio.
+- Pinned on 2026-08-31: Hugging Face repo revision
+  `0669b98607d47046c7c2b3f801011d54a08cfccf` (repo last modified
+  2026-08-14), local SHA-256
+  `31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34`. The
+  local digest matches the Hugging Face LFS `oid` for the same path and size,
+  so this pin is upstream-verified rather than self-reported.
+- MLX conversions of the 27B do exist, correcting an earlier note in this repo
+  that none was found: `mlx-community/Qwen3.8-27B-{4bit,8bit,bf16}` run through
+  `mlx-vlm` because the 27B is a VLM, plus
+  `lukaskremla/Qwen3.8-27B-*-MLX-TextOnly` for plain `mlx-lm`. None has been
+  loaded or benchmarked here yet, so treat them as candidates pending
+  preflight. No Ollama Qwen3.8 tag has been verified.
+- Also staged locally and checksum-verified against upstream Hugging Face LFS
+  oids: `ggml-org` `Qwen3.8-27B-Q8_0.gguf` (28,595,763,552 bytes, SHA-256
+  `f5c702d8820d36fb55985bb238fc83ee3a313e920f4b752a437c3a6a9e14e4c8`) and the
+  three `unsloth` `Qwen3.8-Flash-Next-UD-IQ4_XS` shards (10,946,624 /
+  49,835,229,856 / 43,836,407,744 bytes). Neither has benchmark evidence yet.
+
+Chat-template gotchas:
+
+- On this GGUF and llama.cpp build, `--reasoning-budget 0` did **not** disable
+  thinking. Only
+  `--chat-template-kwargs '{"enable_thinking":false}'` produced a genuine
+  thinking-off lane. Verify the thinking state against the template before
+  labelling a Qwen3.8 cell as thinking-off.
+- The reasoning level is controlled by a `reasoning_effort` template variable,
+  not by a llama.cpp flag. Read from `Qwen/Qwen3.8-27B/chat_template.jinja` on
+  2026-08-31, the accepted values are `xhigh`, `medium`, and `low`; there is
+  no `high`, and the template raises on any other value. When thinking is
+  enabled and `reasoning_effort` is unset it resolves to **`xhigh`**, which
+  injects an explicit "think carefully ... validate key assumptions, consider
+  plausible alternatives" instruction. `medium` injects no reasoning
+  instruction at all.
+- Consequence for the 2026-08-31 rows: the cell labelled thinking-high ran at
+  the model's `xhigh` default because the harness never set `reasoning_effort`.
+  Set `--chat-template-kwargs '{"reasoning_effort":"medium"}'` (or `low`)
+  explicitly for any intermediate lane, and treat an uncontrolled thinking-on
+  Qwen3.8 cell as an `xhigh` cell.
+
+Benchmark evidence:
+
+- **Qwen3.8-27B passes the hard one-shot `django-resume` Electron wrap at
+  `reasoning_effort=medium`, the first PASS by a local open-weight model on
+  that benchmark.** Four cells ran on 2026-08-31: thinking-off, the model's
+  uncontrolled `xhigh` default, a second thinking-off cell after the Electron
+  environment fix, and an explicit `medium` cell. The first three failed at the
+  7200s timeout; the `medium` cell exited cleanly in 92.8 minutes with 53/53
+  Node tests and `app_served=1`. All four cells passed 53/53 Node tests on
+  36-46 file wrappers, so output completeness is at hosted-frontier level
+  throughout, and the Qwen3.6 high-thinking zero-file analysis-paralysis mode
+  did not reproduce in any cell. Details and caveats are in
+  `docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`.
+- **`reasoning_effort` is the decisive variable for this target, not the model
+  or the quantization.** The two cells that differ only in reasoning level
+  differ in outcome. Set it explicitly on every Qwen3.8 agentic cell and label
+  by the resolved value (D-041); an uncontrolled thinking-on cell runs at
+  `xhigh`, which was actively harmful here.
+- The limiting factor is self-verification, not code generation. The failing
+  `xhigh` cell never ran its own `smoke:packaged` script, and a post-hoc
+  counterfactual correcting only its invented `isStalePythonArtifact`
+  signature - two lines - made its packaged app build, launch, and serve. The
+  failing prewarmed cell did attempt self-verification and deadlocked because
+  its own check had no failure path. The passing cell ran 15 smokes.
+- The PASS is one unreplicated run and a confirmation cell was still in flight
+  when this entry was written. Two of the four cells also predate the D-040
+  Electron environment fix. Do not promote Qwen3.8-27B to "reliably passes"
+  on this evidence.
+- This is agent-workflow evidence on one workload from single runs per cell. It
+  is not a runtime throughput result and not a replacement for the Qwen3.6
+  strict-GGUF preflight lane.
+
+Sources:
+
+- <https://huggingface.co/Qwen/Qwen3.8-27B>
+- <https://huggingface.co/ggml-org/Qwen3.8-27B-GGUF>
+
+### Laguna XS 2.1
+
+Laguna XS 2.1 (poolside) is the first non-Qwen local coding-specialist target,
+added 2026-09-01. It is a 33B-total / ~3B-active MoE (`model_type: laguna`,
+40 layers, 256 experts, 8 active per token, 262,144 max positions) under the
+permissive OpenMDW-1.1 license, trained specifically for agentic coding and
+long-horizon work.
+
+- Official GGUF: `poolside/Laguna-XS-2.1-GGUF`, file
+  `Laguna-XS-2.1-Q4_K_M.gguf`, 20,274,300,032 bytes, SHA-256
+  `1ac7079101fca5a6df8c5a7523a3c30ea7d1c0e4b1258090e7d6d4039287f6cb`, local
+  copies at `~/models/gguf/laguna-xs-2.1/` on studio and atlas.
+- Throughput measured 2026-09-01 (`runtime-sweep`, thinking off): **~113-121
+  tok/s decode on the M4 Max**, ~5.5x Qwen3.8-27B at the same ~20 GB Q4_K_M
+  footprint; prefill up to ~46k tok/s. Atlas (M5) totals were noisier
+  (89-129 tok/s) and at/below studio on the long case — unresolved, repeat
+  before trusting M5 Laguna numbers. See the 2026-09-01 run-log rows.
+
+Runtime requirements and sharp edges, all verified 2026-09-01:
+
+- **Homebrew llama.cpp build 10621 is not usable for chat** with this model:
+  it loads the `laguna` arch and raw `/completion` works, but the chat-mode
+  response parser silently swallows all output (empty `content`, tokens still
+  billed). Use the source build at `~/src/llama.cpp-774ee0e/bin/` (0.3.0-dev
+  build 200, commit `774ee0e`), which carries an explicit Laguna patch in its
+  chat auto-parser. The atlas copy is rpath-fixed
+  (`install_name_tool -add_rpath @executable_path` + ad-hoc codesign);
+  `DYLD_LIBRARY_PATH` does not survive `nohup` under SIP.
+- Thinking is a **binary** `enable_thinking` chat-template toggle (default
+  false), no effort levels. `--reasoning on/off` does not control it; only
+  `--chat-template-kwargs '{"enable_thinking":...}'` does.
+- **Degenerate default-system-message loop**: with the template's built-in
+  Poolside default system message and thinking off, a user-only prompt at
+  temp 0 makes the model emit `〈|SPECIAL_12|〉` (token 31) forever. Any custom
+  system message avoids it. For system-message-less harnesses (e.g.
+  `runtime-sweep`) serve with the one-line-patched template
+  `~/models/gguf/laguna-xs-2.1/laguna-chat-template-neutral-sys.jinja`;
+  agent harnesses that always send a system prompt (Pi) can use the stock
+  template.
+- Native OpenAI `tool_calls` work out of the box on build 200 (GLM-style
+  `<tool_call>` wire format, parsed server-side).
+- One-shot wrap evidence: first cell (2026-09-01, thinking on) FAILED —
+  fastest, largest-diff cell in the table but zero self-verification and an
+  `app.exit(0)` that masks startup failure as success. See the run-log row
+  before planning follow-up cells.
+
+Sources:
+
+- <https://huggingface.co/poolside/Laguna-XS-2.1>
+- <https://huggingface.co/poolside/Laguna-XS-2.1-GGUF>
+- <https://poolside.ai/blog/introducing-laguna-s-2-1>
+
 ### Qwen3.6
 
 Keep Qwen3.6 as the continuity target for the completed M4/M5 sweep and for
@@ -181,7 +366,10 @@ explicit Qwen comparison requests:
 
 Qwen3.6 remains useful for trend continuity and for the documented Apple
 Silicon MLX-vs-llama.cpp-vs-Ollama workflow. It should not be treated as the
-default answer to every new “current preferred model” question.
+default answer to every new “current preferred model” question. For new local
+Qwen work prefer Qwen3.8-27B above; keep Qwen3.6 as the baseline the Qwen3.8
+rows are read against, and keep it as the only Qwen generation with verified
+MLX, Ollama, and strict same-GGUF tri-host artifacts.
 
 Latest strict-GGUF preflight note:
 
@@ -211,7 +399,7 @@ Keep them separate from Apple/Hetzner local-runtime comparisons.
 | Fast hosted frontier one-shot reference | OpenRouter `anthropic/claude-opus-4.8`; Pi built-in Anthropic ID `claude-opus-4-8` exists but direct Anthropic access was blocked by third-party extra-usage billing on 2026-06-22 | OpenRouter model metadata verified 2026-06-22: text/image model, context length 1,000,000, max completion tokens 128,000; OpenRouter route accepted Pi probes for off and high thinking | Use as a hosted Pi/OpenRouter frontier comparison for one-shot wrap quality and wall-clock, with cost recorded separately from GLM-style hosted runs | First hard one-shot `django-resume` run on 2026-06-22 passed via OpenRouter with thinking off: Pi exited 0 in 612.4s, authored a 36-file Electron wrapper from scratch, passed 53 Node tests, and passed packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). The high-thinking variant failed after 734.3s: it passed 53 Node tests, but packaged smoke failed before HTTP checks with `ModuleNotFoundError: No module named 'desktop_django_starter'`. Parsed unique-turn OpenRouter usage estimates were about $6.22 off and $4.82 high. |
 | Long-horizon hosted agent candidate | OpenRouter `z-ai/glm-5.2`, resolved as `z-ai/glm-5.2-20260616`; upstream HF `zai-org/GLM-5.2` | OpenRouter model metadata verified 2026-06-22: text-only, context length 1,048,576, max completion tokens 32,768, supports tools and reasoning parameters | Use for hosted Pi/OpenRouter one-shot wrap experiments, especially when the question is agent workflow/tool reliability rather than local tokens/sec | First hard one-shot `django-resume` runs on 2026-06-22 passed in both thinking modes tested. Thinking off exited 0 in 1126.4s, authored a 31-file Electron wrapper from scratch, passed Node tests, and passed packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). Thinking high also passed, exiting 0 in 1014.0s with a 27-file wrapper and 40 passing Node tests. A staged run the same day also completed Stage 2/3, but its final Electron wrapper smoke hit a host spawn caveat, so the one-shot rows are the stronger benchmark signal. See `docs/run-log.md`. |
 | Small/free hosted coding model probe | OpenRouter `cohere/north-mini-code:free`; upstream HF `CohereLabs/North-Mini-Code-1.0` | OpenRouter model metadata verified 2026-06-22: text-only, context length 256,000, advertised free pricing, supports tools | Use as a cheap hosted Pi/OpenRouter sanity or efficiency comparison, not as the strongest quality target | Pi tool-call connectivity probe passed on 2026-06-22. No wrap benchmark has been run yet. |
-| Proprietary Qwen hosted agent targets | `qwen3.7-max` and `qwen3.7-plus` through Alibaba Cloud/DashScope-compatible hosted routes when credentials and data policy are acceptable | Not local open-weight replacements. No official Qwen3.7 GGUF/MLX local artifact was verified in this repo on 2026-06-22 | Use only for hosted API comparison lanes, not for the existing Qwen3.6 M4/M5 MLX-vs-llama.cpp-vs-Ollama workflow | `qwen3.7-max` is the text/agent target; `qwen3.7-plus` is the multimodal agent target. Add exact provider, model ID, pricing, context, and credential path before any live run. |
+| Proprietary Qwen hosted agent targets | `qwen3.7-max` and `qwen3.7-plus` through Alibaba Cloud/DashScope-compatible hosted routes when credentials and data policy are acceptable | Not local open-weight replacements. No official Qwen3.7 GGUF/MLX local artifact was verified in this repo on 2026-06-22, and that remains true for the 3.7 line | Use only for hosted API comparison lanes, not for the existing Qwen3.6 M4/M5 MLX-vs-llama.cpp-vs-Ollama workflow | `qwen3.7-max` is the text/agent target; `qwen3.7-plus` is the multimodal agent target. Add exact provider, model ID, pricing, context, and credential path before any live run. Superseded as the answer to “is there a current local Qwen?”: the Qwen3.8 section above records a verified local open-weight Q4_K_M GGUF that loads on existing llama.cpp builds, so a hosted 3.7 route is no longer the only way to get past Qwen3.6 locally. |
 
 Sources:
 
@@ -245,5 +433,18 @@ Sources:
 - Use `docs/gemma4-tri-host-runbook.md` as the archived checklist and template
   for future tri-host campaigns, keeping placeholder metadata examples aligned
   with verified artifacts when they are known.
+- The Qwen3.8 GGUF revision pin and SHA-256 were captured on 2026-08-31 and
+  are recorded in the Qwen3.8 section above. The 2026-08-31 one-shot wrap rows
+  themselves ran before the pin was taken, so treat them as
+  runtime-and-format evidence; any strict same-GGUF or tri-host campaign
+  should re-verify the digest against the pinned revision at preflight.
+- Preflight the identified Qwen3.8-27B MLX conversions (`mlx-community` via
+  `mlx-vlm`, `lukaskremla` TextOnly via `mlx-lm`) and find or build an Ollama
+  tag before Qwen3.8 can replace Qwen3.6 in the Apple Silicon
+  MLX-vs-llama.cpp-vs-Ollama workflow. Only the llama.cpp lane has run.
+- Decide whether to promote `Qwen3.8-Flash-Next` to a benchmark target. Its
+  artifacts are staged and checksum-verified and a `qwen4exp`-capable llama.cpp
+  is built, but it needs the source build rather than the Homebrew binary the
+  27B cells use, so it cannot share their parity lane.
 - Revisit the catalog before scheduling the next authenticated remote or
   service-shaped benchmark matrix.
