@@ -340,10 +340,13 @@ Runtime requirements and sharp edges, all verified 2026-09-01:
   template.
 - Native OpenAI `tool_calls` work out of the box on build 200 (GLM-style
   `<tool_call>` wire format, parsed server-side).
-- One-shot wrap evidence: first cell (2026-09-01, thinking on) FAILED —
-  fastest, largest-diff cell in the table but zero self-verification and an
-  `app.exit(0)` that masks startup failure as success. See the run-log row
-  before planning follow-up cells.
+- One-shot wrap evidence: **0-for-2** (2026-09-01). Thinking-on FAILED with
+  zero self-verification and an `app.exit(0)` that masks startup failure as
+  success; thinking-off FAILED despite genuinely self-verifying (ran staging,
+  its own packaged smoke, 45 Node + 182 Django tests) because it rationalized
+  past its one red end-to-end check and the verifier's smoke then hung. The
+  thinking toggle flips verification *behavior* but neither lane passes. See
+  the run-log rows before planning follow-up cells.
 
 Sources:
 

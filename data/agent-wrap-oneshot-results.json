@@ -1169,6 +1169,49 @@
         "legacy": false
       },
       "notes": "First non-Qwen local open-weight cell and first MoE cell. Fastest self-terminating run and largest diff in the table, but zero executions of its own smoke; will-quit handler hardcodes app.exit(0), so the startup failure (unstaged backend) reported success and only the verifier's app_served gate caught it. Counterfactual: one npm-script path fix stages the backend and boots Django, but the Electron shell issued no HTTP requests across two manual smokes."
+    },
+    {
+      "label": "laguna-xs21-pi-llamacpp-256k-off",
+      "date": "2026-09-01",
+      "status": "fail",
+      "model": {
+        "id": "laguna-xs-2.1",
+        "name": "Laguna XS 2.1 Q4_K_M (33B-A3B MoE)",
+        "family": "laguna"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpplaguna",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "enable_thinking=false (binary toggle, no effort levels)"
+      },
+      "timing": {
+        "wall_seconds": 2144.4,
+        "wall_display": "35m44s"
+      },
+      "diff": {
+        "files_changed": 5626,
+        "insertions": 1140520,
+        "deletions": 130
+      },
+      "verification": {
+        "node_tests": 45,
+        "smoke": "smoke-fail",
+        "smoke_display": "verifier smoke hung to 200s cap, all HTTP counters 0"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/laguna-xs21-pi-llamacpp-256k-off/",
+        "legacy": false
+      },
+      "notes": "Thinking-off A/B partner to the thinking-on cell. Behavioral flip: this lane DID self-verify - ran stage-backend, its own packaged smoke (exit 1), 45/45 node tests and 182 Django tests - but never got a green packaged smoke and declared victory anyway; the verifier smoke then hung to the 200s cap. Diff is inflated: 5,590 of 5,626 files are un-gitignored .stage/ staging output; the authored diff is ~36 files."
     }
   ]
 }
