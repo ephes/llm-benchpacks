@@ -29,6 +29,7 @@ nav = [
     ] },
     { "Django Resume Electron Wrap" = [
       { "Overview" = "benchmarks/django-resume-electron-wrap/index.md" },
+      { "Qwen3.8 One-Shot Campaign 2026-08-31" = "benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md" },
       { "Legacy DS4/Pi Staged Benchmark" = "benchmarks/django-resume-electron-wrap/legacy-ds4-pi-wrap-benchmark.md" },
       { "Legacy DS4 Goal Prompt" = "benchmarks/django-resume-electron-wrap/legacy-ds4-goal-prompt.md" },
     ] },

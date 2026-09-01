@@ -622,8 +622,8 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     summary = import_agent_wrap_results(data_path, db_path)
     second = import_agent_wrap_results(data_path, db_path)
 
-    assert summary.rows_imported == 21
-    assert second.rows_imported == 21
+    assert summary.rows_imported == 25
+    assert second.rows_imported == 25
     rows = query_agent_wrap_results(
         db_path,
         status="pass",
@@ -637,14 +637,14 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     assert rows[0]["timing"]["wall_seconds"] == 1003.5
 
     pass_rows = query_agent_wrap_results(db_path, status="pass")
-    assert len(pass_rows) == 17
+    assert len(pass_rows) == 18
     assert pass_rows[0]["label"] == "gpt55-pi-django-resume-030-off"
     with sqlite3.connect(db_path) as conn:
         count = conn.execute("SELECT COUNT(*) FROM agent_wrap_runs").fetchone()[0]
         fastest = conn.execute(
             "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds LIMIT 1"
         ).fetchone()[0]
-    assert count == 21
+    assert count == 25
     assert fastest == "gpt55-pi-django-resume-030-off"
 
 
@@ -663,7 +663,7 @@ def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     import_agent_wrap_results(pruned_path, db_path)
 
     rows = query_agent_wrap_results(db_path)
-    assert len(rows) == 20
+    assert len(rows) == 24
     assert removed_label not in {row["label"] for row in rows}
 
 
@@ -707,7 +707,7 @@ def test_registry_agent_wrap_cli_import_and_query(
             str(data_path),
         ]
     ) == 0
-    assert "imported 21 agent-wrap rows" in capsys.readouterr().out
+    assert "imported 25 agent-wrap rows" in capsys.readouterr().out
 
     assert main(
         [
@@ -924,7 +924,7 @@ def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     assert "Pipy / openai-codex" in html
     assert "filter-harness" in html
     assert "No imported benchpack result rows are selected." in report
-    assert len(snapshot["agent_wrap_runs"]) == 21
+    assert len(snapshot["agent_wrap_runs"]) == 25
     assert snapshot["agent_wrap_runs"][0]["label"] == "gpt55-pi-django-resume-030-off"
 
 

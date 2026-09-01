@@ -16,6 +16,130 @@ working history and open questions.
 - ...
 ```
 
+## 2026-08-31 (Qwen3.8 first local open-weight wrap pass)
+
+### Changed
+
+- Implemented the D-040 Electron precondition. Root cause pinned in a bare
+  `npm i electron@40.8.5` scratch project: `npm install-scripts approve
+  electron` writes `allowScripts` and still yields nothing, and `node
+  install.js` directly or via `npm rebuild electron --foreground-scripts`
+  prints nothing and exits 0 because the `@electron/get` download promise never
+  settles. The three files in `dist/` ship inside the npm tarball rather than
+  being a partial extraction. Fix is a canonical dist at
+  `/Users/jochen/.cache/benchpack-electron/40.8.5/` plus an `electron ->
+  Electron.app/Contents/MacOS/Electron` symlink, exported through
+  `ELECTRON_OVERRIDE_DIST_PATH` and `ELECTRON_SKIP_BINARY_DOWNLOAD=1`.
+  Validated by deleting `dist/` and `path.txt` and still reaching
+  `smoke_exit=0 / health200=1 / root302=1 / resume200=1`. Environment only; no
+  model code or verifier logic changed.
+- Added Run C, `qwen38-pi-llamacpp-256k-off-prewarmed`, thinking off with the
+  Electron fix. FAIL at the 7200s timeout, but `stage-backend` succeeded for
+  the first time in the campaign. It died on two model-authored defects: an
+  invented `desktop-dev-smoke` justfile target that passes the smoke flag as an
+  env var while its own launcher reads argv, and a packaged smoke whose exit is
+  bound solely to `did-finish-load` with no failure path.
+- Added Run D, `qwen38-pi-llamacpp-256k-medium`, and recorded it as **the first
+  PASS by a local open-weight model on this benchmark**. `pi_exit=0` after
+  5570.0s, 53/53 Node tests, `app_served=1` with counters recounted from
+  `verify-smoke.log` rather than read from `summary.txt`.
+- Recorded that `reasoning_effort` is the decisive variable. Runs C and D are
+  identical except for the reasoning level and differ in outcome; the
+  uncontrolled `xhigh` default and both thinking-off cells failed, explicit
+  `medium` passed. Added D-041 requiring every Qwen3.8 agentic cell to set it
+  explicitly and label by the resolved value.
+- Recorded the campaign's single cross-cutting pathology: all four defects are
+  two model-authored components disagreeing about an interface on a code path
+  the model never executed.
+- Corrected an earlier catalog claim that no Qwen3.8 MLX conversion was found.
+  `mlx-community/Qwen3.8-27B-{4bit,8bit,bf16}` (via `mlx-vlm`) and
+  `lukaskremla/Qwen3.8-27B-*-MLX-TextOnly` (via `mlx-lm`) exist; neither has
+  been preflighted. Also recorded the Qwen3.8 variant landscape (27B dense VLM,
+  2.4T-A95B MoE, Flash-Next MoE VLM; no Qwen3.8-Coder exists) and the
+  checksum-verified local Q8_0 and Flash-Next artifacts.
+- Recorded that Homebrew llama.cpp build 10621 lacks the `qwen4exp` arch and a
+  source build at `774ee0e` (build 200) provides it, for Flash-Next only. All
+  27B cells used the Homebrew binary and later 27B cells should keep to it for
+  parity.
+- Corrected a factual overstatement in the existing Run B write-up. The claim
+  that zero of its 93 bash commands contain `stage-backend` or `.stage/backend`
+  was wrong: two do, a `cp` of the starter's script and a heredoc rewriting a
+  test file. Neither executes anything, so the substantive finding stands, and
+  the wording now says it never *executed* its acceptance criterion.
+
+### Open Questions
+
+- The PASS is unreplicated. A confirmation cell
+  `qwen38-pi-llamacpp-256k-medium-rerun1` was in flight when this entry was
+  written; its result is not yet recorded. Do not treat Qwen3.8-27B as
+  reliably passing until it lands.
+- Runs A and B predate the Electron fix, so the A/B-to-C/D improvement is
+  partly environmental. A rerun of the thinking-off cell with the fix would
+  isolate that, and Run C is a partial answer already (still FAIL).
+- Run D carries the same latent no-failure-path smoke defect as Run C; its
+  checks terminated because they succeeded. Whether the `medium` setting
+  produces checks that can actually fail is untested.
+- Whether `low` behaves like `medium` or like thinking-off on this workload is
+  unknown; only `xhigh`, `medium`, and off have been run.
+
+## 2026-08-31 (Qwen3.8 one-shot agent wrap campaign)
+
+### Changed
+
+- Added the first local open-weight Qwen3.8 rows to the hard one-shot
+  `django-resume` Electron wrap benchmark: `qwen38-pi-llamacpp-256k-off` and
+  `qwen38-pi-llamacpp-256k-high`, both on the studio M4 Max through
+  `llama-server` build 10621 at 262k context with q8_0 KV cache and the
+  `ggml-org/Qwen3.8-27B-GGUF` Q4_K_M artifact.
+- Both cells failed. Each was killed by the 7200s runner timeout, each passed
+  53/53 Node tests with a 37-38 file wrapper, and each died in the
+  packaged-staging step without serving the app.
+- Added `docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`
+  as the curated campaign report, including the Run B transcript forensics and
+  the Qwen3.6 comparison table.
+- Added Qwen3.8 to `docs/model-targets.md` as the current local open-weight
+  Qwen target. It reuses the `qwen3_5` architecture string and Qwen3.6-27B
+  geometry, so it loads on existing llama.cpp and `mlx-lm` builds with no
+  runtime upgrade, but 48 of its 64 layers are GatedDeltaNet linear attention
+  with no KV cache, which confounds memory-pressure comparisons against
+  Qwen3.6. Qwen3.6 stays as the continuity and trend baseline.
+- Recorded D-039: new local-model one-shot wrap runs must pass `--pi-mode json`
+  so a timeout-killed cell still retains a transcript. The thinking-off cell in
+  this campaign was launched without it and lost its transcript on `SIGTERM`.
+- Recorded the chat-template gotcha that `--reasoning-budget 0` does not
+  disable thinking on this Qwen3.8 template; only
+  `--chat-template-kwargs '{"enable_thinking":false}'` does.
+- Recorded a post-hoc counterfactual for the high-thinking cell. Correcting
+  only the model's invented `isStalePythonArtifact` signature, two lines with
+  no other model code touched, and repairing the host Electron install by hand,
+  made `npm run smoke:packaged` run end to end and serve
+  (`smoke_exit=0 health200=1 root302=1 resume200=1`, `app_served=1` under the
+  verifier's own gate). With the recorded 53/53 Node tests that output
+  satisfies the pass criteria, so the distance to pass was a single defect. The
+  recorded outcome for both cells stays FAIL; the counterfactual is a
+  diagnostic, not a result.
+- Recorded D-040 after confirming a host-level Electron install defect: npm
+  11.19.0 gates Electron's postinstall while still exiting 0, and `node
+  install.js` by hand produces only three files with no `Electron.app`, both
+  reproduced with no model involved, while the cached zip is intact and a plain
+  `unzip` yields the correct 275 MB `dist/`. A working Electron binary is now a
+  stated precondition for a clean wrap cell, because otherwise the benchmark
+  scores environment recovery as wrapping quality.
+
+### Open Questions
+
+- No Hugging Face revision pin and no local SHA-256 were captured for the
+  Qwen3.8 Q4_K_M artifact. Both are needed before this lane can be promoted
+  from runtime-and-format evidence to a strict same-GGUF or tri-host campaign.
+- The host Electron install defect behind D-040 is confirmed but not fixed.
+  Until it is, every wrap cell on this host partly measures whether the agent
+  can work around a broken Electron install. Decide whether to fix the host,
+  pin an older electron/npm pair, or pre-provision `dist/` in the runner before
+  the next wrap campaign.
+- Whether Qwen3.8 needs MLX and Ollama conversions before it can replace
+  Qwen3.6 in the Apple Silicon MLX-vs-llama.cpp-vs-Ollama workflow is
+  undecided. Only the llama.cpp lane is verified.
+
 ## 2026-07-01 (OfferWeave reference matcher)
 
 ### Changed

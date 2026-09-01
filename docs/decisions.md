@@ -797,3 +797,87 @@ which is the representative result for the leak-free fixture.
 Reason: a fixture-artifact identifier trivializes the task and rewards shortcut
 discovery over matching; stripping it restores the intended multi-signal
 (title/price/brand/category) difficulty.
+
+## D-039: Local-Model One-Shot Wrap Runs Must Capture A Transcript
+
+New local-model runs of the hard one-shot Django/Electron wrap through
+`scripts/run-agent-wrap-oneshot --runner pi` must pass `--pi-mode json`. A run
+launched without it is not a complete benchmark cell and should be relaunched
+rather than analyzed.
+
+Reason: local-model cells routinely end at the runner timeout, and Pi buffers
+its output. On `SIGTERM` the buffer is discarded, so a timeout-killed run
+without `--pi-mode json` leaves an effectively empty `pi.log` and no way to
+tell an analysis-paralysis collapse from a blocked side-quest from a genuine
+capability gap. The 2026-08-31 `qwen38-pi-llamacpp-256k-off` cell lost its
+transcript exactly this way and its verifier counters alone could not explain
+the failure; the paired `qwen38-pi-llamacpp-256k-high` cell, launched with
+`--pi-mode json`, retained a 19.8 MB JSONL transcript that carried the whole
+diagnosis. Hosted-agent cells usually finish inside the timeout, so this is
+written as a local-model requirement, but passing the flag is harmless
+everywhere and should be the default.
+
+## D-040: A Working Electron Binary Is A Wrap-Benchmark Precondition
+
+Before a hard one-shot Django/Electron wrap cell counts as a clean benchmark
+result, the host must be shown to produce a real
+`electron/node_modules/electron/dist` containing `Electron.app`. `npm install`
+exiting 0 does not establish that. Cells run on a host where that install is
+broken are still recorded, but their notes must say so, because such a cell
+measures workaround ability alongside wrapping ability.
+
+Reason: on the studio host on 2026-08-31, npm 11.19.0 gated Electron's
+postinstall (`npm warn install-scripts ... electron@40.8.5 (postinstall: node
+install.js)`) while still exiting 0, so the runner recorded `npm_install_ok=1`
+against an empty `dist/`. Running `node install.js` by hand exited silently and
+produced only `LICENSE`, `LICENSES.chromium.html`, and `version` with no
+`Electron.app`, reproduced with no model in the loop; the cached
+`electron-v40.8.5-darwin-arm64.zip` was intact and a plain `unzip` produced the
+correct 275 MB `dist/`. The defect is inside Electron's own install/extract
+path on electron 40.8.5 with node v26.8.1. The two Qwen3.8 cells that day
+diverged on exactly this: the thinking-off cell worked around it and its
+packaged app launched, while the high-thinking cell spent 61 of its 120 minutes
+losing to it. Without this precondition the benchmark silently scores
+environment recovery as if it were wrapping quality.
+
+Implemented 2026-08-31. The root cause was pinned in a bare
+`npm i electron@40.8.5` scratch project: `npm install-scripts approve electron`
+writes `allowScripts` and still yields nothing, and `node install.js` directly
+or via `npm rebuild electron --foreground-scripts` prints nothing and exits 0
+because the `@electron/get` download promise never settles, so Node's event
+loop empties and the process exits clean. The three files in `dist/` ship
+inside the npm tarball; they are not a partial extraction. The fix is a
+canonical dist at `/Users/jochen/.cache/benchpack-electron/40.8.5/` built by
+unzipping the cached zip, plus an `electron ->
+Electron.app/Contents/MacOS/Electron` symlink inside it, because
+`electron/index.js` resolves
+`path.join(ELECTRON_OVERRIDE_DIST_PATH, executablePath || 'electron')` and
+`executablePath` comes from a `path.txt` that does not exist when the download
+is skipped. Runs export `ELECTRON_OVERRIDE_DIST_PATH` and
+`ELECTRON_SKIP_BINARY_DOWNLOAD=1`. Validated by deleting `dist/` and `path.txt`
+outright and still reaching `smoke_exit=0 / health200=1 / root302=1 /
+resume200=1`; `install.js` now exits in 0.04s instead of hanging. No model code
+and no verifier logic changed. Cells run before this fix (Qwen3.8 Runs A and B)
+are not strictly comparable to cells run after it.
+
+## D-041: Qwen3.8 Agentic Cells Must Set reasoning_effort Explicitly
+
+Any Qwen3.8 agentic benchmark cell must set the `reasoning_effort` chat-template
+variable explicitly and be labelled by the resolved value, not by the runner's
+`--thinking` argument. A thinking-enabled Qwen3.8 cell that does not set it is
+an `xhigh` cell and must be recorded as one.
+
+Reason: `reasoning_effort` is a chat-template variable, not a llama.cpp flag,
+so no server or runner switch controls it. `Qwen/Qwen3.8-27B/chat_template.jinja`
+accepts only `xhigh`, `medium`, and `low` - there is no `high` - and raises on
+anything else; unset with thinking enabled it resolves to `xhigh`, which
+injects an explicit "think carefully, validate key assumptions, consider
+plausible alternatives" instruction, while `medium` injects no reasoning
+instruction at all. On 2026-08-31 this parameter decided the benchmark outcome.
+Runs C and D were identical in model, quantization, context, KV settings,
+harness, Electron fix, source checkout, and timeout, and differed only in
+reasoning level: the `xhigh` and thinking-off cells failed and the explicit
+`medium` cell passed, becoming the first local open-weight pass on this
+benchmark. A runner label like `--thinking high` is actively misleading here,
+because the template has no `high` and the cell in fact ran at the model's
+maximum deliberation setting.

@@ -95,6 +95,16 @@ uv run benchpack registry agent-wrap import \
 `just registry-site` imports these rows into the local registry-backed site.
 The historical narrative remains in [Run Log](../../run-log.md).
 
+## Campaign Reports
+
+- [Qwen3.8-27B one-shot campaign, 2026-08-31](qwen38-oneshot-20260831.md):
+  four cells, and **the first PASS by a local open-weight model on this
+  benchmark**. Three failed at the 7200s timeout; the fourth exited cleanly
+  with `app_served=1` on a single changed parameter, `reasoning_effort=medium`.
+  Includes transcript forensics, a Qwen3.6 comparison, the host Electron
+  install defect and its fix (D-040), the `reasoning_effort` control
+  requirement (D-041), and a counterfactual measuring distance-to-pass.
+
 ## Historical Notes
 
 Older staged DS4/Pi work is kept here as historical context:

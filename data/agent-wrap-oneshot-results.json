@@ -265,6 +265,21 @@
       "notes": "Slowest successful current-target pass so far; fewer model-authored Node tests than low/high."
     },
     {
+      "label": "qwen38-pi-llamacpp-256k-medium",
+      "date": "2026-08-31",
+      "status": "pass",
+      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
+      "harness": {"id": "pi", "name": "Pi"},
+      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {"kind": "thinking", "level": "medium", "display": "reasoning_effort medium, set explicitly"},
+      "timing": {"wall_seconds": 5570.0, "wall_display": "92m50s"},
+      "diff": {"files_changed": 36, "insertions": 7622, "deletions": 120},
+      "verification": {"node_tests": 53, "smoke": "http-ok", "smoke_display": "HTTP ok"},
+      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium/", "legacy": false},
+      "notes": "First pass by a local open-weight model on this benchmark; exited cleanly rather than timing out. Decisive variable was reasoning_effort=medium, not the model or the quant. Single unreplicated run."
+    },
+    {
       "label": "gpt55-codex-yolo-django-resume-030-none",
       "date": "2026-06-23",
       "status": "fail",
@@ -308,6 +323,51 @@
       "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
       "artifact": {"result_dir": "desktop-django-starter/.bench-qwen36/results-oneshot-opus48-openrouter-main-high/", "legacy": true},
       "notes": "Packaged backend leaked a starter dependency: ModuleNotFoundError: desktop_django_starter."
+    },
+    {
+      "label": "qwen38-pi-llamacpp-256k-off",
+      "date": "2026-08-31",
+      "status": "fail",
+      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
+      "harness": {"id": "pi", "name": "Pi"},
+      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, chat-template kwarg"},
+      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
+      "diff": {"files_changed": 38, "insertions": 7749, "deletions": 3},
+      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
+      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off/", "legacy": false},
+      "notes": "First local open-weight Qwen3.8 row; killed by the 7200s runner timeout. Staging failed because .stage/backend/src was not a Python project. No transcript captured (--pi-mode unset), see D-039."
+    },
+    {
+      "label": "qwen38-pi-llamacpp-256k-high",
+      "date": "2026-08-31",
+      "status": "fail",
+      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
+      "harness": {"id": "pi", "name": "Pi"},
+      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {"kind": "thinking", "level": "high", "display": "thinking high"},
+      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
+      "diff": {"files_changed": 37, "insertions": 7708, "deletions": 136},
+      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
+      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-high/", "legacy": false},
+      "notes": "Killed by the 7200s runner timeout. Its own generated stage-backend.cjs threw a TypeError because it assumed fs.cpSync passes a Dirent to filter. It never ran its own packaged smoke once, and stopped editing files with 51% of the budget unspent. A post-hoc counterfactual correcting only that two-line signature made the packaged app serve, so the distance to pass was a single defect."
+    },
+    {
+      "label": "qwen38-pi-llamacpp-256k-off-prewarmed",
+      "date": "2026-08-31",
+      "status": "fail",
+      "model": {"id": "qwen3.8-27b", "name": "Qwen3.8-27B Q4_K_M", "family": "qwen"},
+      "harness": {"id": "pi", "name": "Pi"},
+      "provider": {"id": "llamacpp38", "name": "llama.cpp local"},
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {"kind": "thinking", "level": "off", "display": "thinking off, Electron pre-warmed"},
+      "timing": {"wall_seconds": 7200.0, "wall_display": "120m00s"},
+      "diff": {"files_changed": 46, "insertions": 7608, "deletions": 138},
+      "verification": {"node_tests": 53, "smoke": "smoke-fail", "smoke_display": "Smoke fail"},
+      "artifact": {"result_dir": "results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off-prewarmed/", "legacy": false},
+      "notes": "First cell where stage-backend succeeded, clearing the step that killed runs A and B. It did attempt self-verification and deadlocked on its own invented desktop-dev-smoke target, which passes the smoke flag as an env var while its launcher reads argv; the packaged smoke separately hung because its exit is bound solely to did-finish-load with no failure path."
     },
     {
       "label": "gpt55-main-off-interrupted",
