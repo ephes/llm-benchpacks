@@ -622,8 +622,8 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     summary = import_agent_wrap_results(data_path, db_path)
     second = import_agent_wrap_results(data_path, db_path)
 
-    assert summary.rows_imported == 28
-    assert second.rows_imported == 28
+    assert summary.rows_imported == 42
+    assert second.rows_imported == 42
     rows = query_agent_wrap_results(
         db_path,
         status="pass",
@@ -637,15 +637,16 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     assert rows[0]["timing"]["wall_seconds"] == 1003.5
 
     pass_rows = query_agent_wrap_results(db_path, status="pass")
-    assert len(pass_rows) == 18
-    assert pass_rows[0]["label"] == "gpt55-pi-django-resume-030-off"
+    assert len(pass_rows) == 32
+    # Fastest pass; GPT-5.6 Sol via Pi (362.9s) ties Codex low and wins on dataset order (id).
+    assert pass_rows[0]["label"] == "gpt56sol-pi-django-resume-030-off"
     with sqlite3.connect(db_path) as conn:
         count = conn.execute("SELECT COUNT(*) FROM agent_wrap_runs").fetchone()[0]
         fastest = conn.execute(
-            "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds LIMIT 1"
+            "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds, id LIMIT 1"
         ).fetchone()[0]
-    assert count == 28
-    assert fastest == "gpt55-pi-django-resume-030-off"
+    assert count == 42
+    assert fastest == "gpt56sol-pi-django-resume-030-off"
 
 
 def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
@@ -663,7 +664,7 @@ def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     import_agent_wrap_results(pruned_path, db_path)
 
     rows = query_agent_wrap_results(db_path)
-    assert len(rows) == 27
+    assert len(rows) == 41
     assert removed_label not in {row["label"] for row in rows}
 
 
@@ -707,7 +708,7 @@ def test_registry_agent_wrap_cli_import_and_query(
             str(data_path),
         ]
     ) == 0
-    assert "imported 28 agent-wrap rows" in capsys.readouterr().out
+    assert "imported 42 agent-wrap rows" in capsys.readouterr().out
 
     assert main(
         [
@@ -727,7 +728,8 @@ def test_registry_agent_wrap_cli_import_and_query(
         ]
     ) == 0
     rows = json.loads(capsys.readouterr().out)
-    assert rows[0]["label"] == "opus48-claude-yolo-django-resume-030-medium"
+    # Fastest passing Claude Code medium-effort row; Fable 5.1 (737.5s) displaced Opus 4.8 (871.0s) on 2026-09-01.
+    assert rows[0]["label"] == "fable51-claude-yolo-django-resume-030-medium"
 
 
 def test_registry_query_rejects_run_id_and_label_together(tmp_path: Path) -> None:
@@ -924,8 +926,8 @@ def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     assert "Pipy / openai-codex" in html
     assert "filter-harness" in html
     assert "No imported benchpack result rows are selected." in report
-    assert len(snapshot["agent_wrap_runs"]) == 28
-    assert snapshot["agent_wrap_runs"][0]["label"] == "gpt55-pi-django-resume-030-off"
+    assert len(snapshot["agent_wrap_runs"]) == 42
+    assert snapshot["agent_wrap_runs"][0]["label"] == "gpt56sol-pi-django-resume-030-off"
 
 
 def test_registry_static_site_export_requires_force_for_existing_output(

@@ -741,6 +741,135 @@
       "notes": "Slowest successful current-target pass so far; fewer model-authored Node tests than low/high."
     },
     {
+      "label": "qwen38-flashnext-pi-llamacpp-128k-medium",
+      "date": "2026-08-31",
+      "status": "pass",
+      "model": {
+        "id": "qwen3.8-flash-next",
+        "name": "Qwen3.8-Flash-Next UD-IQ4_XS (MoE, ~180B/~6B active)",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacppfn",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 2488.1,
+        "wall_display": "41m28s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 6814,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 34,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium/",
+        "legacy": false
+      },
+      "notes": "Fastest local open-weight pass and the first qwen4exp (Flash-Next MoE) cell; needed a source-built llama.cpp (build 200, 774ee0e) at 131072 context with the n-gram table offloaded to CPU. Ran 3 smokes in 54 bash calls and wrote a 34-test harness. Not a controlled comparison with the 27B rows: different binary, context, quant family, and port. Two earlier attempts were terminated externally at ~29.5 min and are discarded, not recorded (D-042); this pass came from a detached relaunch."
+    },
+    {
+      "label": "qwen38-q8-pi-llamacpp-256k-medium",
+      "date": "2026-08-31",
+      "status": "pass",
+      "model": {
+        "id": "qwen3.8-27b-q8",
+        "name": "Qwen3.8-27B Q8_0",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 3701.5,
+        "wall_display": "61m42s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 8025,
+        "deletions": 135
+      },
+      "verification": {
+        "node_tests": 40,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-q8-pi-llamacpp-256k-medium/",
+        "legacy": false
+      },
+      "notes": "Q8_0 control for the medium lane, same Homebrew server and flags as the Q4_K_M cells. Passed on its first attempt, 31 minutes faster than the Q4_K_M pass, with 8 smokes in 64 bash calls. Wrote a 40-test harness rather than the 53-test one every Q4_K_M cell produced. One observation each way: shows the pass is not an artifact of Q4_K_M, not that Q8_0 is more reliable."
+    },
+    {
+      "label": "qwen38-flashnext-pi-llamacpp-128k-medium-rerun2",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "qwen3.8-flash-next",
+        "name": "Qwen3.8-Flash-Next UD-IQ4_XS (MoE, ~180B/~6B active)",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacppfn",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 3737.7,
+        "wall_display": "62m18s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 7032,
+        "deletions": 3
+      },
+      "verification": {
+        "node_tests": 34,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium-rerun2/",
+        "legacy": false
+      },
+      "notes": "Second replication cell for the Flash-Next pass, launched detached (D-042). Exited cleanly in 62.3 min with 34/34 tests and a served packaged app; Flash-Next at reasoning_effort=medium is 3-for-3, the first local open-weight lane whose pass replicated. 102 tool calls, 3 smoke invocations, no electron-builder call. Ran concurrently with a claude-yolo cell from another session on the same host, with free memory at 9-18% and swap up to 12.5 GB."
+    },
+    {
       "label": "qwen38-pi-llamacpp-256k-medium",
       "date": "2026-08-31",
       "status": "pass",
@@ -782,6 +911,479 @@
         "legacy": false
       },
       "notes": "First pass by a local open-weight model on this benchmark; exited cleanly rather than timing out. Decisive variable was reasoning_effort=medium, not the model or the quant. Did not replicate: the confirmation cell qwen38-pi-llamacpp-256k-medium-rerun1 failed the packaged smoke, so the medium lane is 1-for-2."
+    },
+    {
+      "label": "qwen38-flashnext-pi-llamacpp-128k-medium-rerun1",
+      "date": "2026-09-01",
+      "status": "pass",
+      "model": {
+        "id": "qwen3.8-flash-next",
+        "name": "Qwen3.8-Flash-Next UD-IQ4_XS (MoE, ~180B/~6B active)",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacppfn",
+        "name": "llama.cpp local"
+      },
+      "runner_provider_display": "Pi / llama.cpp local",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 7200.0,
+        "wall_display": "120m00s"
+      },
+      "diff": {
+        "files_changed": 38,
+        "insertions": 7504,
+        "deletions": 137
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok (verified after the runner timeout)"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium-rerun1/",
+        "legacy": false
+      },
+      "notes": "First replication cell for the Flash-Next pass, launched detached (D-042). The runner's 7200s timeout killed pi (pi_exit=124), but the verifier found a served packaged app with 53/53 tests, so the gate records PASS - the first pass at the cap in this table. About 30 of the 120 minutes went to a single `npx electron-builder --dir`, which auto-discovered the host's Developer ID identity and deep-signed the app (with its embedded Python runtime) file by file with Apple timestamping; reproduced afterwards, not a hang and not the model's doing. No earlier passing cell had invoked electron-builder. 178 tool calls, 11 smoke invocations."
+    },
+    {
+      "label": "fable51-claude-yolo-django-resume-030-medium",
+      "date": "2026-09-01",
+      "status": "pass",
+      "model": {
+        "id": "claude-fable-5.1",
+        "name": "Claude Fable 5.1",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "medium",
+        "display": "effort medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 737.5,
+        "wall_display": "12m18s"
+      },
+      "diff": {
+        "files_changed": 43,
+        "insertions": 8294,
+        "deletions": 134
+      },
+      "verification": {
+        "node_tests": 60,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/fable51-claude-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
+      "notes": "First Claude 5-family cell on this benchmark and the fastest direct Claude Code/yolo row so far (737.5s vs Opus 4.8 medium 871.0s). Explicit model id claude-fable-5-1 on Claude Code 2.1.257 with the D-040 Electron override in effect. Authored a Go menu module (app-menu.cjs, with tests) for back/forward/overview navigation plus a Django-side tests/desktop_shell_test.py; 60 model-authored Node tests is the most of any Claude Code/yolo row. The agent skipped its own packaged smoke per the skill's unattended-run guidance; the verifier's independent packaged smoke passed. Host caveat: the first ~6.5 minutes overlapped another session's 744s sustained-generation load test against a resident ~49 GB Flash-Next llama-server (1-minute load average 159 two minutes after launch, 10-14% free memory, swap in use), and its last ~5-7 minutes overlapped the same session's qwen38-flashnext-pi-llamacpp-128k-medium-rerun1 local-model wrap cell (launched 23:06:34) generating on that server, so treat the wall time as an upper bound."
+    },
+    {
+      "label": "opus5-claude-yolo-django-resume-030-medium",
+      "date": "2026-09-01",
+      "status": "pass",
+      "model": {
+        "id": "claude-opus-5",
+        "name": "Claude Opus 5",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "medium",
+        "display": "effort medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 855.8,
+        "wall_display": "14m16s"
+      },
+      "diff": {
+        "files_changed": 41,
+        "insertions": 7075,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 33,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus5-claude-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
+      "notes": "Passed at 855.8s, marginally faster than Opus 4.8 medium (871.0s) and 16% slower than the Fable 5.1 medium cell launched concurrently (737.5s). Explicit model id claude-opus-5 on Claude Code 2.1.257 with the D-040 Electron override in effect. 33 model-authored Node tests, fewer than Opus 4.8 medium (53) and equal to Opus 4.8 high (33). Also authored a Go menu (app-menu.cjs, with tests), staged the backend with the bundled Python 3.13 and re-ran the Django-side checks inside the stage bundle; it did not boot its own packaged smoke, and the verifier's independent packaged smoke passed. Same host caveat as the Fable 5.1 medium cell: the first ~6.5 minutes overlapped another session's 744s sustained-generation load test against a resident ~49 GB Flash-Next llama-server, and its last ~5-7 minutes overlapped the same session's qwen38-flashnext-pi-llamacpp-128k-medium-rerun1 local-model wrap cell (launched 23:06:34) generating on that server, so treat the wall time as an upper bound."
+    },
+    {
+      "label": "opus5-claude-yolo-django-resume-030-low",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "claude-opus-5",
+        "name": "Claude Opus 5",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "low",
+        "display": "effort low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 535.2,
+        "wall_display": "8m55s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 6917,
+        "deletions": 139
+      },
+      "verification": {
+        "node_tests": 41,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus5-claude-yolo-django-resume-030-low/",
+        "legacy": false
+      },
+      "notes": "Passed at 535.2s, 49% faster than Opus 4.8 low (1053.0s) and the fastest direct Claude Code/yolo row so far, ahead of Fable 5.1 medium (737.5s). Explicit model id claude-opus-5 on Claude Code 2.1.257 with the D-040 Electron override in effect. 41 model-authored Node tests (Opus 4.8 low: 53). Authored a Go menu for back/forward/overview navigation and an app-data-copy desktop dev mode because example/db.sqlite3 is tracked; deliberately added no packaging CI workflow and said so in its docs. Did not boot its own packaged smoke; the verifier's independent packaged smoke passed. The first launch at 23:13 hit the Claude account session limit after 188.6s with 28 files changed and was discarded as infrastructure noise; this row is the forced retry launched 00:57. Host: the first ~3 minutes ran on a quiet host (80% free memory); from 01:00 another session's Flash-Next llama-server was resident again (10-11% free memory) and generating for its own wrap cell at 80-180% CPU, with the 1-minute load average reaching 101 as this cell finished, so the wall time is still an upper bound."
+    },
+    {
+      "label": "fable51-claude-yolo-django-resume-030-low",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "claude-fable-5.1",
+        "name": "Claude Fable 5.1",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "low",
+        "display": "effort low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 702.9,
+        "wall_display": "11m43s"
+      },
+      "diff": {
+        "files_changed": 40,
+        "insertions": 7952,
+        "deletions": 138
+      },
+      "verification": {
+        "node_tests": 57,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/fable51-claude-yolo-django-resume-030-low/",
+        "legacy": false
+      },
+      "notes": "Passed at 702.9s, 33% faster than Opus 4.8 low (1053.0s) and slightly faster than Fable 5.1 medium (737.5s); slower than Opus 5 low (535.2s). Explicit model id claude-fable-5-1 on Claude Code 2.1.257. 57 model-authored Node tests plus 13 new Django tests in tests/desktop_test.py; authored a Go menu for back/forward/overview navigation and a placeholder icon set. D-040 note: unlike the other three Claude 5 cells, this one reported that electron could not start after npm install skipped Electron's postinstall and copied the 275 MB Electron 40.8.5 dist plus path.txt from the starter checkout, so it measures workaround ability alongside wrapping ability; the other cells ran on the empty dist via the ELECTRON_OVERRIDE_DIST_PATH override. It also wrote a Claude Code auto-memory note about that workaround under ~/.claude/projects/ for the target path. Did not boot its own packaged smoke; the verifier's independent packaged smoke passed. The first launch at 23:11 hit the Claude account session limit after 361.6s with 32 files changed and was discarded as infrastructure noise; this row is the forced retry launched 00:57. Host: quiet for the first ~3 minutes (80% free memory); from 01:00 another session's Flash-Next llama-server was resident again (10-12% free memory) and generating for its own wrap cell, with the 1-minute load average at 90-101 during this cell's last three minutes, so the wall time is an upper bound."
+    },
+    {
+      "label": "opus5-claude-yolo-django-resume-030-high",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "claude-opus-5",
+        "name": "Claude Opus 5",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "high",
+        "display": "effort high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 850.3,
+        "wall_display": "14m10s"
+      },
+      "diff": {
+        "files_changed": 47,
+        "insertions": 8383,
+        "deletions": 134
+      },
+      "verification": {
+        "node_tests": 58,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/opus5-claude-yolo-django-resume-030-high/",
+        "legacy": false
+      },
+      "notes": "Completes the Opus 5 sweep at 3 for 3. Passed at 850.3s, 25% faster than Opus 4.8 high (1131.3s) and level with Opus 5 medium (855.8s); Opus 5 low (535.2s) remains the fastest of the three. Explicit model id claude-opus-5 on Claude Code 2.1.257 with the D-040 Electron override in effect (empty dist/, no workaround). 58 model-authored Node tests (Opus 4.8 high: 33), the largest diff of the Opus 5 cells: a separate navigation.cjs module behind the Go menu, an SVG brand icon with generated icon set, a cross-platform CI workflow, and a fix for the project's missing STATICFILES_DIRS that had left example/static/css/custom.css returning 404. Did not boot its own packaged smoke; the verifier's independent packaged smoke passed. The first launch at 23:16 hit the Claude account session limit within 3.1s with no files changed and was discarded as infrastructure noise; this row is the forced retry launched 01:06 after Opus 5 low in the same lane. Host: throughout the cell another session's Flash-Next llama-server was resident (10-14% free memory) and generating for its own wrap cell at 90-145% CPU, with the 1-minute load average between 5 and 133, so the wall time is an upper bound."
+    },
+    {
+      "label": "fable51-claude-yolo-django-resume-030-high",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "claude-fable-5.1",
+        "name": "Claude Fable 5.1",
+        "family": "anthropic"
+      },
+      "harness": {
+        "id": "claude-yolo",
+        "name": "Claude Code"
+      },
+      "provider": {
+        "id": "anthropic",
+        "name": "Anthropic"
+      },
+      "runner_provider_display": "Claude Code / yolo",
+      "thinking": {
+        "kind": "effort",
+        "level": "high",
+        "display": "effort high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 935.4,
+        "wall_display": "15m35s"
+      },
+      "diff": {
+        "files_changed": 40,
+        "insertions": 8415,
+        "deletions": 132
+      },
+      "verification": {
+        "node_tests": 58,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/fable51-claude-yolo-django-resume-030-high/",
+        "legacy": false
+      },
+      "notes": "Completes the Fable 5.1 sweep at 3 for 3 (low 702.9s, medium 737.5s, high 935.4s). Slowest Claude 5 cell, yet 17% faster than Opus 4.8 high (1131.3s) and 27% faster than Sonnet 4.6 high (1276.6s); 10% slower than Opus 5 high (850.3s). Explicit model id claude-fable-5-1 on Claude Code 2.1.257 with the D-040 Electron override in effect (empty dist/, no workaround). 58 model-authored Node tests plus 19 new Django desktop tests in a 358-line tests/desktop_test.py, the most Django-side coverage of any cell; also fixed the project's missing STATICFILES_DIRS, built the Sphinx docs, and shipped no icon or CI workflow by stated choice. Wrote a Claude Code auto-memory note about the host's Electron binary environment under ~/.claude/projects/ for the target path (same rerun hazard as the Fable 5.1 low cell). Did not boot its own packaged smoke; the verifier's independent packaged smoke passed. The first launch at 23:17 hit the Claude account session limit within 3.5s with no files changed and was discarded as infrastructure noise; this row is the forced retry launched 01:08 after Fable 5.1 low in the same lane. Host: throughout the cell another session's Flash-Next llama-server was resident (10-14% free memory) and generating for its own wrap cell at ~90-125% CPU, with the 1-minute load average between 5 and 133, so the wall time is an upper bound."
+    },
+    {
+      "label": "gpt56sol-pi-django-resume-030-off",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
+      "runner_provider_display": "Pi / OpenAI Codex",
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 362.9,
+        "wall_display": "6m03s"
+      },
+      "diff": {
+        "files_changed": 36,
+        "insertions": 6100,
+        "deletions": 144
+      },
+      "verification": {
+        "node_tests": 39,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt56sol-pi-django-resume-030-off/",
+        "legacy": false
+      },
+      "notes": "New fastest row in the dataset: 362.9s beats GPT-5.5 via Pi thinking off (431.7s) by 16%. Pi 0.84.4 through the built-in openai-codex provider, model gpt-5.6-sol, thinking off, --pi-mode json (JSON transcript kept for forensics; the GPT-5.5 Pi cell used text mode). 38 turns and 68 tool calls (27 read, 21 bash, 14 write, 6 edit). Smallest diff of the 2026-09-01/02 cells (36 files, +6100/-144) with the leanest Django side (89-line base_settings.py, 46-line middleware.py); 39 model-authored Node tests against 53 for GPT-5.5 Pi off. Verified its own dev smoke and redirect chain but did not boot its own packaged smoke; the verifier's independent packaged smoke passed. D-040 override in effect, empty dist/, no workaround. Host caveat: another session's Flash-Next llama-server was resident (13-14% free memory) and generating for its own qwen38-flashnext-pi-llamacpp-128k-medium-rerun2 wrap cell at 74-107% CPU throughout, 1-minute load average 3-19, so the wall time is an upper bound."
+    },
+    {
+      "label": "gpt56sol-codex-yolo-django-resume-030-medium",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
+      "runner_provider_display": "Codex CLI / yolo",
+      "thinking": {
+        "kind": "reasoning",
+        "level": "medium",
+        "display": "reasoning medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 595.7,
+        "wall_display": "9m56s"
+      },
+      "diff": {
+        "files_changed": 39,
+        "insertions": 8417,
+        "deletions": 142
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt56sol-codex-yolo-django-resume-030-medium/",
+        "legacy": false
+      },
+      "notes": "First GPT-5.6 Sol Codex CLI cell. Passed at 595.7s, 20% faster than GPT-5.5 Codex medium (741.9s) with a comparable diff (39 files, +8417/-142 vs +7401/-140) and 53 model-authored Node tests (GPT-5.5 medium: 55) plus 4 new Django tests in tests/desktop_runtime_test.py. Codex CLI 0.151.0, model id gpt-5.6-sol, model_reasoning_effort=medium set explicitly on the command line (the host's ~/.codex/config.toml default is high). Verified its own dev smoke, redirect chain, token behaviour, and packaged settings through the test client; did not boot its own packaged smoke; the verifier's independent packaged smoke passed. D-040 override in effect, empty dist/, no workaround. Host caveat: another session's Flash-Next llama-server was resident (13-14% free memory) and generating for its own qwen38-flashnext-pi-llamacpp-128k-medium-rerun2 wrap cell at 74-107% CPU throughout, 1-minute load average 3-21, so the wall time is an upper bound."
+    },
+    {
+      "label": "gpt56sol-codex-yolo-django-resume-030-low",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
+      "runner_provider_display": "Codex CLI / yolo",
+      "thinking": {
+        "kind": "reasoning",
+        "level": "low",
+        "display": "reasoning low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 362.9,
+        "wall_display": "6m03s"
+      },
+      "diff": {
+        "files_changed": 37,
+        "insertions": 8199,
+        "deletions": 141
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt56sol-codex-yolo-django-resume-030-low/",
+        "legacy": false
+      },
+      "notes": "Passed at 362.9s, tying the GPT-5.6 Sol Pi thinking-off cell to the tenth of a second for fastest row in the dataset, 17% faster than the GPT-5.5 Codex low rerun (438.3s), and passing on the first attempt where GPT-5.5 low had failed once (491.9s) before its rerun. 53 model-authored Node tests, the same count as every GPT-5.5 Codex cell; 37 files, +8199/-141, with a compact Django side (62-line base_settings.py, 41-line desktop.py) and no packaging CI workflow, which it called optional for the wrapping scope. Codex CLI 0.151.0, model id gpt-5.6-sol, model_reasoning_effort=low set explicitly. Verified its own dev smoke, redirect chain, token probes, and packaged settings; did not boot its own packaged smoke; the verifier's independent packaged smoke passed. D-040 override in effect, empty dist/, no workaround. Host caveat: another session's Flash-Next llama-server was resident (13-14% free memory) and generating for its own qwen38-flashnext-pi-llamacpp-128k-medium-rerun2 wrap cell at roughly 70-80% CPU for most of the cell, 1-minute load average 8-21, so the wall time is an upper bound."
+    },
+    {
+      "label": "gpt56sol-codex-yolo-django-resume-030-high",
+      "date": "2026-09-02",
+      "status": "pass",
+      "model": {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex"
+      },
+      "runner_provider_display": "Codex CLI / yolo",
+      "thinking": {
+        "kind": "reasoning",
+        "level": "high",
+        "display": "reasoning high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 635.9,
+        "wall_display": "10m36s"
+      },
+      "diff": {
+        "files_changed": 43,
+        "insertions": 8532,
+        "deletions": 141
+      },
+      "verification": {
+        "node_tests": 54,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt56sol-codex-yolo-django-resume-030-high/",
+        "legacy": false
+      },
+      "notes": "Completes the GPT-5.6 Sol Codex sweep at 3 for 3 (low 362.9s, medium 595.7s, high 635.9s), 18% faster than GPT-5.5 Codex high (776.2s). 54 model-authored Node tests (GPT-5.5 high: 53) and the largest GPT-5.6 Sol diff (43 files, +8532/-141): a 177-line cross-platform packaging workflow with checksum publishing, a docs/dev/desktop.txt guide, and a Sphinx build run with warnings treated as errors. Codex CLI 0.151.0, model id gpt-5.6-sol, model_reasoning_effort=high set explicitly. Verified its own dev smoke, redirect chain, edit view, token probes, packaged static serving, and both media-bootstrap probes; did not boot its own packaged smoke; the verifier's independent packaged smoke passed. D-040 override in effect, empty dist/, no workaround. Host caveat: another session's Flash-Next llama-server was resident (14-18% free memory) and generating intermittently for its own qwen38-flashnext-pi-llamacpp-128k-medium-rerun2 wrap cell at 0-122% CPU, 1-minute load average 3-16, so the wall time is an upper bound."
     },
     {
       "label": "gpt55-codex-yolo-django-resume-030-none",

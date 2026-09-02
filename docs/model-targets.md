@@ -237,7 +237,23 @@ Verified artifact state:
   oids: `ggml-org` `Qwen3.8-27B-Q8_0.gguf` (28,595,763,552 bytes, SHA-256
   `f5c702d8820d36fb55985bb238fc83ee3a313e920f4b752a437c3a6a9e14e4c8`) and the
   three `unsloth` `Qwen3.8-Flash-Next-UD-IQ4_XS` shards (10,946,624 /
-  49,835,229,856 / 43,836,407,744 bytes). Neither has benchmark evidence yet.
+  49,835,229,856 / 43,836,407,744 bytes, 93.7 GB). Both now have one-shot wrap
+  evidence; see below.
+- The `qwen4exp` `llama-server` for Flash-Next lives in two byte-identical
+  durable copies of the same build 200 (`774ee0e`): `~/src/llama.cpp-774ee0e/bin/`
+  (also used by the Laguna cells; its rpath still points into a reapable
+  session scratchpad) and `~/opt/llama.cpp-qwen4exp/bin/` (rpath rewritten to
+  `@executable_path`, ad-hoc re-signed, verified to load without the scratchpad
+  and to contain `qwen4exp`). Use the `~/opt` copy for Flash-Next.
+- Flash-Next memory profile on the 128 GB M4 Max, measured 2026-09-01 with the
+  exact benchmark flags (`--ctx-size 131072`, q8_0 KV, `-ot "ple_ngram_embd=CPU"`):
+  loading wires **96.5 GB** system-wide (from 6.7 GB idle), because
+  Metal-resident weights are wired rather than evictable page cache; free drops
+  from 89% to 11% and the compressor grows from 6.7 GB to 16 GB. Load takes
+  40-54 s. Sustained generation holds ~30 tok/s at short context. Budget the
+  remaining ~30 GB for the OS, the agent, and the benchmark's own Django,
+  Electron, npm and node processes; see the 2026-09-01 run-log rows for the
+  sustained-load and colima numbers.
 
 Chat-template gotchas:
 
@@ -262,16 +278,21 @@ Chat-template gotchas:
 
 Benchmark evidence:
 
-- **Qwen3.8-27B passes the hard one-shot `django-resume` Electron wrap at
-  `reasoning_effort=medium`, the first PASS by a local open-weight model on
-  that benchmark.** Four cells ran on 2026-08-31: thinking-off, the model's
-  uncontrolled `xhigh` default, a second thinking-off cell after the Electron
-  environment fix, and an explicit `medium` cell. The first three failed at the
-  7200s timeout; the `medium` cell exited cleanly in 92.8 minutes with 53/53
-  Node tests and `app_served=1`. All four cells passed 53/53 Node tests on
-  36-46 file wrappers, so output completeness is at hosted-frontier level
-  throughout, and the Qwen3.6 high-thinking zero-file analysis-paralysis mode
-  did not reproduce in any cell. Details and caveats are in
+- **Qwen3.8 passes the hard one-shot `django-resume` Electron wrap at
+  `reasoning_effort=medium`, the first passes by a local open-weight model on
+  that benchmark.** Nine valid cells ran on 2026-08-31 and 2026-09-01/02: 27B
+  Q4_K_M at thinking-off, at the model's uncontrolled `xhigh` default,
+  thinking-off again after the Electron environment fix, `medium`, and a
+  `medium` confirmation rerun; 27B Q8_0 at `medium`; and Flash-Next UD-IQ4_XS
+  at `medium` three times. The three off/xhigh cells failed at the 7200s
+  timeout; of the six `medium` cells, five passed: Q4_K_M in 92.8 min (53/53
+  tests), Q8_0 in 61.7 min (40/40), Flash-Next in 41.5 min (34/34), at the
+  120-min cap (53/53, verified after the timeout), and in 62.3 min (34/34).
+  The Q4_K_M `medium` rerun failed. Every cell passed every Node test it
+  wrote, so output
+  completeness is at hosted-frontier level throughout, and the Qwen3.6
+  high-thinking zero-file analysis-paralysis mode did not reproduce in any
+  cell. Details and caveats are in
   `docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`.
 - **`reasoning_effort` is the decisive variable for this target, not the model
   or the quantization.** The two cells that differ only in reasoning level
@@ -284,12 +305,29 @@ Benchmark evidence:
   signature - two lines - made its packaged app build, launch, and serve. The
   failing prewarmed cell did attempt self-verification and deadlocked because
   its own check had no failure path. The passing cell ran 15 smokes.
-- The PASS **did not replicate**: the confirmation cell
-  `qwen38-pi-llamacpp-256k-medium-rerun1` failed its packaged smoke
-  (`ModuleNotFoundError: example.packaged_settings`, recorded 2026-09-01),
-  putting the medium lane at 1-for-2. Two of the four original cells also
-  predate the D-040 Electron environment fix. Do not promote Qwen3.8-27B to
-  "reliably passes" on this evidence.
+- The 27B Q4_K_M PASS **did not replicate on its first confirmation**: the
+  cell `qwen38-pi-llamacpp-256k-medium-rerun1` failed its packaged smoke
+  (`ModuleNotFoundError: example.packaged_settings`, recorded 2026-09-01), so
+  that lane is 1-for-2. The Q8_0 pass is a single run. Two of the original
+  cells also predate the D-040 Electron environment fix. Do not promote
+  Qwen3.8-27B to "reliably passes" on this evidence.
+- **Flash-Next at `reasoning_effort=medium` is 3-for-3 and is the recommended
+  local Qwen3.8 target for this workload on a 128 GB host.** The original cell
+  passed in 41.5 min; the two detached replication cells
+  (`qwen38-flashnext-pi-llamacpp-128k-medium-rerun1`, `-rerun2`, 2026-09-01/02)
+  passed at the 120-min cap and in 62.3 min. It is the only local open-weight
+  lane whose pass has replicated. Caveats that stay attached to the
+  recommendation: it is a different model, not a different quant, and its
+  numbers carry four confounds against the 27B rows (source-built binary,
+  131072 context, UD-IQ4_XS quant family, separate port and provider); the
+  cap-hitting rerun lost 30 minutes to `electron-builder --dir` auto-signing
+  the app with the host's Developer ID certificate (set
+  `CSC_IDENTITY_AUTO_DISCOVERY=false` for benchmark hosts; not applied
+  mid-campaign, so rows stay comparable); it wires ~96 GB
+  and needs the memory discipline above (stop colima, launch detached per
+  D-042); and three runs on one host, one quant, one benchmark is still thin.
+  Two earlier attempts of the original cell were terminated by the agent
+  harness at ~29.5 minutes and are discarded, not recorded (D-042).
 - This is agent-workflow evidence on one workload from single runs per cell. It
   is not a runtime throughput result and not a replacement for the Qwen3.6
   strict-GGUF preflight lane.

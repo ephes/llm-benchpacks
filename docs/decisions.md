@@ -881,3 +881,42 @@ reasoning level: the `xhigh` and thinking-off cells failed and the explicit
 benchmark. A runner label like `--thinking high` is actively misleading here,
 because the template has no `high` and the cell in fact ran at the model's
 maximum deliberation setting.
+
+## D-042: Long Local-Model Wrap Runs Launch Detached; Externally Terminated Runs Are Discarded
+
+Local-model one-shot wrap runs that are expected to exceed roughly 30 minutes
+are launched detached - `nohup ... > log 2>&1 &` followed by `disown`, so the
+runner reparents to PID 1 - and never as a background task tracked by the
+agent session that started them. A run that ends because something outside the
+runner stopped it (the agent harness, an operator, or the OS) is not a
+benchmark result: it is not recorded as a FAIL row, it is not added to
+`data/agent-wrap-oneshot-results.json`, and the campaign report notes it only
+as methodology.
+
+Reason: on 2026-08-31 two `qwen38-flashnext-pi-llamacpp-128k-medium` attempts
+launched as Claude Code background tasks were terminated 29m35s and 29m15s
+after launch (22:15:13 to 22:44:48 and 22:45:33 to 23:14:48 local). The
+evidence, assembled 2026-09-01, all points at the harness and away from the
+run itself. The harness reported both tasks as `status=killed` ("was stopped")
+and wrote its own `[killed]` marker as the entire task output. The server log
+shows `srv stop: cancel task` at 22:44:47 and 23:14:48 - the client
+disconnecting mid-generation, while the server was decoding at 17.6 tok/s on a
+75k-token context and stayed healthy - and the transcripts end on ordinary
+`message_update` events with no error. No orphaned processes remained, which is
+what a process-group kill of the runner looks like. Ruled out: an OS memory
+kill (the unified log for 22:40-23:16 contains no jetsam, memorystatus,
+ReportCrash, or spindump event, only the scheduled jetsam-telemetry report
+task at 22:43:11); memory exhaustion (12% and 11% free at the two kill times,
+swap 3.8 of 4 GB then 5.4 of 6 GB, so the swap file grew but never filled); a
+server-side fault (it served the next request within seconds); and session
+inactivity (the six Qwen3.8-27B cells launched the same way the same day ran
+59-123 minutes each through idle gaps of 43-119 minutes and completed). Not
+established: what inside the harness issued the kill, and why both landed at
+29.5 minutes. The identical run relaunched detached completed in 41.5 minutes
+and passed, and the two reruns on 2026-09-01 were launched detached as well.
+Recording an externally killed run as a model FAIL would attribute a harness
+artifact to the model and corrupt every aggregate built from the dataset.
+
+Implemented 2026-09-01. The two terminated attempts are described in the
+"Two Discarded Attempts" section of
+`docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`.
