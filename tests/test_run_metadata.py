@@ -28,7 +28,13 @@ def test_load_run_metadata_accepts_documented_shape(tmp_path: Path) -> None:
                 },
                 "model": {
                     "id": "qwen2.5-0.5b-instruct-q4_k_m",
+                    "canonical_id": "qwen2.5-0.5b-instruct",
+                    "display_name": "Qwen2.5 0.5B Instruct",
                     "quantization": "Q4_K_M",
+                },
+                "host": {
+                    "identity": "apple-m4-max-studio-128gb",
+                    "display": "Apple M4 Max Mac Studio (128 GB)",
                 },
                 "operating_conditions": {
                     "power": "not captured",
@@ -44,6 +50,8 @@ def test_load_run_metadata_accepts_documented_shape(tmp_path: Path) -> None:
 
     assert metadata["runtime"]["name"] == "llama-server"
     assert metadata["model"]["quantization"] == "Q4_K_M"
+    assert metadata["model"]["canonical_id"] == "qwen2.5-0.5b-instruct"
+    assert metadata["host"]["display"] == "Apple M4 Max Mac Studio (128 GB)"
     assert metadata["operating_conditions"]["thermal"] == "not captured"
 
 
@@ -78,6 +86,28 @@ def test_load_run_metadata_rejects_non_string_notes(tmp_path: Path) -> None:
     path.write_text(json.dumps({"notes": ["too", "much"]}), encoding="utf-8")
 
     with pytest.raises(RunMetadataError, match="notes"):
+        load_run_metadata(path)
+
+
+@pytest.mark.parametrize(
+    "metadata,field",
+    [
+        ({"host": {"identity": 42}}, "host.identity"),
+        ({"host": {"identity": "   "}}, "host.identity"),
+        ({"host": {"display": "   "}}, "host.display"),
+        ({"model": {"canonical_id": "---"}}, "model.canonical_id"),
+        ({"model": {"display_name": "   "}}, "model.display_name"),
+    ],
+)
+def test_load_run_metadata_rejects_invalid_canonical_identity(
+    tmp_path: Path,
+    metadata: dict,
+    field: str,
+) -> None:
+    path = tmp_path / "metadata.json"
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(RunMetadataError, match=field):
         load_run_metadata(path)
 
 

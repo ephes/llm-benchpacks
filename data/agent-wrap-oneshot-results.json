@@ -1814,6 +1814,49 @@
         "legacy": false
       },
       "notes": "Thinking-off A/B partner to the thinking-on cell. Behavioral flip: this lane DID self-verify - ran stage-backend, its own packaged smoke (exit 1), 45/45 node tests and 182 Django tests - but never got a green packaged smoke and declared victory anyway; the verifier smoke then hung to the 200s cap. Diff is inflated: 5,590 of 5,626 files are un-gitignored .stage/ staging output; the authored diff is ~36 files."
+    },
+    {
+      "label": "qwen38-hetzner-pi-llamacpp-q4km-256k-medium",
+      "date": "2026-09-02",
+      "status": "fail",
+      "model": {
+        "id": "qwen3.8-27b",
+        "name": "Qwen3.8-27B Q4_K_M",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "llamacpp38",
+        "name": "llama.cpp remote CUDA"
+      },
+      "runner_provider_display": "Pi / llama.cpp remote CUDA",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning_effort medium, set explicitly"
+      },
+      "timing": {
+        "wall_seconds": 7200.1,
+        "wall_display": "120m00s"
+      },
+      "diff": {
+        "files_changed": 0,
+        "insertions": 0,
+        "deletions": 0
+      },
+      "verification": {
+        "node_tests": 0,
+        "smoke": "smoke-fail",
+        "smoke_display": "not run; no electron/package.json produced"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-hetzner-pi-llamacpp-q4km-256k-medium/",
+        "legacy": false
+      },
+      "notes": "RTX 4000 SFF Ada Q4_K_M fit test with inference on the Hetzner GEX44 and the unchanged Pi harness, target checkout, and verifier on the M4 Studio over an SSH local forward. All 64 model layers fit on the GPU, but exact 262144 context required an 8.5 GiB q8_0 KV cache in system RAM (--no-kv-offload). The run spent the full two-hour cap reading and planning, made 56 inspection calls but no write/edit call, and left the clean target unchanged. Completed-generation decode fell from 7.50 tok/s at 2.3K context to 2.12 tok/s at 91.7K; the final canceled prompt contained 93.3K tokens. Eleven transient client connection errors automatically retried while the server remained healthy. Treat this as a split-host CUDA inference result, not a full agent-host comparison."
     }
   ]
 }

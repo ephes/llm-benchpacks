@@ -230,6 +230,20 @@ rendering the SQLite-backed static site, so the browser table and
 and thinking-mode fields from the database. `docs/run-log.md` remains the
 narrative source for benchmark context and caveats.
 
+The generated page has a direct Django Resume one-shot quick view. Every
+filter is reflected in the query string, so changing the table, target, model,
+outcome, or another facet produces a shareable address; the page also provides
+a “Copy filtered URL” button. For example:
+
+<https://benchmarks.staging.django-cast.com/?table=agent-wrap&target=django-resume>
+
+The Outcome column and summary distinguish pass, fail, and interrupted runs.
+Host and model filters use canonical indexed identities, while raw hostnames,
+platform values, model ids, artifacts, and quantization remain available in
+`snapshot.json`. Optional `host.identity` / `host.display` and
+`model.canonical_id` / `model.display_name` run metadata can override fallback
+normalization for new results.
+
 For optional exploratory repo-task evidence, select the coding-task pack set
 explicitly instead of changing the default four-pack matrix:
 
@@ -436,9 +450,12 @@ data. The export uses SQLite only; source result directories and large
 artifacts are not required.
 
 For local browsing, `just site` is the shortest path. It renders the default
-`registry/site` export from `registry/llm-benchpacks.sqlite`; when that database
-is missing, it first imports every local `results/*` directory that contains a
-`run.jsonl`.
+`registry/site` export from the explicitly curated
+`registry/llm-benchpacks.sqlite` and refreshes the tracked agent-wrap dataset.
+It does not automatically publish new local results. Instead, it reports how
+many direct `results/*` directories with `run.jsonl` are not indexed; review
+those directories and import the selected paths explicitly before rebuilding.
+Large raw/workspace artifact trees are never part of the static export.
 
 The preferred hosted direction is now a Django registry service, documented in
 [`docs/registry-hosted-django-spec.md`](docs/registry-hosted-django-spec.md).
@@ -451,8 +468,10 @@ Deployment mechanics should use the same responsibility split as other
 services: product code here, reusable deployment logic in `ops-library`, and
 private staging configuration plus email-provider secrets in `ops-control`.
 `homepage` and `nyxmon` are references for those mechanics only. The static
-export remains a local/offline review path and possible temporary read-only
-fallback.
+export remains the local/offline review path and is deployed as the temporary
+read-only fallback at
+<https://benchmarks.staging.django-cast.com/>. The dynamic Django service is
+still the preferred long-term hosted direction.
 
 For the temporary static staging archive, the local Justfile mirrors the
 homepage-style delegation pattern while keeping the generated artifact boundary
@@ -467,15 +486,17 @@ for a complete generated static site: `index.html`, `report.md`, and
 `snapshot.json`. If those files exist, it delegates that directory to
 `../ops-control` with `BENCHMARKS_STATIC_SITE_SOURCE` set explicitly and does
 not require a registry database. The fallback requires the companion
-`ops-control` checkout to provide a `deploy-benchmarks-static` recipe; if that
-recipe is absent, the shortcut fails before generating or deploying with an
-explicit ops-control preflight message. If the generated site is absent or
+`ops-control` checkout to provide a `deploy-benchmarks-static` recipe. The
+staging deployment path is live as of 2026-09-02; if that companion recipe is
+absent in another checkout, the shortcut fails before generating or deploying
+with an explicit ops-control preflight message. If the generated site is absent or
 incomplete and `BENCHMARKS_REGISTRY_DB` exists (defaulting to
 `registry/llm-benchpacks.sqlite`), it runs `benchpack registry site` and then
 delegates the generated output. If neither a complete generated site nor the
 registry DB exists, it exits with the curation/import commands needed to create
 one. Use `just site` or `just registry-site` for local generation with automatic
-bootstrap from local `results/*/run.jsonl` directories, or
+refresh of the tracked agent-wrap dataset and an audit notice for unindexed
+local results; explicitly import reviewed result directories first. Use
 `just deploy-staging-existing` when you want the existing-site-only path to fail
 instead of regenerating from SQLite.
 

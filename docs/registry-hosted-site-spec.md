@@ -8,6 +8,17 @@ publication path. The preferred direction is the dynamic Django service in
 [`registry-hosted-django-spec.md`](registry-hosted-django-spec.md), deployed
 through `ops-library` and `ops-control`.
 
+Update 2026-09-02: the temporary static fallback is deployed at
+<https://benchmarks.staging.django-cast.com/>. The current published snapshot has
+108 runs, including 43 Django/Electron-wrap rows and 17 Hetzner RTX
+4000 Gemma/Qwen strict-GGUF runs, and is served as exactly
+`index.html`, `report.md`, and `snapshot.json` by a loopback-only service behind
+Traefik HTTPS. The dynamic Django service remains the preferred hosted target.
+The static view keeps all filter state in the URL, includes a direct Django
+Resume one-shot view, renders explicit outcomes, uses canonical human-readable
+host/model facets, retains raw identifiers in `snapshot.json`, and links the
+raw Markdown report without duplicating it below the rendered tables.
+
 This spec defines the first hosted consumption path for `llm-benchpacks`
 benchmark results. The goal is a small public or semi-public benchmark archive
 published at the v1 staging hostname
@@ -164,6 +175,14 @@ When the static fallback is used:
   without contacting benchmark endpoints or reading raw artifacts.
 - The static site must include enough provenance to distinguish self-reported,
   operator-curated, and independently reproduced bundles.
+- Static filters must round-trip through URL query parameters so filtered views
+  are shareable. Django Resume one-shot results must have a direct quick link,
+  and pass/fail/interrupted outcomes must be visible without horizontal
+  scrolling.
+- Host/model facets must use canonical indexed identities and readable labels;
+  raw hostname, platform, model, artifact, and quantization values remain
+  available for provenance. Wide tables must use the full viewport and retain
+  accessible horizontal overflow at narrow widths.
 - Deployment work must remain separate from the homepage Django app.
 - Hosted upload/review, APIs, and leaderboard policy remain out of scope for
   the static fallback and belong to the dynamic Django service track.

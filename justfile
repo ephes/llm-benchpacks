@@ -22,25 +22,14 @@ registry-site:
     set -euo pipefail
 
     if [[ ! -f "{{BENCHMARKS_REGISTRY_DB}}" ]]; then
-      mapfile -t result_dirs < <(
-        find results -mindepth 2 -maxdepth 2 -name run.jsonl -print \
-          | sed 's#/run.jsonl$##' \
-          | sort
-      )
-      if (( ${#result_dirs[@]} == 0 )) && [[ ! -f "{{AGENT_WRAP_DATA}}" ]]; then
+      if [[ ! -f "{{AGENT_WRAP_DATA}}" ]]; then
         echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}" >&2
-        echo "No importable result directories with run.jsonl found under results/." >&2
         echo "No normalized agent-wrap data found at {{AGENT_WRAP_DATA}}." >&2
+        echo "Import reviewed result directories explicitly before rendering." >&2
         exit 1
       fi
       echo "Missing registry DB: {{BENCHMARKS_REGISTRY_DB}}"
       mkdir -p "$(dirname "{{BENCHMARKS_REGISTRY_DB}}")"
-      if (( ${#result_dirs[@]} > 0 )); then
-        echo "Importing ${#result_dirs[@]} result directories into a new registry."
-        uv run benchpack registry import \
-          --db "{{BENCHMARKS_REGISTRY_DB}}" \
-          "${result_dirs[@]}"
-      fi
     fi
 
     if [[ -f "{{AGENT_WRAP_DATA}}" ]]; then
@@ -48,6 +37,31 @@ registry-site:
         --db "{{BENCHMARKS_REGISTRY_DB}}" \
         "{{AGENT_WRAP_DATA}}"
     fi
+
+    uv run python - "{{BENCHMARKS_REGISTRY_DB}}" <<'PY'
+    from pathlib import Path
+    import sqlite3
+    import sys
+
+    db = Path(sys.argv[1])
+    root = Path.cwd()
+    with sqlite3.connect(db) as conn:
+        indexed = {
+            Path(value).resolve()
+            for (value,) in conn.execute("SELECT result_dir FROM runs")
+        }
+    local = {path.parent.resolve() for path in Path("results").glob("*/run.jsonl")}
+    missing = sorted(local - indexed)
+    if missing:
+        print(
+            f"Notice: {len(missing)} local compact result directories are not "
+            "in the curated registry."
+        )
+        print(
+            "Review them, then import selected paths explicitly with "
+            "`uv run benchpack registry import --db " + str(db) + " ...`."
+        )
+    PY
 
     mkdir -p "$(dirname "{{BENCHMARKS_SITE_OUT}}")"
     uv run benchpack registry site \

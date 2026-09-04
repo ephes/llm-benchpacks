@@ -191,6 +191,13 @@ Runtime compatibility, verified on 2026-08-31:
   drop-in claim holds for short-context throughput, not just loading. See
   the 2026-09-01 `docs/run-log.md` row for flags, caveats, and the
   long-context qualifier.
+- Hetzner small-GPU fit measured on 2026-09-02: the same pinned Q4_K_M GGUF
+  loads all 64 model layers on the 20 GB RTX 4000 SFF Ada. A 4K
+  `runtime-sweep` passed 9/9 rows at 13.23/13.15/13.09 median decode tok/s for
+  short/medium/long, versus about 21 tok/s on M4 Max and 23-24 on M5 Max. The
+  card is therefore a valid short-context serving target, but the exact 256K
+  agent contract is not fully GPU-resident: its 8.5 GiB q8_0 KV cache must use
+  system RAM when all Q4 weights stay on the GPU.
 - The internals are not the same. 48 of the 64 layers are GatedDeltaNet linear
   attention and carry no KV cache; only 16 are full attention. KV cost at 262k
   context is therefore far below a conventional 27B. Treat any Qwen3.6-vs-3.8
@@ -280,35 +287,45 @@ Benchmark evidence:
 
 - **Qwen3.8 passes the hard one-shot `django-resume` Electron wrap at
   `reasoning_effort=medium`, the first passes by a local open-weight model on
-  that benchmark.** Nine valid cells ran on 2026-08-31 and 2026-09-01/02: 27B
+  that benchmark.** Ten valid cells ran on 2026-08-31 and 2026-09-01/02: 27B
   Q4_K_M at thinking-off, at the model's uncontrolled `xhigh` default,
   thinking-off again after the Electron environment fix, `medium`, and a
-  `medium` confirmation rerun; 27B Q8_0 at `medium`; and Flash-Next UD-IQ4_XS
-  at `medium` three times. The three off/xhigh cells failed at the 7200s
-  timeout; of the six `medium` cells, five passed: Q4_K_M in 92.8 min (53/53
+  `medium` confirmation rerun; 27B Q8_0 at `medium`; Flash-Next UD-IQ4_XS
+  at `medium` three times; and a split-host Hetzner Q4_K_M `medium` cell. The
+  three off/xhigh cells failed at the 7200s timeout; of the seven `medium`
+  cells, five passed: Q4_K_M in 92.8 min (53/53
   tests), Q8_0 in 61.7 min (40/40), Flash-Next in 41.5 min (34/34), at the
   120-min cap (53/53, verified after the timeout), and in 62.3 min (34/34).
-  The Q4_K_M `medium` rerun failed. Every cell passed every Node test it
-  wrote, so output
-  completeness is at hosted-frontier level throughout, and the Qwen3.6
-  high-thinking zero-file analysis-paralysis mode did not reproduce in any
-  cell. Details and caveats are in
+  The M4 Q4_K_M `medium` rerun failed packaged smoke. The Hetzner cell timed
+  out with zero edits after decode declined from 7.50 tok/s at 2.3K context to
+  2.12 tok/s at 91.7K under CPU-resident KV. Every cell that wrote Node tests
+  passed them, so output completeness is at hosted-frontier level for the
+  implementation-producing cells. The Qwen3.6 high-thinking zero-file
+  analysis-paralysis mode did not reproduce in the original M4 cells; Cell J
+  also made zero edits, but under a distinct long-context throughput collapse.
+  Details and caveats are in
   `docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`.
-- **`reasoning_effort` is the decisive variable for this target, not the model
-  or the quantization.** The two cells that differ only in reasoning level
-  differ in outcome. Set it explicitly on every Qwen3.8 agentic cell and label
-  by the resolved value (D-041); an uncontrolled thinking-on cell runs at
-  `xhigh`, which was actively harmful here.
-- The limiting factor is self-verification, not code generation. The failing
-  `xhigh` cell never ran its own `smoke:packaged` script, and a post-hoc
+- **`reasoning_effort` was the decisive variable in the controlled original
+  M4 pair, not the model or quantization.** The two cells that differ only in
+  reasoning level differ in outcome. Set it explicitly on every Qwen3.8
+  agentic cell and label by the resolved value (D-041); an uncontrolled
+  thinking-on cell runs at `xhigh`, which was actively harmful there. Cell J
+  shows that inference topology can dominate this relationship.
+- For the implementation-producing A-E failures, the limiting factor was
+  self-verification rather than code generation. The failing `xhigh` cell
+  never ran its own `smoke:packaged` script, and a post-hoc
   counterfactual correcting only its invented `isStalePythonArtifact`
   signature - two lines - made its packaged app build, launch, and serve. The
   failing prewarmed cell did attempt self-verification and deadlocked because
-  its own check had no failure path. The passing cell ran 15 smokes.
-- The 27B Q4_K_M PASS **did not replicate on its first confirmation**: the
+  its own check had no failure path. The passing cell ran 15 smokes. Cell J is
+  a separate write-free capacity/throughput failure and is not evidence for
+  that self-verification claim.
+- The 27B Q4_K_M PASS **did not replicate on its first M4 confirmation**: the
   cell `qwen38-pi-llamacpp-256k-medium-rerun1` failed its packaged smoke
   (`ModuleNotFoundError: example.packaged_settings`, recorded 2026-09-01), so
-  that lane is 1-for-2. The Q8_0 pass is a single run. Two of the original
+  the M4 lane is 1-for-2. Including the split-host Hetzner timeout, Q4_K_M
+  `medium` is 1-for-3, but that third cell has a materially different
+  long-context memory topology. The Q8_0 pass is a single run. Two of the original
   cells also predate the D-040 Electron environment fix. Do not promote
   Qwen3.8-27B to "reliably passes" on this evidence.
 - **Flash-Next at `reasoning_effort=medium` is 3-for-3 and is the recommended

@@ -1,9 +1,11 @@
 # Qwen3.8-27B One-Shot Wrap Campaign - 2026-08-31
 
 This campaign is the first hard one-shot `django-resume` Electron wrap run for
-local open-weight Qwen3.8 artifacts. It has nine valid cells, all through
-`scripts/run-agent-wrap-oneshot` with the `pi` runner against a local
-`llama-server`:
+local open-weight Qwen3.8 artifacts. It now has ten valid cells, all through
+`scripts/run-agent-wrap-oneshot` with the `pi` runner against `llama-server`.
+Cells A-I used a server on the M4 harness host; Cell J kept the harness and
+target on that M4 Studio while serving inference from a Hetzner CUDA host over
+an SSH loopback forward:
 
 | Cell | Label | Artifact | Reasoning | Outcome |
 | --- | --- | --- | --- | --- |
@@ -16,8 +18,9 @@ local open-weight Qwen3.8 artifacts. It has nine valid cells, all through
 | G | `qwen38-flashnext-pi-llamacpp-128k-medium` | Flash-Next UD-IQ4_XS | `medium` | **PASS** |
 | H | `qwen38-flashnext-pi-llamacpp-128k-medium-rerun1` | Flash-Next UD-IQ4_XS | `medium` | **PASS** (at the cap) |
 | I | `qwen38-flashnext-pi-llamacpp-128k-medium-rerun2` | Flash-Next UD-IQ4_XS | `medium` | **PASS** |
+| J | `qwen38-hetzner-pi-llamacpp-q4km-256k-medium` | 27B Q4_K_M, RTX 4000 SFF Ada | `medium` | FAIL, timeout with zero edits |
 
-**Qwen3.8 passes this benchmark: 5 passes in 9 valid cells, across two model
+**Qwen3.8 passes this benchmark: 5 passes in 10 valid cells, across two model
 variants and two quantizations, and the Flash-Next pass replicated twice.** These are the first passes by a local
 open-weight model here; every prior pass in the curated table is a hosted
 frontier model, and all eight legacy Qwen3.6 cells failed.
@@ -27,11 +30,14 @@ Three findings carry the campaign.
 - **`reasoning_effort` is necessary but not sufficient.** Every pass used
   `medium`. Nothing has ever passed at `off` (0/2) or `xhigh` (0/1). But
   `medium` is not deterministic: Cell E is a same-configuration rerun of the
-  passing Cell D and it failed, so the 27B Q4_K_M medium lane is 1-for-2. See
+  passing Cell D and it failed. Cell J adds a split-host CUDA failure, so the
+  M4-only 27B Q4_K_M medium lane is 1-for-2 and the combined Q4_K_M medium
+  record is 1-for-3. See
   [Reasoning Effort Is The Decisive Variable](#reasoning-effort-is-the-decisive-variable).
-- **Every failure is one pathology.** Across the four failing cells, all six
+- **The original four implementation failures are one pathology.** Their six
   defects are the model writing two components that disagree about an
-  interface, on a code path it never executed. See
+  interface on a code path it never executed. Cell J is different: it never
+  began editing under a CPU-resident 256K KV-cache topology. See
   [One Pathology, Six Defects](#one-pathology-six-defects).
 - **Flash-Next is the fastest pass, the cheapest to run, and the first local
   lane whose pass replicated: 3-for-3.** 41.5 minutes for the original cell
@@ -46,7 +52,9 @@ Three findings carry the campaign.
   and [Cell I](#cell-i---qwen38-flashnext-pi-llamacpp-128k-medium-rerun2---replicated-again-cleanly).
 
 Runs A and B predate the Electron environment fix, so they are not strictly
-comparable to Cells C through I.
+comparable to Cells C through J. Cell J also has a different inference host
+and KV-cache placement, so it is a capacity/throughput result rather than a
+strict host replication.
 
 ## Setup
 
@@ -794,6 +802,79 @@ minutes, which is not the model's doing.
 The 27B Q4_K_M lane, by contrast, passed once and then failed its first
 confirmation.
 
+## Cell J - `qwen38-hetzner-pi-llamacpp-q4km-256k-medium` - RTX 4000 fit, one-shot FAIL
+
+Cell J answers the small-GPU question directly. The exact pinned 4-bit artifact
+from Cells A-E fits on the Hetzner GEX44's NVIDIA RTX 4000 SFF Ada:
+
+- `Qwen3.8-27B-Q4_K_M.gguf`, 18,973,870,432 bytes;
+- revision `0669b98607d47046c7c2b3f801011d54a08cfccf`;
+- SHA-256 `31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34`;
+- `llama-server` build 9030 (`a09a00e50`), Linux x86_64/CUDA;
+- all 64 model layers resident on the GPU.
+
+A 4K thinking-off `runtime-sweep` control passed 9/9 rows. Median throughput
+was:
+
+| Case | Decode tok/s | Total tok/s | TTFT s | Prefill tok/s |
+| --- | ---: | ---: | ---: | ---: |
+| short | 13.23 | 12.93 | 0.180 | 483.9 |
+| medium | 13.15 | 12.92 | 0.168 | 2160.6 |
+| long | 13.09 | 12.86 | 0.174 | 4644.8 |
+
+That is useful short-context throughput, but slower than the same pinned GGUF
+on Apple Metal: the existing M4 medians are 21.35/21.46/21.41 decode tok/s and
+the M5 medians are 24.29/23.53/22.92. This is a runtime-and-hardware comparison,
+not evidence that one architecture is intrinsically faster.
+
+The exact one-shot provider contract advertises a 262,144-token context. The
+18.97 GB Q4 model and that context do not fit together in 20 GB VRAM. The only
+configuration that retained all model layers on the GPU placed the 8.5 GiB
+q8_0 KV cache in system RAM:
+
+```sh
+llama-server \
+  --ctx-size 262144 --batch-size 2048 --ubatch-size 512 \
+  --cache-type-k q8_0 --cache-type-v q8_0 --no-kv-offload \
+  --gpu-layers all --fit off --parallel 1 --cache-prompt \
+  --no-webui --jinja --timeout 3600 \
+  --chat-template-kwargs '{"reasoning_effort":"medium"}'
+```
+
+The server reported an 8,704 MiB CPU KV buffer, a 149.62 MiB CPU recurrent
+state buffer, and a 1,380.27 MiB CUDA compute buffer. During the campaign the
+GPU peaked at 19,418 MiB used, leaving 603 MiB free; the sampled maximum was
+78 C and 69.65 W. No GPU or server failure occurred.
+
+The agent result was nevertheless **FAIL**. It hit the 7,200.1-second cap with
+zero changed files, no `electron/` directory, and therefore no npm, Node-test,
+or packaged-smoke phase. The transcript contains 56 inspection calls (42 reads
+and 14 shell calls) and no write/edit call. Completed-generation decode speed
+fell as the prompt grew:
+
+| Prompt context | Decode tok/s |
+| ---: | ---: |
+| 2.3K | 7.50 |
+| 11.1K | 6.03 |
+| 37.9K | 3.71 |
+| 61.5K | 2.80 |
+| 75.3K | 2.42 |
+| 91.7K | 2.12 |
+
+The final canceled request had a 93.3K-token prompt. Across the completed
+generations, decode ranged from 2.11 to 7.50 tok/s for the agent traffic. The
+CPU-resident KV cache and PCIe traffic are the leading explanation for that
+long-context collapse, although this one run cannot separate runtime topology
+from model trajectory. Eleven transient client `Connection error` events
+automatically retried while the server stayed healthy; record them as a
+methodology caveat, not as successful work.
+
+This is deliberately a split-host cell: Pi 0.84.4, the clean target checkout at
+`3dc54f8`, and the independent verifier ran on the M4 Studio, while only model
+inference ran on Hetzner through an SSH loopback forward. It proves that the
+Q4_K_M weights fit and serve on this 20 GB card. It does not show that the
+exact 256K one-shot workload is practical there with CPU KV.
+
 ## Memory Profile Under Load
 
 Measured 2026-09-01 on the same host with the exact Cell G server flags, using
@@ -911,7 +992,7 @@ else does:
 | --- | --- | --- |
 | thinking off | A, C | 0 / 2 |
 | `xhigh` (uncontrolled default) | B | 0 / 1 |
-| `medium` (explicit) | D, E, F, G, H, I | **5 / 6** |
+| `medium` (explicit) | D, E, F, G, H, I, J | **5 / 7** |
 
 **Every pass in this campaign used `medium`. Nothing has ever passed at `off`
 or `xhigh`.** `xhigh` is the model's own default when `reasoning_effort` is
@@ -920,10 +1001,11 @@ validate key assumptions, consider plausible alternatives" instruction;
 `medium` is the one level that injects no reasoning instruction at all.
 
 The necessary qualification: **`medium` is not sufficient, and it is not
-deterministic.** Cell E reran Cell D's exact configuration and failed, so the
-27B Q4_K_M medium lane stands at 1-for-2. The setting moves the model from
-"never passes" to "usually passes", which is a real and useful effect, but a
-single `medium` run is not a reliable pass.
+deterministic.** Cell E reran Cell D's exact M4 configuration and failed, so
+that lane stands at 1-for-2. Cell J makes the combined Q4_K_M medium record
+1-for-3, but under a materially different CUDA/CPU-KV topology. The setting
+moves this model family from "never passes" to "sometimes passes" in this
+campaign; a single `medium` run is not a reliable pass.
 
 ## Self-Verification Effort Does Not Transfer Across Models
 
@@ -936,6 +1018,7 @@ containing the string:
 
 | Cell | Artifact / reasoning | Executed smokes | bash calls | Outcome |
 | --- | --- | --- | --- | --- |
+| J | 27B Q4_K_M, `medium`, CUDA/CPU-KV | 0 | 14 | FAIL |
 | B | 27B Q4_K_M, `xhigh` | 0 | 93 | FAIL |
 | E | 27B Q4_K_M, `medium` | 2 | 50 | FAIL |
 | G | Flash-Next, `medium` | 3 | 54 | **PASS** |
@@ -945,9 +1028,11 @@ containing the string:
 | C | 27B Q4_K_M, off | 10 | 108 | FAIL |
 | D | 27B Q4_K_M, `medium` | 15 | 81 | **PASS** |
 
-Within the three 27B `medium` cells the ordering is perfect - 15 passes, 8
-passes, 2 fails - and Cell B, which executed none at all, also failed. That is
-a real pattern within a fixed model, quantization, and reasoning setting.
+Among the pre-J 27B `medium` cells, more executed smokes aligned with outcome:
+15 passes, 8 passes, and 2 fails, although the eight-smoke cell used Q8_0.
+Cell J also executed none and failed, but its CPU-resident KV topology and
+write-free trajectory make it a separate confound rather than a clean extension
+of that relationship.
 
 It does not generalize, for two independent reasons visible in the same table:
 
@@ -957,16 +1042,18 @@ It does not generalize, for two independent reasons visible in the same table:
   does not buy the same thing; Cell C's problem was that its check had no
   failure path, so running it more would not have helped.
 
-With n = 6 transcripts across two models, two quantizations, and three
-reasoning settings, this is a within-configuration observation and nothing
-more. Do not use it as a general predictor.
+With nine retained transcripts across two models, three quantization families,
+three reasoning settings, and two inference topologies, this is a
+within-configuration observation and nothing more. Do not use it as a general
+predictor. Cell A is excluded because its transcript was not captured.
 
-## One Pathology, Six Defects
+## One Implementation Pathology, Six Defects
 
-Every failure in this campaign is the same shape: **the model writes two
+Every implementation-producing failure in Cells A-E is the same shape: **the model writes two
 components that disagree about an interface, on a code path it never
 executes.** Six instances across the four failing cells, and not one of them is
-a reasoning error about the domain:
+a reasoning error about the domain. Cell J is a distinct write-free timeout and
+is not included in this classification:
 
 | Cell | The two components | The disagreement |
 | --- | --- | --- |
@@ -1011,6 +1098,7 @@ narrative is `.bench-qwen36/RUNTIME-COMPARISON.md:178-187`.
 | 3.8 Flash-Next (G) | `qwen38-flashnext-pi-llamacpp-128k-medium` | `medium` (explicit) | 41.5 min | **exited 0** | 34 | 34 | **none - `app_served=1`, PASS** |
 | 3.8 Flash-Next (H) | `qwen38-flashnext-pi-llamacpp-128k-medium-rerun1` | `medium` (explicit) | 120.0 min | timeout, verified after | 38 | 53 | **none - `app_served=1`, PASS at the cap**; 30 min lost to electron-builder deep-signing the app with the host's Developer ID |
 | 3.8 Flash-Next (I) | `qwen38-flashnext-pi-llamacpp-128k-medium-rerun2` | `medium` (explicit) | 62.3 min | **exited 0** | 36 | 34 | **none - `app_served=1`, PASS** |
+| 3.8 Q4_K_M CUDA/CPU-KV (J) | `qwen38-hetzner-pi-llamacpp-q4km-256k-medium` | `medium` (explicit) | 120.0 min | timeout | 0 | n/a | no implementation produced; verification not reached |
 
 Reading of that table:
 
@@ -1018,8 +1106,9 @@ Reading of that table:
   cells, on two different runtimes, produced zero files. Qwen3.8 high produced
   37 files and a complete harness. That is the single largest generational
   change here.
-- Output completeness is at frontier level. All seven 3.8 cells passed every
-  test they wrote, at 53 (A-E), 40 (F), and 34 (G). Among the 3.6 cells only
+- Output completeness was at frontier level for Cells A-I. Every cell that
+  wrote tests passed them, at 53 (A-E and H), 40 (F), and 34 (G and I). Cell J
+  wrote no implementation or tests. Among the 3.6 cells only
   `qwen-q8-low` reached 53, and it did so at Q8_0 with 178 changed paths
   including committed staticfiles and package-lock material. No 3.6 Q4_K_M cell
   got past 51. Test counts are self-authored, so they measure the model's own
@@ -1030,15 +1119,19 @@ Reading of that table:
   counterfactual shows Cell B was one defect from serving, which is not true of
   any Qwen3.6 cell. Cell C got staging working and died on its own verification
   harness. Cells D, F, and G self-verified and passed.
-- Wall clock is no longer a regression at all. Every timed-out cell is a
-  thinking-off or `xhigh` cell. All four `medium` cells finished on their own,
-  at 92.8, 59.5, 61.7, and 41.5 minutes, and three of the four are faster than
-  the best Qwen3.6 cell's 79.0 minutes - which did not pass.
+- On the M4 host, wall clock was no longer a straight regression: the original
+  `medium` cells finished on their own at 92.8, 59.5, 61.7, and 41.5 minutes.
+  Cell J is the exception introduced by the small-GPU topology: it timed out at
+  `medium` before editing as decode fell toward 2.1 tok/s with CPU-resident KV.
 - Reasoning effort separates the Qwen3.8 cells from each other far more than
   generation or quantization does. But it is not deterministic: the same
   `medium` configuration passed once and failed once.
 
-## Conclusions
+## Original A-D Conclusions
+
+The conclusions below describe the original four-cell slice. Cells E-J were
+added later; the current campaign-level result is summarized at the top of this
+report and in the per-cell addenda.
 
 1. **Qwen3.8-27B passes this benchmark, at `reasoning_effort=medium`.** Run D
    is the first PASS by a local open-weight model here. The campaign record is
@@ -1102,8 +1195,9 @@ Reading of that table:
   Electron binary never installed; Runs C and D ran with the fix in place. A/B
   and C/D are therefore not strictly comparable, and part of the A-B-to-C-D
   improvement is environmental rather than model behaviour.
-- **Single run per cell.** No repeats, no seed control, and no thermal or
-  power control. Treat every cell as one observation.
+- **Single run per cell.** No seed control. Thermal and power were sampled for
+  Cell J but were not controlled for the earlier cells. Treat every cell as one
+  observation.
 - **Runtime-and-format scope.** These are llama.cpp Q4_K_M rows. They are not
   artifact-parity comparisons against the MLX or Q8_0 Qwen3.6 lanes.
 
@@ -1116,11 +1210,19 @@ results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off/
 results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-high/
 results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-off-prewarmed/
 results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium/
+results/agent-wrap-oneshot/qwen38-pi-llamacpp-256k-medium-rerun1/
+results/agent-wrap-oneshot/qwen38-q8-pi-llamacpp-256k-medium/
+results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium/
+results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium-rerun1/
+results/agent-wrap-oneshot/qwen38-flashnext-pi-llamacpp-128k-medium-rerun2/
+results/agent-wrap-oneshot/qwen38-hetzner-pi-llamacpp-q4km-256k-medium/
 ```
 
-Each contains `summary.txt`, `diff-stat.txt`, `files-changed.txt`, `npm.log`,
-`nodetests.log`, `verify-smoke.log`, and `pi.log`. Every cell except Run A
-holds a usable JSONL transcript; Run A's was lost to the timeout kill.
+Cells A-I contain `summary.txt`, `diff-stat.txt`, `files-changed.txt`,
+`npm.log`, `nodetests.log`, `verify-smoke.log`, and `pi.log`. Every one except
+Run A holds a usable JSONL transcript; Run A's was lost to the timeout kill.
+Cell J stopped before npm and verification, so it contains only `summary.txt`,
+`diff-stat.txt`, `files-changed.txt`, `pi.log`, and `run-metadata.json`.
 
 The counterfactual clone is kept for reproducibility at:
 
@@ -1133,5 +1235,5 @@ Its only divergence from Run B's model output is the
 rest of the difference is the repaired host Electron install under
 `electron/node_modules/electron/`.
 
-Normalized rows for both cells are in
+Normalized rows for the campaign are in
 `data/agent-wrap-oneshot-results.json`.

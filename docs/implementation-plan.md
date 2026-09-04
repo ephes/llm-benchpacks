@@ -2,7 +2,7 @@
 
 ## Active Backlog Queue
 
-Status date: 2026-05-18.
+Status date: 2026-09-02.
 
 This queue is the short working view over the longer historical plan below.
 Keep completed implementation history in the phase sections, but use this
@@ -86,8 +86,11 @@ Next actionable slices:
    Treat `homepage` and `nyxmon` as references for local command and deployment
    mechanics only; keep the product spec and project layout cleanly
    `llm-benchpacks`-specific. Keep `benchpack registry site` as a local/offline
-   static export and possible temporary fallback, not the target hosted
-   architecture.
+   static export and temporary fallback, not the target hosted architecture.
+   **The static fallback was deployed 2026-09-02** at
+   `benchmarks.staging.django-cast.com`; the current curated snapshot has 108
+   runs and 43 agent-wrap rows;
+   future hosted-product work still belongs to the dynamic Django track.
 
    First implementation slices:
 

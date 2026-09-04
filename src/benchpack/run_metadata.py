@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 
 RUN_METADATA_FILENAME = "run-metadata.json"
-KNOWN_OBJECT_SECTIONS = ("runtime", "model", "operating_conditions")
+KNOWN_OBJECT_SECTIONS = ("host", "runtime", "model", "operating_conditions")
 
 
 class RunMetadataError(ValueError):
@@ -67,6 +68,32 @@ def validate_run_metadata(
         raise RunMetadataError(
             f"run metadata field 'notes' must be a string in {source}"
         )
+
+    for section, fields in (
+        ("host", ("identity", "display")),
+        ("model", ("canonical_id", "display_name")),
+    ):
+        values = metadata.get(section)
+        if not isinstance(values, dict):
+            continue
+        for field in fields:
+            value = values.get(field)
+            if value is not None and (
+                not isinstance(value, str) or value.strip() == ""
+            ):
+                raise RunMetadataError(
+                    f"run metadata field {section}.{field} must be a non-empty "
+                    f"string in {source}"
+                )
+            if (
+                field in {"identity", "canonical_id"}
+                and isinstance(value, str)
+                and re.search(r"[A-Za-z0-9]", value) is None
+            ):
+                raise RunMetadataError(
+                    f"run metadata field {section}.{field} must contain a letter "
+                    f"or number in {source}"
+                )
 
     return dict(metadata)
 

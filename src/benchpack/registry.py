@@ -25,7 +25,7 @@ from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
-REGISTRY_SCHEMA_VERSION = 3
+REGISTRY_SCHEMA_VERSION = 4
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
@@ -60,6 +60,8 @@ _RUN_COLUMN_DEFINITIONS = (
     ("host_hostname", "TEXT"),
     ("host_platform", "TEXT"),
     ("host_label", "TEXT"),
+    ("host_identity", "TEXT"),
+    ("host_display", "TEXT"),
     ("host_repo_commit", "TEXT"),
     ("comparison_mode", "TEXT"),
     ("comparison_boundary", "TEXT"),
@@ -68,6 +70,8 @@ _RUN_COLUMN_DEFINITIONS = (
     ("runtime_endpoint", "TEXT"),
     ("runtime_options_json", "TEXT"),
     ("model_metadata_id", "TEXT"),
+    ("model_identity", "TEXT"),
+    ("model_display", "TEXT"),
     ("model_quantization", "TEXT"),
     ("model_artifact_repo", "TEXT"),
     ("model_artifact_file", "TEXT"),
@@ -76,6 +80,48 @@ _RUN_COLUMN_DEFINITIONS = (
     ("operating_power", "TEXT"),
     ("operating_thermal", "TEXT"),
     ("operating_background_load", "TEXT"),
+)
+_SITE_MODEL_IDENTITIES = (
+    (
+        re.compile(r"qwen[\s/_-]*3[.]?8.*flash[\s_-]*next", re.I),
+        "qwen3.8-flash-next",
+        "Qwen3.8 Flash-Next",
+    ),
+    (re.compile(r"qwen[\s/_-]*3[.]?8.*27b", re.I), "qwen3.8-27b", "Qwen3.8 27B"),
+    (
+        re.compile(r"qwen[\s/_-]*3[.]?6.*35b.*a3b", re.I),
+        "qwen3.6-35b-a3b",
+        "Qwen3.6 35B-A3B",
+    ),
+    (re.compile(r"qwen[\s/_-]*3[.]?6.*27b", re.I), "qwen3.6-27b", "Qwen3.6 27B"),
+    (
+        re.compile(r"qwen[\s/_-]*2[.]?5.*0[.]5b.*instruct", re.I),
+        "qwen2.5-0.5b-instruct",
+        "Qwen2.5 0.5B Instruct",
+    ),
+    (
+        re.compile(r"qwen[\s/_-]*3.*coder.*30b.*a3b", re.I),
+        "qwen3-coder-30b-a3b",
+        "Qwen3 Coder 30B-A3B",
+    ),
+    (re.compile(r"gemma[\s/_-]*4.*e2b", re.I), "gemma-4-e2b", "Gemma 4 E2B"),
+    (
+        re.compile(r"gemma[\s/_-]*4.*26b.*a4b", re.I),
+        "gemma-4-26b-a4b",
+        "Gemma 4 26B-A4B",
+    ),
+    (
+        re.compile(r"laguna[\s/_-]*xs[\s/_-]*2[.]1", re.I),
+        "laguna-xs-2.1",
+        "Laguna XS 2.1",
+    ),
+)
+_MODEL_QUANTIZATION_PATTERNS = (
+    (re.compile(r"ud[\s_-]*iq4[\s_-]*xs", re.I), "UD-IQ4_XS"),
+    (re.compile(r"q4[\s_-]*k[\s_-]*m", re.I), "Q4_K_M"),
+    (re.compile(r"q8[\s_-]*0", re.I), "Q8_0"),
+    (re.compile(r"mxfp4", re.I), "MXFP4"),
+    (re.compile(r"4bit", re.I), "4bit"),
 )
 
 
@@ -166,9 +212,13 @@ class _SiteComparisonMetric:
     host_label: str | None
     host_hostname: str | None
     host_platform: str | None
+    host_identity: str | None
+    host_display: str | None
     runtime_name: str | None
     model_metadata_id: str | None
     model: str | None
+    model_identity: str | None
+    model_display: str | None
     model_quantization: str | None
     rows: int
     ok_count: int
@@ -361,10 +411,12 @@ def export_registry_static_site(
             )
 
     try:
-        runs, run_rows, case_rows, metric_rows, agent_wrap_rows = _load_registry_site_snapshot(
-            db_path,
-            run_ids=run_ids,
-            labels=labels,
+        runs, run_rows, case_rows, metric_rows, agent_wrap_rows = (
+            _load_registry_site_snapshot(
+                db_path,
+                run_ids=run_ids,
+                labels=labels,
+            )
         )
         report_markdown = (
             render_report(runs)
@@ -378,7 +430,6 @@ def export_registry_static_site(
             case_rows=case_rows,
             metric_rows=metric_rows,
             agent_wrap_rows=agent_wrap_rows,
-            report_markdown=report_markdown,
             generated_at=generated_at,
         )
         snapshot_json = _render_static_site_snapshot_json(
@@ -448,7 +499,9 @@ def import_result_bundles(
     """Validate compact public bundles and import their runs into the registry."""
 
     if not bundle_dirs:
-        raise RegistryError("benchpack registry bundle import requires bundle directories")
+        raise RegistryError(
+            "benchpack registry bundle import requires bundle directories"
+        )
 
     # Validate every bundle before opening the database so multi-bundle imports
     # fail without partial writes when a later bundle is malformed.
@@ -558,7 +611,9 @@ def create_result_bundle(
             + ", ".join(sorted(BUNDLE_PROVENANCE_LABELS))
         )
     if not result_dirs:
-        raise RegistryError("benchpack registry bundle create requires result directories")
+        raise RegistryError(
+            "benchpack registry bundle create requires result directories"
+        )
     runs = [_load_and_validate_result_dir(path) for path in result_dirs]
 
     bundle_root = Path(bundle_dir)
@@ -654,7 +709,9 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         )
     runs = manifest.get("runs")
     if not isinstance(runs, list) or not runs:
-        raise RegistryError(f"bundle manifest requires a non-empty runs list: {manifest_path}")
+        raise RegistryError(
+            f"bundle manifest requires a non-empty runs list: {manifest_path}"
+        )
 
     expected_files = {BUNDLE_MANIFEST_FILENAME}
     file_count = 1
@@ -682,7 +739,9 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
             raise RegistryError(f"bundle run {run_index} requires non-empty files")
         for file_entry in files:
             if not isinstance(file_entry, dict):
-                raise RegistryError(f"bundle run {run_index} file entries must be objects")
+                raise RegistryError(
+                    f"bundle run {run_index} file entries must be objects"
+                )
             rel_path = _manifest_string(file_entry, "path", f"run {run_index} file")
             role = _manifest_string(file_entry, "role", f"run {run_index} file")
             _validate_bundle_file_role(rel_path, role)
@@ -693,7 +752,9 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
             file_count += 1
         omitted = run_manifest.get("omitted_artifacts", [])
         if not isinstance(omitted, list):
-            raise RegistryError(f"bundle run {run_index} omitted_artifacts must be a list")
+            raise RegistryError(
+                f"bundle run {run_index} omitted_artifacts must be a list"
+            )
         omitted_count += len(omitted)
 
     actual_files = {
@@ -831,9 +892,7 @@ def _validate_registry_selection(
             raise RegistryError(f"{command} --run-id requires at least one value")
         for run_id in run_ids:
             if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
-                raise RegistryError(
-                    f"{command} --run-id values must be integers >= 1"
-                )
+                raise RegistryError(f"{command} --run-id values must be integers >= 1")
     if labels is not None:
         if not labels:
             raise RegistryError(f"{command} --label requires at least one value")
@@ -886,10 +945,14 @@ def _validate_agent_wrap_query_filters(
         ("--thinking", thinking),
     ):
         if value is not None and value == "":
-            raise RegistryError(f"registry agent-wrap query {name} value must be non-empty")
+            raise RegistryError(
+                f"registry agent-wrap query {name} value must be non-empty"
+            )
     if limit is not None:
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-            raise RegistryError("registry agent-wrap query --limit must be an integer >= 1")
+            raise RegistryError(
+                "registry agent-wrap query --limit must be an integer >= 1"
+            )
 
 
 def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, Any]:
@@ -950,7 +1013,9 @@ def _validate_agent_wrap_row(row: dict[str, Any], source: str) -> None:
     thinking = row["thinking"]
     kind = _agent_wrap_required_string(thinking, "kind", f"{source} thinking")
     if kind not in {"thinking", "reasoning", "effort"}:
-        raise RegistryError(f"{source} thinking.kind must be thinking, reasoning, or effort")
+        raise RegistryError(
+            f"{source} thinking.kind must be thinking, reasoning, or effort"
+        )
     level = _agent_wrap_required_string(thinking, "level", f"{source} thinking")
     if level not in {"off", "none", "low", "medium", "high"}:
         raise RegistryError(f"{source} thinking.level is not normalized: {level}")
@@ -961,10 +1026,16 @@ def _validate_agent_wrap_row(row: dict[str, Any], source: str) -> None:
     _agent_wrap_required_string(row["timing"], "wall_display", f"{source} timing")
     for key in ("files_changed", "insertions", "deletions"):
         _agent_wrap_required_int(row["diff"], key, f"{source} diff")
-    _agent_wrap_required_int(row["verification"], "node_tests", f"{source} verification")
-    smoke = _agent_wrap_required_string(row["verification"], "smoke", f"{source} verification")
+    _agent_wrap_required_int(
+        row["verification"], "node_tests", f"{source} verification"
+    )
+    smoke = _agent_wrap_required_string(
+        row["verification"], "smoke", f"{source} verification"
+    )
     if smoke not in {"http-ok", "smoke-fail"}:
-        raise RegistryError(f"{source} verification.smoke must be http-ok or smoke-fail")
+        raise RegistryError(
+            f"{source} verification.smoke must be http-ok or smoke-fail"
+        )
     _agent_wrap_required_string(
         row["verification"], "smoke_display", f"{source} verification"
     )
@@ -1051,9 +1122,11 @@ def _select_site_run_rows(
         SELECT id, label, row_count, imported_at, run_jsonl_sha256,
                pack_ids_json, pack_versions_json, adapters_json, models_json,
                endpoints_json, host_hostname, host_platform, host_label,
+               host_identity, host_display,
                host_repo_commit, comparison_mode, comparison_boundary,
                runtime_name, runtime_version, runtime_endpoint,
-               model_metadata_id, model_quantization, model_artifact_repo,
+               model_metadata_id, model_identity, model_display,
+               model_quantization, model_artifact_repo,
                model_artifact_file, model_revision, model_sha256,
                operating_power, operating_thermal, operating_background_load
         FROM runs
@@ -1077,8 +1150,9 @@ def _select_site_case_rows(
                s.cached_prompt_token_rows, s.cached_prompt_token_median,
                s.prefill_tps_rows, s.prefill_tps_median,
                r.host_label, r.host_hostname, r.host_platform,
+               r.host_identity, r.host_display,
                r.runtime_name, r.models_json, r.model_metadata_id,
-               r.model_quantization
+               r.model_identity, r.model_display, r.model_quantization
         FROM result_case_stats AS s
         JOIN runs AS r ON r.id = s.run_id
         WHERE s.run_id IN ({placeholders})
@@ -1096,8 +1170,9 @@ def _select_site_metric_rows(
     rows = conn.execute(
         f"""
         SELECT r.id AS run_id, r.label AS run_label, r.host_label,
-               r.host_hostname, r.host_platform, r.runtime_name,
-               r.model_metadata_id, r.model_quantization, rr.model,
+               r.host_hostname, r.host_platform, r.host_identity, r.host_display,
+               r.runtime_name, r.model_metadata_id, r.model_quantization, rr.model,
+               rr.model_identity, rr.model_display,
                rr.pack_id, rr.pack_version, rr.case_id, rr.ok,
                rr.scoring_passed, rr.wall_s, rr.ttft_s,
                rr.decode_tps, rr.total_tps, rr.prompt_tokens,
@@ -1117,6 +1192,7 @@ def _select_site_metric_rows(
             row["pack_id"],
             row["pack_version"],
             row["case_id"],
+            row["model"],
         )
         grouped.setdefault(key, []).append(row)
 
@@ -1138,9 +1214,13 @@ def _select_site_metric_rows(
                 host_label=_optional_text(first["host_label"]),
                 host_hostname=_optional_text(first["host_hostname"]),
                 host_platform=_optional_text(first["host_platform"]),
+                host_identity=_optional_text(first["host_identity"]),
+                host_display=_optional_text(first["host_display"]),
                 runtime_name=_optional_text(first["runtime_name"]),
                 model_metadata_id=_optional_text(first["model_metadata_id"]),
                 model=_optional_text(first["model"]),
+                model_identity=_optional_text(first["model_identity"]),
+                model_display=_optional_text(first["model_display"]),
                 model_quantization=_optional_text(first["model_quantization"]),
                 rows=len(group_rows),
                 ok_count=sum(1 for row in group_rows if int(row["ok"]) == 1),
@@ -1264,7 +1344,8 @@ def _select_agent_wrap_rows(
         f"""
         SELECT id, label, dataset_source, imported_at, date, status,
                target_project, target_version, target_commit, target_workload,
-               model_id, model_name, model_family, harness_id, harness_name,
+               model_id, model_name, model_family, model_identity, model_display,
+               model_quantization, harness_id, harness_name,
                provider_id, provider_name, runner_provider_display,
                thinking_kind, thinking_level, thinking_display,
                wall_seconds, wall_display, files_changed, insertions, deletions,
@@ -1362,6 +1443,9 @@ def _agent_wrap_row_dict(row: sqlite3.Row) -> dict[str, Any]:
             "id": row["model_id"],
             "name": row["model_name"],
             "family": row["model_family"],
+            "identity": row["model_identity"],
+            "display": row["model_display"],
+            "quantization": row["model_quantization"],
         },
         "harness": {
             "id": row["harness_id"],
@@ -1406,9 +1490,29 @@ def _render_static_site_html(
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
     agent_wrap_rows: list[sqlite3.Row],
-    report_markdown: str,
     generated_at: str,
 ) -> str:
+    has_nvidia_django_wrap = any(
+        row.pack_id == "desktop-django-wrap"
+        and "nvidia" in (row.host_display or "").casefold()
+        for row in metric_rows
+    )
+    quick_views = [
+        '<a href="?table=agent-wrap&amp;target=django-resume">Django Resume one-shot results</a>',
+        '<a href="?table=agent-wrap&amp;target=django-resume&amp;result=pass">passing runs</a>',
+        '<a href="?table=agent-wrap&amp;target=django-resume&amp;result=fail">failed runs</a>',
+    ]
+    agent_scope_note = "This curated agent-workflow dataset has no host facet."
+    if has_nvidia_django_wrap:
+        quick_views.append(
+            '<a href="?table=comparison&amp;pack=desktop-django-wrap&amp;q=nvidia">'
+            "NVIDIA Django wrap pack</a>"
+        )
+        agent_scope_note += (
+            " For local-runtime prompt-pack results, select "
+            "<strong>Comparison Matrix</strong> and the "
+            "<strong>desktop-django-wrap</strong> pack."
+        )
     lines = [
         "<!doctype html>",
         '<html lang="en">',
@@ -1419,22 +1523,29 @@ def _render_static_site_html(
         "<style>",
         "body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#202124;background:#f8faf9;line-height:1.45}",
         "header{background:#12343b;color:#fff;padding:24px 32px}",
-        "main{padding:24px 32px;max-width:1440px}",
+        "main{box-sizing:border-box;padding:24px 32px;width:100%}",
         "h1{font-size:28px;margin:0 0 8px}h2{font-size:20px;margin:28px 0 12px}",
         "p{margin:0 0 12px}.meta{color:#d7e4e5}",
         "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}",
         ".filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 12px}",
         ".filters label{display:grid;gap:4px;font-size:12px;font-weight:600;color:#334244}",
+        ".filters label.filter-disabled{opacity:.5}",
         ".filters input,.filters select{font:inherit;font-size:13px;padding:7px 8px;border:1px solid #b8c9ca;background:#fff;color:#202124}",
         ".filter-count{color:#526466;font-size:13px}",
+        ".quick-views,.filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}",
+        ".filter-actions button{font:inherit;font-size:13px;padding:6px 10px;border:1px solid #0b6670;background:#fff;color:#0b6670;cursor:pointer}",
+        ".copy-status{color:#526466;font-size:12px}",
         ".is-hidden{display:none}",
-        ".table-wrap{overflow-x:auto;border:1px solid #cbd8d9;background:#fff}",
+        ".table-wrap{box-sizing:border-box;max-width:100%;overflow-x:auto;border:1px solid #cbd8d9;background:#fff;scrollbar-gutter:stable}",
         "table{border-collapse:collapse;width:100%;font-size:13px}",
-        "th,td{border-bottom:1px solid #e1e8e8;padding:8px 10px;text-align:left;vertical-align:top;white-space:nowrap}",
-        "th{background:#edf4f2;color:#273536;font-weight:600;position:sticky;top:0}",
+        "th,td{border-bottom:1px solid #e1e8e8;padding:8px 10px;text-align:left;vertical-align:top}",
+        "th{background:#edf4f2;color:#273536;font-weight:600;position:sticky;top:0;white-space:nowrap}",
+        "td{max-width:32rem;overflow-wrap:anywhere}",
         "tr:nth-child(even) td{background:#fbfdfc}",
-        "pre{background:#101820;color:#f5f7f7;overflow:auto;padding:16px;border-radius:6px;font-size:12px;line-height:1.5}",
+        ".outcome{display:inline-block;min-width:5.5em;padding:2px 7px;border-radius:999px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em}",
+        ".outcome-pass{background:#dff3e5;color:#145b2d}.outcome-fail{background:#fde4e1;color:#8a2118}.outcome-interrupted{background:#fff0c7;color:#6f4d00}",
         "a{color:#0b6670}",
+        "@media(max-width:700px){header,main{padding-left:16px;padding-right:16px}.filters{grid-template-columns:1fr}.table-wrap{max-width:calc(100vw - 32px)}}",
         "</style>",
         "</head>",
         "<body>",
@@ -1456,6 +1567,9 @@ def _render_static_site_html(
         "<main>",
         "<section>",
         "<h2>Browse Filters</h2>",
+        '<p class="quick-views"><strong>Quick views:</strong> '
+        + " ".join(quick_views)
+        + "</p>",
         '<div class="filters" data-registry-filters>',
         '<label>Search<input id="filter-search" type="search" '
         'placeholder="run, pack, model, host"></label>',
@@ -1496,12 +1610,21 @@ def _render_static_site_html(
         _site_filter_select(
             "filter-quantization",
             "Quantization",
-            _site_quantization_filter_options(run_rows, case_rows, metric_rows),
+            _site_quantization_filter_options(
+                run_rows, case_rows, metric_rows, agent_wrap_rows
+            ),
         ),
         _site_filter_select(
             "filter-result",
-            "Result",
+            "Outcome",
             _agent_wrap_filter_options(row["status"] for row in agent_wrap_rows),
+        ),
+        _site_filter_select(
+            "filter-target",
+            "Target",
+            _agent_wrap_filter_options(
+                row["target_project"] for row in agent_wrap_rows
+            ),
         ),
         _site_filter_select(
             "filter-harness",
@@ -1516,18 +1639,22 @@ def _render_static_site_html(
         _site_filter_select(
             "filter-thinking",
             "Thinking",
-            _agent_wrap_filter_options(row["thinking_level"] for row in agent_wrap_rows),
+            _agent_wrap_filter_options(
+                row["thinking_level"] for row in agent_wrap_rows
+            ),
         ),
         "</div>",
         '<p id="filter-count" class="filter-count"></p>',
+        '<p class="filter-actions"><button id="copy-filter-url" type="button">Copy filtered URL</button>'
+        '<span id="copy-filter-status" class="copy-status" aria-live="polite"></span></p>',
         "</section>",
         '<section data-registry-section="runs">',
         "<h2>Runs</h2>",
-        '<div class="table-wrap">',
+        '<div class="table-wrap" role="region" tabindex="0" aria-label="Runs table">',
         "<table>",
         "<thead><tr>"
         "<th>id</th><th>label</th><th>imported</th><th>rows</th>"
-        "<th>packs</th><th>adapters</th><th>models</th><th>endpoints</th>"
+        "<th>packs</th><th>adapters</th><th>model</th><th>endpoints</th>"
         "<th>runtime</th><th>model metadata</th><th>quantization</th>"
         "<th>model artifact</th><th>model revision</th><th>model sha256</th>"
         "<th>host</th><th>comparison</th><th>repo commit</th><th>operating</th>"
@@ -1549,34 +1676,37 @@ def _render_static_site_html(
             *_json_list_values(row["endpoints_json"]),
             _site_runtime_cell(row),
             row["model_metadata_id"],
+            row["model_identity"],
+            row["model_display"],
             row["model_quantization"],
             _site_model_artifact_cell(row),
             row["model_revision"],
             row["model_sha256"],
-            _site_host_cell(row),
+            row["host_display"],
+            row["host_identity"],
             _site_comparison_cell(row),
             row["host_repo_commit"],
             _site_operating_cell(row),
             row["run_jsonl_sha256"],
         ]
         lines.append(
-            "<tr class=\"registry-row\""
-            f" data-table=\"runs\""
-            f" data-pack=\"{_site_filter_values_attr(packs)}\""
-            f" data-case=\"\""
-            " data-host=\""
-            f"{_site_filter_values_attr([row['host_label'], row['host_hostname'], row['host_platform']])}\""
-            f" data-runtime=\"{_site_filter_values_attr([row['runtime_name']])}\""
-            f" data-model=\"{_site_filter_values_attr([row['model_metadata_id'], *models])}\""
-            f" data-quantization=\"{_site_filter_values_attr([row['model_quantization']])}\""
-            f" data-search=\"{_site_search_attr(search_values)}\">"
+            '<tr class="registry-row"'
+            f' data-table="runs"'
+            f' data-pack="{_site_filter_values_attr(packs)}"'
+            f' data-case=""'
+            ' data-host="'
+            f'{_site_filter_values_attr([row["host_identity"]])}"'
+            f' data-runtime="{_site_filter_values_attr([row["runtime_name"]])}"'
+            f' data-model="{_site_filter_values_attr([row["model_identity"]])}"'
+            f' data-quantization="{_site_filter_values_attr([row["model_quantization"]])}"'
+            f' data-search="{_site_search_attr(search_values)}">'
             f"<td>{_html(row['id'])}</td>"
             f"<td>{_html(row['label'])}</td>"
             f"<td>{_html(row['imported_at'] or '—')}</td>"
             f"<td>{_html(row['row_count'])}</td>"
             f"<td>{_html(_json_list_cell(row['pack_ids_json'], row['pack_versions_json']))}</td>"
             f"<td>{_html(_json_list_cell(row['adapters_json']))}</td>"
-            f"<td>{_html(_json_list_cell(row['models_json']))}</td>"
+            f"<td>{_html(row['model_display'] or '—')}</td>"
             f"<td>{_html(_json_list_cell(row['endpoints_json']))}</td>"
             f"<td>{_html(_site_runtime_cell(row))}</td>"
             f"<td>{_html(row['model_metadata_id'] or '—')}</td>"
@@ -1584,7 +1714,7 @@ def _render_static_site_html(
             f"<td>{_html(_site_model_artifact_cell(row))}</td>"
             f"<td>{_html(row['model_revision'] or '—')}</td>"
             f"<td>{_html(row['model_sha256'] or '—')}</td>"
-            f"<td>{_html(_site_host_cell(row))}</td>"
+            f"<td>{_html(row['host_display'] or '—')}</td>"
             f"<td>{_html(_site_comparison_cell(row))}</td>"
             f"<td>{_html(row['host_repo_commit'] or '—')}</td>"
             f"<td>{_html(_site_operating_cell(row))}</td>"
@@ -1599,7 +1729,7 @@ def _render_static_site_html(
             "</section>",
             '<section data-registry-section="comparison">',
             "<h2>Comparison Matrix</h2>",
-            '<div class="table-wrap">',
+            '<div class="table-wrap" role="region" tabindex="0" aria-label="Comparison matrix table">',
             "<table>",
             "<thead><tr>"
             "<th>run</th><th>pack</th><th>case</th><th>host</th>"
@@ -1618,33 +1748,33 @@ def _render_static_site_html(
             row.pack_id,
             row.pack_version,
             row.case_id,
-            row.host_label,
-            row.host_hostname,
-            row.host_platform,
+            row.host_display,
             row.runtime_name,
             row.model_metadata_id,
             row.model,
+            row.model_identity,
+            row.model_display,
             row.model_quantization,
             row.rows,
             row.ok_count,
             _site_count_cell(row.scoring_passed_count, row.scoring_rows),
         ]
         lines.append(
-            "<tr class=\"registry-row\""
-            f" data-table=\"comparison\""
-            f" data-pack=\"{_site_filter_values_attr([row.pack_id])}\""
-            f" data-case=\"{_site_filter_values_attr([row.case_id])}\""
-            f" data-host=\"{_site_filter_values_attr([row.host_label, row.host_hostname, row.host_platform])}\""
-            f" data-runtime=\"{_site_filter_values_attr([row.runtime_name])}\""
-            f" data-model=\"{_site_filter_values_attr([row.model_metadata_id, row.model])}\""
-            f" data-quantization=\"{_site_filter_values_attr([row.model_quantization])}\""
-            f" data-search=\"{_site_search_attr(search_values)}\">"
+            '<tr class="registry-row"'
+            f' data-table="comparison"'
+            f' data-pack="{_site_filter_values_attr([row.pack_id])}"'
+            f' data-case="{_site_filter_values_attr([row.case_id])}"'
+            f' data-host="{_site_filter_values_attr([row.host_identity])}"'
+            f' data-runtime="{_site_filter_values_attr([row.runtime_name])}"'
+            f' data-model="{_site_filter_values_attr([row.model_identity])}"'
+            f' data-quantization="{_site_filter_values_attr([row.model_quantization])}"'
+            f' data-search="{_site_search_attr(search_values)}">'
             f"<td>{_html(row.run_label)}</td>"
             f"<td>{_html(row.pack_id + ' ' + row.pack_version)}</td>"
             f"<td>{_html(row.case_id)}</td>"
-            f"<td>{_html(_site_parts_cell(row.host_label, row.host_platform))}</td>"
+            f"<td>{_html(row.host_display or '—')}</td>"
             f"<td>{_html(row.runtime_name or '—')}</td>"
-            f"<td>{_html(row.model_metadata_id or '—')}</td>"
+            f"<td>{_html(row.model_display or '—')}</td>"
             f"<td>{_html(row.model_quantization or '—')}</td>"
             f"<td>{_html(row.rows)}</td>"
             f"<td>{_html(row.ok_count)}</td>"
@@ -1666,7 +1796,7 @@ def _render_static_site_html(
             "</section>",
             '<section data-registry-section="cases">',
             "<h2>Case Metrics</h2>",
-            '<div class="table-wrap">',
+            '<div class="table-wrap" role="region" tabindex="0" aria-label="Case metrics table">',
             "<table>",
             "<thead><tr>"
             "<th>run</th><th>pack</th><th>case</th><th>rows</th><th>ok</th>"
@@ -1688,20 +1818,22 @@ def _render_static_site_html(
             row["host_platform"],
             row["runtime_name"],
             row["model_metadata_id"],
+            row["model_identity"],
+            row["model_display"],
             *_json_list_values(row["models_json"]),
             row["model_quantization"],
         ]
         models = _json_list_values(row["models_json"])
         lines.append(
-            "<tr class=\"registry-row\""
-            f" data-table=\"cases\""
-            f" data-pack=\"{_site_filter_values_attr([row['pack_id']])}\""
-            f" data-case=\"{_site_filter_values_attr([row['case_id']])}\""
-            f" data-host=\"{_site_filter_values_attr([row['host_label'], row['host_hostname'], row['host_platform']])}\""
-            f" data-runtime=\"{_site_filter_values_attr([row['runtime_name']])}\""
-            f" data-model=\"{_site_filter_values_attr([row['model_metadata_id'], *models])}\""
-            f" data-quantization=\"{_site_filter_values_attr([row['model_quantization']])}\""
-            f" data-search=\"{_site_search_attr(search_values)}\">"
+            '<tr class="registry-row"'
+            f' data-table="cases"'
+            f' data-pack="{_site_filter_values_attr([row["pack_id"]])}"'
+            f' data-case="{_site_filter_values_attr([row["case_id"]])}"'
+            f' data-host="{_site_filter_values_attr([row["host_identity"]])}"'
+            f' data-runtime="{_site_filter_values_attr([row["runtime_name"]])}"'
+            f' data-model="{_site_filter_values_attr([row["model_identity"]])}"'
+            f' data-quantization="{_site_filter_values_attr([row["model_quantization"]])}"'
+            f' data-search="{_site_search_attr(search_values)}">'
             f"<td>{_html(row['run_label'])}</td>"
             f"<td>{_html(row['pack_id'] + ' ' + row['pack_version'])}</td>"
             f"<td>{_html(row['case_id'])}</td>"
@@ -1721,12 +1853,14 @@ def _render_static_site_html(
             "</table>",
             "</div>",
             "</section>",
-            '<section data-registry-section="agent-wrap">',
-            "<h2>Agent Wrap One-Shot Runs</h2>",
-            '<div class="table-wrap">',
+        '<section data-registry-section="agent-wrap">',
+        "<h2>Agent Wrap One-Shot Runs</h2>",
+        "<p>The <strong>Outcome</strong> column is the recorded benchmark result; Node tests and smoke are supporting verification checks.</p>",
+        f"<p>{agent_scope_note}</p>",
+            '<div class="table-wrap" role="region" tabindex="0" aria-label="Agent wrap one-shot results table">',
             "<table>",
             "<thead><tr>"
-            "<th>status</th><th>model</th><th>harness/provider</th>"
+            "<th>outcome</th><th>model</th><th>harness/provider</th>"
             "<th>thinking</th><th>time</th><th>files</th><th>insertions</th>"
             "<th>deletions</th><th>node tests</th><th>smoke</th><th>target</th>"
             "<th>artifact</th><th>notes</th>"
@@ -1741,6 +1875,8 @@ def _render_static_site_html(
             row["model_id"],
             row["model_name"],
             row["model_family"],
+            row["model_identity"],
+            row["model_display"],
             row["harness_id"],
             row["harness_name"],
             row["provider_id"],
@@ -1756,18 +1892,19 @@ def _render_static_site_html(
             row["notes"],
         ]
         lines.append(
-            "<tr class=\"registry-row\""
-            f" data-table=\"agent-wrap\""
-            " data-pack=\"[]\" data-case=\"[]\" data-host=\"[]\" data-runtime=\"[]\""
-            f" data-model=\"{_site_filter_values_attr([row['model_id'], row['model_name']])}\""
-            " data-quantization=\"[]\""
-            f" data-result=\"{_site_filter_values_attr([row['status']])}\""
-            f" data-harness=\"{_site_filter_values_attr([row['harness_id']])}\""
-            f" data-provider=\"{_site_filter_values_attr([row['provider_id']])}\""
-            f" data-thinking=\"{_site_filter_values_attr([row['thinking_level']])}\""
-            f" data-search=\"{_site_search_attr(search_values)}\">"
-            f"<td>{_html(str(row['status']).upper())}</td>"
-            f"<td>{_html(row['model_name'])}</td>"
+            '<tr class="registry-row"'
+            f' data-table="agent-wrap"'
+            ' data-pack="[]" data-case="[]" data-host="[]" data-runtime="[]"'
+            f' data-model="{_site_filter_values_attr([row["model_identity"]])}"'
+            f' data-quantization="{_site_filter_values_attr([row["model_quantization"]])}"'
+            f' data-result="{_site_filter_values_attr([row["status"]])}"'
+            f' data-target="{_site_filter_values_attr([row["target_project"]])}"'
+            f' data-harness="{_site_filter_values_attr([row["harness_id"]])}"'
+            f' data-provider="{_site_filter_values_attr([row["provider_id"]])}"'
+            f' data-thinking="{_site_filter_values_attr([row["thinking_level"]])}"'
+            f' data-search="{_site_search_attr(search_values)}">'
+            f'<td><span class="outcome outcome-{_html(_site_filter_key(row["status"]) or "unknown")}">{_html(str(row["status"]).upper())}</span></td>'
+            f"<td>{_html(row['model_display'])}</td>"
             f"<td>{_html(row['runner_provider_display'])}</td>"
             f"<td>{_html(row['thinking_display'])}</td>"
             f"<td>{_html(_site_float(row['wall_seconds']))}s<br>{_html(row['wall_display'])}</td>"
@@ -1788,20 +1925,76 @@ def _render_static_site_html(
             "</div>",
             "</section>",
             "<section>",
-            "<h2>Markdown Report</h2>",
+            "<h2>Raw Report</h2>",
             (
                 f'<p><a href="{STATIC_SITE_REPORT_FILENAME}">'
-                f"Open {STATIC_SITE_REPORT_FILENAME}</a></p>"
+                f"Open raw {STATIC_SITE_REPORT_FILENAME}</a> for a portable "
+                "Markdown version of the indexed benchmark results.</p>"
             ),
-            f"<pre>{_html(report_markdown)}</pre>",
             "</section>",
             "<script>",
             "const registryRows=Array.from(document.querySelectorAll('.registry-row'));",
             "const registrySections=Array.from(document.querySelectorAll('[data-registry-section]'));",
-            "const filterIds=['pack','case','host','runtime','model','quantization','result','harness','provider','thinking'];",
+            "const filterIds=['pack','case','host','runtime','model','quantization','result','target','harness','provider','thinking'];",
+            "const benchFilterIds=['pack','case','host','runtime'];",
+            "const agentFilterIds=['result','target','harness','provider','thinking'];",
             "const filters={search:document.getElementById('filter-search'),table:document.getElementById('filter-table')};",
             "for(const id of filterIds){filters[id]=document.getElementById('filter-'+id);}",
+            "const tableFilterScopes={",
+            "  runs:new Set(['pack','host','runtime','model','quantization']),",
+            "  comparison:new Set(['pack','case','host','runtime','model','quantization']),",
+            "  cases:new Set(['pack','case','host','runtime','model','quantization']),",
+            "  'agent-wrap':new Set(['model','quantization','result','target','harness','provider','thinking']),",
+            "};",
+            "const queryNames={search:'q',table:'table'};for(const id of filterIds){queryNames[id]=id;}",
+            "const queryIds=Object.fromEntries(Object.entries(queryNames).map(([id,param])=>[param,id]));",
             "const countEl=document.getElementById('filter-count');",
+            "const copyButton=document.getElementById('copy-filter-url');",
+            "const copyStatus=document.getElementById('copy-filter-status');",
+            "function filterAcceptsValue(id,value){",
+            "  const filter=filters[id];",
+            "  return Boolean(filter&&(filter.tagName!=='SELECT'||Array.from(filter.options).some(option=>option.value===value)));",
+            "}",
+            "function loadFiltersFromUrl(){",
+            "  const params=new URLSearchParams(window.location.search);",
+            "  const acceptedScopedValues=[];",
+            "  for(const [param,value] of params){",
+            "    const id=queryIds[param];",
+            "    if(!id||!filterAcceptsValue(id,value)){continue;}",
+            "    filters[id].value=value;",
+            "    if(benchFilterIds.includes(id)||agentFilterIds.includes(id)){acceptedScopedValues.push([id,value]);}",
+            "  }",
+            "  for(let index=acceptedScopedValues.length-1;index>=0;index-=1){",
+            "    const [id,value]=acceptedScopedValues[index];",
+            "    if(value&&filters[id].value===value){resolveCrossScopeFilters(id);break;}",
+            "  }",
+            "}",
+            "function resolveCrossScopeFilters(changedId){",
+            "  if(filters.table.value||!changedId){return;}",
+            "  const changedBench=benchFilterIds.includes(changedId);",
+            "  const changedAgent=agentFilterIds.includes(changedId);",
+            "  if(!changedBench&&!changedAgent){return;}",
+            "  const benchActive=benchFilterIds.some(id=>filters[id].value);",
+            "  const agentActive=agentFilterIds.some(id=>filters[id].value);",
+            "  let clearIds=[];",
+            "  if(filters[changedId].value){clearIds=changedBench?agentFilterIds:benchFilterIds;}",
+            "  else if(benchActive&&agentActive){clearIds=changedBench?benchFilterIds:agentFilterIds;}",
+            "  for(const id of clearIds){filters[id].value='';}",
+            "}",
+            "function syncFilterScope(){",
+            "  const scope=tableFilterScopes[filters.table.value];",
+            "  for(const id of filterIds){",
+            "    const disabled=Boolean(scope&&!scope.has(id));",
+            "    filters[id].disabled=disabled;",
+            "    filters[id].parentElement.classList.toggle('filter-disabled',disabled);",
+            "    if(disabled){filters[id].value='';}",
+            "  }",
+            "}",
+            "function updateFilterUrl(){",
+            "  const url=new URL(window.location.href);",
+            "  for(const [id,param] of Object.entries(queryNames)){const value=filters[id].value.trim();if(value){url.searchParams.set(param,value);}else{url.searchParams.delete(param);}}",
+            "  history.replaceState(null,'',url.pathname+url.search+url.hash);",
+            "}",
             "function rowMatches(row){",
             "  if(filters.table.value&&row.dataset.table!==filters.table.value){return false;}",
             "  const query=filters.search.value.trim().toLowerCase();",
@@ -1815,11 +2008,13 @@ def _render_static_site_html(
             "  return true;",
             "}",
             "function applyFilters(){",
+            "  syncFilterScope();",
             "  let shown=0;",
+            "  const outcomes={};",
             "  for(const row of registryRows){",
             "    const visible=rowMatches(row);",
             "    row.classList.toggle('is-hidden',!visible);",
-            "    if(visible){shown+=1;}",
+            "    if(visible){shown+=1;const values=JSON.parse(row.dataset.result||'[]');if(values[0]){outcomes[values[0]]=(outcomes[values[0]]||0)+1;}}",
             "  }",
             "  for(const section of registrySections){",
             "    const table=section.dataset.registrySection;",
@@ -1827,11 +2022,15 @@ def _render_static_site_html(
             "    const hidden=(filters.table.value&&filters.table.value!==table)||visibleRows===0;",
             "    section.classList.toggle('is-hidden',hidden);",
             "  }",
-            "  countEl.textContent=shown+' visible row'+(shown===1?'':'s')+' across generated tables.';",
+            "  const breakdown=Object.entries(outcomes).map(([name,count])=>count+' '+name).join(', ');",
+            "  countEl.textContent=shown+' visible row'+(shown===1?'':'s')+' across generated tables.'+(breakdown?' Outcomes: '+breakdown+'.':'');",
+            "  updateFilterUrl();",
             "}",
             "filters.search.addEventListener('input',applyFilters);",
             "filters.table.addEventListener('change',applyFilters);",
-            "for(const id of filterIds){filters[id].addEventListener('change',applyFilters);}",
+            "for(const id of filterIds){filters[id].addEventListener('change',()=>{resolveCrossScopeFilters(id);applyFilters();});}",
+            "copyButton.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(window.location.href);copyStatus.textContent='Copied.';}catch(error){copyStatus.textContent='Copy the URL from the address bar.';}});",
+            "loadFiltersFromUrl();",
             "applyFilters();",
             "</script>",
             "</main>",
@@ -1882,6 +2081,9 @@ def _site_run_row_dict(row: sqlite3.Row) -> dict[str, Any]:
             "label": row["host_label"],
             "hostname": row["host_hostname"],
             "platform": row["host_platform"],
+            "platform_display": _site_platform_display(row["host_platform"]),
+            "identity": row["host_identity"],
+            "display": row["host_display"],
             "repo_commit": row["host_repo_commit"],
         },
         "comparison": {
@@ -1895,6 +2097,8 @@ def _site_run_row_dict(row: sqlite3.Row) -> dict[str, Any]:
         },
         "model_metadata": {
             "id": row["model_metadata_id"],
+            "identity": row["model_identity"],
+            "display": row["model_display"],
             "quantization": row["model_quantization"],
             "artifact_repo": row["model_artifact_repo"],
             "artifact_file": row["model_artifact_file"],
@@ -1930,9 +2134,14 @@ def _site_metric_row_dict(row: _SiteComparisonMetric) -> dict[str, Any]:
             "label": row.host_label,
             "hostname": row.host_hostname,
             "platform": row.host_platform,
+            "platform_display": _site_platform_display(row.host_platform),
+            "identity": row.host_identity,
+            "display": row.host_display,
         },
         "runtime": {"name": row.runtime_name},
         "model": row.model,
+        "model_identity": row.model_identity,
+        "model_display": row.model_display,
         "model_metadata": {
             "id": row.model_metadata_id,
             "quantization": row.model_quantization,
@@ -1979,11 +2188,16 @@ def _site_case_row_dict(row: sqlite3.Row) -> dict[str, Any]:
             "label": row["host_label"],
             "hostname": row["host_hostname"],
             "platform": row["host_platform"],
+            "platform_display": _site_platform_display(row["host_platform"]),
+            "identity": row["host_identity"],
+            "display": row["host_display"],
         },
         "runtime": {"name": row["runtime_name"]},
         "models": _json_list_values(row["models_json"]),
         "model_metadata": {
             "id": row["model_metadata_id"],
+            "identity": row["model_identity"],
+            "display": row["model_display"],
             "quantization": row["model_quantization"],
         },
     }
@@ -2035,14 +2249,14 @@ def _site_host_filter_options(
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
 ) -> list[tuple[str, str]]:
-    values: list[object] = []
+    identities: list[tuple[object, object]] = []
     for row in run_rows:
-        values.extend([row["host_label"], row["host_hostname"], row["host_platform"]])
+        identities.append((row["host_identity"], row["host_display"]))
     for row in case_rows:
-        values.extend([row["host_label"], row["host_hostname"], row["host_platform"]])
+        identities.append((row["host_identity"], row["host_display"]))
     for row in metric_rows:
-        values.extend([row.host_label, row.host_hostname, row.host_platform])
-    return _site_filter_options(values)
+        identities.append((row.host_identity, row.host_display))
+    return _site_identity_options(identities)
 
 
 def _site_runtime_filter_options(
@@ -2063,27 +2277,29 @@ def _site_model_filter_options(
     metric_rows: list[_SiteComparisonMetric],
     agent_wrap_rows: list[sqlite3.Row],
 ) -> list[tuple[str, str]]:
-    values: list[object] = []
+    identities: list[tuple[object, object]] = []
     for row in run_rows:
-        values.extend([row["model_metadata_id"], *_json_list_values(row["models_json"])])
+        identities.append((row["model_identity"], row["model_display"]))
     for row in case_rows:
-        values.extend([row["model_metadata_id"], *_json_list_values(row["models_json"])])
+        identities.append((row["model_identity"], row["model_display"]))
     for row in metric_rows:
-        values.extend([row.model_metadata_id, row.model])
+        identities.append((row.model_identity, row.model_display))
     for row in agent_wrap_rows:
-        values.extend([row["model_id"], row["model_name"]])
-    return _site_filter_options(values)
+        identities.append((row["model_identity"], row["model_display"]))
+    return _site_identity_options(identities)
 
 
 def _site_quantization_filter_options(
     run_rows: list[sqlite3.Row],
     case_rows: list[sqlite3.Row],
     metric_rows: list[_SiteComparisonMetric],
+    agent_wrap_rows: list[sqlite3.Row],
 ) -> list[tuple[str, str]]:
     return _site_filter_options(
         [row["model_quantization"] for row in run_rows]
         + [row["model_quantization"] for row in case_rows]
         + [row.model_quantization for row in metric_rows]
+        + [row["model_quantization"] for row in agent_wrap_rows]
     )
 
 
@@ -2101,6 +2317,18 @@ def _site_filter_options(values: Iterable[object]) -> list[tuple[str, str]]:
     return sorted(by_key.items(), key=lambda item: item[1].lower())
 
 
+def _site_identity_options(
+    identities: Iterable[tuple[object, object]],
+) -> list[tuple[str, str]]:
+    by_key: dict[str, str] = {}
+    for identity, display in identities:
+        key = _site_filter_key(identity)
+        if key is None:
+            continue
+        by_key.setdefault(key, str(display or identity))
+    return sorted(by_key.items(), key=lambda item: item[1].lower())
+
+
 def _site_filter_values_attr(values: Iterable[object]) -> str:
     keys: list[str] = []
     for value in values:
@@ -2112,9 +2340,7 @@ def _site_filter_values_attr(values: Iterable[object]) -> str:
 
 def _site_search_attr(values: Iterable[object]) -> str:
     rendered = [
-        str(value).lower()
-        for value in values
-        if value not in (None, "", [], "—")
+        str(value).lower() for value in values if value not in (None, "", [], "—")
     ]
     return _html(" ".join(rendered))
 
@@ -2123,6 +2349,165 @@ def _site_filter_key(value: object) -> str | None:
     if value in (None, "", [], "—"):
         return None
     return str(value).strip().lower()
+
+
+def _normalized_model_identity(
+    *values: object,
+    explicit_id: object = None,
+    explicit_display: object = None,
+) -> tuple[str | None, str | None]:
+    """Return one stable base-model facet while retaining raw model fields."""
+
+    if explicit_id not in (None, ""):
+        identity = _slug(str(explicit_id))
+        display = (
+            str(explicit_display).strip()
+            if explicit_display not in (None, "")
+            else str(explicit_id).strip()
+        )
+        return identity, display
+    rendered = [str(value).strip() for value in values if value not in (None, "")]
+    if not rendered:
+        return None, None
+    searchable = " ".join(rendered)
+    for pattern, identity, display in _SITE_MODEL_IDENTITIES:
+        if pattern.search(searchable):
+            return identity, str(explicit_display).strip() if explicit_display else display
+    identity = _slug(rendered[0])
+    display = (
+        str(explicit_display).strip()
+        if explicit_display not in (None, "")
+        else rendered[0]
+    )
+    return identity, display
+
+
+def _normalized_run_model_identity(
+    raw_models: list[str],
+    model_metadata: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    explicit_id = _string_or_none(model_metadata, "canonical_id")
+    explicit_display = _string_or_none(model_metadata, "display_name")
+    metadata_id = _string_or_none(model_metadata, "id")
+    if explicit_id is not None:
+        return _normalized_model_identity(
+            metadata_id,
+            *raw_models,
+            explicit_id=explicit_id,
+            explicit_display=explicit_display,
+        )
+    normalized = [_normalized_model_identity(model) for model in raw_models]
+    identities = {identity for identity, _display in normalized if identity is not None}
+    if len(identities) > 1:
+        return None, None
+    if len(raw_models) == 1:
+        return _normalized_model_identity(
+            metadata_id,
+            raw_models[0],
+            explicit_display=explicit_display,
+        )
+    if normalized:
+        identity, display = normalized[0]
+        return identity, explicit_display or display
+    return _normalized_model_identity(
+        metadata_id,
+        explicit_display=explicit_display,
+    )
+
+
+def _normalized_agent_model_identity(
+    model_id: object,
+    model_name: object,
+) -> tuple[str | None, str | None]:
+    identity, display = _normalized_model_identity(model_id, model_name)
+    if display == str(model_id).strip() and model_name not in (None, ""):
+        display = str(model_name).strip()
+    return identity, display
+
+
+def _normalized_host_identity(
+    hardware: dict[str, Any] | None,
+    host: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    """Return a stable hardware identity and a reader-facing host label."""
+
+    explicit_id = _string_or_none(host, "identity")
+    explicit_display = _string_or_none(host, "display")
+    if explicit_id is not None:
+        return _slug(explicit_id), explicit_display or explicit_id
+    gpus = hardware.get("gpus") if isinstance(hardware, dict) else None
+    gpu_displays: list[str] = []
+    if isinstance(gpus, list):
+        for gpu in gpus:
+            if not isinstance(gpu, dict):
+                continue
+            gpu_model = _string_or_none(gpu, "model")
+            if gpu_model is None or gpu_model.casefold().startswith("apple "):
+                continue
+            gpu_display = gpu_model
+            vram_mb = gpu.get("vram_mb")
+            if (
+                isinstance(vram_mb, int)
+                and not isinstance(vram_mb, bool)
+                and vram_mb > 0
+            ):
+                gpu_display += f" ({round(vram_mb / 1024)} GB VRAM)"
+            gpu_displays.append(gpu_display)
+    if gpu_displays:
+        counted_displays = [
+            (
+                display,
+                sum(candidate == display for candidate in gpu_displays),
+            )
+            for display in sorted(
+                set(gpu_displays), key=lambda value: (value.casefold(), value)
+            )
+        ]
+        gpu_display = " + ".join(
+            f"{count}× {display}" if count > 1 else display
+            for display, count in counted_displays
+        )
+        return _slug(gpu_display), explicit_display or gpu_display
+    chip = _string_or_none(hardware, "chip") or _string_or_none(hardware, "cpu_model")
+    machine_name = _string_or_none(hardware, "hardware_model_name")
+    ram_mb = hardware.get("ram_mb") if isinstance(hardware, dict) else None
+    if chip is not None and chip.casefold().startswith("apple "):
+        parts = [chip]
+    else:
+        parts = list(dict.fromkeys(part for part in (chip, machine_name) if part))
+    if isinstance(ram_mb, int) and not isinstance(ram_mb, bool) and ram_mb > 0:
+        memory = f"{ram_mb // 1024} GB"
+    else:
+        memory = None
+    if parts:
+        display = " ".join(parts)
+        if memory is not None:
+            display += f" ({memory})"
+        return _slug(display), explicit_display or display
+    raw = (
+        _string_or_none(host, "label")
+        or _string_or_none(hardware, "hostname")
+        or _string_or_none(host, "hostname")
+    )
+    if raw is None:
+        return None, None
+    display = raw.removesuffix(".local")
+    return _slug(display), explicit_display or display
+
+
+def _inferred_model_quantization(*values: object) -> str | None:
+    searchable = " ".join(str(value) for value in values if value not in (None, ""))
+    for pattern, quantization in _MODEL_QUANTIZATION_PATTERNS:
+        if pattern.search(searchable):
+            return quantization
+    return None
+
+
+def _site_platform_display(value: object) -> str:
+    key = _site_filter_key(value)
+    if key == "darwin":
+        return "macOS"
+    return str(value) if value not in (None, "", "—") else "—"
 
 
 def _json_list_cell(raw_json: str | None, paired_json: str | None = None) -> str:
@@ -2258,7 +2643,9 @@ def _copy_run_into_bundle(
     for relative_path, role in _included_artifacts(run):
         source = _safe_existing_file(run.path, relative_path)
         if source is None:
-            omitted.append(_omitted_artifact(run.path, relative_path, "missing-or-unsafe"))
+            omitted.append(
+                _omitted_artifact(run.path, relative_path, "missing-or-unsafe")
+            )
             continue
         _assert_file_has_no_public_secret(source, relative_path)
         destination = run_bundle_dir / relative_path
@@ -2317,7 +2704,10 @@ def _assert_bundle_output_disjoint_from_sources(
 
 def _included_artifacts(run: ResultRun) -> list[tuple[str, str]]:
     artifacts: list[tuple[str, str]] = [("run.jsonl", "run-jsonl")]
-    for filename, role in (("hardware.json", "hardware"), ("run-metadata.json", "run-metadata")):
+    for filename, role in (
+        ("hardware.json", "hardware"),
+        ("run-metadata.json", "run-metadata"),
+    ):
         if (run.path / filename).is_file():
             artifacts.append((filename, role))
     for record in run.records:
@@ -2394,7 +2784,9 @@ def _omitted_artifact(root: Path, relative_path: str, reason: str) -> dict[str, 
     return entry
 
 
-def _file_manifest_entry(bundle_root: Path, relative_path: Path, role: str) -> dict[str, Any]:
+def _file_manifest_entry(
+    bundle_root: Path, relative_path: Path, role: str
+) -> dict[str, Any]:
     bundle_relative = relative_path.as_posix()
     path = bundle_root / bundle_relative
     return {
@@ -2433,20 +2825,26 @@ def _resolve_bundle_relative(bundle_root: Path, relative_path: str) -> Path:
         or candidate.is_absolute()
         or any(part in ("", ".", "..") for part in candidate.parts)
     ):
-        raise RegistryError(f"bundle path must be relative and non-empty: {relative_path!r}")
+        raise RegistryError(
+            f"bundle path must be relative and non-empty: {relative_path!r}"
+        )
     root = bundle_root.resolve()
     path = (root / relative_path).resolve(strict=False)
     try:
         path.relative_to(root)
     except ValueError as exc:
-        raise RegistryError(f"bundle path escapes bundle root: {relative_path}") from exc
+        raise RegistryError(
+            f"bundle path escapes bundle root: {relative_path}"
+        ) from exc
     return path
 
 
 def _manifest_string(record: dict[str, Any], field: str, source: str) -> str:
     value = record.get(field)
     if not isinstance(value, str) or value == "":
-        raise RegistryError(f"bundle {source} field {field!r} must be a non-empty string")
+        raise RegistryError(
+            f"bundle {source} field {field!r} must be a non-empty string"
+        )
     return value
 
 
@@ -2472,11 +2870,17 @@ def _validate_bundle_file_role(relative_path: str, role: str) -> None:
         raise RegistryError(f"bundle file path has unexpected shape: {relative_path}")
     run_relative = parts[2:]
     if role == "run-jsonl" and run_relative != ("run.jsonl",):
-        raise RegistryError(f"run-jsonl bundle file has unexpected path: {relative_path}")
+        raise RegistryError(
+            f"run-jsonl bundle file has unexpected path: {relative_path}"
+        )
     if role == "hardware" and run_relative != ("hardware.json",):
-        raise RegistryError(f"hardware bundle file has unexpected path: {relative_path}")
+        raise RegistryError(
+            f"hardware bundle file has unexpected path: {relative_path}"
+        )
     if role == "run-metadata" and run_relative != ("run-metadata.json",):
-        raise RegistryError(f"run-metadata bundle file has unexpected path: {relative_path}")
+        raise RegistryError(
+            f"run-metadata bundle file has unexpected path: {relative_path}"
+        )
     if role == "patch" and (
         len(run_relative) < 3
         or run_relative[0] != "patch"
@@ -2488,7 +2892,9 @@ def _validate_bundle_file_role(relative_path: str, role: str) -> None:
         or run_relative[0] != "task"
         or not run_relative[-1].endswith(".model-calls.jsonl")
     ):
-        raise RegistryError(f"model-call-log bundle file has unexpected name: {relative_path}")
+        raise RegistryError(
+            f"model-call-log bundle file has unexpected name: {relative_path}"
+        )
     if role not in {"run-jsonl", "hardware", "run-metadata", "patch", "model-call-log"}:
         raise RegistryError(f"unknown bundle file role: {role}")
 
@@ -2505,7 +2911,9 @@ def _assert_file_has_no_public_secret(path: Path, source: str) -> None:
     except UnicodeDecodeError as exc:
         raise RegistryError(f"could not decode bundle file {source}") from exc
     except OSError as exc:
-        raise RegistryError(f"could not read bundle file {source}: {exc.strerror}") from exc
+        raise RegistryError(
+            f"could not read bundle file {source}: {exc.strerror}"
+        ) from exc
     _assert_no_public_secret(text, source)
 
 
@@ -2515,6 +2923,7 @@ def _slug(value: str) -> str:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
+    _reject_future_registry_schema(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS registry_meta (
@@ -2536,6 +2945,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           repetition INTEGER,
           adapter TEXT NOT NULL,
           model TEXT NOT NULL,
+          model_identity TEXT,
+          model_display TEXT,
           endpoint TEXT NOT NULL,
           ok INTEGER NOT NULL,
           wall_s REAL,
@@ -2591,6 +3002,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           model_id TEXT NOT NULL,
           model_name TEXT NOT NULL,
           model_family TEXT NOT NULL,
+          model_identity TEXT,
+          model_display TEXT,
+          model_quantization TEXT,
           harness_id TEXT NOT NULL,
           harness_name TEXT NOT NULL,
           provider_id TEXT NOT NULL,
@@ -2615,6 +3029,21 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         """
     )
     _ensure_run_columns(conn)
+    _ensure_table_columns(
+        conn,
+        "result_rows",
+        (("model_identity", "TEXT"), ("model_display", "TEXT")),
+    )
+    _ensure_table_columns(
+        conn,
+        "agent_wrap_runs",
+        (
+            ("model_identity", "TEXT"),
+            ("model_display", "TEXT"),
+            ("model_quantization", "TEXT"),
+        ),
+    )
+    _backfill_normalized_identities(conn)
     _ensure_case_stats_for_existing_runs(conn)
     conn.execute(
         "INSERT OR REPLACE INTO registry_meta(key, value) VALUES (?, ?)",
@@ -2623,22 +3052,111 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(f"PRAGMA user_version = {REGISTRY_SCHEMA_VERSION}")
 
 
+def _reject_future_registry_schema(conn: sqlite3.Connection) -> None:
+    user_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    versions = [user_version]
+    has_meta = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'registry_meta'"
+    ).fetchone()
+    if has_meta is not None:
+        row = conn.execute(
+            "SELECT value FROM registry_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if row is not None:
+            try:
+                versions.append(int(row[0]))
+            except (TypeError, ValueError) as exc:
+                raise RegistryError("registry schema version metadata is invalid") from exc
+    future = max(versions)
+    if future > REGISTRY_SCHEMA_VERSION:
+        raise RegistryError(
+            f"registry schema version {future} is newer than supported version "
+            f"{REGISTRY_SCHEMA_VERSION}"
+        )
+
+
 def _create_runs_table_sql() -> str:
     columns = ",\n          ".join(
-        f"{name} {declaration}"
-        for name, declaration in _RUN_COLUMN_DEFINITIONS
+        f"{name} {declaration}" for name, declaration in _RUN_COLUMN_DEFINITIONS
     )
     return f"CREATE TABLE IF NOT EXISTS runs (\n          {columns}\n        )"
 
 
 def _ensure_run_columns(conn: sqlite3.Connection) -> None:
+    _ensure_table_columns(conn, "runs", _RUN_COLUMN_DEFINITIONS)
+
+
+def _ensure_table_columns(
+    conn: sqlite3.Connection,
+    table: str,
+    definitions: Iterable[tuple[str, str]],
+) -> None:
     existing = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+        row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
     }
-    for column, declaration in _RUN_COLUMN_DEFINITIONS:
+    for column, declaration in definitions:
         if column not in existing:
-            conn.execute(f"ALTER TABLE runs ADD COLUMN {column} {declaration}")
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+
+
+def _backfill_normalized_identities(conn: sqlite3.Connection) -> None:
+    run_rows = conn.execute(
+        """
+        SELECT id, hardware_json, run_metadata_json, models_json,
+               model_metadata_id
+        FROM runs
+        """
+    ).fetchall()
+    for row in run_rows:
+        hardware = _json_object_or_none(row[1], "hardware_json", int(row[0]))
+        metadata = _json_object_or_none(row[2], "run_metadata_json", int(row[0]))
+        host = metadata.get("host") if isinstance(metadata, dict) else None
+        model = metadata.get("model") if isinstance(metadata, dict) else None
+        host_identity, host_display = _normalized_host_identity(hardware, host)
+        raw_models = _json_list_values(row[3])
+        model_identity, model_display = _normalized_run_model_identity(
+            raw_models,
+            model,
+        )
+        conn.execute(
+            """
+            UPDATE runs
+            SET host_identity = ?, host_display = ?,
+                model_identity = ?, model_display = ?
+            WHERE id = ?
+            """,
+            (host_identity, host_display, model_identity, model_display, row[0]),
+        )
+    result_rows = conn.execute(
+        """
+        SELECT rr.id, rr.model, r.model_identity, r.model_display
+        FROM result_rows AS rr
+        JOIN runs AS r ON r.id = rr.run_id
+        """
+    ).fetchall()
+    for row in result_rows:
+        identity, display = (
+            (row[2], row[3])
+            if row[2] is not None
+            else _normalized_model_identity(row[1])
+        )
+        conn.execute(
+            "UPDATE result_rows SET model_identity = ?, model_display = ? WHERE id = ?",
+            (identity, display, row[0]),
+        )
+    agent_rows = conn.execute(
+        "SELECT id, model_id, model_name FROM agent_wrap_runs"
+    ).fetchall()
+    for row in agent_rows:
+        identity, display = _normalized_agent_model_identity(row[1], row[2])
+        conn.execute(
+            """
+            UPDATE agent_wrap_runs
+            SET model_identity = ?, model_display = ?, model_quantization = ?
+            WHERE id = ?
+            """,
+            (identity, display, _inferred_model_quantization(row[1], row[2]), row[0]),
+        )
 
 
 def _ensure_case_stats_for_existing_runs(conn: sqlite3.Connection) -> None:
@@ -2714,9 +3232,11 @@ def _import_run(
           result_dir, label, imported_at, row_count, run_jsonl_sha256,
           pack_ids_json, pack_versions_json, adapters_json, models_json,
           endpoints_json, hardware_json, run_metadata_json, host_hostname,
-          host_platform, host_label, host_repo_commit, comparison_mode,
+          host_platform, host_label, host_identity, host_display,
+          host_repo_commit, comparison_mode,
           comparison_boundary, runtime_name, runtime_version, runtime_endpoint,
-          runtime_options_json, model_metadata_id, model_quantization,
+          runtime_options_json, model_metadata_id, model_identity, model_display,
+          model_quantization,
           model_artifact_repo, model_artifact_file, model_revision, model_sha256,
           operating_power, operating_thermal, operating_background_load
         )
@@ -2724,9 +3244,11 @@ def _import_run(
           :result_dir, :label, :imported_at, :row_count, :run_jsonl_sha256,
           :pack_ids_json, :pack_versions_json, :adapters_json, :models_json,
           :endpoints_json, :hardware_json, :run_metadata_json, :host_hostname,
-          :host_platform, :host_label, :host_repo_commit, :comparison_mode,
+          :host_platform, :host_label, :host_identity, :host_display,
+          :host_repo_commit, :comparison_mode,
           :comparison_boundary, :runtime_name, :runtime_version, :runtime_endpoint,
-          :runtime_options_json, :model_metadata_id, :model_quantization,
+          :runtime_options_json, :model_metadata_id, :model_identity, :model_display,
+          :model_quantization,
           :model_artifact_repo, :model_artifact_file, :model_revision, :model_sha256,
           :operating_power, :operating_thermal, :operating_background_load
         )
@@ -2745,6 +3267,8 @@ def _import_run(
           host_hostname = excluded.host_hostname,
           host_platform = excluded.host_platform,
           host_label = excluded.host_label,
+          host_identity = excluded.host_identity,
+          host_display = excluded.host_display,
           host_repo_commit = excluded.host_repo_commit,
           comparison_mode = excluded.comparison_mode,
           comparison_boundary = excluded.comparison_boundary,
@@ -2753,6 +3277,8 @@ def _import_run(
           runtime_endpoint = excluded.runtime_endpoint,
           runtime_options_json = excluded.runtime_options_json,
           model_metadata_id = excluded.model_metadata_id,
+          model_identity = excluded.model_identity,
+          model_display = excluded.model_display,
           model_quantization = excluded.model_quantization,
           model_artifact_repo = excluded.model_artifact_repo,
           model_artifact_file = excluded.model_artifact_file,
@@ -2777,21 +3303,29 @@ def _import_run(
         """
         INSERT INTO result_rows(
           run_id, row_index, pack_id, pack_version, case_id, repetition,
-          adapter, model, endpoint, ok, wall_s, ttft_s, prefill_tps,
+          adapter, model, model_identity, model_display, endpoint, ok,
+          wall_s, ttft_s, prefill_tps,
           decode_tps, total_tps, prompt_tokens, output_tokens,
           cached_prompt_tokens, scoring_mode, scoring_passed,
           repo_task_status, verify_exit_code, raw_json
         )
         VALUES (
           :run_id, :row_index, :pack_id, :pack_version, :case_id, :repetition,
-          :adapter, :model, :endpoint, :ok, :wall_s, :ttft_s, :prefill_tps,
+          :adapter, :model, :model_identity, :model_display, :endpoint, :ok,
+          :wall_s, :ttft_s, :prefill_tps,
           :decode_tps, :total_tps, :prompt_tokens, :output_tokens,
           :cached_prompt_tokens, :scoring_mode, :scoring_passed,
           :repo_task_status, :verify_exit_code, :raw_json
         )
         """,
         [
-            _result_row_values(run_id, index, record)
+            _result_row_values(
+                run_id,
+                index,
+                record,
+                model_identity=inserted["model_identity"],
+                model_display=inserted["model_display"],
+            )
             for index, record in enumerate(run.records, start=1)
         ],
     )
@@ -2837,7 +3371,8 @@ def _import_agent_wrap_row(
         INSERT INTO agent_wrap_runs(
           label, dataset_source, imported_at, date, status,
           target_project, target_version, target_commit, target_workload,
-          model_id, model_name, model_family, harness_id, harness_name,
+          model_id, model_name, model_family, model_identity, model_display,
+          model_quantization, harness_id, harness_name,
           provider_id, provider_name, runner_provider_display,
           thinking_kind, thinking_level, thinking_display,
           wall_seconds, wall_display, files_changed, insertions, deletions,
@@ -2846,7 +3381,7 @@ def _import_agent_wrap_row(
         )
         VALUES(
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ON CONFLICT(label) DO UPDATE SET
           dataset_source=excluded.dataset_source,
@@ -2860,6 +3395,9 @@ def _import_agent_wrap_row(
           model_id=excluded.model_id,
           model_name=excluded.model_name,
           model_family=excluded.model_family,
+          model_identity=excluded.model_identity,
+          model_display=excluded.model_display,
+          model_quantization=excluded.model_quantization,
           harness_id=excluded.harness_id,
           harness_name=excluded.harness_name,
           provider_id=excluded.provider_id,
@@ -2894,6 +3432,8 @@ def _import_agent_wrap_row(
             model["id"],
             model["name"],
             model["family"],
+            *_normalized_agent_model_identity(model["id"], model["name"]),
+            _inferred_model_quantization(model["id"], model["name"]),
             harness["id"],
             harness["name"],
             provider["id"],
@@ -2945,7 +3485,9 @@ def _run_row_values(
     run_metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
     runtime = run_metadata.get("runtime") if isinstance(run_metadata, dict) else None
-    model_metadata = run_metadata.get("model") if isinstance(run_metadata, dict) else None
+    model_metadata = (
+        run_metadata.get("model") if isinstance(run_metadata, dict) else None
+    )
     host = run_metadata.get("host") if isinstance(run_metadata, dict) else None
     repo = run_metadata.get("repo") if isinstance(run_metadata, dict) else None
     operating = (
@@ -2954,6 +3496,12 @@ def _run_row_values(
         else None
     )
     runtime_options = runtime.get("options") if isinstance(runtime, dict) else None
+    host_identity, host_display = _normalized_host_identity(hardware, host)
+    raw_models = _unique_record_values(run.records, "model")
+    model_identity, model_display = _normalized_run_model_identity(
+        raw_models,
+        model_metadata,
+    )
     return {
         "result_dir": result_dir,
         "label": run.label,
@@ -2963,7 +3511,7 @@ def _run_row_values(
         "pack_ids_json": _json_dumps(_unique_pack_values(run.records, "id")),
         "pack_versions_json": _json_dumps(_unique_pack_values(run.records, "version")),
         "adapters_json": _json_dumps(_unique_record_values(run.records, "adapter")),
-        "models_json": _json_dumps(_unique_record_values(run.records, "model")),
+        "models_json": _json_dumps(raw_models),
         "endpoints_json": _json_dumps(_unique_record_values(run.records, "endpoint")),
         "hardware_json": _json_dumps(hardware) if hardware is not None else None,
         "run_metadata_json": (
@@ -2972,6 +3520,8 @@ def _run_row_values(
         "host_hostname": _string_or_none(hardware, "hostname"),
         "host_platform": _string_or_none(hardware, "platform"),
         "host_label": _string_or_none(host, "label"),
+        "host_identity": host_identity,
+        "host_display": host_display,
         "host_repo_commit": _string_or_none(host, "repo_commit")
         or _string_or_none(repo, "commit"),
         "comparison_mode": _string_or_none(run_metadata, "comparison_mode"),
@@ -2983,6 +3533,8 @@ def _run_row_values(
             _json_dumps(runtime_options) if isinstance(runtime_options, dict) else None
         ),
         "model_metadata_id": _string_or_none(model_metadata, "id"),
+        "model_identity": model_identity,
+        "model_display": model_display,
         "model_quantization": _string_or_none(model_metadata, "quantization"),
         "model_artifact_repo": _string_or_none(model_metadata, "artifact_repo"),
         "model_artifact_file": _string_or_none(model_metadata, "artifact_file"),
@@ -3001,6 +3553,9 @@ def _result_row_values(
     run_id: int,
     row_index: int,
     record: dict[str, Any],
+    *,
+    model_identity: str | None = None,
+    model_display: str | None = None,
 ) -> dict[str, Any]:
     pack = record["pack"]
     timing = record["timing"]
@@ -3013,6 +3568,8 @@ def _result_row_values(
             scoring_passed = 1
         elif scoring.get("passed") is False:
             scoring_passed = 0
+    if model_identity is None:
+        model_identity, model_display = _normalized_model_identity(record["model"])
     return {
         "run_id": run_id,
         "row_index": row_index,
@@ -3022,6 +3579,8 @@ def _result_row_values(
         "repetition": _optional_positive_int(record.get("repetition")),
         "adapter": record["adapter"],
         "model": record["model"],
+        "model_identity": model_identity,
+        "model_display": model_display,
         "endpoint": record["endpoint"],
         "ok": 1 if record["ok"] else 0,
         "wall_s": _optional_number(timing.get("wall_s")),
@@ -3148,7 +3707,9 @@ def _validate_record(record: dict[str, Any], jsonl_path: Path, row_index: int) -
             )
 
 
-def _load_optional_json_object(result_dir: Path, filename: str) -> dict[str, Any] | None:
+def _load_optional_json_object(
+    result_dir: Path, filename: str
+) -> dict[str, Any] | None:
     path = result_dir / filename
     if not path.exists():
         return None
@@ -3200,7 +3761,9 @@ def _validate_optional_metric(record: dict[str, Any], field: str, source: str) -
     if value is None:
         return
     if _optional_number(value) is None:
-        raise RegistryError(f"field {field!r} must be a finite number or null in {source}")
+        raise RegistryError(
+            f"field {field!r} must be a finite number or null in {source}"
+        )
 
 
 def _validate_optional_int(record: dict[str, Any], field: str, source: str) -> None:

@@ -676,7 +676,7 @@ writing SQLite rows. Optional `hardware.json` and `run-metadata.json` are read
 only when present; malformed optional metadata fails clearly because the
 registry is being asked to index it.
 
-The local registry is currently schema version `3`. The `runs` table stores one
+The local registry is currently schema version `4`. The `runs` table stores one
 row per canonical result directory path, import timestamp, row count,
 `run.jsonl` SHA-256, compact JSON lists for pack ids/versions, adapters,
 models, and endpoints, optional hardware/run-metadata JSON, and selected host,
@@ -684,12 +684,19 @@ runtime, model, and comparability-anchor metadata columns. Those anchors come
 only from explicit `run-metadata.json` fields such as `comparison_mode`,
 runtime options, model artifact repo/file/revision/checksum, quantization, host
 repo commit, and operating-condition notes; the registry does not infer
-artifact parity or cache parity from missing metadata. Host identity columns
-are split by source: `host_hostname` and `host_platform` come from
+artifact parity or cache parity from missing metadata. Schema version `4` adds
+canonical `host_identity` / `host_display` and `model_identity` /
+`model_display` browse facets. Explicit `host.identity`, `host.display`,
+`model.canonical_id`, and `model.display_name` metadata wins; otherwise the
+importer derives host presentation from captured chip/model/memory data and
+normalizes maintained historical model aliases to a base-model identity.
+Quantization remains separate, and all original identifiers are retained. Raw
+host columns are split by source: `host_hostname` and `host_platform` come from
 `hardware.json`, while run-label and repo-commit host filters come from
 `run-metadata.json`. The `result_rows` table stores one row per
 measured `run.jsonl` record with normalized pack/case/repetition, adapter,
-model, endpoint, `ok`, timing metrics, token metrics, scoring state, repo-task
+model plus canonical model identity/display, endpoint, `ok`, timing metrics,
+token metrics, scoring state, repo-task
 verifier status, and compact sort-keyed JSON re-encoding of the normalized row.
 The `result_case_stats` table stores one row per run/pack-version/case with
 row counts, ok counts, prompt-token coverage and median, cached-prompt-token
@@ -697,7 +704,7 @@ coverage and median, and prefill-TPS coverage and median. Re-importing the
 same result directory updates the run row and replaces its child rows and case
 stats.
 
-Schema version `3` adds `agent_wrap_runs`, a normalized operator-curated table
+Schema version `3` added `agent_wrap_runs`, a normalized operator-curated table
 for hard one-shot Django/Electron wrapping rows that do not naturally arrive as
 ordinary `run.jsonl` benchpack results. Each row has a stable label plus
 explicit target, model, harness, provider, thinking/effort, wall-clock timing,
@@ -707,6 +714,15 @@ row JSON for auditability. Re-import also prunes rows from the same
 `dataset_source` when their labels are absent from the current curated file, so
 the table converges to the maintained dataset instead of accumulating stale
 rows.
+
+Schema version `4` adds the same canonical model identity/display and separate
+quantization facet to `agent_wrap_runs`, so quantized aliases such as Qwen3.8
+Q4 and Q8 browse under one base model without losing their distinct raw ids.
+For mixed-model result directories, canonicalization stays row-local and the
+run-level canonical model fields remain absent unless all rows resolve to one
+base model. `_ensure_schema` rejects future registry versions before issuing
+DDL or backfill writes, preventing an older client from downgrading schema
+markers.
 
 The importer writes only the configured SQLite database. It does not execute
 packs, load adapters, start runtimes, collect hardware, contact endpoints, read
@@ -735,13 +751,25 @@ selectors. The generated `index.html` contains local run tables, a comparison
 matrix with per-run/per-case median latency, throughput, token, and scoring
 fields, case-metric coverage tables, an `agent_wrap_runs` table when curated
 one-shot rows have been imported, browser-side filters over the generated table
-rows, and an embedded copy of the Markdown report; `report.md` is
-produced by the existing report renderer. `snapshot.json` is a
+rows, URL-query synchronization for shareable filtered views, explicit
+one-shot outcome badges/summaries, responsive full-width table containers, and
+a table-aware filter scope that clears and disables facets unavailable to the
+selected dataset (notably host/runtime/pack for curated agent-wrap rows), plus
+a cross-dataset conflict resolver for the all-tables view where the most
+recently selected benchpack-only or agent-only facet clears the other facet
+group. Selecting `All` for one facet resolves any remaining conflict in favor
+of the opposing active group. URL loading considers only accepted final
+control values, so stale or duplicate parameters cannot preserve an impossible
+intersection, plus
+a link to the raw Markdown report; `report.md` is produced by the existing
+report renderer without duplicating its contents below the rendered tables.
+`snapshot.json` is a
 machine-readable static export of the same compact run, comparison, and
 case-metric data for local review tooling, plus `agent_wrap_runs` for the
 curated one-shot comparison table; nested comparison and case-metric rows carry
 `run_id` for unambiguous joins back to `runs`, and case-metric rows include
-compact host/runtime/model fields for static filtering. The site
+compact host/runtime/model fields for static filtering. The snapshot includes
+canonical identity/display fields alongside raw provenance. The site
 export does not require source result directories, read raw/workspace/task/
 verify artifacts, inspect patch or model-call files, mutate the database, or
 contact endpoints. Existing output paths are refused unless `--force` is
@@ -755,7 +783,7 @@ hosted upload/review exists, without changing import idempotency, deleting
 rows, or treating different `run.jsonl` contents as duplicates.
 
 `benchpack registry query --db <sqlite>` is the first machine-readable local
-query surface over normalized registry rows. It reads schema version `3` in
+query surface over normalized registry rows. It reads schema version `4` in
 SQLite query-only mode and returns a JSON array of compact row objects selected
 by optional run id or label plus exact indexed filters for pack, case, adapter,
 model, host label, runtime name, model quantization, adapter `ok` state, and

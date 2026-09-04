@@ -780,6 +780,10 @@ The recommended `--run-metadata` shape is permissive and optional by field:
 
 ```json
 {
+  "host": {
+    "identity": "apple-m4-max-studio-128gb",
+    "display": "Apple M4 Max Mac Studio (128 GB)"
+  },
   "runtime": {
     "name": "llama-server",
     "version": "9010",
@@ -791,6 +795,8 @@ The recommended `--run-metadata` shape is permissive and optional by field:
   },
   "model": {
     "id": "qwen2.5-0.5b-instruct-q4_k_m",
+    "canonical_id": "qwen2.5-0.5b-instruct",
+    "display_name": "Qwen2.5 0.5B Instruct",
     "source": "local-gguf",
     "quantization": "Q4_K_M",
     "sha256": "..."
@@ -805,9 +811,12 @@ The recommended `--run-metadata` shape is permissive and optional by field:
 ```
 
 Validation is deliberately small: the metadata file must exist, parse as JSON,
-and have a JSON object at the root. If present, `runtime`, `model`, and
+and have a JSON object at the root. If present, `host`, `runtime`, `model`, and
 `operating_conditions` must be JSON objects, and `notes` must be a string.
-Missing fields are allowed. The runner does not infer runtime version, server
+Optional `host.identity`, `host.display`, `model.canonical_id`, and
+`model.display_name` values must be non-empty strings. These fields provide
+stable browse facets without replacing raw hostnames, model ids, artifacts, or
+quantization fields. Missing fields are allowed. The runner does not infer runtime version, server
 command, model checksum, quantization, context size, cache settings, power
 state, thermal state, or background load.
 
@@ -1031,7 +1040,7 @@ boolean `ok`, `timing` object, `tokens` object, optional positive integer
 when present. Optional `run-metadata.json` uses the same permissive validation
 as `benchpack run --run-metadata` and `benchpack report`.
 
-The SQLite schema version is `3`, recorded in `PRAGMA user_version` and a
+The SQLite schema version is `4`, recorded in `PRAGMA user_version` and a
 `registry_meta` row. The schema stores:
 
 - one `runs` row per canonical result-directory path, with import time,
@@ -1048,6 +1057,25 @@ The SQLite schema version is `3`, recorded in `PRAGMA user_version` and a
 - one `agent_wrap_runs` row per curated hard one-shot Django/Electron wrapping
   result, with stable label, target, model, harness, provider, thinking/effort,
   wall-clock timing, diff size, verification, artifact, and notes columns.
+
+Schema version `4` adds canonical host/model identity and display columns to
+`runs`, canonical model identity/display columns to `result_rows`, and
+canonical model identity/display plus quantization columns to
+`agent_wrap_runs`. Import prefers explicit `host.identity`, `host.display`,
+`model.canonical_id`, and `model.display_name` metadata. Historical rows fall
+back to captured chip/model/memory host data and maintained base-model alias
+normalization. Original hostnames, platforms, model ids, and artifacts remain
+stored; this normalization is for stable browse facets and does not infer
+comparability. Inferred Apple host facets group by chip and memory so older
+rows that omitted the Mac form factor do not split from newer rows for the same
+machine class; the captured hardware model remains provenance. Discrete-GPU
+hosts prefer GPU model and VRAM over a generic Linux image hostname.
+Mixed-model result directories retain a per-result-row canonical
+identity instead of applying one run-level identity to every row. Import
+refuses databases whose `PRAGMA user_version` or registry metadata version is
+newer than the client supports, without changing their schema markers.
+Comparison-matrix aggregation groups by raw model as well as run, pack, and
+case, so two models measured on the same case remain distinct rows.
 
 Schema version `2` also promotes registry-facing comparability anchors from
 optional `run-metadata.json` into nullable `runs` columns: `comparison_mode`,
@@ -1091,7 +1119,7 @@ benchpack registry duplicates --db <sqlite-db>
 ```
 
 `benchpack registry duplicates` is a read-only inspection command over an
-existing schema version `3` registry. It groups imported `runs` rows by the
+existing schema version `4` registry. It groups imported `runs` rows by the
 registry-stored `run_jsonl_sha256` value and prints only groups where more than one
 run has identical `run.jsonl` contents. Each duplicate entry includes the
 registry run id, label, row count, import time, and indexed result-directory
@@ -1115,7 +1143,7 @@ benchpack registry query --db <sqlite-db> [--ok true|false] [--scoring-passed tr
 ```
 
 `benchpack registry query` is a read-only JSON query over an existing schema
-version `3` registry. With no selectors, it searches every imported run ordered
+version `4` registry. With no selectors, it searches every imported run ordered
 by registry id and row index. `--run-id` and `--label` mirror the registry
 report selectors and are mutually exclusive. Additional filters match indexed
 normalized fields exactly: pack id, case id, adapter id, model id, host label,
@@ -1171,7 +1199,7 @@ registry id. `--run-id` may be repeated to select specific run ids, and
 `--label` may be repeated to select runs by registry label; the two selector
 types are mutually exclusive.
 
-The command reads schema version `3` registry data: `result_rows.raw_json`
+The command reads schema version `4` registry data: `result_rows.raw_json`
 provides normalized result records, and `runs.hardware_json` plus
 `runs.run_metadata_json` provide report-facing host and user-supplied runtime
 metadata when they were indexed. It reuses the normal report renderer, so row
@@ -1206,11 +1234,23 @@ The output directory contains:
 - `index.html`, a local browser view with dense run tables, a comparison matrix
   of per-run/per-case median latency, throughput, token, and scoring fields,
   case-metric coverage tables, imported agent-wrap one-shot rows when present,
-  browser-side filters for pack, case, host, runtime, model, quantization,
-  result, harness, provider, thinking level, and table type, and an embedded
-  copy of the generated Markdown report;
+  browser-side filters for pack, case, canonical host, runtime, canonical base
+  model, quantization, outcome, target, harness, provider, thinking level, and
+  table type. Filter state is loaded from and written to URL query parameters,
+  and the page includes copyable quick links for the Django Resume one-shot
+  results. The one-shot table renders explicit pass/fail/interrupted outcome
+  badges and a visible outcome summary. Selecting a specific table disables
+  and clears facets that do not exist for that dataset, preventing agent-only
+  target/outcome filters from being combined with benchpack-only host/runtime/
+  pack filters. With all tables selected, choosing a benchpack-only facet
+  clears active agent-only facets and vice versa; the last domain-specific
+  filter wins. Conflicting query parameters are normalized the same way on
+  page load; only values accepted by their controls participate, duplicate
+  parameters use the final accepted value, and stale values cannot preserve an
+  impossible cross-dataset intersection;
 - `report.md`, the same registry-backed Markdown report produced through the
-  existing report renderer;
+  existing report renderer and linked from the HTML as a raw, portable
+  artifact rather than duplicated inline;
 - `snapshot.json`, a machine-readable static snapshot with schema version `1`,
   the registry schema version, generation time, source database name, compact
   run metadata, comparison-matrix rows, case-metric rows, imported
@@ -1219,12 +1259,20 @@ The output directory contains:
   consumers can join them back to `runs` even when run labels collide.
   Case-metric entries also include compact host, runtime, and model metadata
   copied from the indexed run row so static review tools can apply the same
-  filters without opening the SQLite database. This is an additive extension;
+  filters without opening the SQLite database. Host and model objects expose
+  additive `identity` / `display` fields (plus `platform_display` for hosts),
+  while original labels, hostnames, platform values, and model ids remain
+  available as provenance. This is an additive extension;
   `snapshot.json` `schema_version` remains `1` because no existing field shape
   changed.
 
-The static site reads schema version `3` registry data only. It uses compact
-`runs`, `result_rows`, `result_case_stats`, and `agent_wrap_runs` data and does
+The static site reads schema version `4` registry data only. Schema version `4`
+stores normalized host and base-model identities beside the original source
+values. Import prefers explicit run-metadata identities, derives readable host
+labels from captured chip/model/memory fields, and applies maintained
+base-model alias normalization for historical model identifiers. It does not
+conflate quantization with model identity. The site uses compact `runs`,
+`result_rows`, `result_case_stats`, and `agent_wrap_runs` data and does
 not require source result directories to exist. It does not read raw payloads,
 workspaces, task logs, verifier artifacts, patch files, or model-call logs; it
 does not mutate the database or source results; and it does not contact

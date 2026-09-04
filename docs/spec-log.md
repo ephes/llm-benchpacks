@@ -16,6 +16,123 @@ working history and open questions.
 - ...
 ```
 
+## 2026-09-02 (static registry staging deployment)
+
+### Changed
+
+- Deployed the temporary read-only registry fallback at
+  `https://benchmarks.staging.django-cast.com/` through the existing
+  `just deploy-staging` delegation path. The first live snapshot contains 74
+  runs and all 42 curated Django/Electron-wrap rows, including GPT-5.6 Sol and
+  local open-weight Qwen3.8 rows.
+- Deployed and verified a 108-run replacement snapshot, including the new
+  Qwen3.8 27B Q4_K_M runtime control, restored compact Hetzner RTX 4000
+  Gemma/Qwen strict-GGUF runs, and 17 reviewed
+  but previously unindexed Atlas result directories. Public browser checks
+  confirmed the shareable Hetzner/Gemma and Django Resume views, the raw-report
+  link without an inline Markdown block, and the three normalized M4/M5/RTX
+  host facets. The snapshot also contains 43 curated Django/Electron-wrap rows,
+  including the failed split-host Qwen3.8 CUDA one-shot. Controller/public
+  SHA-256 hashes matched for all three published
+  files, HTTP redirected to HTTPS, and the Let's Encrypt certificate was valid
+  through 2026-12-01.
+- Kept the publication boundary to exactly `index.html`, `report.md`, and
+  `snapshot.json`. A dedicated unprivileged service listens only on
+  `127.0.0.1:10061`; Traefik owns the public HTTP-to-HTTPS redirect and a
+  Let's Encrypt certificate for the staging hostname.
+- Verified local/public health markers, exact controller-to-host SHA-256
+  parity for all three files, security/no-cache response headers, and a second
+  deployment with zero remote changes. The dynamic Django registry remains
+  the preferred hosted architecture; this deployment does not add uploads,
+  accounts, moderation, a hosted database, or an API.
+- Removed the redundant inline, unrendered Markdown block below the generated
+  tables. The page keeps a clearly labeled link to the portable raw
+  `report.md` artifact.
+- Made filter scope table-aware: choosing the agent-wrap table clears and
+  disables benchpack-only host/runtime/pack/case facets, while choosing a
+  benchpack table clears and disables agent-only outcome/target/harness/
+  provider/thinking facets. Added a direct NVIDIA `desktop-django-wrap` quick
+  view and an inline explanation that one-shot agent rows do not carry host
+  metadata.
+- Fixed the corresponding all-tables edge case: agent-only and benchpack-only
+  facets no longer remain active as an impossible intersection. The last
+  domain-specific selection wins and clears the opposing facet group; existing
+  conflicting URLs are normalized by the last accepted scoped query parameter
+  on load. Stale and duplicate values are ignored when selecting that winner,
+  and choosing `All` resolves any residual conflict by clearing the rest of the
+  changed facet's group.
+- Prefer a discrete GPU model and VRAM for inferred host identity/display on
+  CUDA machines, while retaining the original host label, hostname, platform,
+  and hardware JSON as provenance. This keeps the Hetzner filter readable and
+  avoids exposing a generic Linux image hostname as the primary host name.
+- Group inferred Apple hosts by chip and memory rather than including the Mac
+  form-factor label, so older `Apple M5 Max (64 GB)` rows and newer rows that
+  additionally record `MacBook Pro` share one browse facet.
+- Changed `just registry-site` to audit and report direct-child result
+  directories with `run.jsonl` that are absent from the SQLite registry. It
+  deliberately requires explicit import after review rather than automatically
+  publishing every local run. This exposes the stale-index gap without
+  weakening the hosted curation/privacy boundary; nested legacy and agent
+  artifact trees without a top-level `run.jsonl` remain outside the audit.
+
+### Open Questions
+
+- How long the static fallback should remain active after the dynamic Django
+  registry reaches a deployable submission/review slice remains undecided.
+
+## 2026-09-02 (Qwen3.8 27B Q4 small-GPU fit and one-shot)
+
+### Changed
+
+- Staged and checksum-verified the exact pinned
+  `Qwen3.8-27B-Q4_K_M.gguf` on the Hetzner GEX44. Repaired the rebooted host's
+  NVIDIA kernel/userspace mismatch by installing the running kernel's headers,
+  rebuilding the 595.84 DKMS module, and loading it before the benchmark.
+- Added a same-GGUF 4K `runtime-sweep` control: 9/9 rows passed with
+  13.23/13.15/13.09 median decode tok/s for short/medium/long. All model layers
+  fit on the RTX 4000 SFF Ada, but with little VRAM headroom.
+- Added one hard `django-resume` 0.3.0 Electron-wrap cell through Pi at explicit
+  `reasoning_effort=medium`. Exact 256K context required an 8.5 GiB q8_0 KV
+  cache in system RAM while weights stayed on the GPU. The run failed at the
+  7,200.1-second cap with zero edits; decode declined from 7.50 tok/s at 2.3K
+  context to 2.12 at 91.7K. The split-host topology is recorded explicitly:
+  inference on Hetzner, harness/target/verifier on the M4 Studio via SSH
+  loopback.
+- Restored and verified the production vLLM, management, and Caddy services,
+  public health/readiness responses, and the unauthenticated 401 boundary after
+  the exclusive GPU window.
+
+### Open Questions
+
+- Whether a deliberately smaller provider context, such as 128K with lower-bit
+  KV and limited model-layer offload, is a better throughput/quality tradeoff
+  on 20 GB VRAM remains unmeasured. A larger-GPU 256K run is the cleaner way to
+  preserve the exact agent contract.
+
+## 2026-09-02 (shareable registry filters and canonical facets)
+
+### Changed
+
+- Added URL-backed static-site filters plus direct Django Resume one-shot,
+  passing-only, and failed-only links. The URL updates in place as filters
+  change and can be copied from the page.
+- Made one-shot outcomes explicit with pass/fail/interrupted badges and a
+  visible outcome breakdown. Expanded tables to the full viewport, allowed
+  long cells to wrap, and retained horizontal overflow on narrow screens.
+- Advanced the registry to schema version `4`. Runs, result rows, and curated
+  agent-wrap rows now index canonical host/base-model identities and display
+  labels beside raw provenance. Hardware-derived labels replace `studio`,
+  `atlas.local`, and `darwin` as primary browse labels; quantization stays a
+  separate facet, and optional explicit identity fields are supported for new
+  run metadata.
+- Closed review findings by honoring display-only overrides, preserving
+  per-row identities in mixed-model imports, rejecting newer database schemas
+  before mutation, rejecting blank or punctuation-only canonical ids, indexing
+  canonical display text for search, and making scroll regions keyboard
+  focusable with accessible labels. A targeted re-review then tightened
+  comparison aggregation to keep two raw models on the same case in separate
+  rows.
+
 ## 2026-08-31 (Qwen3.8 first local open-weight wrap pass)
 
 ### Changed
@@ -1411,7 +1528,7 @@ working history and open questions.
   the same optional repeated `--run-id` or `--label` selectors as registry
   report, and writes `index.html` plus `report.md`.
 - `index.html` contains dense run and case-metric tables from `runs` and
-  `result_case_stats`, plus an embedded copy of the Markdown report. The
+  `result_case_stats`, plus a link to the raw Markdown report. The
   `report.md` file is rendered through the existing registry-backed report
   path, so medians, warnings, cache rows, and `prefill parity` semantics remain
   aligned.

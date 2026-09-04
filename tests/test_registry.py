@@ -354,7 +354,7 @@ def test_registry_report_rejects_stale_schema_database(tmp_path: Path) -> None:
             """
         )
 
-    with pytest.raises(RegistryError, match="requires schema version 3"):
+    with pytest.raises(RegistryError, match="requires schema version 4"):
         load_registry_report_runs(db_path)
 
 
@@ -616,14 +616,16 @@ def test_registry_query_returns_empty_list_when_row_filters_match_nothing(
 
 
 def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> None:
-    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
     db_path = tmp_path / "registry.sqlite"
 
     summary = import_agent_wrap_results(data_path, db_path)
     second = import_agent_wrap_results(data_path, db_path)
 
-    assert summary.rows_imported == 42
-    assert second.rows_imported == 42
+    assert summary.rows_imported == 43
+    assert second.rows_imported == 43
     rows = query_agent_wrap_results(
         db_path,
         status="pass",
@@ -636,6 +638,25 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     assert rows[0]["provider"]["id"] == "openai-codex"
     assert rows[0]["timing"]["wall_seconds"] == 1003.5
 
+    cuda_rows = query_agent_wrap_results(
+        db_path,
+        status="fail",
+        model="qwen3.8-27b",
+        thinking="medium",
+    )
+    cuda_row = next(
+        row
+        for row in cuda_rows
+        if row["label"] == "qwen38-hetzner-pi-llamacpp-q4km-256k-medium"
+    )
+    assert cuda_row["provider"] == {
+        "id": "llamacpp38",
+        "name": "llama.cpp remote CUDA",
+    }
+    assert cuda_row["model"]["name"] == "Qwen3.8-27B Q4_K_M"
+    assert cuda_row["diff"]["files_changed"] == 0
+    assert cuda_row["verification"]["smoke_display"].startswith("not run;")
+
     pass_rows = query_agent_wrap_results(db_path, status="pass")
     assert len(pass_rows) == 32
     # Fastest pass; GPT-5.6 Sol via Pi (362.9s) ties Codex low and wins on dataset order (id).
@@ -645,14 +666,16 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
         fastest = conn.execute(
             "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds, id LIMIT 1"
         ).fetchone()[0]
-    assert count == 42
+    assert count == 43
     assert fastest == "gpt56sol-pi-django-resume-030-off"
 
 
 def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     tmp_path: Path,
 ) -> None:
-    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
     db_path = tmp_path / "registry.sqlite"
     import_agent_wrap_results(data_path, db_path)
     dataset = json.loads(data_path.read_text(encoding="utf-8"))
@@ -664,7 +687,7 @@ def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     import_agent_wrap_results(pruned_path, db_path)
 
     rows = query_agent_wrap_results(db_path)
-    assert len(rows) == 41
+    assert len(rows) == 42
     assert removed_label not in {row["label"] for row in rows}
 
 
@@ -677,7 +700,9 @@ def test_registry_schema_setup_backfills_missing_case_stats(
     import_result_dirs([result_dir], db_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("DELETE FROM result_case_stats")
-    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
 
     import_agent_wrap_results(data_path, db_path)
 
@@ -695,38 +720,46 @@ def test_registry_agent_wrap_cli_import_and_query(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
     db_path = tmp_path / "registry.sqlite"
 
-    assert main(
-        [
-            "registry",
-            "agent-wrap",
-            "import",
-            "--db",
-            str(db_path),
-            str(data_path),
-        ]
-    ) == 0
-    assert "imported 42 agent-wrap rows" in capsys.readouterr().out
+    assert (
+        main(
+            [
+                "registry",
+                "agent-wrap",
+                "import",
+                "--db",
+                str(db_path),
+                str(data_path),
+            ]
+        )
+        == 0
+    )
+    assert "imported 43 agent-wrap rows" in capsys.readouterr().out
 
-    assert main(
-        [
-            "registry",
-            "agent-wrap",
-            "query",
-            "--db",
-            str(db_path),
-            "--harness",
-            "claude-yolo",
-            "--provider",
-            "anthropic",
-            "--thinking",
-            "medium",
-            "--limit",
-            "1",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "registry",
+                "agent-wrap",
+                "query",
+                "--db",
+                str(db_path),
+                "--harness",
+                "claude-yolo",
+                "--provider",
+                "anthropic",
+                "--thinking",
+                "medium",
+                "--limit",
+                "1",
+            ]
+        )
+        == 0
+    )
     rows = json.loads(capsys.readouterr().out)
     # Fastest passing Claude Code medium-effort row; Fable 5.1 (737.5s) displaced Opus 4.8 (871.0s) on 2026-09-01.
     assert rows[0]["label"] == "fable51-claude-yolo-django-resume-030-medium"
@@ -773,7 +806,16 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     rows = [_record("short"), _record("long")]
     _write_result_dir(result_dir, rows)
     (result_dir / "hardware.json").write_text(
-        json.dumps({"hostname": "atlas", "platform": "Darwin"}) + "\n",
+        json.dumps(
+            {
+                "hostname": "atlas.local",
+                "platform": "Darwin",
+                "chip": "Apple M5 Max",
+                "ram_mb": 65536,
+                "hardware_model_name": "MacBook Pro",
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     (result_dir / "run-metadata.json").write_text(
@@ -820,25 +862,27 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert 'id="filter-pack"' in html
     assert '<option value="runtime-sweep">runtime-sweep</option>' in html
     assert '<option value="short">short</option>' in html
-    assert '<option value="atlas">atlas</option>' in html
-    assert '<option value="m5-max">m5-max</option>' in html
+    assert '<option value="apple-m5-max-64-gb">Apple M5 Max (64 GB)</option>' in html
+    assert '<option value="atlas.local">' not in html
+    assert '<option value="darwin">' not in html
     assert '<option value="llama-server">llama-server</option>' in html
-    assert '<option value="test-model">test-model</option>' in html
-    assert '<option value="gemma4-e2b-q4km">gemma4-e2b-q4km</option>' in html
+    assert '<option value="gemma-4-e2b">Gemma 4 E2B</option>' in html
     assert '<option value="q4_k_m">Q4_K_M</option>' in html
     assert 'data-table="comparison"' in html
     assert 'data-registry-section="comparison"' in html
     assert 'data-registry-section="cases"' in html
     assert 'data-pack="[&quot;runtime-sweep&quot;]"' in html
-    assert 'data-host="[&quot;m5-max&quot;,&quot;atlas&quot;,&quot;darwin&quot;]"' in html
+    assert 'data-host="[&quot;apple-m5-max-64-gb&quot;]"' in html
     assert 'data-runtime="[&quot;llama-server&quot;]"' in html
-    assert 'data-model="[&quot;gemma4-e2b-q4km&quot;,&quot;test-model&quot;]"' in html
+    assert 'data-model="[&quot;gemma-4-e2b&quot;]"' in html
+    assert "gemma-4-e2b gemma 4 e2b" in html
+    assert 'role="region" tabindex="0" aria-label="Runs table"' in html
     assert "JSON.parse(row.dataset[id]||'[]')" in html
     assert "function applyFilters()" in html
     assert "<td>run-a</td>" in html
     assert "<td>runtime-sweep 0.1.0</td>" in html
     assert "<td>openai-chat</td>" in html
-    assert "<td>test-model</td>" in html
+    assert "<td>Gemma 4 E2B</td>" in html
     assert "<td>http://example.test/v1/chat/completions</td>" in html
     assert "<td>llama-server; 9030; http://127.0.0.1:8081/v1</td>" in html
     assert "<td>gemma4-e2b-q4km</td>" in html
@@ -848,16 +892,19 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
         "google_gemma-4-E2B-it-Q4_K_M.gguf</td>"
     ) in html
     assert "<td>b5e99bd</td>" in html
-    assert "<td>b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705</td>" in html
-    assert "<td>m5-max; atlas; Darwin</td>" in html
+    assert (
+        "<td>b5310340b3a23d31655d7119d100d5df1b2d8ee17b3ca8b0a23ad7e9eb5fa705</td>"
+        in html
+    )
+    assert "<td>Apple M5 Max (64 GB)</td>" in html
     assert "<td>strict-same-gguf</td>" in html
     assert "<td>abc1234</td>" in html
     assert "<td>plugged in</td>" in html
     assert "<h2>Comparison Matrix</h2>" in html
     assert "<th>decode TPS med</th>" in html
-    assert "<td>m5-max; Darwin</td>" in html
+    assert "<td>Apple M5 Max (64 GB)</td>" in html
     assert "<td>llama-server</td>" in html
-    assert "<td>gemma4-e2b-q4km</td>" in html
+    assert "<td>Gemma 4 E2B</td>" in html
     # Matrix medians from the fixture rows: total_tps and output_tokens.
     assert "<td>30.00</td>" in html
     assert "<td>60.00</td>" in html
@@ -865,22 +912,25 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     assert "# benchpack report" in report
     assert "| run-a | short | 1 | 1 | 1.250 |" in report
     assert snapshot["schema_version"] == 1
-    assert snapshot["registry_schema_version"] == 3
+    assert snapshot["registry_schema_version"] == 4
     assert snapshot["source_database"] == "registry.sqlite"
     assert snapshot["report_path"] == "report.md"
     assert snapshot["runs"][0]["label"] == "run-a"
-    assert snapshot["runs"][0]["packs"] == [
-        {"id": "runtime-sweep", "version": "0.1.0"}
-    ]
+    assert snapshot["runs"][0]["packs"] == [{"id": "runtime-sweep", "version": "0.1.0"}]
     assert snapshot["runs"][0]["pack_versions"] == ["0.1.0"]
     assert snapshot["runs"][0]["runtime"]["name"] == "llama-server"
     assert snapshot["runs"][0]["model_metadata"]["quantization"] == "Q4_K_M"
+    assert snapshot["runs"][0]["model_metadata"]["identity"] == "gemma-4-e2b"
+    assert snapshot["runs"][0]["model_metadata"]["display"] == "Gemma 4 E2B"
     assert snapshot["comparison_matrix"][0]["run_id"] == snapshot["runs"][0]["id"]
     assert snapshot["comparison_matrix"][0]["run"] == "run-a"
     assert snapshot["comparison_matrix"][0]["host"] == {
         "label": "m5-max",
-        "hostname": "atlas",
+        "hostname": "atlas.local",
         "platform": "Darwin",
+        "platform_display": "macOS",
+        "identity": "apple-m5-max-64-gb",
+        "display": "Apple M5 Max (64 GB)",
     }
     assert snapshot["comparison_matrix"][0]["model"] == "test-model"
     assert snapshot["comparison_matrix"][0]["medians"]["total_tps"] == 30.0
@@ -892,13 +942,18 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
     }
     assert snapshot["case_metrics"][0]["host"] == {
         "label": "m5-max",
-        "hostname": "atlas",
+        "hostname": "atlas.local",
         "platform": "Darwin",
+        "platform_display": "macOS",
+        "identity": "apple-m5-max-64-gb",
+        "display": "Apple M5 Max (64 GB)",
     }
     assert snapshot["case_metrics"][0]["runtime"] == {"name": "llama-server"}
     assert snapshot["case_metrics"][0]["models"] == ["test-model"]
     assert snapshot["case_metrics"][0]["model_metadata"] == {
         "id": "gemma4-e2b-q4km",
+        "identity": "gemma-4-e2b",
+        "display": "Gemma 4 E2B",
         "quantization": "Q4_K_M",
     }
     assert snapshot["agent_wrap_runs"] == []
@@ -907,7 +962,9 @@ def test_registry_static_site_export_writes_snapshot_without_source_artifacts(
 def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     tmp_path: Path,
 ) -> None:
-    data_path = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
     db_path = tmp_path / "registry.sqlite"
     import_agent_wrap_results(data_path, db_path)
 
@@ -921,13 +978,192 @@ def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     assert summary.runs == 0
     assert "<h2>Agent Wrap One-Shot Runs</h2>" in html
     assert 'data-table="agent-wrap"' in html
-    assert '<option value="gpt-5.5">gpt-5.5</option>' in html
-    assert '<option value="claude-opus-4.8">claude-opus-4.8</option>' in html
+    assert '<option value="gpt-5.5">GPT-5.5</option>' in html
+    assert '<option value="claude-opus-4.8">Claude Opus 4.8</option>' in html
+    assert '<option value="qwen3.8-27b">Qwen3.8 27B</option>' in html
+    assert 'value="qwen3.8-27b-q8"' not in html
+    assert 'href="?table=agent-wrap&amp;target=django-resume"' in html
+    assert (
+        'href="?table=comparison&amp;pack=desktop-django-wrap&amp;q=nvidia"'
+        not in html
+    )
+    assert "This curated agent-workflow dataset has no host facet." in html
+    assert "For local-runtime prompt-pack results" not in html
+    assert 'id="filter-target"' in html
+    assert 'id="copy-filter-url"' in html
+    assert "function loadFiltersFromUrl()" in html
+    assert "function syncFilterScope()" in html
+    assert "function resolveCrossScopeFilters(changedId)" in html
+    assert "function filterAcceptsValue(id,value)" in html
+    assert "benchFilterIds=['pack','case','host','runtime']" in html
+    assert (
+        "agentFilterIds=['result','target','harness','provider','thinking']" in html
+    )
+    assert "acceptedScopedValues.push([id,value])" in html
+    assert "filters[id].value===value" in html
+    assert "resolveCrossScopeFilters(id);applyFilters();" in html
+    assert "runs:new Set(['pack','host','runtime','model','quantization'])" in html
+    assert (
+        "comparison:new Set(['pack','case','host','runtime','model',"
+        "'quantization'])" in html
+    )
+    assert (
+        "cases:new Set(['pack','case','host','runtime','model','quantization'])"
+        in html
+    )
+    assert (
+        "'agent-wrap':new Set(['model','quantization','result','target',"
+        "'harness','provider','thinking'])" in html
+    )
+    assert "filters[id].disabled=disabled" in html
+    assert "if(disabled){filters[id].value='';}" in html
+    assert html.index("  syncFilterScope();") < html.index("  let shown=0;")
+    assert "history.replaceState" in html
+    assert 'class="outcome outcome-pass">PASS</span>' in html
+    assert "Outcomes: " in html
+    assert "max-width:1440px" not in html
+    assert "scrollbar-gutter:stable" in html
+    assert '<a href="report.md">Open raw report.md</a>' in html
+    assert "<pre>" not in html
     assert "Pipy / openai-codex" in html
     assert "filter-harness" in html
     assert "No imported benchpack result rows are selected." in report
-    assert len(snapshot["agent_wrap_runs"]) == 42
-    assert snapshot["agent_wrap_runs"][0]["label"] == "gpt56sol-pi-django-resume-030-off"
+    assert len(snapshot["agent_wrap_runs"]) == 43
+    assert (
+        snapshot["agent_wrap_runs"][0]["label"] == "gpt56sol-pi-django-resume-030-off"
+    )
+    qwen_q8 = next(
+        row
+        for row in snapshot["agent_wrap_runs"]
+        if row["model"]["id"] == "qwen3.8-27b-q8"
+    )
+    assert qwen_q8["model"]["identity"] == "qwen3.8-27b"
+    assert qwen_q8["model"]["display"] == "Qwen3.8 27B"
+    assert qwen_q8["model"]["quantization"] == "Q8_0"
+    qwen_cuda = next(
+        row
+        for row in snapshot["agent_wrap_runs"]
+        if row["label"] == "qwen38-hetzner-pi-llamacpp-q4km-256k-medium"
+    )
+    assert qwen_cuda["status"] == "fail"
+    assert qwen_cuda["provider"]["name"] == "llama.cpp remote CUDA"
+    assert qwen_cuda["model"]["identity"] == "qwen3.8-27b"
+    assert qwen_cuda["model"]["quantization"] == "Q4_K_M"
+
+
+def test_normalized_host_identity_prefers_discrete_gpu_over_machine_hostname() -> None:
+    identity, display = registry._normalized_host_identity(
+        {
+            "hostname": "Ubuntu-2404-noble-amd64-base",
+            "platform": "linux",
+            "cpu_model": "13th Gen Intel(R) Core(TM) i5-13500",
+            "ram_mb": 64081,
+            "gpus": [
+                {
+                    "model": "NVIDIA RTX 4000 SFF Ada Generation",
+                    "vram_mb": 20475,
+                }
+            ],
+        },
+        {"label": "hetzner-gex44"},
+    )
+
+    assert identity == "nvidia-rtx-4000-sff-ada-generation-20-gb-vram"
+    assert display == "NVIDIA RTX 4000 SFF Ada Generation (20 GB VRAM)"
+
+
+def test_normalized_host_identity_uses_deterministic_complete_gpu_topology() -> None:
+    gpu_a = {"model": "NVIDIA RTX 4000 SFF Ada Generation", "vram_mb": 20475}
+    gpu_b = {"model": "NVIDIA L4", "vram_mb": 23034}
+
+    first = registry._normalized_host_identity(
+        {"gpus": [gpu_a, gpu_b, gpu_a]},
+        {"label": "gpu-host"},
+    )
+    reordered = registry._normalized_host_identity(
+        {"gpus": [gpu_b, gpu_a, gpu_a]},
+        {"label": "gpu-host"},
+    )
+
+    assert first == reordered
+    assert first == (
+        "nvidia-l4-22-gb-vram-2-nvidia-rtx-4000-sff-ada-generation-20-gb-vram",
+        "NVIDIA L4 (22 GB VRAM) + "
+        "2× NVIDIA RTX 4000 SFF Ada Generation (20 GB VRAM)",
+    )
+
+    case_tied = registry._normalized_host_identity(
+        {"gpus": [{"model": "nvidia l4"}, {"model": "NVIDIA L4"}]},
+        {"label": "gpu-host"},
+    )
+    assert case_tied == (
+        "nvidia-l4-nvidia-l4",
+        "NVIDIA L4 + nvidia l4",
+    )
+
+
+def test_registry_static_site_links_nvidia_wrap_only_when_rows_exist(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "results" / "nvidia-wrap"
+    record = _record("wrap-plan-small")
+    record["pack"] = {"id": "desktop-django-wrap", "version": "0.1.5"}
+    record["model"] = "gemma4-e2b-q4km"
+    record["scoring"] = {"mode": "regex", "passed": True}
+    _write_result_dir(result_dir, [record])
+    (result_dir / "hardware.json").write_text(
+        json.dumps(
+            {
+                "hostname": "Ubuntu-2404-noble-amd64-base",
+                "platform": "linux",
+                "gpus": [
+                    {
+                        "model": "NVIDIA RTX 4000 SFF Ada Generation",
+                        "vram_mb": 20475,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "host": {"label": "hetzner-gex44"},
+                "runtime": {"name": "llama-server"},
+                "model": {
+                    "id": "google/gemma-4-E2B-it",
+                    "quantization": "Q4_K_M",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    data_path = (
+        Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    )
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db_path)
+    import_agent_wrap_results(data_path, db_path)
+
+    export_registry_static_site(db_path, tmp_path / "site")
+
+    html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    assert (
+        'href="?table=comparison&amp;pack=desktop-django-wrap&amp;q=nvidia"'
+        in html
+    )
+    assert "For local-runtime prompt-pack results" in html
+    assert 'data-table="comparison"' in html
+    assert 'data-pack="[&quot;desktop-django-wrap&quot;]"' in html
+    assert (
+        'data-host="[&quot;nvidia-rtx-4000-sff-ada-generation-20-gb-vram&quot;]"'
+        in html
+    )
+    assert 'data-table="agent-wrap"' in html
+    assert 'data-target="[&quot;django-resume&quot;]"' in html
 
 
 def test_registry_static_site_export_requires_force_for_existing_output(
@@ -1030,11 +1266,11 @@ def test_registry_static_site_distinguishes_unscored_from_zero_passes(
 
     html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     assert (
-        "<td>unscored</td><td>—</td><td>—</td><td>—</td><td>—</td>"
+        "<td>unscored</td><td>—</td><td>—</td><td>test-model</td><td>—</td>"
         "<td>2</td><td>2</td><td>—</td>"
     ) in html
     assert (
-        "<td>scored</td><td>—</td><td>—</td><td>—</td><td>—</td>"
+        "<td>scored</td><td>—</td><td>—</td><td>test-model</td><td>—</td>"
         "<td>2</td><td>2</td><td>0/2</td>"
     ) in html
 
@@ -1160,7 +1396,7 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
     import_result_dirs([result_dir], db_path)
 
     with sqlite3.connect(db_path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
         run = conn.execute(
             """
             SELECT comparison_mode, runtime_endpoint, runtime_options_json,
@@ -1168,9 +1404,9 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
             FROM runs
             """
         ).fetchone()
-        stats_count = conn.execute(
-            "SELECT COUNT(*) FROM result_case_stats"
-        ).fetchone()[0]
+        stats_count = conn.execute("SELECT COUNT(*) FROM result_case_stats").fetchone()[
+            0
+        ]
         agent_wrap_table = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_wrap_runs'"
         ).fetchone()
@@ -1183,6 +1419,107 @@ def test_registry_import_upgrades_schema_v1_database(tmp_path: Path) -> None:
     )
     assert stats_count == 1
     assert agent_wrap_table == ("agent_wrap_runs",)
+
+
+def test_registry_import_rejects_future_schema_without_mutation(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db_path = tmp_path / "registry.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE registry_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            INSERT INTO registry_meta(key, value) VALUES ('schema_version', '5');
+            CREATE TABLE future_sentinel (value TEXT NOT NULL);
+            INSERT INTO future_sentinel(value) VALUES ('untouched');
+            PRAGMA user_version = 5;
+            """
+        )
+
+    with pytest.raises(RegistryError, match="newer than supported version 4"):
+        import_result_dirs([result_dir], db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert conn.execute(
+            "SELECT value FROM registry_meta WHERE key = 'schema_version'"
+        ).fetchone()[0] == "5"
+        assert conn.execute("SELECT value FROM future_sentinel").fetchone()[0] == (
+            "untouched"
+        )
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'runs'"
+        ).fetchone() is None
+
+
+def test_registry_keeps_distinct_model_identities_in_multi_model_run(
+    tmp_path: Path,
+) -> None:
+    first = _record("first")
+    first["model"] = "Qwen3.6-27B-Q4_K_M"
+    second = _record("first")
+    second["model"] = "gemma4-e2b-q4km"
+    result_dir = tmp_path / "mixed-models"
+    _write_result_dir(result_dir, [first, second])
+    db_path = tmp_path / "registry.sqlite"
+
+    import_result_dirs([result_dir], db_path)
+    export_registry_static_site(db_path, tmp_path / "site")
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute(
+            "SELECT model_identity, model_display FROM runs"
+        ).fetchone() == (None, None)
+        assert conn.execute(
+            "SELECT model_identity FROM result_rows ORDER BY row_index"
+        ).fetchall() == [("qwen3.6-27b",), ("gemma-4-e2b",)]
+    snapshot = json.loads(
+        (tmp_path / "site" / "snapshot.json").read_text(encoding="utf-8")
+    )
+    assert [row["model_identity"] for row in snapshot["comparison_matrix"]] == [
+        "qwen3.6-27b",
+        "gemma-4-e2b",
+    ]
+    assert [row["case"] for row in snapshot["comparison_matrix"]] == [
+        "first",
+        "first",
+    ]
+
+
+def test_registry_honors_display_only_metadata_for_known_model_alias(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    record = _record()
+    record["model"] = "Qwen3.6-27B-Q4_K_M"
+    _write_result_dir(result_dir, [record])
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "model": {
+                    "id": "qwen36-27b-q4km",
+                    "display_name": "Qwen 3.6 Dense 27B",
+                }
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "registry.sqlite"
+
+    import_result_dirs([result_dir], db_path)
+    export_registry_static_site(db_path, tmp_path / "site")
+
+    snapshot = json.loads(
+        (tmp_path / "site" / "snapshot.json").read_text(encoding="utf-8")
+    )
+    assert snapshot["runs"][0]["model_metadata"]["identity"] == "qwen3.6-27b"
+    assert snapshot["runs"][0]["model_metadata"]["display"] == (
+        "Qwen 3.6 Dense 27B"
+    )
 
 
 def test_registry_import_rolls_back_schema_upgrade_on_sqlite_failure(
@@ -1262,13 +1599,13 @@ def test_registry_import_rolls_back_schema_upgrade_on_sqlite_failure(
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
-        assert conn.execute(
-            "SELECT value FROM registry_meta WHERE key = 'schema_version'"
-        ).fetchone()[0] == "1"
-        columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(runs)").fetchall()
-        }
+        assert (
+            conn.execute(
+                "SELECT value FROM registry_meta WHERE key = 'schema_version'"
+            ).fetchone()[0]
+            == "1"
+        )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
         case_stats = conn.execute(
             """
             SELECT name FROM sqlite_master
@@ -1585,7 +1922,9 @@ def test_registry_bundle_omits_malformed_model_call_log_name(
     create_result_bundle([result_dir], bundle_dir)
 
     manifest = json.loads((bundle_dir / BUNDLE_MANIFEST_FILENAME).read_text())
-    omitted = {entry["path"]: entry for entry in manifest["runs"][0]["omitted_artifacts"]}
+    omitted = {
+        entry["path"]: entry for entry in manifest["runs"][0]["omitted_artifacts"]
+    }
     assert omitted["task/case/rep-X.model-calls.jsonl"]["reason"] == (
         "unsafe-model-call-log-omitted"
     )
@@ -1622,7 +1961,9 @@ def test_registry_bundle_validate_rejects_non_utf8_copied_file(
     )
     bundle_dir = tmp_path / "bundle"
     create_result_bundle([result_dir], bundle_dir)
-    bundled_patch = bundle_dir / "runs" / "run-001-run-a" / "patch" / "short" / "rep-001.diff"
+    bundled_patch = (
+        bundle_dir / "runs" / "run-001-run-a" / "patch" / "short" / "rep-001.diff"
+    )
     bundled_patch.write_bytes(b"\xff")
     manifest_path = bundle_dir / BUNDLE_MANIFEST_FILENAME
     manifest = json.loads(manifest_path.read_text())
