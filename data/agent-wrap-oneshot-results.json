@@ -1257,6 +1257,178 @@
       "notes": "New fastest row in the dataset: 362.9s beats GPT-5.5 via Pi thinking off (431.7s) by 16%. Pi 0.84.4 through the built-in openai-codex provider, model gpt-5.6-sol, thinking off, --pi-mode json (JSON transcript kept for forensics; the GPT-5.5 Pi cell used text mode). 38 turns and 68 tool calls (27 read, 21 bash, 14 write, 6 edit). Smallest diff of the 2026-09-01/02 cells (36 files, +6100/-144) with the leanest Django side (89-line base_settings.py, 46-line middleware.py); 39 model-authored Node tests against 53 for GPT-5.5 Pi off. Verified its own dev smoke and redirect chain but did not boot its own packaged smoke; the verifier's independent packaged smoke passed. D-040 override in effect, empty dist/, no workaround. Host caveat: another session's Flash-Next llama-server was resident (13-14% free memory) and generating for its own qwen38-flashnext-pi-llamacpp-128k-medium-rerun2 wrap cell at 74-107% CPU throughout, 1-minute load average 3-19, so the wall time is an upper bound."
     },
     {
+      "label": "deepseek-v41-flash-pi-openrouter-django-resume-030-off",
+      "date": "2026-09-10",
+      "status": "pass",
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "family": "deepseek"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
+      "runner_provider_display": "Pi / OpenRouter",
+      "thinking": {
+        "kind": "thinking",
+        "level": "off",
+        "display": "thinking off, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 1371.0,
+        "wall_display": "22m51s"
+      },
+      "diff": {
+        "files_changed": 33,
+        "insertions": 7000,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 37,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/deepseek-v41-flash-pi-openrouter-django-resume-030-off/",
+        "legacy": false
+      },
+      "notes": "2026-09-10 DeepSeek V4.1 Flash Pi/OpenRouter campaign, the first DeepSeek evidence on this benchmark; all four thinking cells passed. Thinking off was the slowest cell at 1371.0s, 2.4x its own thinking-low lane, despite emitting zero reasoning tokens: 96 turns, 108 tool calls (83 bash, 14 write, 7 edit, 4 read), 13.5 MB transcript, $0.2265 OpenRouter spend. It still ran `just desktop-dev-smoke` four times and `npm --prefix electron test` five times, so the extra wall time is exploration, not unverified output. 37 model-authored Node tests, the fewest of the four; did not boot its own packaged smoke, which the verifier's independent run then passed."
+    },
+    {
+      "label": "deepseek-v41-flash-pi-openrouter-django-resume-030-low",
+      "date": "2026-09-10",
+      "status": "pass",
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "family": "deepseek"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
+      "runner_provider_display": "Pi / OpenRouter",
+      "thinking": {
+        "kind": "thinking",
+        "level": "low",
+        "display": "thinking low, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 560.0,
+        "wall_display": "9m20s"
+      },
+      "diff": {
+        "files_changed": 33,
+        "insertions": 7009,
+        "deletions": 139
+      },
+      "verification": {
+        "node_tests": 40,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/deepseek-v41-flash-pi-openrouter-django-resume-030-low/",
+        "legacy": false
+      },
+      "notes": "Fastest cell of the 2026-09-10 DeepSeek V4.1 Flash Pi/OpenRouter campaign at 560.0s, with 28,303 reasoning tokens and the cheapest spend of the four ($0.1838). 57 turns, 78 tool calls (51 bash, 14 write, 8 edit, 5 read), 18.0 MB transcript. 40 model-authored Node tests. Self-verified with three `just desktop-dev-smoke` runs and two `npm --prefix electron test` runs; did not boot its own packaged smoke, which the verifier then passed."
+    },
+    {
+      "label": "deepseek-v41-flash-pi-openrouter-django-resume-030-medium",
+      "date": "2026-09-10",
+      "status": "pass",
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "family": "deepseek"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
+      "runner_provider_display": "Pi / OpenRouter",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "thinking medium, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 760.2,
+        "wall_display": "12m40s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 7549,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/deepseek-v41-flash-pi-openrouter-django-resume-030-medium/",
+        "legacy": false
+      },
+      "notes": "Middle of the 2026-09-10 DeepSeek V4.1 Flash Pi/OpenRouter campaign at 760.2s with 30,806 reasoning tokens and 53 model-authored Node tests, matching the GPT-5.5 Pi count. 65 turns, 108 tool calls (49 read, 38 bash, 10 write, 11 edit), 17.5 MB transcript, $0.2116. The only DeepSeek cell that ran its own `smoke:packaged`; it also ran three dev smokes and three Node test runs."
+    },
+    {
+      "label": "deepseek-v41-flash-pi-openrouter-django-resume-030-high",
+      "date": "2026-09-10",
+      "status": "pass",
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "family": "deepseek"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
+      "runner_provider_display": "Pi / OpenRouter",
+      "thinking": {
+        "kind": "thinking",
+        "level": "high",
+        "display": "thinking high, neutral runner"
+      },
+      "timing": {
+        "wall_seconds": 576.0,
+        "wall_display": "9m36s"
+      },
+      "diff": {
+        "files_changed": 34,
+        "insertions": 7576,
+        "deletions": 138
+      },
+      "verification": {
+        "node_tests": 53,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/deepseek-v41-flash-pi-openrouter-django-resume-030-high/",
+        "legacy": false
+      },
+      "notes": "Second-fastest DeepSeek V4.1 Flash cell of the 2026-09-10 Pi/OpenRouter campaign at 576.0s, with the most reasoning of the four (34,487 tokens) and 53 Node tests. 75 turns, 95 tool calls (76 bash, 14 write, 4 edit, 1 read), 21.1 MB transcript, $0.1986. Three dev smokes and two Node test runs; the verifier's independent packaged smoke passed."
+    },
+    {
       "label": "gpt56sol-codex-yolo-django-resume-030-medium",
       "date": "2026-09-02",
       "status": "pass",

@@ -16,6 +16,32 @@ working history and open questions.
 - ...
 ```
 
+## 2026-09-10 (DeepSeek V4.1 Flash hosted one-shot campaign)
+
+### Changed
+
+- Added DeepSeek V4.1 Flash (`deepseek/deepseek-v4.1-flash` via OpenRouter) as a hosted
+  agent-workflow target in `docs/model-targets.md`, benchmarked through the neutral Pi lane.
+- Ran four `django-resume` one-shot Electron-wrap cells at thinking
+  off/low/medium/high. All four passed, the first DeepSeek evidence on this benchmark
+  and the first hosted sweep here where every thinking level passed. Wall times were
+  1371.0s / 560.0s / 760.2s / 576.0s; the levels were genuinely distinct (0 / 28,303 /
+  30,806 / 34,487 reasoning tokens); total OpenRouter spend was about $0.82.
+- Curated the four cells into `data/agent-wrap-oneshot-results.json` (43 -> 47 rows) and
+  updated the pinned counts in `tests/test_registry.py` accordingly.
+- The host Electron install defect (D-040) is still active. No `ELECTRON_OVERRIDE_DIST_PATH`
+  was set for this campaign, so each cell recovered its own Electron `dist/` (cached-zip
+  unzip, reinstall, or copy from the starter). These cells therefore measure wrapping plus
+  workaround ability, unlike the 2026-09-01/02 cells that ran behind the override.
+
+### Open Questions
+
+- DeepSeek V4.1 Flash has only a Pi/OpenRouter route here. Whether a Codex-CLI or
+  Claude-Code-equivalent lane exists, so it can be compared harness-for-harness against the
+  GPT-5.6 Sol and Opus 5 rows, is unresolved.
+- Four cells at one workload on one host, one per thinking level, is a single sample each.
+  Replication before treating any level as reliable is still outstanding.
+
 ## 2026-09-02 (static registry staging deployment)
 
 ### Changed

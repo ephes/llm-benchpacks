@@ -97,6 +97,13 @@ The historical narrative remains in [Run Log](../../run-log.md).
 
 ## Campaign Reports
 
+- [DeepSeek V4.1 Flash one-shot campaign, 2026-09-10](deepseek-v41-oneshot-20260910.md):
+  four Pi/OpenRouter cells at thinking off/low/medium/high, **all four
+  PASS** - the first DeepSeek evidence on this benchmark and the first hosted
+  sweep here where every thinking level passed. Thinking levels were
+  genuinely distinct (0 / 28,303 / 30,806 / 34,487 reasoning tokens), total
+  OpenRouter spend was about $0.82, and the host Electron install defect
+  (D-040) was left in each cell's path rather than pre-fixed.
 - [Qwen3.8-27B one-shot campaign, 2026-08-31](qwen38-oneshot-20260831.md):
   four cells, and **the first PASS by a local open-weight model on this
   benchmark**. Three failed at the 7200s timeout; the fourth exited cleanly

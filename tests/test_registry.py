@@ -624,8 +624,8 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     summary = import_agent_wrap_results(data_path, db_path)
     second = import_agent_wrap_results(data_path, db_path)
 
-    assert summary.rows_imported == 43
-    assert second.rows_imported == 43
+    assert summary.rows_imported == 47
+    assert second.rows_imported == 47
     rows = query_agent_wrap_results(
         db_path,
         status="pass",
@@ -658,7 +658,7 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     assert cuda_row["verification"]["smoke_display"].startswith("not run;")
 
     pass_rows = query_agent_wrap_results(db_path, status="pass")
-    assert len(pass_rows) == 32
+    assert len(pass_rows) == 36
     # Fastest pass; GPT-5.6 Sol via Pi (362.9s) ties Codex low and wins on dataset order (id).
     assert pass_rows[0]["label"] == "gpt56sol-pi-django-resume-030-off"
     with sqlite3.connect(db_path) as conn:
@@ -666,7 +666,7 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
         fastest = conn.execute(
             "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds, id LIMIT 1"
         ).fetchone()[0]
-    assert count == 43
+    assert count == 47
     assert fastest == "gpt56sol-pi-django-resume-030-off"
 
 
@@ -687,7 +687,7 @@ def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     import_agent_wrap_results(pruned_path, db_path)
 
     rows = query_agent_wrap_results(db_path)
-    assert len(rows) == 42
+    assert len(rows) == 46
     assert removed_label not in {row["label"] for row in rows}
 
 
@@ -738,7 +738,7 @@ def test_registry_agent_wrap_cli_import_and_query(
         )
         == 0
     )
-    assert "imported 43 agent-wrap rows" in capsys.readouterr().out
+    assert "imported 47 agent-wrap rows" in capsys.readouterr().out
 
     assert (
         main(
@@ -1028,7 +1028,7 @@ def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     assert "Pipy / openai-codex" in html
     assert "filter-harness" in html
     assert "No imported benchpack result rows are selected." in report
-    assert len(snapshot["agent_wrap_runs"]) == 43
+    assert len(snapshot["agent_wrap_runs"]) == 47
     assert (
         snapshot["agent_wrap_runs"][0]["label"] == "gpt56sol-pi-django-resume-030-off"
     )
