@@ -1541,6 +1541,8 @@ def _render_static_site_html(
         "th,td{border-bottom:1px solid #e1e8e8;padding:8px 10px;text-align:left;vertical-align:top}",
         "th{background:#edf4f2;color:#273536;font-weight:600;position:sticky;top:0;white-space:nowrap}",
         "td{max-width:32rem;overflow-wrap:anywhere}",
+        "details.cell-notes{max-width:32rem}",
+        "details.cell-notes>summary{cursor:pointer;color:#0b6670;font-weight:600}",
         "tr:nth-child(even) td{background:#fbfdfc}",
         ".outcome{display:inline-block;min-width:5.5em;padding:2px 7px;border-radius:999px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em}",
         ".outcome-pass{background:#dff3e5;color:#145b2d}.outcome-fail{background:#fde4e1;color:#8a2118}.outcome-interrupted{background:#fff0c7;color:#6f4d00}",
@@ -1915,7 +1917,7 @@ def _render_static_site_html(
             f"<td>{_html(row['smoke_display'])}</td>"
             f"<td>{_html(row['target_project'] + ' ' + row['target_version'])}</td>"
             f"<td>{_html(row['result_dir'])}</td>"
-            f"<td>{_html(row['notes'])}</td>"
+            f'<td><details class="cell-notes"><summary>notes</summary>{_html(row["notes"])}</details></td>'
             "</tr>"
         )
     lines.extend(

@@ -1429,6 +1429,49 @@
       "notes": "Second-fastest DeepSeek V4.1 Flash cell of the 2026-09-10 Pi/OpenRouter campaign at 576.0s, with the most reasoning of the four (34,487 tokens) and 53 Node tests. 75 turns, 95 tool calls (76 bash, 14 write, 4 edit, 1 read), 21.1 MB transcript, $0.1986. Three dev smokes and two Node test runs; the verifier's independent packaged smoke passed."
     },
     {
+      "label": "qwen38-flash-pi-openrouter-django-resume-030-medium",
+      "date": "2026-09-11",
+      "status": "pass",
+      "model": {
+        "id": "qwen3.8-flash",
+        "name": "Qwen3.8 Flash (Alibaba hosted)",
+        "family": "qwen"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openrouter",
+        "name": "OpenRouter"
+      },
+      "runner_provider_display": "Pi / OpenRouter (Alibaba)",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "reasoning.effort medium, verified in request body"
+      },
+      "timing": {
+        "wall_seconds": 3368.7,
+        "wall_display": "56m09s"
+      },
+      "diff": {
+        "files_changed": 41,
+        "insertions": 8948,
+        "deletions": 136
+      },
+      "verification": {
+        "node_tests": 60,
+        "smoke": "http-ok",
+        "smoke_display": "HTTP ok"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/qwen38-flash-pi-openrouter-django-resume-030-medium/",
+        "legacy": false
+      },
+      "notes": "Hosted counterpart of the local Qwen3.8-Flash-Next lane: OpenRouter pinned to the Alibaba provider (`provider.only=[Alibaba]`, verified in the request body) with `reasoning.effort=medium`. Ran with the D-040 Electron environment exported, matching the local Flash-Next lane, so the wall time is model/serving-bound rather than Electron-recovery-bound. 176 turns and 172 tool calls (bash 123, read 11, write 30, edit 19); 137,969 output tokens including 53,521 reasoning tokens; $0.53 OpenRouter spend. 60 model-authored Node tests, the most of any Qwen cell here; self-verified and passed the verifier's independent packaged smoke (`/health/` 200, `/` 302, `/resume/` 200). Raw decode measured separately at ~49-54 tok/s versus ~30 tok/s for local Flash-Next on M4 Max. Runtime-and-format comparison, not artifact parity: hosted Alibaba Qwen3.8 Flash (1M context, snapshot 20260826) versus local unsloth UD-IQ4_XS at 131072 context."
+    },
+    {
       "label": "gpt56sol-codex-yolo-django-resume-030-medium",
       "date": "2026-09-02",
       "status": "pass",

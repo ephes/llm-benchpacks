@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
+
+### Changed
+
+- Added a hosted Qwen3.8 Flash one-shot wrap cell
+  (`qwen38-flash-pi-openrouter-django-resume-030-medium`) to
+  `data/agent-wrap-oneshot-results.json` (47 -> 48 rows). It passed in 3368.7s with
+  60/60 Node tests, routed through OpenRouter pinned to the Alibaba provider with
+  `reasoning.effort=medium`.
+- Changed the static registry site's agent-wrap table so the per-run `notes`
+  forensics are rendered inside a collapsed `<details class="cell-notes">` toggle
+  instead of as inline cell text. The notes remain searchable because they are still
+  part of each row's `data-search`, and the raw Markdown report is unchanged. Before
+  this change the long notes made the wrap table effectively unreadable.
+
+### Open Questions
+
+- The hosted Alibaba Qwen3.8 Flash route is a runtime-and-format comparison against
+  the local Flash-Next lane (different artifact, context, and serving stack), not
+  artifact parity. A strict apples-to-apples speed comparison still needs a matched
+  artifact or a documented serving-equivalence argument.
+
 ## 2026-09-10 (DeepSeek V4.1 Flash hosted one-shot campaign)
 
 ### Changed

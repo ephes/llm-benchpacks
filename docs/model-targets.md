@@ -284,6 +284,17 @@ Chat-template gotchas:
   Qwen3.8 cell as an `xhigh` cell.
 
 Benchmark evidence:
+Hosted route evidence, added 2026-09-11: `qwen/qwen3.8-flash` on OpenRouter is served
+by the Alibaba provider and is the hosted counterpart of the local Flash-Next lane.
+Pin it with a per-model `compat.openRouterRouting` override of `{"only": ["Alibaba"]}`,
+because OpenRouter otherwise falls back to other upstreams when `reasoning.effort` is
+set. One medium-thinking `django-resume` one-shot wrap cell passed in 3368.7s with
+60/60 Node tests and $0.53 spend, and a direct streaming probe measured
+**~49-54 tok/s decode versus ~30 tok/s for local Flash-Next on M4 Max**. Treat that as
+a runtime-and-format comparison, not artifact parity: the hosted model carries a 1M
+context and a different serving stack than the local `unsloth` UD-IQ4_XS at 131072
+context.
+
 
 - **Qwen3.8 passes the hard one-shot `django-resume` Electron wrap at
   `reasoning_effort=medium`, the first passes by a local open-weight model on
