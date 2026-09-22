@@ -4,7 +4,7 @@ Wrap `django-resume` in Electron using Pi backed by local DS4 / DeepSeek V4 Flas
 
 Done when:
 - The run uses `~/workspaces/ds4-pi-django-resume/django-resume` as the target and `~/workspaces/ds4-pi-django-resume/desktop-django-starter` as the starter. Do not use the older dirty `~/workspaces/tmp/django-resume` workspace.
-- Pi uses the local DS4 provider/model: `DS4_MODEL_QUANT=q2-imatrix DS4_GGUF_DIR=$HOME/src/ds4/gguf pi --model ds4/deepseek-v4-flash --thinking high ...`. First verify `pi --offline --list-models ds4` shows `ds4/deepseek-v4-flash`; do not switch to OpenAI, Ollama, MLX, or another model unless DS4 is genuinely blocked and the blocker is reported.
+- Pi uses the local DS4 provider/model: `DS4_MODEL_QUANT=q2-imatrix DS4_GGUF_DIR=$HOME/models/ds4 pi --model ds4/deepseek-v4-flash --thinking high ...`. First verify `pi --offline --list-models ds4` shows `ds4/deepseek-v4-flash`; do not switch to OpenAI, Ollama, MLX, or another model unless DS4 is genuinely blocked and the blocker is reported.
 - The target starts clean: `git status --short` in `django-resume` is empty. If not, stop and report the dirty paths unless they are known artifacts from this run.
 - Stage 1 deterministic scaffold has been run exactly once from the clean target with `../desktop-django-starter/skills/wrap-existing-django-in-electron-staged/scripts/scaffold-target.sh "$PWD"`.
 - Stage 2 is run with the staged Electron prompt and keeps writes to `electron/**`; if its verification bundle already passes, it stops with a verification-only result.
