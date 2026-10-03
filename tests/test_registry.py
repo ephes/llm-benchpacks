@@ -624,8 +624,8 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     summary = import_agent_wrap_results(data_path, db_path)
     second = import_agent_wrap_results(data_path, db_path)
 
-    assert summary.rows_imported == 50
-    assert second.rows_imported == 50
+    assert summary.rows_imported == 52
+    assert second.rows_imported == 52
     rows = query_agent_wrap_results(
         db_path,
         status="pass",
@@ -658,16 +658,22 @@ def test_registry_agent_wrap_import_queries_normalized_rows(tmp_path: Path) -> N
     assert cuda_row["verification"]["smoke_display"].startswith("not run;")
 
     pass_rows = query_agent_wrap_results(db_path, status="pass")
-    assert len(pass_rows) == 39
-    # Fastest pass; GPT-5.6 Sol via Pi (362.9s) ties Codex low and wins on dataset order (id).
-    assert pass_rows[0]["label"] == "gpt56sol-pi-django-resume-030-off"
+    assert len(pass_rows) == 41
+    # Lowest observed agent time in this dataset; this is sorting evidence, not a model ranking.
+    assert pass_rows[0]["label"] == "gpt61sol-pi-openai-sub-low-20261003"
     with sqlite3.connect(db_path) as conn:
         count = conn.execute("SELECT COUNT(*) FROM agent_wrap_runs").fetchone()[0]
         fastest = conn.execute(
             "SELECT label FROM agent_wrap_runs ORDER BY wall_seconds, id LIMIT 1"
         ).fetchone()[0]
-    assert count == 50
-    assert fastest == "gpt56sol-pi-django-resume-030-off"
+    assert count == 52
+    assert fastest == "gpt61sol-pi-openai-sub-low-20261003"
+    pi_sol = query_agent_wrap_results(db_path, harness="pi", model="gpt-6.1-sol")
+    assert len(pi_sol) == 1
+    assert pi_sol[0]["provider"]["id"] == "openai"
+    assert pi_sol[0]["thinking"]["level"] == "low"
+    # 359.9s rounds across the minute boundary; the public display must agree.
+    assert pi_sol[0]["timing"] == {"wall_seconds": 359.9, "wall_display": "6m00s agent"}
 
 
 def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
@@ -687,7 +693,7 @@ def test_registry_agent_wrap_import_prunes_removed_dataset_rows(
     import_agent_wrap_results(pruned_path, db_path)
 
     rows = query_agent_wrap_results(db_path)
-    assert len(rows) == 49
+    assert len(rows) == 51
     assert removed_label not in {row["label"] for row in rows}
 
 
@@ -738,7 +744,7 @@ def test_registry_agent_wrap_cli_import_and_query(
         )
         == 0
     )
-    assert "imported 50 agent-wrap rows" in capsys.readouterr().out
+    assert "imported 52 agent-wrap rows" in capsys.readouterr().out
 
     assert (
         main(
@@ -1028,9 +1034,9 @@ def test_registry_static_site_exports_agent_wrap_rows_without_run_jsonl(
     assert "Pipy / openai-codex" in html
     assert "filter-harness" in html
     assert "No imported benchpack result rows are selected." in report
-    assert len(snapshot["agent_wrap_runs"]) == 50
+    assert len(snapshot["agent_wrap_runs"]) == 52
     assert (
-        snapshot["agent_wrap_runs"][0]["label"] == "gpt56sol-pi-django-resume-030-off"
+        snapshot["agent_wrap_runs"][0]["label"] == "gpt61sol-pi-openai-sub-low-20261003"
     )
     qwen_q8 = next(
         row

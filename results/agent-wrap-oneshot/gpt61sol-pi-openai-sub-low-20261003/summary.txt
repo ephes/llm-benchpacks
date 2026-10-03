@@ -1,0 +1,8 @@
+label=gpt61sol-pi-openai-sub-low-20261003
+runner=pi provider=openai model=gpt-6.1-sol thinking=low pi_extension=none pi_mode=json
+source=<synthetic-source> target=<benchmark-root>/django-resume-oneshot-gpt61sol-pi-openai-sub-low-20261003 output=<benchmark-root>/results/gpt61sol-pi-openai-sub-low-20261003
+pi_exit=0 (124=timeout) duration_seconds=359.9
+electron_exists=1 npm_install_ok=1 node_tests=pass
+smoke_exit=0 health200=1 root200=0 root302=1 resume200=1 app_served=1
+files_changed=37
+outcome=PASS

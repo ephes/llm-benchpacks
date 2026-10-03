@@ -1,0 +1,38 @@
+ .gitignore                                        |    5 +
+ docs/desktop.md                                   |   38 +
+ electron/assets/icons/app-icon.icns               |  Bin 0 -> 237218 bytes
+ electron/assets/icons/app-icon.png                |  Bin 0 -> 38593 bytes
+ electron/electron-builder.config.cjs              |    3 +
+ electron/main.js                                  |  809 ++++
+ electron/package-lock.json                        | 4972 +++++++++++++++++++++
+ electron/package.json                             |   24 +
+ electron/preload.cjs                              |    5 +
+ electron/scripts/auth-token.cjs                   |   58 +
+ electron/scripts/auth-token.test.cjs              |   72 +
+ electron/scripts/bundled-python.cjs               |  145 +
+ electron/scripts/bundled-python.test.cjs          |  126 +
+ electron/scripts/electron-builder-config.cjs      |  243 +
+ electron/scripts/electron-builder-config.test.cjs |  300 ++
+ electron/scripts/generate-icons.cjs               |   56 +
+ electron/scripts/launch-electron.cjs              |   49 +
+ electron/scripts/materialize-symlinks.cjs         |   47 +
+ electron/scripts/materialize-symlinks.test.cjs    |   87 +
+ electron/scripts/process-exit-policy.cjs          |   12 +
+ electron/scripts/process-exit-policy.test.cjs     |   57 +
+ electron/scripts/prune-bundled-python-runtime.cjs |   85 +
+ electron/scripts/resume-shell.test.cjs            |   12 +
+ electron/scripts/stage-backend.cjs                |  191 +
+ electron/scripts/updates.cjs                      |  240 +
+ electron/scripts/updates.test.cjs                 |  327 ++
+ electron/scripts/window-guards.cjs                |   41 +
+ electron/scripts/window-guards.test.cjs           |   63 +
+ electron/signing/entitlements.mac.inherit.plist   |   13 +
+ electron/signing/entitlements.mac.plist           |   13 +
+ example/example/base_settings.py                  |  143 +
+ example/example/desktop_dev_settings.py           |    4 +
+ example/example/desktop_middleware.py             |   34 +
+ example/example/packaged_settings.py              |   30 +
+ example/example/settings.py                       |  142 +-
+ example/example/urls.py                           |   10 +-
+ justfile                                          |   18 +
+ 37 files changed, 8333 insertions(+), 141 deletions(-)

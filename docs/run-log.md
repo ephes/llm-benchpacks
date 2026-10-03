@@ -154,3 +154,7 @@ Future reproductions should port any needed provider behavior into a
   `prefill parity` status for the relevant cases. Do not turn
   `desktop-django-wrap` or `patch-from-failure` into broad coding-agent claims;
   describe their prompt-only or tiny repo-task-smoke scope.
+
+## 2026-10-03 — Pi OpenAI subscription established pair
+
+One fresh SolLOW and AstraMEDIUM cell through original run-agent-wrap-oneshot/Pi0.99.2 openai ChatGPT subscription OAuth; both PASS54 Node and original packaged endpoints. Agent/full359.9/369.246124s and667.5/674.916760s; inclusive input/cache/output914801/868992/6295 and1970456/1899776/11857. Cache is input subset, no pricing/allowance/ranking claim. Preserved separate initial stale openai-codex zero-token auth401 strictFAIL/infrastructure-invalid outside normalized performance rows. Force-add only curated clean summary/npm/Node/smoke/diff/filename logs and aggregate sidecars under results/agent-wrap-oneshot for the two successful labels plus the failed-auth summary/provenance; no raw native sessions/auth/CV/apps. Earlier50 rows unchanged, append2 (52). [Full report](benchmarks/django-resume-electron-wrap/sol-astra-pi-established-20261003.md). Local adoption/import candidate only, no source push/main merge/Pi publication.

@@ -1,0 +1,8 @@
+label=gpt6astra-pi-openai-sub-medium-20261003
+runner=pi provider=openai model=gpt-6-astra thinking=medium pi_extension=none pi_mode=json
+source=<synthetic-source> target=<benchmark-root>/django-resume-oneshot-gpt6astra-pi-openai-sub-medium-20261003 output=<benchmark-root>/results/gpt6astra-pi-openai-sub-medium-20261003
+pi_exit=0 (124=timeout) duration_seconds=667.5
+electron_exists=1 npm_install_ok=1 node_tests=pass
+smoke_exit=0 health200=1 root200=0 root302=1 resume200=1 app_served=1
+files_changed=41
+outcome=PASS

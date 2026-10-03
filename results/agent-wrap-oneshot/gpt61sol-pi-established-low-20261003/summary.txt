@@ -1,0 +1,8 @@
+label=gpt61sol-pi-established-low-20261003
+runner=pi provider=openai-codex model=gpt-6.1-sol thinking=low pi_extension=none pi_mode=json
+source=<synthetic-source> target=<auth-attempt-root>/django-resume-oneshot-gpt61sol-pi-established-low-20261003 output=<auth-attempt-root>/results/gpt61sol-pi-established-low-20261003
+pi_exit=0 (124=timeout) duration_seconds=0.4
+electron_exists=0 npm_install_ok=0 node_tests=NA
+smoke_exit=NA health200=0 root200=0 root302=0 resume200=0 app_served=0
+files_changed=0
+outcome=FAIL

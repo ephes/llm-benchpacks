@@ -5012,3 +5012,7 @@ working history and open questions.
   entity-resolution lane with tens of thousands of offers is required before
   candidate generation, clustering, memory pressure, or offers/s claims are
   meaningful.
+
+## 2026-10-03 — Pi subscription result curation
+
+Curated original-protocol SolLOW/AstraMEDIUM Pi PASS samples using existing normalized schema/importer/exporter. Documented renewed provider openai ChatGPT subscription route distinctly from failed openai-codex auth and Codex benchmark pair. Native uncached/inclusive/cache/output semantics and effort evidence limits explicit. No harness/schema redesign or new benchmark. Status: local integration candidate; owner adoption/publication separate.

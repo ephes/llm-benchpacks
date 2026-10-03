@@ -97,6 +97,8 @@ The historical narrative remains in [Run Log](../../run-log.md).
 
 ## Campaign Reports
 
+- [Sol LOW / Astra MEDIUM through Pi subscription, 2026-10-03](sol-astra-pi-established-20261003.md): both original-protocol PASS; separate zero-token OAuth infrastructure failure preserved, native cache accounting and agent/full-time limits. No new publication.
+
 - [Sol LOW / Astra MEDIUM, established full-access protocol, 2026-10-03](sol-astra-established-20261003.md):
   one fresh sample each, both original-rubric PASS; agent/full times, native
   cache-subset accounting and exact provenance kept distinct from earlier

@@ -1,0 +1,65 @@
+{
+  "label": "gpt61sol-pi-openai-sub-low-20261003",
+  "model": "gpt-6.1-sol",
+  "provider": "openai",
+  "auth_route": "OpenAI (ChatGPT subscription) OAuth; API-key environment scrubbed",
+  "effort": "low",
+  "outcome": "PASS",
+  "validity": "genuine original protocol, native model completion and fixed verifier PASS",
+  "node_tests": 54,
+  "agent_wall_seconds": 359.9,
+  "full_runner_wall_seconds": 369.2461242499994,
+  "pi_native_uncached_input": 45809,
+  "input_inclusive_cache": 914801,
+  "cached_input_subset": 868992,
+  "cache_write": 0,
+  "output": 6295,
+  "reasoning_output_subset": 108,
+  "native_total": 921096,
+  "native_trace_sha256": "0ea4ee5b0cb7b3851d6fe8217746543457b7735e07cbbb2ab5546112e70c687c",
+  "native_assistant_final_messages": 29,
+  "native_last_stop": "stop",
+  "cleanup_verified": true,
+  "cleanup_actions": [],
+  "runner_original_head": "4680298f4813b1e65fe0d4fd0d078a2b8e9f2f3d",
+  "runner_source_commit": "3ee325fe7ad3e2cf5a2c9d891f1ed0343dbdc7c0",
+  "runner_blob": "0f38f8a674b210ee9d40bfe0b9f55088b6105b7f",
+  "runner_sha256": "82f01df17656f5e22584e1e92cb170d065a7c15126aea97c4dd57f2c31aa5285",
+  "source_commit": "3dc54f85646ace421ddaa164119229f5fc25cef0",
+  "starter_commit": "a0c90a79e6910b2c1547f7eb7398dd6c007cf45c",
+  "prompt_sha256": "e427efe0072840514238220dbca7d5bebfc41d63e4fc6baca8debb74da7c0512",
+  "pi_version": "0.99.2",
+  "logs": {
+    "summary.txt": {
+      "original_sha256": "96c2f86b726766640a866ce8b9d590b52f9d45f2fa2ad2b41ca493c732b77fde",
+      "curated_sha256": "6ff25bad348ca64161a5d6668c3468b78c6c775eb5ec6386f49f7f3d36d493af",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    },
+    "nodetests.log": {
+      "original_sha256": "edccacdd7b5a773c87d21e67602095fcee0ed585aef7f4c514477df06dd46971",
+      "curated_sha256": "edccacdd7b5a773c87d21e67602095fcee0ed585aef7f4c514477df06dd46971",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    },
+    "npm.log": {
+      "original_sha256": "17e1e897f6856a58efed4f184afe4b8efa6daaf246e90452881d0775d72bcf74",
+      "curated_sha256": "17e1e897f6856a58efed4f184afe4b8efa6daaf246e90452881d0775d72bcf74",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    },
+    "verify-smoke.log": {
+      "original_sha256": "9e30175f0f60c957ceccbe012e7c899b937d5245dea6fbcb3f26e3ec1a0e1f41",
+      "curated_sha256": "7f46965ca7d421d02f2282831d96be7e8580357a19d85a5627bf2e8246f26e66",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    },
+    "diff-stat.txt": {
+      "original_sha256": "eb3d0068a024c5ab9ab5e4dc1ee76053f9c272fe1ee931b17cbfe4bc3300d88a",
+      "curated_sha256": "eb3d0068a024c5ab9ab5e4dc1ee76053f9c272fe1ee931b17cbfe4bc3300d88a",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    },
+    "files-changed.txt": {
+      "original_sha256": "19bdfba34009724a7242cec64142777d46c220610861072ad5095b27560da1f8",
+      "curated_sha256": "19bdfba34009724a7242cec64142777d46c220610861072ad5095b27560da1f8",
+      "sanitization": "local absolute paths replaced; no native agent trace included"
+    }
+  },
+  "effort_proof": "original runner argv --thinking plus installed Pi supported reasoning mapping; JSON events do not independently expose server request effort"
+}

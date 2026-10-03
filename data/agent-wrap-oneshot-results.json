@@ -2158,6 +2158,92 @@
         "legacy": false
       },
       "notes": "Fresh established-full-access profile; one sample, no ranking claim. Registry time is agent 911.7s, not full runner 919.065475s; verifier not separately timed. ChatGPT subscription, Codex 0.160.0. Native input/cached/output 2144901/2043264/20005; cached is subset of input. Earlier confined/blocked/supplemental records remain separate. Exact provenance and clean logs: results/agent-wrap-oneshot/gpt6astra-established-medium-20261003/provenance.json."
+    },
+    {
+      "label": "gpt61sol-pi-openai-sub-low-20261003",
+      "date": "2026-10-03",
+      "status": "pass",
+      "model": {
+        "id": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai",
+        "name": "OpenAI ChatGPT subscription"
+      },
+      "runner_provider_display": "Pi / OpenAI subscription / established full-access",
+      "thinking": {
+        "kind": "thinking",
+        "level": "low",
+        "display": "thinking low, established full-access"
+      },
+      "timing": {
+        "wall_seconds": 359.9,
+        "wall_display": "6m00s agent"
+      },
+      "diff": {
+        "files_changed": 37,
+        "insertions": 8333,
+        "deletions": 141
+      },
+      "verification": {
+        "node_tests": 54,
+        "smoke": "http-ok",
+        "smoke_display": "health 200; root 302 → resume 200"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt61sol-pi-openai-sub-low-20261003/",
+        "legacy": false
+      },
+      "notes": "Fresh Pi0.99.2 established-full-access; OpenAI ChatGPT subscription OAuth provider openai, not paid API/OpenRouter. One sample, no ranking claim. Agent 359.9s, full 369.246124s; verifier not separately timed. Input including cache/cached/output 914801/868992/6295; native Pi uncached input 45809, cache is input subset. Prior zero-token openai-codex auth failure remains separate infrastructure-invalid, not a model FAIL. Effort from explicit argv/provider mapping; native JSON does not expose server effort. Provenance and clean logs: results/agent-wrap-oneshot/gpt61sol-pi-openai-sub-low-20261003/provenance.json."
+    },
+    {
+      "label": "gpt6astra-pi-openai-sub-medium-20261003",
+      "date": "2026-10-03",
+      "status": "pass",
+      "model": {
+        "id": "gpt-6-astra",
+        "name": "GPT-6 Astra",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "pi",
+        "name": "Pi"
+      },
+      "provider": {
+        "id": "openai",
+        "name": "OpenAI ChatGPT subscription"
+      },
+      "runner_provider_display": "Pi / OpenAI subscription / established full-access",
+      "thinking": {
+        "kind": "thinking",
+        "level": "medium",
+        "display": "thinking medium, established full-access"
+      },
+      "timing": {
+        "wall_seconds": 667.5,
+        "wall_display": "11m08s agent"
+      },
+      "diff": {
+        "files_changed": 41,
+        "insertions": 7944,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 54,
+        "smoke": "http-ok",
+        "smoke_display": "health 200; root 302 → resume 200"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt6astra-pi-openai-sub-medium-20261003/",
+        "legacy": false
+      },
+      "notes": "Fresh Pi0.99.2 established-full-access; OpenAI ChatGPT subscription OAuth provider openai, not paid API/OpenRouter. One sample, no ranking claim. Agent 667.5s, full 674.916760s; verifier not separately timed. Input including cache/cached/output 1970456/1899776/11857; native Pi uncached input 70680, cache is input subset. Prior zero-token openai-codex auth failure remains separate infrastructure-invalid, not a model FAIL. Effort from explicit argv/provider mapping; native JSON does not expose server effort. Provenance and clean logs: results/agent-wrap-oneshot/gpt6astra-pi-openai-sub-medium-20261003/provenance.json."
     }
   ]
 }

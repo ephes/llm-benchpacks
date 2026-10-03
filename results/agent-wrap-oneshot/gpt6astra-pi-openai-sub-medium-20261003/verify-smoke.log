@@ -1,0 +1,69 @@
+
+> django-resume-desktop@0.3.0 smoke:packaged
+> npm run stage-backend && node ./scripts/launch-electron.cjs --runtime=packaged --smoke-test
+
+
+> django-resume-desktop@0.3.0 stage-backend
+> node ./scripts/stage-backend.cjs
+
+Downloading cpython-3.14.8-macos-aarch64-none (download) (25.4MiB)
+ Downloaded cpython-3.14.8-macos-aarch64-none (download)
+Installed Python 3.14.8 in 933ms
+ + cpython-3.14.8-macos-aarch64-none
+Pruned bundled Python GUI artifacts:
+- bin/idle3
+- bin/idle3.14
+- lib/itcl4.3.8
+- lib/libtcl9.0.dylib
+- lib/libtcl9tk9.0.dylib
+- lib/python3.14/idlelib
+- lib/python3.14/lib-dynload/_tkinter.cpython-314-darwin.so
+- lib/python3.14/tkinter
+- lib/tcl9
+- lib/tcl9.0
+- lib/thread3.0.6
+- lib/tk9.0
+Building wheel...
+Successfully built .stage/.build/django_resume-0.3.0-py3-none-any.whl
+Using Python 3.14.8 environment at: .stage/backend/python
+Resolved 5 packages in 76ms
+Prepared 5 packages in 10ms
+Installed 5 packages in 95ms
+ + asgiref==3.12.1
+ + django==6.1.1
+ + django-resume==0.3.0 (from file://<benchmark-root>/django-resume-oneshot-gpt6astra-pi-openai-sub-medium-20261003/.stage/.build/django_resume-0.3.0-py3-none-any.whl)
+ + nh3==0.3.7
+ + sqlparse==0.6.0
+core ready! Example plugins disabled (set DJANGO_RESUME_ENABLE_EXAMPLE_PLUGINS=True to enable).
+
+144 static files copied to '<benchmark-root>/django-resume-oneshot-gpt6astra-pi-openai-sub-medium-20261003/.stage/backend/staticfiles'.
+Staged backend bundle at <benchmark-root>/django-resume-oneshot-gpt6astra-pi-openai-sub-medium-20261003/.stage/backend
+[django] core ready! Example plugins disabled (set DJANGO_RESUME_ENABLE_EXAMPLE_PLUGINS=True to enable).
+[django] Operations to perform:
+  Apply all migrations: admin, auth, contenttypes, django_resume, sessions
+[django] Running migrations:
+  No migrations to apply.
+[django] core ready! Example plugins disabled (set DJANGO_RESUME_ENABLE_EXAMPLE_PLUGINS=True to enable).
+[django] Performing system checks...
+
+[django] System check identified no issues (0 silenced).
+[django] October 03, 2026 - 13:15:40
+Django version 6.1.1, using settings 'example.packaged_settings'
+Starting WSGI development server at http://127.0.0.1:50958/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.1/howto/deployment/
+[desktop] /health/ 200
+[django] [03/Oct/2026 13:15:40] "GET /health/ HTTP/1.1" 200 16
+[django] [03/Oct/2026 13:15:40] "GET / HTTP/1.1" 302 0
+[django] [03/Oct/2026 13:15:40] "GET /resume/ HTTP/1.1" 200 19898
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/css/edit.css HTTP/1.1" 200 5702
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/css/styles.css HTTP/1.1" 200 10486
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/fonts/martian_mono_300.woff2 HTTP/1.1" 200 17640
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/fonts/martian_mono_200.woff2 HTTP/1.1" 200 17544
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/fonts/inter_600.woff2 HTTP/1.1" 200 112224
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/img/jochen-illustration-footer.png HTTP/1.1" 200 804039
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/css/print.css HTTP/1.1" 200 742
+[django] [03/Oct/2026 13:15:40] "GET /static/django_resume/img/white-linen.png HTTP/1.1" 200 466
+[desktop] loaded http://127.0.0.1:50958/resume/
