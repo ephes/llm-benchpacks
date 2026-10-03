@@ -97,6 +97,11 @@ The historical narrative remains in [Run Log](../../run-log.md).
 
 ## Campaign Reports
 
+- [Sol LOW / Astra MEDIUM, established full-access protocol, 2026-10-03](sol-astra-established-20261003.md):
+  one fresh sample each, both original-rubric PASS; agent/full times, native
+  cache-subset accounting and exact provenance kept distinct from earlier
+  invalid/confined/supplemental attempts. No general ranking claim.
+
 - [DeepSeek V4.1 Flash one-shot campaign, 2026-09-10](deepseek-v41-oneshot-20260910.md):
   four Pi/OpenRouter cells at thinking off/low/medium/high, **all four
   PASS** - the first DeepSeek evidence on this benchmark and the first hosted

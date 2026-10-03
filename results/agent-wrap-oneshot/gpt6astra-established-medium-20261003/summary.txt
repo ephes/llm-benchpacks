@@ -1,0 +1,8 @@
+label=gpt6astra-established-medium-20261003
+runner=codex-yolo provider=openai model=gpt-6-astra reasoning_effort=medium
+source=<fixed-source> target=<target> output=<results>
+codex_exit=0 (124=timeout) duration_seconds=911.7
+electron_exists=1 npm_install_ok=1 node_tests=pass
+smoke_exit=0 health200=1 root200=0 root302=1 resume200=1 app_served=1
+files_changed=52
+outcome=PASS

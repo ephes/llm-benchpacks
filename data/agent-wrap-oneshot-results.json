@@ -2072,6 +2072,92 @@
         "legacy": false
       },
       "notes": "RTX 4000 SFF Ada Q4_K_M fit test with inference on the Hetzner GEX44 and the unchanged Pi harness, target checkout, and verifier on the M4 Studio over an SSH local forward. All 64 model layers fit on the GPU, but exact 262144 context required an 8.5 GiB q8_0 KV cache in system RAM (--no-kv-offload). The run spent the full two-hour cap reading and planning, made 56 inspection calls but no write/edit call, and left the clean target unchanged. Completed-generation decode fell from 7.50 tok/s at 2.3K context to 2.12 tok/s at 91.7K; the final canceled prompt contained 93.3K tokens. Eleven transient client connection errors automatically retried while the server remained healthy. Treat this as a split-host CUDA inference result, not a full agent-host comparison."
+    },
+    {
+      "label": "gpt61sol-established-low-20261003",
+      "date": "2026-10-03",
+      "status": "pass",
+      "model": {
+        "id": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex subscription"
+      },
+      "runner_provider_display": "Codex CLI / established full-access",
+      "thinking": {
+        "kind": "reasoning",
+        "level": "low",
+        "display": "reasoning low, established full-access"
+      },
+      "timing": {
+        "wall_seconds": 473.3,
+        "wall_display": "7m53s agent"
+      },
+      "diff": {
+        "files_changed": 42,
+        "insertions": 8624,
+        "deletions": 140
+      },
+      "verification": {
+        "node_tests": 54,
+        "smoke": "http-ok",
+        "smoke_display": "health 200; root 302 → resume 200"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt61sol-established-low-20261003/",
+        "legacy": false
+      },
+      "notes": "Fresh established-full-access profile; one sample, no ranking claim. Registry time is agent 473.3s, not full runner 482.252439s; verifier not separately timed. ChatGPT subscription, Codex 0.160.0. Native input/cached/output 1658709/1580416/11583; cached is subset of input. Earlier confined/blocked/supplemental records remain separate. Exact provenance and clean logs: results/agent-wrap-oneshot/gpt61sol-established-low-20261003/provenance.json."
+    },
+    {
+      "label": "gpt6astra-established-medium-20261003",
+      "date": "2026-10-03",
+      "status": "pass",
+      "model": {
+        "id": "gpt-6-astra",
+        "name": "GPT-6 Astra",
+        "family": "openai"
+      },
+      "harness": {
+        "id": "codex-yolo",
+        "name": "Codex CLI"
+      },
+      "provider": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex subscription"
+      },
+      "runner_provider_display": "Codex CLI / established full-access",
+      "thinking": {
+        "kind": "reasoning",
+        "level": "medium",
+        "display": "reasoning medium, established full-access"
+      },
+      "timing": {
+        "wall_seconds": 911.7,
+        "wall_display": "15m12s agent"
+      },
+      "diff": {
+        "files_changed": 52,
+        "insertions": 9024,
+        "deletions": 145
+      },
+      "verification": {
+        "node_tests": 56,
+        "smoke": "http-ok",
+        "smoke_display": "health 200; root 302 → resume 200"
+      },
+      "artifact": {
+        "result_dir": "results/agent-wrap-oneshot/gpt6astra-established-medium-20261003/",
+        "legacy": false
+      },
+      "notes": "Fresh established-full-access profile; one sample, no ranking claim. Registry time is agent 911.7s, not full runner 919.065475s; verifier not separately timed. ChatGPT subscription, Codex 0.160.0. Native input/cached/output 2144901/2043264/20005; cached is subset of input. Earlier confined/blocked/supplemental records remain separate. Exact provenance and clean logs: results/agent-wrap-oneshot/gpt6astra-established-medium-20261003/provenance.json."
     }
   ]
 }

@@ -16,6 +16,20 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-03 (established one-shot pair curation)
+
+### Changed
+
+- Appended two original-protocol PASS rows (Sol LOW, Astra MEDIUM) using the
+  existing registry schema/import path; committed only curated clean verifier
+  logs and aggregate provenance. Registry timing remains explicitly agent time;
+  full wall/native cache-subset usage is preserved in sidecars and campaign docs.
+- No harness/schema change, ranking, retroactive reclassification or deployment.
+
+### Open Questions
+
+- Owner adoption/publication remains separate from this local evidence commit.
+
 ## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
 
 ### Changed

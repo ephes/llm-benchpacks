@@ -1,0 +1,143 @@
+{
+  "record_kind": "curated-existing-schema-agent-wrap-evidence",
+  "profile": "established-full-access",
+  "date": "2026-10-03",
+  "label": "gpt6astra-established-medium-20261003",
+  "source_commit": "3dc54f85646ace421ddaa164119229f5fc25cef0",
+  "starter_commit": "a0c90a79e6910b2c1547f7eb7398dd6c007cf45c",
+  "prompt_path": "skills/wrap-existing-django-in-electron/prompt.md",
+  "prompt_sha256": "e427efe0072840514238220dbca7d5bebfc41d63e4fc6baca8debb74da7c0512",
+  "harness_main_commit_at_run": "4680298f4813b1e65fe0d4fd0d078a2b8e9f2f3d",
+  "runner_source_commit": "3ee325fe7ad3e2cf5a2c9d891f1ed0343dbdc7c0",
+  "runner_git_blob": "0f38f8a674b210ee9d40bfe0b9f55088b6105b7f",
+  "runner_sha256": "82f01df17656f5e22584e1e92cb170d065a7c15126aea97c4dd57f2c31aa5285",
+  "model": "gpt-6-astra",
+  "reasoning_effort": "medium",
+  "tools": {
+    "node": "v26.10.0",
+    "npm": "11.19.1",
+    "uv": "0.12.22",
+    "just": "1.58.0",
+    "codex": "0.160.0",
+    "Electron": "40.8.5"
+  },
+  "auth": "codex login status: Logged in using ChatGPT; native provider openai; inherited API-key/credential environment names scrubbed, no credential values read/copied",
+  "native_record_sha256": "1fc15d0b910554c9454e7ba94dd0e67865f6705ce43df44ab13dae84afca41a2",
+  "native_originator": "codex_exec",
+  "native_task_complete_count": 1,
+  "native_context": {
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "sandbox_policy": "danger-full-access",
+    "approval_policy": "never"
+  },
+  "native_usage": {
+    "input_tokens": 2144901,
+    "cached_input_tokens": 2043264,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 20005,
+    "reasoning_output_tokens": 3574,
+    "total_tokens": 2164906
+  },
+  "native_start_utc": "2026-10-03T10:36:21.389Z",
+  "native_complete_utc": "2026-10-03T10:51:32.020Z",
+  "timing": {
+    "registry_wall_seconds_means": "original agent subprocess rounded to 0.1s",
+    "agent_seconds": 911.7,
+    "full_runner_seconds": 919.0654748340021,
+    "verifier_seconds": null,
+    "non_agent_residual_seconds_approx": 7.365474834002043,
+    "residual_is_not_pure_verifier": true,
+    "post_exit_cleanup_observation_excluded": true
+  },
+  "verification": {
+    "original_outcome": "PASS",
+    "wrapper_exit": 0,
+    "node_tests_passed": 56,
+    "smoke_exit": 0,
+    "health200": 1,
+    "root302": 1,
+    "resume200": 1,
+    "app_served": 1
+  },
+  "cleanup": {
+    "owned_processes_remaining_after_runner": 0,
+    "signals_sent": 0,
+    "final_target_cwd_live_processes": 0,
+    "unrelated_processes_killed": 0,
+    "sampling_interval_seconds": 0.25,
+    "limits": "bounded process-group/descendant identity sampling plus final target-cwd check, not adversarial containment"
+  },
+  "human_generated_app_repairs": 0,
+  "samples": 1,
+  "profile_boundary": {
+    "model": "Codex --dangerously-bypass-approvals-and-sandbox; existing CLI settings inherited",
+    "verifier": "original ordinary npm install, Node tests, packaged smoke",
+    "accounting": "ordinary target Git diff; no added snapshot/cap/cache exclusions",
+    "data_separation": "unique scratch HOME/Cocoa/TMP/XDG/uv/npm caches; not filesystem confinement",
+    "trusted_electron": "existing 40.8.5 override, skip binary download; Chromium sandbox not disabled",
+    "relative_layout": "target sibling of read-only desktop-django-starter, outside harness/results and enclosing Python project",
+    "different_from_previous_attempts": true
+  },
+  "command": [
+    "scripts/run-agent-wrap-oneshot",
+    "--runner",
+    "codex-yolo",
+    "--model",
+    "gpt-6-astra",
+    "--reasoning-effort",
+    "medium",
+    "--label",
+    "gpt6astra-established-medium-20261003",
+    "--source",
+    "<fixed-source-commit>",
+    "--starter",
+    "<fresh-root>/desktop-django-starter",
+    "--target",
+    "<fresh-root>/django-resume-oneshot-gpt6astra-established-medium-20261003",
+    "--results-root",
+    "<fresh-root>/results",
+    "--timeout",
+    "7200"
+  ],
+  "curation": {
+    "path_replacements_only": [
+      "fixed source",
+      "fresh target/results/root",
+      "owner home"
+    ],
+    "no_native_conversations_or_agent_log_committed": true,
+    "logs": {
+      "summary.txt": {
+        "original_sha256": "a99eb253255080b8559ac2fa6da0efb83b17b8dbe2cdeb19f40971b9a98a242f",
+        "curated_sha256": "765fa36fa23086cadccd8b3678c0db72284eb4f2189a08e01449dc951de25304"
+      },
+      "nodetests.log": {
+        "original_sha256": "c92a80e4fe115111d2db37f53f55cdee969507148a5cdc83e55a0258bba6e97d",
+        "curated_sha256": "c92a80e4fe115111d2db37f53f55cdee969507148a5cdc83e55a0258bba6e97d"
+      },
+      "verify-smoke.log": {
+        "original_sha256": "2fc0720d4b056c1a25f273976f35602fc767b88c69eb034df4b1ae0da1f2eb48",
+        "curated_sha256": "8da494354b617d6854c6413daf2b63b012db22d57be14aa65a25c6117cf8a9ff"
+      },
+      "npm.log": {
+        "original_sha256": "2cd5740f6a61d3f9e247ba1b2ce431f18568c2f530736f8d686babaa6cf82ce7",
+        "curated_sha256": "2cd5740f6a61d3f9e247ba1b2ce431f18568c2f530736f8d686babaa6cf82ce7"
+      },
+      "diff-stat.txt": {
+        "original_sha256": "4ae332229b7a0ec65d1b8f065f022c0c6c96761e739674bfaf33ca2a45e5fbbd",
+        "curated_sha256": "4ae332229b7a0ec65d1b8f065f022c0c6c96761e739674bfaf33ca2a45e5fbbd"
+      },
+      "files-changed.txt": {
+        "original_sha256": "1cf04ed11fe1f4e6966bcd1ff35455440e025c4d7764aa153a5850132024354b",
+        "curated_sha256": "1cf04ed11fe1f4e6966bcd1ff35455440e025c4d7764aa153a5850132024354b"
+      }
+    }
+  },
+  "limits": [
+    "one sequential sample each, different effort, no general model/economics ranking",
+    "cached input is subset of input; reasoning output subset of output; no billed-price estimate",
+    "original runtime/tests rubric is not complete prompt/security/platform validation",
+    "earlier failures/incomplete/supplemental results not modified"
+  ]
+}
