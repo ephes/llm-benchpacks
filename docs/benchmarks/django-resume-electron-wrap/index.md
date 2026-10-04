@@ -125,3 +125,7 @@ Older staged DS4/Pi work is kept here as historical context:
 
 - [Legacy DS4/Pi staged benchmark](legacy-ds4-pi-wrap-benchmark.md)
 - [Legacy DS4 goal prompt](legacy-ds4-goal-prompt.md)
+
+## Campaign shutdown checkpoint
+
+[October 4 shutdown, verified staging and restart boundary](campaign-shutdown-20261004.md). Campaign stopped; no further runs or deployment authorized by this note.
