@@ -1,0 +1,43 @@
+name: CI
+
+# Runs the test suite against the locked dependencies. No secrets are used and
+# nothing is deployed: the registry site build and `just deploy-staging` stay
+# operator steps.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'supersedable' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  PYTHONUNBUFFERED: "1"
+  UV_NO_PROGRESS: "1"
+  UV_PYTHON: "3.14"
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.23"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Sync locked dependencies
+        run: uv sync --frozen
+      - name: Tests
+        run: uv run --frozen pytest -q

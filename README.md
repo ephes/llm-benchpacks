@@ -345,7 +345,10 @@ model, and operating-condition notes such as server command, runtime version,
 quantization, checksum, context/cache options, power, thermal, and background
 load. See
 [`docs/specification.md`](docs/specification.md) for the full CLI shape and
-collision rules, and `uv run pytest` for the test suite.
+collision rules, and `uv run pytest` for the test suite. GitHub Actions
+(`.github/workflows/ci.yml`) runs the same suite on every push and pull request
+with `uv sync --frozen` on Python 3.14; it uses no secrets and never deploys
+(`just deploy-staging` stays a manual operator step).
 
 For `openai-chat` streaming runs, `--openai-stream-usage include` is the
 default and sends `stream_options.include_usage` so supporting endpoints can
