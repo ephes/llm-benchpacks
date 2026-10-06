@@ -348,7 +348,10 @@ load. See
 collision rules, and `uv run pytest` for the test suite. GitHub Actions
 (`.github/workflows/ci.yml`) runs the same suite on every push and pull request
 with `uv sync --frozen` on Python 3.14; it uses no secrets and never deploys
-(`just deploy-staging` stays a manual operator step).
+(`just deploy-staging` stays a manual operator step). CI skips the
+product-offer reference verifier test, whose clusterer exceeds the pack's
+60-second program limit on hosted runners; run the full suite locally before
+changing that pack.
 
 For `openai-chat` streaming runs, `--openai-stream-usage include` is the
 default and sends `stream_options.include_usage` so supporting endpoints can
