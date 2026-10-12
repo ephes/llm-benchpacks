@@ -195,11 +195,15 @@ def test_directory_diff_symlink_target_change_is_text_diff(tmp_path: Path) -> No
 
     assert directory_diff(source, workspace) == (
         "diff --git a/link.txt b/link.txt\n"
+        "old mode 120000\n"
+        "new mode 120000\n"
         "--- a/link.txt\n"
         "+++ b/link.txt\n"
         "@@ -1 +1 @@\n"
         "-old.txt\n"
+        "\\ No newline at end of file\n"
         "+new.txt\n"
+        "\\ No newline at end of file\n"
     )
 
 
@@ -218,15 +222,19 @@ def test_directory_diff_symlink_added_and_deleted_use_target_text(
 
     assert directory_diff(source, workspace) == (
         "diff --git a/added-link.txt b/added-link.txt\n"
+        "new file mode 120000\n"
         "--- /dev/null\n"
         "+++ b/added-link.txt\n"
         "@@ -0,0 +1 @@\n"
         "+added.txt\n"
+        "\\ No newline at end of file\n"
         "diff --git a/deleted-link.txt b/deleted-link.txt\n"
+        "deleted file mode 120000\n"
         "--- a/deleted-link.txt\n"
         "+++ /dev/null\n"
         "@@ -1 +0,0 @@\n"
         "-deleted.txt\n"
+        "\\ No newline at end of file\n"
     )
 
 
@@ -307,3 +315,50 @@ def test_patch_replays_multiple_files(tmp_path: Path, empty_addition: bool) -> N
     for name in ['a', 'b']:
         assert (source / name).read_bytes() == (workspace / name).read_bytes()
         assert (source / name).stat().st_mode & 0o777 == (workspace / name).stat().st_mode & 0o777
+
+
+@pytest.mark.parametrize('operation', ['change', 'add', 'delete', 'file-to-link', 'link-to-file'])
+def test_captured_mixed_symlink_patch_replays(tmp_path: Path, operation: str) -> None:
+    import os
+    import shutil
+    import subprocess
+    from benchpack.tasks import apply_unified_diff_to_workspace
+
+    source, workspace, replay = (tmp_path / name for name in ('source', 'workspace', 'replay'))
+    source.mkdir()
+    (source / 'regular').write_bytes(b'old\r\n')
+    if operation == 'file-to-link':
+        (source / 'link').write_bytes(b'old file')
+    elif operation != 'add':
+        os.symlink('./missing//old', source / 'link')
+    shutil.copytree(source, workspace, symlinks=True)
+    shutil.copytree(source, replay, symlinks=True)
+    (workspace / 'regular').write_bytes(b'new')
+    (workspace / 'regular').chmod(0o755)
+    if operation != 'add':
+        (workspace / 'link').unlink()
+    if operation == 'link-to-file':
+        (workspace / 'link').write_bytes(b'new file')
+        (workspace / 'link').chmod(0o755)
+    elif operation != 'delete':
+        os.symlink('./missing//new', workspace / 'link')
+
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace)
+    record = capture_workspace_patch(prepared, tmp_path / 'run', make_case(), 1)
+    patch = (tmp_path / 'run' / record['path']).read_bytes().decode('utf-8')
+    subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
+    applied, _, stderr = apply_unified_diff_to_workspace(patch, replay)
+    assert applied, stderr
+    for root in (source, replay):
+        assert (root / 'regular').read_bytes() == b'new'
+        assert (root / 'regular').stat().st_mode & 0o777 == 0o755
+        if operation == 'delete':
+            assert not (root / 'link').exists()
+            assert not (root / 'link').is_symlink()
+        elif operation == 'link-to-file':
+            assert not (root / 'link').is_symlink()
+            assert (root / 'link').read_bytes() == b'new file'
+            assert (root / 'link').stat().st_mode & 0o777 == 0o755
+        else:
+            assert (root / 'link').is_symlink()
+            assert os.readlink(root / 'link') == './missing//new'

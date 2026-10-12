@@ -903,5 +903,8 @@ standard no-newline markers. Git mode headers capture changes between regular
 non-executable (100644) and executable (100755) files, including additions and
 deletions. Executability follows the owner execute bit, as in Git. Other
 permission bits, ownership, timestamps and empty directories are not captured.
-Binary files remain descriptive markers rather than replayable patches; symlink
-changes remain target-text evidence rather than replayable symlink metadata.
+Symlink diffs preserve the literal target (without following or normalizing it)
+and Git symlink mode (120000), including additions, deletions, target changes,
+and transitions to or from regular files. Mixed symlink and regular-file patches
+replay through `git apply` and the fenced-patch executor. Binary files remain
+descriptive markers rather than replayable patches.

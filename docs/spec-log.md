@@ -20,7 +20,9 @@ working history and open questions.
 
 ### Changed
 - Patch capture preserves line endings, final newlines and Git executable modes.
-- Regression tests replay regular-file evidence with `git apply`.
+- Symlink capture preserves Git mode and literal targets without final newlines.
+- Regression tests replay mixed symlink and regular-file changes with `git apply`
+  and the fenced-patch executor, including file/symlink type transitions.
 
 ## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
 

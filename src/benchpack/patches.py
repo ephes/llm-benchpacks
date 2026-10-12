@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -98,7 +99,7 @@ def _snapshot(root: Path) -> dict[str, _Entry]:
         for child in directory.iterdir():
             relative_path = child.relative_to(root).as_posix()
             if child.is_symlink():
-                entries[relative_path] = _Entry(kind="symlink", path=child)
+                entries[relative_path] = _Entry(kind="symlink", path=child, mode=0o120000)
             elif child.is_dir():
                 walk(child)
             elif child.is_file():
@@ -112,9 +113,9 @@ def _added_diff(relative_path: str, entry: _Entry | None) -> str:
     if entry is None:
         return ""
     if entry.kind == "symlink":
-        return _text_diff(
+        return _file_header(relative_path, entry, "new", "") + _text_diff(
             [],
-            [_readlink_text(entry.path) + "\n"],
+            _text_lines(_readlink_text(entry.path)),
             old_label="/dev/null",
             new_label=f"b/{relative_path}",
         )
@@ -133,8 +134,8 @@ def _added_diff(relative_path: str, entry: _Entry | None) -> str:
 
 def _deleted_diff(relative_path: str, entry: _Entry) -> str:
     if entry.kind == "symlink":
-        return _text_diff(
-            [_readlink_text(entry.path) + "\n"],
+        return _file_header(relative_path, entry, "deleted", "") + _text_diff(
+            _text_lines(_readlink_text(entry.path)),
             [],
             old_label=f"a/{relative_path}",
             new_label="/dev/null",
@@ -163,9 +164,10 @@ def _changed_diff(relative_path: str, old: _Entry, new: _Entry) -> str:
         new_target = _readlink_text(new.path)
         if old_target == new_target:
             return ""
-        return _text_diff(
-            [old_target + "\n"],
-            [new_target + "\n"],
+        return (f"diff --git a/{relative_path} b/{relative_path}\n"
+                "old mode 120000\nnew mode 120000\n") + _text_diff(
+            _text_lines(old_target),
+            _text_lines(new_target),
             old_label=f"a/{relative_path}",
             new_label=f"b/{relative_path}",
         )
@@ -237,4 +239,4 @@ def _text_lines(text: str) -> list[str]:
 
 
 def _readlink_text(path: Path) -> str:
-    return path.readlink().as_posix()
+    return os.readlink(path)

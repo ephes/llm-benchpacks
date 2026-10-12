@@ -646,9 +646,11 @@ fixture or workspace to be a Git repository. It compares the immutable source
 fixture directory to the prepared workspace after the adapter call, orders paths
 lexicographically by POSIX-style relative path, emits unified diffs for UTF-8
 text file additions, deletions, and changes, emits deterministic marker lines
-for binary additions, deletions, and changes, represents changed symlink targets
-as text diffs of the link target strings, normalizes UTF-8 text line endings to
-`\n` before comparison, and ignores empty directories.
+for binary additions, deletions, and changes, and ignores empty directories.
+UTF-8 text diffs preserve line endings and final-newline state, with Git mode
+headers for executable files. Symlink diffs preserve literal link targets and
+mode 120000 for additions, deletions, retargeting, and regular-file transitions;
+mixed symlink and regular-file patches replay through the fenced-patch executor.
 
 Cleanup should be deterministic. Keeping a workspace after a run should be an
 explicit runner option or future manifest-independent debug setting, not
