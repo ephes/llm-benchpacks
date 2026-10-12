@@ -5059,3 +5059,9 @@ snapshot beside the output, and retains/restores the prior site on errors.
 Rollback failure reports the backup recovery path. Synthetic filesystem,
 adapter, and SQLite regressions reproduce the original input deletion and
 partial-publication failures. No model runs or deployment.
+
+## 2026-10-12 — Scoring validation
+
+Completed integral JSON integer matching, strict finite JSON output decoding,
+and required contains/regex field validation at manifest loading. Regression
+coverage includes nested numbers and pack/case scoring declarations.

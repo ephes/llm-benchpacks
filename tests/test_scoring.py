@@ -181,3 +181,42 @@ def test_unsupported_modes_raise_not_implemented() -> None:
     for mode in ("equals", "verify-script", "llm-judge"):
         with pytest.raises(NotImplementedError):
             evaluate(Scoring(mode=mode), "x")
+
+
+@pytest.mark.parametrize(
+    "output, passed",
+    [
+        ("1", True),
+        ("1.0", True),
+        ("1e0", True),
+        ("1.5", False),
+        ("true", False),
+        ("NaN", False),
+        ("Infinity", False),
+        ("-Infinity", False),
+    ],
+)
+def test_integral_json_numbers(output, passed):
+    schema = {"type": "integer", "const": 1, "enum": [1.0]}
+    for text, shape in [
+        (output, {"type": "integer"}),
+        (output, schema),
+        (
+            '{"n":[' + output + "]}",
+            {"type": "object", "properties": {"n": {"type": "array", "items": schema}}},
+        ),
+    ]:
+        assert (
+            evaluate(Scoring(mode="json-schema", schema_data=shape), text)["passed"]
+            is passed
+        )
+
+
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity", "1e999"])
+@pytest.mark.parametrize("template", ["{}", '{{"n":{}}}', "[{}]"])
+def test_nonfinite_json_output_fails(number, template):
+    scoring = Scoring(mode="json-schema", schema_data={})
+    result = evaluate(scoring, template.format(number))
+    assert result["passed"] is False
+    assert len(result["error"]) < 200
+    assert evaluate(scoring, '{"n":1.5}')["passed"] is True

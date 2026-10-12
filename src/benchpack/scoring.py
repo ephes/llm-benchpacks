@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any
 
@@ -35,12 +36,16 @@ def evaluate(scoring: Scoring | None, output: str) -> dict[str, Any] | None:
         if scoring.schema_data is None:
             raise ValueError("scoring mode 'json-schema' requires 'schema'")
         try:
-            parsed = json.loads(output)
-        except json.JSONDecodeError as exc:
+            parsed = json.loads(
+                output,
+                parse_constant=_reject_json_constant,
+                parse_float=_finite_json_float,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
             return {
                 "mode": "json-schema",
                 "passed": False,
-                "error": f"invalid JSON: {exc.msg}",
+                "error": f"invalid JSON: {exc.msg if isinstance(exc, json.JSONDecodeError) else str(exc)}",
             }
         error = _validate_json_schema(parsed, scoring.schema_data)
         return {
@@ -49,9 +54,18 @@ def evaluate(scoring: Scoring | None, output: str) -> dict[str, Any] | None:
             **({} if error is None else {"error": error}),
         }
 
-    raise NotImplementedError(
-        f"scoring mode {scoring.mode!r} is not implemented"
-    )
+    raise NotImplementedError(f"scoring mode {scoring.mode!r} is not implemented")
+
+
+def _reject_json_constant(value: str) -> Any:
+    raise ValueError("non-finite JSON number")
+
+
+def _finite_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("JSON number exceeds finite float range")
+    return number
 
 
 def _validate_json_schema(
@@ -143,7 +157,9 @@ def _validate_json_schema(
 
 
 def _validate_json_type(value: Any, expected_type: Any, path: str) -> str | None:
-    allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
+    allowed_types = (
+        expected_type if isinstance(expected_type, list) else [expected_type]
+    )
     if any(_matches_json_type(value, item) for item in allowed_types):
         return None
     return f"{path} must be {expected_type!r}"
@@ -157,7 +173,9 @@ def _matches_json_type(value: Any, expected_type: Any) -> bool:
     if expected_type == "string":
         return isinstance(value, str)
     if expected_type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return (isinstance(value, int) and not isinstance(value, bool)) or (
+            isinstance(value, float) and math.isfinite(value) and value.is_integer()
+        )
     if expected_type == "number":
         return _is_json_number(value)
     if expected_type == "boolean":

@@ -161,6 +161,14 @@ def _scoring_from_dict(
             f"unknown scoring mode {mode!r}; expected one of "
             f"{sorted(KNOWN_SCORING_MODES)}"
         )
+    required_field = {"contains": "expected", "regex": "pattern"}.get(mode)
+    if required_field is not None and not isinstance(data.get(required_field), str):
+        raise PackError(f"scoring.{required_field} must be a string for {mode!r}")
+    if mode == "regex":
+        try:
+            re.compile(data["pattern"])
+        except (re.error, OverflowError, ValueError, RecursionError) as exc:
+            raise PackError(f"scoring.pattern is invalid: {exc}") from exc
     timeout_s = _scoring_timeout_from_value(data.get("timeout_s"))
     environment = _scoring_environment_from_value(data.get("environment"))
     if environment is not None and mode != "verify-script":
