@@ -290,7 +290,7 @@ def test_run_verifier_overlays_manifest_environment(
         run_kwargs.update(kwargs)
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", fake_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", fake_run)
 
     run_repo_task_verifier(
         pack=pack,
@@ -327,7 +327,7 @@ def test_run_verifier_omits_subprocess_env_when_manifest_environment_absent(
         run_kwargs.update(kwargs)
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", fake_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", fake_run)
 
     run_repo_task_verifier(
         pack=pack,
@@ -363,7 +363,7 @@ def test_run_verifier_timeout_writes_captured_logs_and_failed_result(
             stderr=b"partial stderr\n",
         )
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_run)
 
     result = run_repo_task_verifier(
         pack=pack,
@@ -422,7 +422,7 @@ def test_run_verifier_timeout_preserves_object_json_with_authoritative_fields(
         )
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_run)
 
     result = run_repo_task_verifier(
         pack=pack,
@@ -468,7 +468,7 @@ def test_run_verifier_timeout_replaces_invalid_script_json(
         output_path.write_text(script_json, encoding="utf-8")
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_run)
 
     result = run_repo_task_verifier(
         pack=pack,
@@ -487,3 +487,86 @@ def test_run_verifier_timeout_replaces_invalid_script_json(
         "timed_out": True,
         "timeout_s": 3.0,
     }
+
+
+@pytest.mark.skipif(__import__('os').name != 'posix', reason='POSIX process groups')
+@pytest.mark.parametrize(('parent_exits', 'child_closes_pipes'), [(False, False), (True, False), (False, True)])
+def test_verifier_timeout_stops_descendants(tmp_path: Path, parent_exits: bool, child_closes_pipes: bool) -> None:
+    import os
+    import signal
+    import time
+    prepared = make_prepared(tmp_path)
+    pack_dir = tmp_path / 'pack'
+    marker = tmp_path / 'late-marker'
+    ready = tmp_path / 'child-ready'
+    child_body = (
+        'import os, signal, time; from pathlib import Path; '
+        'signal.signal(signal.SIGTERM, signal.SIG_IGN); '
+        + ('os.close(1); os.close(2); ' if child_closes_pipes else '')
+        + f'Path({str(ready)!r}).write_text(str(os.getpid())); '
+        + f'time.sleep(4); Path({str(marker)!r}).write_text("escaped")'
+    )
+    write_script(pack_dir,
+        'import subprocess, sys, time\nfrom pathlib import Path\n'
+        + f'subprocess.Popen([sys.executable, "-c", {child_body!r}])\n'
+        + f'while not Path({str(ready)!r}).exists(): time.sleep(0.01)\n'
+        + 'print("ready", flush=True)\n'
+        + ('sys.exit(0)\n' if parent_exits else 'time.sleep(30)\n')
+    )
+    pack = make_pack(pack_dir)
+    started = time.monotonic()
+    try:
+        result = run_repo_task_verifier(pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
+            prepared_workspace=prepared, patch_path=tmp_path / 'patch.diff', output_dir=tmp_path / 'run',
+            repetition=1, timeout_s=2)
+        assert time.monotonic() - started < 5
+        assert ready.exists(), 'descendant must have started'
+        assert result.scoring['passed'] is False
+        payload = json.loads((tmp_path / 'run' / result.verify['path']).read_text())
+        assert payload['timed_out'] is True
+        assert payload['exit_code'] is None
+        assert 'ready' in (tmp_path / 'run' / result.verify['stdout_path']).read_text()
+        time.sleep(4.1)
+        assert not marker.exists()
+        pid = int(ready.read_text())
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            # On Linux an orphan may be dead but awaiting its init reaper.
+            stat = Path(f'/proc/{pid}/stat')
+            assert stat.exists() and stat.read_text().split()[2] == 'Z'
+    finally:
+        if ready.exists():
+            try:
+                os.kill(int(ready.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.skipif(__import__('os').name != 'posix', reason='POSIX process groups')
+def test_verifier_interrupt_reaps_isolated_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+    prepared = make_prepared(tmp_path)
+    pack_dir = tmp_path / 'pack'
+    write_script(pack_dir, 'import time; time.sleep(30)')
+    pack = make_pack(pack_dir)
+    original = subprocess.Popen.communicate
+    seen = []
+
+    def interrupt_once(process, *args, **kwargs):
+        if not seen:
+            seen.append(process)
+            raise KeyboardInterrupt
+        return original(process, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess.Popen, 'communicate', interrupt_once)
+    with pytest.raises(KeyboardInterrupt):
+        run_repo_task_verifier(pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
+            prepared_workspace=prepared, patch_path=tmp_path / 'patch.diff', output_dir=tmp_path / 'run',
+            repetition=1, timeout_s=2)
+    assert seen[0].returncode is not None
+    assert seen[0].stdout.closed and seen[0].stderr.closed
+    with pytest.raises(ProcessLookupError):
+        os.kill(seen[0].pid, 0)

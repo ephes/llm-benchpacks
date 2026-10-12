@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -166,7 +167,7 @@ def run_repo_task_verifier(
         run_kwargs["env"] = {**os.environ, **scoring.environment}
 
     try:
-        completed = subprocess.run(
+        completed = _run_verifier_command(
             command,
             check=False,
             capture_output=True,
@@ -207,6 +208,73 @@ def run_repo_task_verifier(
         repo_task={"status": status, "verify_exit_code": exit_code},
         scoring={"mode": "verify-script", "passed": passed},
     )
+
+
+_TIMEOUT_GRACE_S = 0.5
+
+
+def _run_verifier_command(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    """Run verification with bounded cleanup of its original POSIX group."""
+
+    kwargs.pop("check", None)
+    kwargs.pop("capture_output", None)
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix", **kwargs,
+    )
+    try:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            stdout, stderr = _stop_verifier(process, exc)
+            raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc
+        except BaseException:
+            # A terminal interrupt no longer reaches the isolated group.
+            _stop_verifier(process, subprocess.TimeoutExpired(command, timeout))
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
+
+
+def _stop_verifier(process: subprocess.Popen[str], expired: subprocess.TimeoutExpired) -> tuple[str, str]:
+    def send(*, kill: bool = False) -> None:
+        try:
+            if os.name == "posix":
+                # The leader may already have exited while a child holds a pipe.
+                os.killpg(process.pid, signal.SIGKILL if kill else signal.SIGTERM)
+            elif not kill:
+                process.terminate()
+            else:
+                process.kill()
+        except ProcessLookupError:
+            pass
+
+    send()
+    try:
+        stdout, stderr = process.communicate(timeout=_TIMEOUT_GRACE_S)
+    except subprocess.TimeoutExpired as exc:
+        expired = exc
+        stdout, stderr = expired.stdout, expired.stderr
+    finally:
+        # A descendant can close its pipes and ignore TERM. Drain completion
+        # alone is not evidence that the entire group has stopped.
+        send(kill=True)
+    try:
+        stdout, stderr = process.communicate(timeout=_TIMEOUT_GRACE_S)
+    except subprocess.TimeoutExpired as exc:
+        # A descendant that escaped the group can retain a pipe. Do not wait
+        # indefinitely for it; retain the captured bytes and close our readers.
+        stdout, stderr = exc.stdout, exc.stderr
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
+        process.wait(timeout=_TIMEOUT_GRACE_S)
+    return _timeout_stream_to_text(stdout), _timeout_stream_to_text(stderr)
 
 
 def _timeout_stream_to_text(value: str | bytes | None) -> str:
