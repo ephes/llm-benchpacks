@@ -5014,3 +5014,10 @@ working history and open questions.
   entity-resolution lane with tens of thousands of offers is required before
   candidate generation, clustering, memory pressure, or offers/s claims are
   meaningful.
+
+## 2026-10-12 — Finite positive timeout budgets
+
+Pack loading now rejects nonfinite and overflowing scoring/harness timeouts
+with pack-specific errors. Budgets are capped at 2,147,483 seconds to fit
+portable signed 32-bit millisecond subprocess waits. Normal integer/fractional budgets and defaults are
+unchanged. Regression tests load synthetic TOML without running verifiers.

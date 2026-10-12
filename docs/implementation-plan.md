@@ -935,7 +935,7 @@ Scope:
   are runner/harness concerns; task logs, raw paths, row shapes, patch capture
   after task execution, verifier execution after patch capture, source fixture
   immutability, and repo-task warmup rejection remain unchanged. The manifest
-  now accepts `harness = { id = "fenced-patch", timeout_s = <positive number> }`
+  now accepts `harness = { id = "fenced-patch", timeout_s = <finite positive number <= 2147483> }`
   for `repo-task` cases only. The timeout bounds the fenced executor's
   subprocess preflight and apply calls. Preflight timeout is a task outcome with
   unchanged workspace; apply timeout after preflight is a runner failure because
@@ -980,7 +980,7 @@ Scope:
   policy was intentionally superseded by the following public runnable slice.
 - Implement the first narrow public `external-agent` repo-task harness slice.
   **Landed 2026-05-05** with parser support for
-  `harness = { id = "external-agent", timeout_s = <positive number> }` on
+  `harness = { id = "external-agent", timeout_s = <finite positive number <= 2147483> }` on
   `repo-task` cases, CLI loading of runner-owned
   `BENCHPACK_EXTERNAL_AGENT_ARGV` as a JSON array of non-empty strings, routing
   through the existing `ExternalProcessHarness` subprocess executor, and early
