@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-12 (comparison metric isolation)
+
+### Changed
+- Comparison metric medians in compare/report ignore decoded integers that
+  cannot be represented as finite floats,
+  preserving valid samples, row counts, and original diagnostic artifacts.
+- Regression coverage includes huge signed integers, booleans, nonfinite values,
+  mixed valid metrics and all-invalid groups. JSON integer digit-limit failures
+  are reported as line-numbered parse errors.
+
 ## 2026-10-12 (verifier timeout cleanup)
 
 ### Changed

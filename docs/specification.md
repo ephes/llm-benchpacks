@@ -910,8 +910,11 @@ The initial summary is intentionally small and deterministic:
   total rows for the case/run group.
 - `prefill parity` displays a deterministic case-level prompt/cache
   comparability status repeated on each run row for that case.
-- Null, non-numeric, and non-finite metric values are ignored; a metric with no
-  numeric samples is displayed as `—`.
+- Null, boolean, non-numeric, non-finite, and integers too large to convert to
+  finite floats are ignored; a metric with no valid numeric samples is displayed
+  as `—`. Other rows still contribute, and input artifacts remain unchanged.
+  Inputs exceeding Python's JSON integer digit limit are rejected with a
+  file/line parse error before metric aggregation.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared

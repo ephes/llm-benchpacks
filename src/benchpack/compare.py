@@ -69,9 +69,9 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
                 continue
             try:
                 record = json.loads(stripped)
-            except json.JSONDecodeError as exc:
+            except ValueError as exc:
                 raise CompareError(
-                    f"could not parse {jsonl_path}:{line_number}: {exc.msg}"
+                    f"could not parse {jsonl_path}:{line_number}: {exc}"
                 ) from exc
             if not isinstance(record, dict):
                 raise CompareError(
@@ -426,13 +426,14 @@ def _numeric_metric_values(
         if not isinstance(section, dict):
             continue
         value = section.get(field_name)
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             continue
-        values.append(float(value))
+        try:
+            numeric_value = float(value)
+        except OverflowError:
+            continue
+        if math.isfinite(numeric_value):
+            values.append(numeric_value)
     return values
 
 
