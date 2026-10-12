@@ -9,6 +9,7 @@ is appended so that the ``scoring`` field is present in the same record.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -162,9 +163,21 @@ class RunReporter:
         if adapter_result.error is not None:
             record["error"] = adapter_result.error
 
+        payload = (json.dumps(record) + "\n").encode("utf-8")
+        # This reporter exclusively owns the file; no concurrent appenders.
+        # Unbuffered writes make rollback independent of pending text buffers.
+        previous_length: int | None = None
+        try:
+            with self._jsonl_path.open("a+b", buffering=0) as fh:
+                fh.seek(0, 2)
+                previous_length = fh.tell()
+                if fh.write(payload) != len(payload):
+                    raise OSError("Incomplete run.jsonl append")
+        except BaseException:
+            if previous_length is not None:
+                os.truncate(self._jsonl_path, previous_length)
+            raise
         self.records.append(record)
-        with self._jsonl_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record) + "\n")
         return record
 
     def write_hardware(self, hardware: dict[str, Any]) -> None:

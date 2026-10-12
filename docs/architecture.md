@@ -959,3 +959,15 @@ usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
+
+### Reporter persistence failures
+
+Each RunReporter exclusively owns its run.jsonl file: callers must serialize
+record calls and must not share the output with other writers. Records are
+serialized before I/O and added to the in-memory summary only after a complete
+unbuffered append and successful close. Serialization/open/write failures
+propagate to the caller. Caught write or close failures truncate the file to its
+previous byte length before raising, so a retry appends one complete line.
+This is not crash-proof storage or an fsync durability guarantee. If truncation
+also fails, that error propagates with the append error chained; stop using the
+reporter and repair the JSONL file before retrying.
