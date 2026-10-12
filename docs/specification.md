@@ -1536,3 +1536,8 @@ The reporter requires exclusive ownership of run.jsonl. Serialization precedes
 mutation and summaries advance after a complete append and close. Caught write
 or close failures restore the previous file length; rollback failures require
 manual JSONL recovery. This does not guarantee durability across crashes.
+
+## Hardware evidence failures
+
+Hardware evidence is best-effort: malformed numeric values and decoding failures
+leave affected fields unavailable without discarding other valid sources.

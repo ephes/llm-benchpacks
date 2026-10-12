@@ -5073,3 +5073,9 @@ complete append. Caught write or close failures restore the prior byte length un
 single-writer ownership, including interruptions. Fault-injection tests cover
 serialization, open, partial/short writes, close failures, chained rollback
 failures, retry and summary agreement.
+
+## 2026-10-12 — Hardware evidence isolation
+
+Malformed hardware memory/core evidence and decoding errors now leave fields
+unavailable while preserving valid partial metadata; synthetic regressions
+require no model calls.
