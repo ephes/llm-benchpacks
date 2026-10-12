@@ -2858,3 +2858,52 @@ def test_bundled_mini_project_completion_verifier_reports_missing_visible_tests(
     assert unittest_check["tests_run"] == 0
     assert unittest_check["minimum_tests_run"] == 3
     assert unittest_check["passed"] is False
+
+
+@pytest.mark.parametrize("field", ["scoring", "harness"])
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "1e300", "2147484", "9" * 400, "0", "true"])
+def test_load_pack_timeout_requires_finite_positive(
+    tmp_path: Path, field: str, value: str,
+) -> None:
+    selection = (
+        f'harness = {{ id = "fenced-patch", timeout_s = {value} }}'
+        if field == "harness" else
+        f'scoring = {{ mode = "verify-script", script = "verify/check.py", timeout_s = {value} }}'
+    )
+    pack_dir = write_manifest(tmp_path, f'''
+[pack]
+id = "timeout-contract"
+version = "0.1.0"
+[[cases]]
+id = "case"
+kind = "repo-task"
+prompt = "Fix it."
+{selection}
+''')
+    error_type = InvalidHarnessError if field == "harness" else PackError
+    with pytest.raises(error_type, match=rf"{field}\.timeout_s"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("field", ["scoring", "harness"])
+@pytest.mark.parametrize("value", ["1", "0.25", "2147483"])
+def test_load_pack_timeout_accepts_finite_positive(
+    tmp_path: Path, field: str, value: str,
+) -> None:
+    selection = (
+        f'harness = {{ id = "fenced-patch", timeout_s = {value} }}'
+        if field == "harness" else
+        f'scoring = {{ mode = "verify-script", script = "verify/check.py", timeout_s = {value} }}'
+    )
+    pack_dir = write_manifest(tmp_path, f'''
+[pack]
+id = "timeout-contract"
+version = "0.1.0"
+[[cases]]
+id = "case"
+kind = "repo-task"
+prompt = "Fix it."
+{selection}
+''')
+    selected = getattr(load_pack(pack_dir).cases[0], field)
+    assert selected.timeout_s == float(value)

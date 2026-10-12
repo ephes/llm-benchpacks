@@ -287,9 +287,11 @@ harness; the compatibility default remains the current fenced executor.
 The loader rejects `harness` on non-`repo-task` cases, unknown ids, missing or
 non-string `id` values, non-table `harness` values, and unexpected extra keys.
 The supported keys are currently `id` and optional `timeout_s`. When present,
-`harness.timeout_s` must be a positive TOML integer or float and bounds the
-selected task harness/executor phase; booleans, strings, zero, negative values,
-arrays, and tables are rejected. It is enforced for the subprocess-backed
+`harness.timeout_s` must be a finite positive TOML integer or float no greater
+than 2,147,483 seconds and bounds the selected task harness/executor phase.
+NaN, infinities, oversized values, booleans, strings, zero, negative values,
+arrays, and tables are rejected. The same numeric bounds apply to
+`scoring.timeout_s`, which controls the separate verifier phase. `harness.timeout_s` is enforced for the subprocess-backed
 fenced-patch and external-agent executors. For `fenced-patch`, unified diff
 preflight first tries `git apply --check --recount` so otherwise valid model
 diffs with inaccurate hunk line counts can be applied as complete hunks rather

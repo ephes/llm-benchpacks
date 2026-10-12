@@ -5020,3 +5020,10 @@ working history and open questions.
 Require explicit OpenAI SSE completion and normalize malformed text events to
 case failures while retaining partial raw evidence. Covered by mock transport
 regressions; no live benchmark campaign.
+
+## 2026-10-12 — Finite positive timeout budgets
+
+Pack loading now rejects nonfinite and overflowing scoring/harness timeouts
+with pack-specific errors. Budgets are capped at 2,147,483 seconds to fit
+portable signed 32-bit millisecond subprocess waits. Normal integer/fractional budgets and defaults are
+unchanged. Regression tests load synthetic TOML without running verifiers.
