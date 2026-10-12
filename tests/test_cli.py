@@ -4057,3 +4057,43 @@ def test_cli_malformed_stream_continues_next_case(tmp_path: Path, monkeypatch) -
     main(_argv(["--out", str(out)]))
     rows = [json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()]
     assert [row["ok"] for row in rows] == [False, True]
+
+
+@pytest.mark.parametrize("location", ["ancestor", "pack", "fixture", "symlink", "metadata"])
+def test_cli_refuses_output_input_overlap(tmp_path: Path, monkeypatch, location: str) -> None:
+    monkeypatch.chdir(tmp_path)
+    pack_dir = _write_repo_task_pack(tmp_path)
+    fixture = pack_dir / "fixtures" / "repo"
+    metadata = tmp_path / "metadata" / "source.json"
+    metadata.parent.mkdir()
+    metadata.write_text('{}')
+    out = {"ancestor": tmp_path, "pack": pack_dir, "fixture": fixture,
+           "symlink": tmp_path / "alias", "metadata": metadata.parent}[location]
+    if location == "symlink":
+        out.symlink_to(pack_dir, target_is_directory=True)
+    (out / "run.jsonl").write_text("prior run\n")
+    before = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    calls = []
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    monkeypatch.setattr("benchpack.cli.get_adapter", lambda *a: calls.append(a))
+    extra = ["--out", str(out), "--force"]
+    if location == "metadata":
+        extra += ["--run-metadata", str(metadata)]
+    with pytest.raises(SystemExit, match="overlap"):
+        main(_argv(extra))
+    assert calls == []
+    assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+
+
+def test_cli_refuses_case_alias_output(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    pack = _write_repo_task_pack(tmp_path)
+    out = pack.parent / pack.name.upper()
+    if not out.exists():
+        pytest.skip("filesystem is case-sensitive")
+    (pack / "run.jsonl").write_text("prior")
+    before = (pack / "benchpack.toml").read_bytes()
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    with pytest.raises(SystemExit, match="overlap"):
+        main(_argv(["--out", str(out), "--force"]))
+    assert (pack / "benchpack.toml").read_bytes() == before

@@ -773,7 +773,13 @@ canonical identity/display fields alongside raw provenance. The site
 export does not require source result directories, read raw/workspace/task/
 verify artifacts, inspect patch or model-call files, mutate the database, or
 contact endpoints. Existing output paths are refused unless `--force` is
-explicit.
+explicit. Output cannot overlap the database or any indexed result root,
+including filesystem aliases, and symlink output is rejected. Export stages
+all files beside the destination and publishes by rename with a recoverable
+backup; rollback failures report its path. Cleanup cannot mask recovery errors.
+Relative agent-wrap provenance paths are interpreted from the current working
+directory. Source paths may be absent, but existing paths must be accessible
+for identity checks; uncheckable source paths fail closed before publication.
 
 `benchpack registry duplicates --db <sqlite>` is a read-only registry inspection
 view over the registry-stored `runs.run_jsonl_sha256` values. It reports groups of

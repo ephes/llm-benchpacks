@@ -1185,6 +1185,8 @@ def test_registry_static_site_export_requires_force_for_existing_output(
     assert summary.runs == 1
     assert not (site_dir / "old.txt").exists()
     assert (site_dir / "index.html").is_file()
+    assert not list(tmp_path.glob(".site-stage-*"))
+    assert not list(tmp_path.glob(".site-backup-*"))
 
 
 def test_registry_static_site_force_keeps_existing_output_on_read_failure(
@@ -1988,3 +1990,221 @@ def test_registry_bundle_validate_rejects_unlisted_files(tmp_path: Path) -> None
 
     with pytest.raises(RegistryError, match="unlisted file"):
         validate_result_bundle(bundle_dir)
+
+
+@pytest.mark.parametrize("failure", ["write", "publish"])
+def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, monkeypatch, failure: str) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db)
+    site = tmp_path / "site"
+    export_registry_static_site(db, site)
+    before = {p.name: p.read_bytes() for p in site.iterdir()}
+    writes = []
+    original_write = Path.write_text
+    original_rename = Path.rename
+    injected = []
+    def fail_write(path, *args, **kwargs):
+        writes.append(path.name)
+        if len(writes) == 2:
+            injected.append(True)
+            raise OSError("injected write failure")
+        return original_write(path, *args, **kwargs)
+    def fail_publish(path, target):
+        if Path(target) == site and path != site and not injected:
+            injected.append(True)
+            raise OSError("injected publish failure")
+        return original_rename(path, target)
+    monkeypatch.setattr(Path, "write_text" if failure == "write" else "rename",
+                        fail_write if failure == "write" else fail_publish)
+    with pytest.raises(RegistryError, match="injected"):
+        export_registry_static_site(db, site, force=True)
+    assert injected
+    assert {p.name: p.read_bytes() for p in site.iterdir()} == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["registry.sqlite", "run-a", "site"]
+
+
+@pytest.mark.parametrize("protected", ["database", "results", "nested", "symlink"])
+def test_registry_site_refuses_input_overlap(tmp_path: Path, protected: str) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db)
+    site = tmp_path if protected == "database" else result_dir
+    if protected == "nested":
+        site = result_dir / "site"
+    if protected == "symlink":
+        site = tmp_path / "alias"
+        site.symlink_to(result_dir, target_is_directory=True)
+    before = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises(RegistryError, match="overlap|symlink"):
+        export_registry_static_site(db, site, force=True)
+    assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+
+
+def test_registry_site_protects_unselected_result_directory(tmp_path: Path) -> None:
+    first = tmp_path / "run-a"
+    second = tmp_path / "run-b"
+    _write_result_dir(first)
+    _write_result_dir(second)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([first, second], db)
+    before = {p.name: p.read_bytes() for p in second.iterdir() if p.is_file()}
+    with pytest.raises(RegistryError, match="overlap"):
+        export_registry_static_site(db, second, labels=["run-a"], force=True)
+    assert {p.name: p.read_bytes() for p in second.iterdir() if p.is_file()} == before
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_registry_site_reports_backup_when_rollback_fails(tmp_path: Path, monkeypatch, cleanup_fails: bool) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db)
+    site = tmp_path / "site"
+    export_registry_static_site(db, site)
+    before = {p.name: p.read_bytes() for p in site.iterdir()}
+    original = Path.rename
+    failures = []
+    def fail_restore_or_publish(path, target):
+        if Path(target) == site:
+            failures.append(path)
+            raise OSError("injected rename failure")
+        return original(path, target)
+    monkeypatch.setattr(Path, "rename", fail_restore_or_publish)
+    cleanup_attempts = []
+    original_cleanup = shutil.rmtree
+    def fail_staging_cleanup(path, *args, **kwargs):
+        if "-stage-" in Path(path).name:
+            cleanup_attempts.append(path)
+            if kwargs.get("ignore_errors"):
+                return
+            raise OSError("injected staging cleanup failure")
+        return original_cleanup(path, *args, **kwargs)
+    if cleanup_fails:
+        monkeypatch.setattr("benchpack.registry.shutil.rmtree", fail_staging_cleanup)
+    with pytest.raises(RegistryError, match="previous site retained at") as error:
+        export_registry_static_site(db, site, force=True)
+    assert len(failures) == 2
+    backups = list(tmp_path.glob(".site-backup-*"))
+    assert len(backups) == 1
+    assert str(backups[0]) in str(error.value)
+    assert {p.name: p.read_bytes() for p in backups[0].iterdir()} == before
+    if cleanup_fails:
+        assert cleanup_attempts
+        assert len(list(tmp_path.glob(".site-stage-*"))) == 1
+    else:
+        assert not list(tmp_path.glob(".site-stage-*"))
+
+
+@pytest.mark.parametrize("cleanup", ["stage", "backup"])
+def test_registry_site_cleanup_errors_have_correct_outcome(tmp_path: Path, monkeypatch, cleanup: str) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db)
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "old.txt").write_text("old")
+    import shutil
+    original = shutil.rmtree
+    def fail_cleanup(path, *args, **kwargs):
+        if f"-{cleanup}-" in Path(path).name:
+            if kwargs.get("ignore_errors"):
+                return
+            raise OSError("injected cleanup failure")
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr("benchpack.registry.shutil.rmtree", fail_cleanup)
+    if cleanup == "backup":
+        with pytest.raises(RegistryError, match="published.*backup") as error:
+            export_registry_static_site(db, site, force=True)
+        backup = next(tmp_path.glob(".site-backup-*"))
+        assert str(backup) in str(error.value)
+        assert (backup / "old.txt").read_text() == "old"
+    else:
+        export_registry_static_site(db, site, force=True)
+    assert sorted(p.name for p in site.iterdir()) == ["index.html", "report.md", "snapshot.json"]
+
+
+def test_registry_site_refuses_case_alias_output(tmp_path: Path) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result_dir], db)
+    out = tmp_path / "RUN-A"
+    if not out.exists():
+        pytest.skip("filesystem is case-sensitive")
+    before = (result_dir / "run.jsonl").read_bytes()
+    with pytest.raises(RegistryError, match="overlap"):
+        export_registry_static_site(db, out, force=True)
+    assert (result_dir / "run.jsonl").read_bytes() == before
+
+
+def test_registry_site_replaces_file_output(tmp_path: Path) -> None:
+    result = tmp_path / "run-a"
+    _write_result_dir(result)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result], db)
+    site = tmp_path / "site"
+    site.write_text("prior file")
+    export_registry_static_site(db, site, force=True)
+    assert sorted(p.name for p in site.iterdir()) == ["index.html", "report.md", "snapshot.json"]
+    assert not list(tmp_path.glob(".site-backup-*"))
+    assert not list(tmp_path.glob(".site-stage-*"))
+
+
+def test_registry_site_protects_agent_wrap_provenance(tmp_path: Path, monkeypatch) -> None:
+    data = Path(__file__).resolve().parents[1] / "data" / "agent-wrap-oneshot-results.json"
+    db = tmp_path / "registry.sqlite"
+    import_agent_wrap_results(data, db)
+    artifact = tmp_path / "artifact"
+    artifact.mkdir()
+    sentinel = artifact / "sentinel"
+    sentinel.write_text("keep")
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE agent_wrap_runs SET result_dir = ?", ("artifact",))
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(RegistryError, match="overlap"):
+        export_registry_static_site(db, artifact, force=True)
+    assert sentinel.read_text() == "keep"
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE agent_wrap_runs SET result_dir = ?", ("bad\x00path",))
+    with pytest.raises(RegistryError, match="could not check output/result paths"):
+        export_registry_static_site(db, tmp_path / "site")
+
+
+def test_registry_site_refuses_database_hardlink(tmp_path: Path) -> None:
+    result = tmp_path / "run-a"
+    _write_result_dir(result)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result], db)
+    site = tmp_path / "site"
+    site.hardlink_to(db)
+    before = db.read_bytes()
+    with pytest.raises(RegistryError, match="overlap"):
+        export_registry_static_site(db, site, force=True)
+    assert db.read_bytes() == before
+    assert site.read_bytes() == before
+    assert not list(tmp_path.glob(".site-backup-*"))
+
+
+def test_registry_site_refuses_uncheckable_source(tmp_path: Path, monkeypatch) -> None:
+    result = tmp_path / "run-a"
+    _write_result_dir(result)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([result], db)
+    site = tmp_path / "site"
+    original = Path.samefile
+    failures = []
+    def deny_source_stat(path, other):
+        if path == result:
+            failures.append(path)
+            raise PermissionError("injected source stat denial")
+        return original(path, other)
+    monkeypatch.setattr(Path, "samefile", deny_source_stat)
+    with pytest.raises(RegistryError, match="could not check output/result paths"):
+        export_registry_static_site(db, site)
+    assert failures
+    assert not site.exists()
+    assert (result / "run.jsonl").is_file()

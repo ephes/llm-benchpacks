@@ -78,6 +78,13 @@ uv run benchpack registry bundle validate bundles/example
 uv run benchpack registry bundle import --db registry/llm-benchpacks.sqlite bundles/example
 ```
 
+Use dedicated output directories outside packs, fixtures, and run metadata.
+`--force` still replaces prior runs, but refuses overlapping inputs. Registry
+site exports also refuse overlap with their database and all indexed result
+directories. They stage all three files before replacement and restore the
+previous site if publication fails; a failed rollback reports a backup path
+for recovery. Serialize exports to the same site directory.
+
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
 That public harness uses runner-owned subprocess configuration rather than a
 manifest command: set `BENCHPACK_EXTERNAL_AGENT_ARGV` to a JSON array of argv

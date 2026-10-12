@@ -28,6 +28,7 @@ from .external_agent_context import (
     write_external_agent_context,
 )
 from .hardware import collect_hardware, sample_resources
+from .output_paths import paths_overlap
 from .packs import (
     Case,
     Pack,
@@ -222,7 +223,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
     external_agent_harness = _load_external_agent_harness(pack)
 
-    adapter = get_adapter(args.adapter)
     run_metadata = None
     if args.run_metadata is not None:
         try:
@@ -234,6 +234,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
     host_label = args.host_label or _derive_host_label(hardware)
     date = datetime.now().strftime("%Y-%m-%d")
     out_dir = Path(args.out) if args.out else Path("results") / f"{date}-{host_label}"
+    protected_inputs = [pack.path, *(fixture.path for fixture in pack.fixtures)]
+    if args.run_metadata is not None:
+        protected_inputs.append(Path(args.run_metadata))
+    for source in protected_inputs:
+        try:
+            overlap = paths_overlap(out_dir, source)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise SystemExit(f"could not check output/input paths: {exc}") from exc
+        if overlap:
+            raise SystemExit(
+                f"output {out_dir} overlaps protected input {source}; "
+                "choose a dedicated run directory with --out"
+            )
+    adapter = get_adapter(args.adapter)
     existing = out_dir / "run.jsonl"
     if existing.exists():
         if args.force:
