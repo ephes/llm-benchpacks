@@ -24,6 +24,14 @@ working history and open questions.
 - Synthetic regressions cover retained pipes, exited leaders and children that
   ignore termination after closing their output pipes.
 
+## 2026-10-12 (patch fidelity)
+
+### Changed
+- Patch capture preserves line endings, final newlines and Git executable modes.
+- Symlink capture preserves Git mode and literal targets without final newlines.
+- Regression tests replay mixed symlink and regular-file changes with `git apply`
+  and the fenced-patch executor, including file/symlink type transitions.
+
 ## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
 
 ### Changed

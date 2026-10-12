@@ -95,6 +95,8 @@ def test_directory_diff_added_text_file_uses_dev_null(
     (workspace / "added.txt").write_text("added\n", encoding="utf-8")
 
     assert directory_diff(source, workspace) == (
+        "diff --git a/added.txt b/added.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/added.txt\n"
         "@@ -0,0 +1 @@\n"
@@ -112,6 +114,8 @@ def test_directory_diff_deleted_text_file_uses_dev_null(
     (source / "deleted.txt").write_text("deleted\n", encoding="utf-8")
 
     assert directory_diff(source, workspace) == (
+        "diff --git a/deleted.txt b/deleted.txt\n"
+        "deleted file mode 100644\n"
         "--- a/deleted.txt\n"
         "+++ /dev/null\n"
         "@@ -1 +0,0 @@\n"
@@ -142,6 +146,8 @@ def test_directory_diff_preserves_nested_posix_paths(tmp_path: Path) -> None:
     (workspace / "subdir" / "foo.txt").write_text("nested\n", encoding="utf-8")
 
     assert directory_diff(source, workspace) == (
+        "diff --git a/subdir/foo.txt b/subdir/foo.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/subdir/foo.txt\n"
         "@@ -0,0 +1 @@\n"
@@ -188,11 +194,16 @@ def test_directory_diff_symlink_target_change_is_text_diff(tmp_path: Path) -> No
         pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
 
     assert directory_diff(source, workspace) == (
+        "diff --git a/link.txt b/link.txt\n"
+        "old mode 120000\n"
+        "new mode 120000\n"
         "--- a/link.txt\n"
         "+++ b/link.txt\n"
         "@@ -1 +1 @@\n"
         "-old.txt\n"
+        "\\ No newline at end of file\n"
         "+new.txt\n"
+        "\\ No newline at end of file\n"
     )
 
 
@@ -210,12 +221,144 @@ def test_directory_diff_symlink_added_and_deleted_use_target_text(
         pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
 
     assert directory_diff(source, workspace) == (
+        "diff --git a/added-link.txt b/added-link.txt\n"
+        "new file mode 120000\n"
         "--- /dev/null\n"
         "+++ b/added-link.txt\n"
         "@@ -0,0 +1 @@\n"
         "+added.txt\n"
+        "\\ No newline at end of file\n"
+        "diff --git a/deleted-link.txt b/deleted-link.txt\n"
+        "deleted file mode 120000\n"
         "--- a/deleted-link.txt\n"
         "+++ /dev/null\n"
         "@@ -1 +0,0 @@\n"
         "-deleted.txt\n"
+        "\\ No newline at end of file\n"
     )
+
+
+@pytest.mark.parametrize(('before', 'after'), [
+    (b'hello\n', b'hello'), (b'hello', b'hello\n'),
+    (b'hello\r\n', b'hello\n'), (b'old\r\n', b'new\r\n'),
+    (b'hello\r', b'hello'),
+])
+def test_patch_replays_exact_line_endings(tmp_path: Path, before: bytes, after: bytes) -> None:
+    import subprocess
+    source, workspace = tmp_path / 'source', tmp_path / 'workspace'
+    source.mkdir()
+    workspace.mkdir()
+    (source / 'file.txt').write_bytes(before)
+    (workspace / 'file.txt').write_bytes(after)
+    patch = directory_diff(source, workspace)
+    assert patch
+    subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
+    assert (source / 'file.txt').read_bytes() == after
+
+
+@pytest.mark.parametrize(('old_mode', 'new_mode'), [(0o644, 0o755), (0o755, 0o644)])
+@pytest.mark.parametrize('edit_content', [False, True])
+def test_patch_replays_executable_mode(tmp_path: Path, old_mode: int, new_mode: int, edit_content: bool) -> None:
+    import subprocess
+    source, workspace = tmp_path / 'source', tmp_path / 'workspace'
+    source.mkdir()
+    workspace.mkdir()
+    (source / 'script').write_bytes(b'old\n')
+    (source / 'script').chmod(old_mode)
+    expected = b'new' if edit_content else b'old\n'
+    (workspace / 'script').write_bytes(expected)
+    (workspace / 'script').chmod(new_mode)
+    patch = directory_diff(source, workspace)
+    assert f'old mode {old_mode | 0o100000:o}' in patch
+    subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
+    assert (source / 'script').stat().st_mode & 0o777 == new_mode
+    assert (source / 'script').read_bytes() == expected
+
+
+@pytest.mark.parametrize('content', [b'', b'echo hello', b'echo hello\r\n'])
+@pytest.mark.parametrize('mode', [0o644, 0o755])
+@pytest.mark.parametrize('delete', [False, True])
+def test_patch_replays_file_creation_deletion(tmp_path: Path, content: bytes, mode: int, delete: bool) -> None:
+    import subprocess
+    source, workspace = tmp_path / 'source', tmp_path / 'workspace'
+    source.mkdir()
+    workspace.mkdir()
+    original = (source if delete else workspace) / 'script'
+    original.write_bytes(content)
+    original.chmod(mode)
+    patch = directory_diff(source, workspace)
+    subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
+    result = source / 'script'
+    if delete:
+        assert not result.exists()
+    else:
+        assert result.read_bytes() == content
+        assert result.stat().st_mode & 0o777 == mode
+
+
+@pytest.mark.parametrize('empty_addition', [False, True])
+def test_patch_replays_multiple_files(tmp_path: Path, empty_addition: bool) -> None:
+    import subprocess
+    source, workspace = tmp_path / 'source', tmp_path / 'workspace'
+    source.mkdir()
+    workspace.mkdir()
+    if empty_addition:
+        (workspace / 'a').write_bytes(b'')
+    else:
+        (source / 'a').write_bytes(b'script\n')
+        (workspace / 'a').write_bytes(b'script\n')
+        (source / 'a').chmod(0o644)
+        (workspace / 'a').chmod(0o755)
+    (source / 'b').write_bytes(b'old\n')
+    (workspace / 'b').write_bytes(b'new\n')
+    subprocess.run(['git', 'apply', '-'], input=directory_diff(source, workspace).encode(), cwd=source, check=True)
+    for name in ['a', 'b']:
+        assert (source / name).read_bytes() == (workspace / name).read_bytes()
+        assert (source / name).stat().st_mode & 0o777 == (workspace / name).stat().st_mode & 0o777
+
+
+@pytest.mark.parametrize('operation', ['change', 'add', 'delete', 'file-to-link', 'link-to-file'])
+def test_captured_mixed_symlink_patch_replays(tmp_path: Path, operation: str) -> None:
+    import os
+    import shutil
+    import subprocess
+    from benchpack.tasks import apply_unified_diff_to_workspace
+
+    source, workspace, replay = (tmp_path / name for name in ('source', 'workspace', 'replay'))
+    source.mkdir()
+    (source / 'regular').write_bytes(b'old\r\n')
+    if operation == 'file-to-link':
+        (source / 'link').write_bytes(b'old file')
+    elif operation != 'add':
+        os.symlink('./missing//old', source / 'link')
+    shutil.copytree(source, workspace, symlinks=True)
+    shutil.copytree(source, replay, symlinks=True)
+    (workspace / 'regular').write_bytes(b'new')
+    (workspace / 'regular').chmod(0o755)
+    if operation != 'add':
+        (workspace / 'link').unlink()
+    if operation == 'link-to-file':
+        (workspace / 'link').write_bytes(b'new file')
+        (workspace / 'link').chmod(0o755)
+    elif operation != 'delete':
+        os.symlink('./missing//new', workspace / 'link')
+
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace)
+    record = capture_workspace_patch(prepared, tmp_path / 'run', make_case(), 1)
+    patch = (tmp_path / 'run' / record['path']).read_bytes().decode('utf-8')
+    subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
+    applied, _, stderr = apply_unified_diff_to_workspace(patch, replay)
+    assert applied, stderr
+    for root in (source, replay):
+        assert (root / 'regular').read_bytes() == b'new'
+        assert (root / 'regular').stat().st_mode & 0o777 == 0o755
+        if operation == 'delete':
+            assert not (root / 'link').exists()
+            assert not (root / 'link').is_symlink()
+        elif operation == 'link-to-file':
+            assert not (root / 'link').is_symlink()
+            assert (root / 'link').read_bytes() == b'new file'
+            assert (root / 'link').stat().st_mode & 0o777 == 0o755
+        else:
+            assert (root / 'link').is_symlink()
+            assert os.readlink(root / 'link') == './missing//new'

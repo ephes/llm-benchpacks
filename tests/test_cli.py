@@ -815,6 +815,7 @@ def test_cli_repo_task_applies_fenced_diff_before_patch_capture(
     )
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
@@ -872,6 +873,7 @@ def test_cli_repo_task_explicit_fenced_patch_harness_matches_default_shape(
     )
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
@@ -1097,6 +1099,7 @@ print("external stderr trace", file=sys.stderr)
         "external stderr trace\n"
     )
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
@@ -1270,6 +1273,8 @@ with open(args.output, "w", encoding="utf-8") as fh:
     )
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/external-agent-example.txt b/external-agent-example.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/external-agent-example.txt\n"
         "@@ -0,0 +1,3 @@\n"
@@ -1579,6 +1584,8 @@ with open(args.output, "w", encoding="utf-8") as fh:
     )
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == ""
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/external-agent-model-call.txt b/external-agent-model-call.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/external-agent-model-call.txt\n"
         "@@ -0,0 +1 @@\n"
@@ -1695,6 +1702,7 @@ print(f"external stdout case={args.case} rep={args.repetition}")
         encoding="utf-8"
     ) == ""
     assert (out / external_record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
@@ -1702,6 +1710,7 @@ print(f"external stdout case={args.case} rep={args.repetition}")
         "+external repo\n"
     )
     assert (out / fenced_record["patch"]["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"

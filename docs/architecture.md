@@ -909,3 +909,17 @@ and timeout artifacts.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.
+
+
+### Patch artifact fidelity
+
+Regular UTF-8 file diffs preserve LF/CRLF bytes and final-newline state using
+standard no-newline markers. Git mode headers capture changes between regular
+non-executable (100644) and executable (100755) files, including additions and
+deletions. Executability follows the owner execute bit, as in Git. Other
+permission bits, ownership, timestamps and empty directories are not captured.
+Symlink diffs preserve the literal target (without following or normalizing it)
+and Git symlink mode (120000), including additions, deletions, target changes,
+and transitions to or from regular files. Mixed symlink and regular-file patches
+replay through `git apply` and the fenced-patch executor. Binary files remain
+descriptive markers rather than replayable patches.
