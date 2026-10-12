@@ -120,3 +120,70 @@ def test_sample_resources_returns_required_keys() -> None:
     sample = sample_resources()
     assert "memory_mb" in sample
     assert "gpu_memory_mb" in sample
+
+
+def test_malformed_memory_is_unavailable() -> None:
+    for value in ('nan GB', 'inf MB', '-1 GB', '1e308 TB', 'bad GB', ''):
+        assert hardware._parse_memory_mb(value) is None
+    assert hardware._parse_memory_mb('1.5 GB') == 1536
+
+
+def test_empty_cores_preserves_partial_metadata() -> None:
+    parsed = hardware._parse_system_profiler_hardware(
+        'Chip: Apple M4\nTotal Number of Cores: \nMemory: nan GB'
+    )
+    assert parsed['chip'] == 'Apple M4'
+    assert parsed['cpu_count'] is None
+    assert parsed['ram_mb'] is None
+
+
+def test_decoding_failures_are_unavailable(monkeypatch, tmp_path) -> None:
+    def invalid_encoding(*args, **kwargs):
+        raise UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid')
+
+    monkeypatch.setattr(hardware.subprocess, 'run', invalid_encoding)
+    assert hardware._run(['fake']) is None
+    evidence = tmp_path / 'os-release'
+    evidence.write_bytes(b'\xff')
+    monkeypatch.setattr(type(evidence), 'read_text', invalid_encoding)
+    assert hardware._read_file(evidence) is None
+
+
+def test_collection_preserves_identity_with_malformed_evidence(monkeypatch) -> None:
+    monkeypatch.setattr(hardware.platform, 'system', lambda: 'Darwin')
+    monkeypatch.setattr(hardware, '_sysctl', lambda key: None)
+
+    def fake_run(cmd, timeout=5.0):
+        if cmd[-1] == 'SPHardwareDataType':
+            return 'Chip: Apple M4\nTotal Number of Cores: \nMemory: inf MB'
+        return '    Apple GPU:\n      VRAM (Total): inf MB'
+
+    monkeypatch.setattr(hardware, '_run', fake_run)
+    hw = collect_hardware()
+    assert hw['cpu_model'] == 'Apple M4'
+    assert hw['cpu_count'] is None
+    assert hw['ram_mb'] is None
+    assert hw['gpus'] == [{'model': 'Apple GPU', 'vram_mb': None}]
+    assert 'collector_error' not in hw
+
+
+def test_malformed_integer_evidence_preserves_linux_metadata(monkeypatch):
+    monkeypatch.setattr(hardware.platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(hardware, '_read_file', lambda path: 'PRETTY_NAME="Test Linux"')
+    for malformed in ('²', '9' * 5000, '-1', 'nan'):
+        def fake_run(cmd, timeout=5.0):
+            if cmd == ['lscpu']:
+                return f'Model name: Test CPU\nCPU(s): {malformed}'
+            if cmd == ['free', '-m']:
+                return f'Mem: {malformed}'
+            return 'Test GPU, -1, driver'
+        monkeypatch.setattr(hardware, '_run', fake_run)
+        hw = collect_hardware()
+        assert hw['cpu_model'] == 'Test CPU'
+        assert hw['cpu_count'] is None
+        assert hw['ram_mb'] is None
+        assert hw['distro'] == 'Test Linux'
+        assert hw['gpus'][0]['vram_mb'] is None
+        assert 'collector_error' not in hw
+    assert hardware._parse_nonnegative_int('16') == 16
+    assert hardware._parse_memory_mb('1 TB') == 1048576

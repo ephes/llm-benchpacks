@@ -5065,3 +5065,9 @@ partial-publication failures. No model runs or deployment.
 Completed integral JSON integer matching, strict finite JSON output decoding,
 and required contains/regex field validation at manifest loading. Regression
 coverage includes nested numbers and pack/case scoring declarations.
+
+## 2026-10-12 — Hardware evidence isolation
+
+Malformed hardware memory/core evidence and decoding errors now leave fields
+unavailable while preserving valid partial metadata; synthetic regressions
+require no model calls.
