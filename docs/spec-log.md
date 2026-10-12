@@ -16,6 +16,14 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-12 (Ollama response validation)
+
+### Changed
+- Require logical nonstreaming completion and validate response/metric shapes.
+- Bound native metrics to signed 64-bit integers and normalize decoder failures.
+- Count failed adapter text answers as scoring failures while retaining partial diagnostics.
+- Preserve raw failures and isolate malformed backend responses with MockTransport regressions.
+
 ## 2026-10-12 (verifier timeout cleanup)
 
 ### Changed

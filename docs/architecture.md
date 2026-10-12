@@ -940,3 +940,5 @@ usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
+
+See [Ollama response validation](specification.md#ollama-response-validation) for completion, metric and failure rules.

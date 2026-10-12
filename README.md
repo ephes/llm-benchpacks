@@ -634,3 +634,5 @@ The first implementation stays small:
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.
+
+See [Ollama response validation](docs/specification.md#ollama-response-validation) for completion, metric and failure rules.

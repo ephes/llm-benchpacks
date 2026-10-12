@@ -110,6 +110,8 @@ class RunReporter:
         scoring_result = (
             dict(scoring_override)
             if scoring_override is not None
+            else {"mode": scoring_cfg.mode, "passed": False}
+            if not adapter_result.ok and scoring_cfg is not None and scoring_cfg.mode != "none"
             else evaluate(scoring_cfg, adapter_result.output_text)
         )
 

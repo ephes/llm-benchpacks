@@ -101,8 +101,10 @@ class OllamaGenerateAdapter:
         else:
             try:
                 payload = response.json()
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
                 payload = {"text": response.text}
+                ok = False
+                error = "invalid Ollama response: expected JSON"
             request.response_path.write_text(json.dumps(payload, indent=2))
             if response.status_code >= 400:
                 ok = False
@@ -111,6 +113,36 @@ class OllamaGenerateAdapter:
             wall_s = time.monotonic() - start
             client.close()
 
+        if not isinstance(payload, dict):
+            if ok:
+                ok = False
+                error = "invalid Ollama response: expected JSON object"
+            payload = {}
+
+        if ok:
+            if "error" in payload:
+                ok = False
+                error = "Ollama backend reported an error"
+                if isinstance(payload["error"], str):
+                    error += f": {payload['error'][:200]}"
+            elif payload.get("done") is not True:
+                ok = False
+                error = "invalid Ollama response: generation is not complete"
+            elif not isinstance(payload.get("response"), str):
+                ok = False
+                error = "invalid Ollama response: expected response string"
+
+        for field in _BACKEND_FIELDS:
+            if field in payload and (
+                type(payload[field]) is not int or not 0 <= payload[field] <= 2**63 - 1
+            ):
+                if ok:
+                    ok = False
+                    error = f"invalid Ollama response: expected signed 64-bit nonnegative integer {field}"
+                # Raw fields remain in the artifact; invalid metrics never enter results.
+                payload = {"response": payload.get("response", "")}
+                break
+
         prompt_count = payload.get("prompt_eval_count")
         eval_count = payload.get("eval_count")
         prefill_tps = _tps(prompt_count, payload.get("prompt_eval_duration"))
@@ -118,7 +150,9 @@ class OllamaGenerateAdapter:
 
         backend = {k: payload[k] for k in _BACKEND_FIELDS if k in payload} or None
 
-        output_text = payload.get("response", "") if isinstance(payload, dict) else ""
+        output_text = payload.get("response", "")
+        if not isinstance(output_text, str):
+            output_text = ""
 
         return AdapterResult(
             adapter=self.name,

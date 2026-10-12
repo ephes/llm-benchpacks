@@ -1506,3 +1506,18 @@ usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
+
+## Ollama response validation
+
+The nonstreaming `ollama-generate` adapter requires a JSON object with
+`done: true`, a string `response`, and no `error` field. A completed empty
+string is valid. Optional native token counts and durations must be nonnegative signed 64-bit
+integers (booleans and null values are invalid); missing metrics remain unknown.
+Malformed shapes, non-JSON bodies, incomplete generations and backend errors
+return `ok: false` with a bounded diagnostic so subsequent cases can continue.
+Raw response artifacts retain invalid fields (non-JSON bodies use a `text`
+wrapper); valid partial text remains diagnostic output, not a completed answer.
+If any metric is invalid, all native metrics are excluded from normalized results.
+Failed adapter answers with configured text scoring record `passed: false`,
+regardless of partial text; this applies consistently across adapters. Explicit
+verifier scoring stays separate. Unconfigured scoring remains null.

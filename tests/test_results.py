@@ -674,3 +674,15 @@ def test_write_summary_distinguishes_repetitions(tmp_path: Path) -> None:
 
     assert "capital#1" in text
     assert "capital#2" in text
+
+
+@pytest.mark.parametrize("adapter", ["ollama-generate", "openai-chat"])
+def test_failed_adapter_partial_answer_counts_as_scoring_failure(tmp_path: Path, adapter) -> None:
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(tmp_path / "run", pack)
+    result = make_adapter_result(tmp_path / "run")
+    result.adapter = adapter
+    result.ok = False
+    assert reporter.record(pack.cases[0], result, {})["scoring"] == {
+        "mode": "contains", "passed": False,
+    }
