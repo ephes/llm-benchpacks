@@ -566,3 +566,128 @@ def test_stream_shape_failure_isolated(tmp_path: Path, payload: object) -> None:
     succeeded = adapter.run(req)
     assert succeeded.ok and succeeded.output_text == 'next'
     assert succeeded.tokens.output == 1
+
+
+@pytest.mark.parametrize("payload", [
+    [], None, 1, "scalar", {},
+    {"choices": None}, {"choices": []}, {"choices": {}},
+    {"choices": [None]}, {"choices": [{"message": None}]},
+    {"choices": [{"message": []}]}, {"choices": [{"message": {}}]},
+    {"choices": [{"message": {"content": 1}}]},
+    {"choices": [{"message": {"content": ["bad"]}}]},
+    {"choices": [{"message": {"content": "ok"}}, None]},
+    {"error": {"message": "backend failed"}},
+    {"error": None, "choices": [{"message": {"content": "ok"}}]},
+    *[
+        {"choices": [{"message": {"content": "ok"}}], "usage": usage}
+        for usage in ([], 1, {"prompt_tokens": "1"}, {"completion_tokens": True},
+                      {"total_tokens": -1}, {"completion_tokens": 1.5},
+                      {"completion_tokens": 10**400}, {"prompt_tokens": 2**53},
+                      {"total_tokens": 2**53})
+    ],
+])
+def test_nonstream_shape_failure_isolated(tmp_path: Path, payload: object) -> None:
+    responses = iter([
+        httpx.Response(200, content=json.dumps(payload)),
+        httpx.Response(200, json={"choices": [{"message": {"content": "next"}}]}),
+    ])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: next(responses)))
+    req = make_request(tmp_path)
+    failed = adapter.run(req)
+    assert not failed.ok
+    assert failed.output_text == ""
+    assert failed.error and len(failed.error) < 250
+    assert failed.tokens.prompt is None and failed.tokens.output is None
+    assert json.loads(req.response_path.read_text()) == payload
+    succeeded = adapter.run(req)
+    assert succeeded.ok and succeeded.output_text == "next"
+
+
+def test_nonstream_non_json_failure_isolated(tmp_path: Path) -> None:
+    responses = iter([
+        httpx.Response(200, text="not JSON"),
+        httpx.Response(200, json={"choices": [{"message": {"content": ""}}]}),
+    ])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: next(responses)))
+    req = make_request(tmp_path)
+    failed = adapter.run(req)
+    assert not failed.ok and failed.output_text == ""
+    assert "not valid JSON" in failed.error
+    assert failed.tokens.output is None
+    assert json.loads(req.response_path.read_text()) == {"text": "not JSON"}
+    succeeded = adapter.run(req)
+    assert succeeded.ok and succeeded.output_text == ""
+
+
+@pytest.mark.parametrize("content", ["", None])
+@pytest.mark.parametrize("usage", [None, {}, {"prompt_tokens": 0, "completion_tokens": 0}])
+def test_nonstream_empty_completion_valid(tmp_path: Path, content: str | None, usage: object) -> None:
+    payload = {"choices": [{"message": {"content": content}}], "usage": usage}
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)))
+    result = adapter.run(make_request(tmp_path))
+    assert result.ok and result.output_text == ""
+    assert result.tokens.output == (0 if usage else None)
+
+
+def test_nonstream_integer_decode_limit_isolated(tmp_path: Path) -> None:
+    text = '{"usage":{"prompt_tokens":' + '1' * 4301 + '}}'
+    responses = iter([
+        httpx.Response(200, text=text),
+        httpx.Response(200, json={"choices": [{"message": {"content": "next"}}]}),
+    ])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: next(responses)))
+    req = make_request(tmp_path)
+    failed = adapter.run(req)
+    assert not failed.ok and failed.output_text == ""
+    assert json.loads(req.response_path.read_text()) == {"text": text}
+    assert adapter.run(req).output_text == "next"
+
+
+def test_nonstream_http_error_does_not_extract_completion(tmp_path: Path) -> None:
+    payload = {"choices": [None], "usage": []}
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(
+        lambda _: httpx.Response(500, json=payload)
+    ))
+    req = make_request(tmp_path)
+    result = adapter.run(req)
+    assert not result.ok and result.output_text == ""
+    assert "HTTP 500" in result.error
+    assert result.tokens.output is None
+    assert json.loads(req.response_path.read_text()) == payload
+
+
+def test_nonstream_nested_json_failure_isolated(tmp_path: Path, monkeypatch) -> None:
+    text = '[' * 2000 + '0' + ']' * 2000
+    original_json = httpx.Response.json
+    attempted = []
+
+    def limited_json(response, **kwargs):
+        if response.text == text:
+            attempted.append(True)
+            raise RecursionError('JSON nesting limit')
+        return original_json(response, **kwargs)
+
+    monkeypatch.setattr(httpx.Response, 'json', limited_json)
+    responses = iter([
+        httpx.Response(200, text=text),
+        httpx.Response(200, json={"choices": [{"message": {"content": "next"}}]}),
+    ])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: next(responses)))
+    req = make_request(tmp_path)
+    failed = adapter.run(req)
+    assert not failed.ok and failed.output_text == ""
+    assert attempted == [True]
+    assert "not valid JSON" in failed.error
+    assert failed.tokens.output is None
+    assert json.loads(req.response_path.read_text()) == {"text": text}
+    assert adapter.run(req).output_text == "next"
+
+
+def test_nonstream_usage_upper_boundary_valid(tmp_path: Path) -> None:
+    count = 2**53 - 1
+    payload = {"choices": [{"message": {"content": "ok"}}],
+               "usage": {"prompt_tokens": count, "completion_tokens": count,
+                         "total_tokens": count}}
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)))
+    result = adapter.run(make_request(tmp_path))
+    assert result.ok and result.tokens.output == count

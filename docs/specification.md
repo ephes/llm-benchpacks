@@ -704,6 +704,17 @@ described below. With `--openai-stream-usage omit`, streamed output and
 `tokens.output`, `tokens.cached_prompt`, `timing.prefill_tps`, and
 `timing.decode_tps` remain null when the endpoint does not report usage.
 
+Nonstream `openai-chat` success requires a JSON object with no `error` key and a
+nonempty `choices` array of object messages with explicit string or null content.
+The first choice supplies scoring text; empty strings and null content are valid
+empty completions. Optional usage may be absent/null, or an object with optional
+integer/null `prompt_tokens`, `completion_tokens`, and `total_tokens`
+between 0 and `2**53 - 1` (the interoperable JSON integer range)
+(no boolean counts). Malformed or undecodable responses and backend errors in
+HTTP-success envelopes fail one case with empty output and unset token metrics;
+later cases continue. Raw decoded JSON or undecodable response text remains
+available in the response artifact for diagnosis.
+
 When OpenAI-compatible usage includes
 `usage.prompt_tokens_details.cached_tokens`, `openai-chat` normalizes that count
 as `tokens.cached_prompt` for both streaming and non-streaming responses.
