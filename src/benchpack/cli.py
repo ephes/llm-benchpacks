@@ -8,10 +8,19 @@ import os
 import re
 import shutil
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
-from .adapters import Adapter, AdapterRequest, get_adapter
+from .adapters import (
+    Adapter,
+    AdapterRequest,
+    AdapterResult,
+    RawPaths,
+    Timing,
+    Tokens,
+    get_adapter,
+)
 from .adapters.openai_chat import (
     OPENAI_API_KEY_ENV_KEY,
     OpenAIChatAuthError,
@@ -199,10 +208,25 @@ def _run_case(
         request_path=request_path,
         response_path=response_path,
     )
+    started = time.monotonic()
     try:
         result = adapter.run(request)
     except OpenAIChatAuthError as exc:
         raise SystemExit(str(exc)) from exc
+    except Exception as exc:
+        error = f"adapter error: {type(exc).__name__}: {str(exc)[:200]}"
+        if not response_path.exists():
+            response_path.write_text(json.dumps({"error": error}))
+        result = AdapterResult(
+            adapter=adapter.name,
+            endpoint=endpoint,
+            model=model,
+            ok=False,
+            timing=Timing(wall_s=time.monotonic() - started),
+            tokens=Tokens(),
+            raw=RawPaths(str(request_path), str(response_path)),
+            error=error,
+        )
     sample = sample_resources() if collect_resources else {}
     return result, sample
 

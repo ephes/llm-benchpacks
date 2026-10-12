@@ -5045,3 +5045,10 @@ snapshot beside the output, and retains/restores the prior site on errors.
 Rollback failure reports the backup recovery path. Synthetic filesystem,
 adapter, and SQLite regressions reproduce the original input deletion and
 partial-publication failures. No model runs or deployment.
+
+## 2026-10-12 — Ollama validation review repairs
+
+- Failed JSON-schema scoring now retains a bounded adapter diagnostic.
+- The runner isolates adapter exceptions per case, including deeply nested
+  JSON reserialization failures; authentication errors and interrupts retain
+  their run-level behavior. Regression tests cover both repairs.

@@ -4097,3 +4097,52 @@ def test_cli_refuses_case_alias_output(tmp_path: Path, monkeypatch) -> None:
     with pytest.raises(SystemExit, match="overlap"):
         main(_argv(["--out", str(out), "--force"]))
     assert (pack / "benchpack.toml").read_bytes() == before
+
+
+def test_cli_deep_ollama_response_continues_next_case(tmp_path: Path, monkeypatch) -> None:
+    from benchpack.adapters.ollama_generate import OllamaGenerateAdapter
+
+    # Exercise the recursive encoder path even on Python versions whose
+    # default one-shot encoder can serialize this depth without recursion.
+    depth = sys.getrecursionlimit() * 3 // 4
+    nested = '[' * depth + '0' + ']' * depth
+    json.loads(nested)
+    original_dumps = json.dumps
+    def recursive_dumps(value, **kwargs):
+        if isinstance(value, dict) and "extra" in value:
+            limit = sys.getrecursionlimit()
+            try:
+                sys.setrecursionlimit(limit // 2)
+                return "".join(json.JSONEncoder(**kwargs).iterencode(value))
+            finally:
+                sys.setrecursionlimit(limit)
+        return original_dumps(value, **kwargs)
+    monkeypatch.setattr(json, "dumps", recursive_dumps)
+    bodies = iter([
+        '{"done":true,"response":"Paris","extra":' + nested + '}',
+        '{"done":true,"response":"Paris"}',
+    ])
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, text=next(bodies))
+    transport = httpx.MockTransport(handler)
+    class FakeAdapter(OllamaGenerateAdapter):
+        def __init__(self):
+            super().__init__(transport=transport)
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "ollama-generate", FakeAdapter)
+    monkeypatch.chdir(tmp_path)
+    _write_streaming_pack(tmp_path)
+    manifest = tmp_path / "benchpacks/smoke-chat/benchpack.toml"
+    manifest.write_text(manifest.read_text().replace('mode = "none"', 'mode = "contains"\nexpected = "Paris"'))
+    with manifest.open("a") as handle:
+        handle.write('\n[[cases]]\nid = "second"\nkind = "chat"\nprompt = "Next"\n')
+    out = tmp_path / "out"
+    assert main(_argv(["--adapter", "ollama-generate", "--out", str(out)])) == 0
+    rows = [json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()]
+    assert len(calls) == 2
+    assert [row["ok"] for row in rows] == [False, True]
+    assert "RecursionError" in rows[0]["error"]
+    assert rows[0]["scoring"]["passed"] is False
+    assert rows[1]["scoring"]["passed"] is True
+    assert json.loads((out / rows[0]["raw"]["response_path"]).read_text())["error"] == rows[0]["error"]

@@ -1521,3 +1521,9 @@ If any metric is invalid, all native metrics are excluded from normalized result
 Failed adapter answers with configured text scoring record `passed: false`,
 regardless of partial text; this applies consistently across adapters. Explicit
 verifier scoring stays separate. Unconfigured scoring remains null.
+
+Adapter exceptions, including deeply nested response serialization failures, are
+converted at the per-case boundary to failed results with a bounded error.
+Authentication configuration errors still stop the run; interrupts propagate.
+Failed `json-schema` scoring includes the adapter error (up to 500 characters),
+or `adapter failed` when no diagnostic is available.
