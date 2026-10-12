@@ -4097,3 +4097,33 @@ def test_cli_refuses_case_alias_output(tmp_path: Path, monkeypatch) -> None:
     with pytest.raises(SystemExit, match="overlap"):
         main(_argv(["--out", str(out), "--force"]))
     assert (pack / "benchpack.toml").read_bytes() == before
+
+
+@pytest.mark.parametrize("payload", [
+    [], {}, {"error": "backend failed"},
+    {"choices": [{"message": {"content": "partial"}}],
+     "usage": {"completion_tokens": 10**400}},
+])
+def test_cli_malformed_nonstream_continues_next_case(tmp_path: Path, monkeypatch, payload: object) -> None:
+    responses = iter([
+        httpx.Response(200, content=json.dumps(payload)),
+        httpx.Response(200, json={"choices": [{"message": {"content": "Paris"}}],
+                                 "usage": {"completion_tokens": 1}}),
+    ])
+    transport = httpx.MockTransport(lambda _: next(responses))
+
+    class FakeAdapter(OpenAIChatAdapter):
+        def __init__(self) -> None:
+            super().__init__(transport=transport)
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", FakeAdapter)
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    monkeypatch.chdir(tmp_path)
+    _write_two_case_pack(tmp_path)
+    out = tmp_path / "out"
+    main(_argv(["--out", str(out)]))
+    rows = [json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()]
+    assert [row["ok"] for row in rows] == [False, True]
+    assert rows[0]["tokens"]["output"] is None
+    assert rows[0]["timing"]["total_tps"] is None
+    assert rows[1]["tokens"]["output"] == 1

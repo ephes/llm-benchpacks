@@ -23,6 +23,8 @@ OPENAI_STREAM_USAGE_KEY = "_openai_stream_usage"
 OPENAI_STREAM_USAGE_INCLUDE = "include"
 OPENAI_STREAM_USAGE_OMIT = "omit"
 OPENAI_API_KEY_ENV_KEY = "_openai_api_key_env"
+# Largest integer exactly interoperable with JSON consumers using doubles.
+MAX_NONSTREAM_TOKEN_COUNT = 2**53 - 1
 
 
 class OpenAIChatAuthError(ValueError):
@@ -61,6 +63,41 @@ def _cached_prompt_tokens(usage: dict[str, Any]) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+def _nonstream_completion(payload: Any) -> tuple[dict[str, Any], str]:
+    if not isinstance(payload, dict):
+        raise ValueError("response must be an object")
+    if "error" in payload:
+        raise ValueError("backend error response")
+    usage = payload.get("usage")
+    if usage is None:
+        usage = {}
+    if not isinstance(usage, dict):
+        raise ValueError("usage must be an object or null")
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(key)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 0 <= value <= MAX_NONSTREAM_TOKEN_COUNT
+        ):
+            raise ValueError("usage token counts must be integers between 0 and 2**53 - 1")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("choices must be a nonempty array")
+    for choice in choices:
+        if not isinstance(choice, dict):
+            raise ValueError("choice must be an object")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise ValueError("message must be an object")
+        if "content" not in message:
+            raise ValueError("message content is required")
+        content = message["content"]
+        if content is not None and not isinstance(content, str):
+            raise ValueError("content must be a string or null")
+    return usage, choices[0]["message"]["content"] or ""
 
 
 def _auth_headers(defaults: dict[str, Any]) -> dict[str, str] | None:
@@ -124,6 +161,7 @@ class OpenAIChatAdapter:
         error: str | None = None
         usage: dict[str, Any] = {}
         response_payload: Any = None
+        output_text = ""
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -134,18 +172,27 @@ class OpenAIChatAdapter:
             error = f"transport error: {exc!r}"
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
+            decode_failed = False
             try:
                 response_payload = response.json()
-            except json.JSONDecodeError:
+                raw_response = json.dumps(response_payload, indent=2)
+            except (ValueError, RecursionError):
+                decode_failed = True
                 response_payload = {"text": response.text}
-            request.response_path.write_text(
-                json.dumps(response_payload, indent=2)
-            )
+                raw_response = json.dumps(response_payload, indent=2)
+            request.response_path.write_text(raw_response)
             if response.status_code >= 400:
                 ok = False
                 error = f"HTTP {response.status_code}: {response.text[:200]}"
+            elif decode_failed:
+                ok = False
+                error = "response parse error: response is not valid JSON"
             else:
-                usage = response_payload.get("usage", {}) or {}
+                try:
+                    usage, output_text = _nonstream_completion(response_payload)
+                except ValueError as exc:
+                    ok = False
+                    error = f"response parse error: {str(exc)[:200]}"
         finally:
             wall_s = time.monotonic() - start
             client.close()
@@ -153,13 +200,6 @@ class OpenAIChatAdapter:
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
         cached_prompt_tokens = _cached_prompt_tokens(usage)
-
-        output_text = ""
-        if isinstance(response_payload, dict):
-            choices = response_payload.get("choices") or []
-            if choices:
-                message = choices[0].get("message") or {}
-                output_text = message.get("content") or ""
 
         return AdapterResult(
             adapter=self.name,

@@ -935,6 +935,20 @@ and transitions to or from regular files. Mixed symlink and regular-file patches
 replay through `git apply` and the fenced-patch executor. Binary files remain
 descriptive markers rather than replayable patches.
 
+## OpenAI-compatible nonstream completion
+
+Successful nonstream responses must decode to an object without an `error` key
+and contain a nonempty `choices` array. Each choice must be an object with an
+object `message` and explicit string or null `content`; the first choice is
+used for scoring. Empty strings and null content are valid empty completions.
+Usage may be absent or null; otherwise it must be an object whose optional
+`prompt_tokens`, `completion_tokens`, and `total_tokens` are integers between 0 and `2**53 - 1`
+(the interoperable JSON integer range) or null (booleans are rejected). Validate the entire contract before extracting
+output or usage. Malformed envelopes, undecodable JSON and backend-error success
+responses return a failed result with empty scoring output and unset token
+metrics, without interrupting later cases. Decoded payloads remain in the raw
+response artifact; undecodable responses retain their text there.
+
 ## OpenAI-compatible streaming completion
 
 The text streaming adapter requires an SSE `data: [DONE]` marker; EOF alone

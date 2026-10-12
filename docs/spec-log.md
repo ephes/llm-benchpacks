@@ -16,6 +16,18 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-12 (nonstream completion contract)
+
+### Changed
+- Nonstream OpenAI-compatible responses validate completion and usage shapes
+  before publishing output or metrics; malformed/backend-error success responses
+  fail one case while retaining diagnostic payloads and allowing later cases.
+- Empty-string and explicit null completions remain valid; regression fixtures
+  cover malformed JSON/envelopes/messages/usage and subsequent successful calls.
+- Nonstream usage counts are bounded to the interoperable JSON integer range
+  (0 through `2**53 - 1`) so oversized counts cannot crash result reporting.
+  JSON parser/serialization limits retain raw text and fail only that case.
+
 ## 2026-10-12 (comparison metric isolation)
 
 ### Changed
