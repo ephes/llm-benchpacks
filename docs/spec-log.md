@@ -16,6 +16,14 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-12 (verifier timeout cleanup)
+
+### Changed
+- Verifier budget expiry stops the original POSIX process group, with bounded
+  terminate/kill escalation, output drain and immediate-process reaping.
+- Synthetic regressions cover retained pipes, exited leaders and children that
+  ignore termination after closing their output pipes.
+
 ## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
 
 ### Changed

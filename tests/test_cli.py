@@ -2973,7 +2973,8 @@ def test_cli_repo_task_verify_script_timeout_records_completed_row(
         scoring='[scoring]\nmode = "verify-script"\nscript = "verify/check.py"\n',
     )
     _write_verifier_script(pack_dir, "")
-    real_run = subprocess.run
+    from benchpack.verifiers import _run_verifier_command
+    real_run = _run_verifier_command
     timeouts: list[float] = []
 
     def timeout_verifier_run(command, *args, **kwargs):
@@ -2989,7 +2990,7 @@ def test_cli_repo_task_verify_script_timeout_records_completed_row(
             )
         return real_run(command, *args, **kwargs)
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_verifier_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_verifier_run)
     out = tmp_path / "run"
 
     assert main(_argv(["--out", str(out)])) == 0
@@ -3037,7 +3038,8 @@ def test_cli_repo_task_verify_script_manifest_timeout_reaches_verifier(
         ),
     )
     _write_verifier_script(pack_dir, "")
-    real_run = subprocess.run
+    from benchpack.verifiers import _run_verifier_command
+    real_run = _run_verifier_command
     timeouts: list[float] = []
 
     def timeout_verifier_run(command, *args, **kwargs):
@@ -3053,7 +3055,7 @@ def test_cli_repo_task_verify_script_manifest_timeout_reaches_verifier(
             )
         return real_run(command, *args, **kwargs)
 
-    monkeypatch.setattr("benchpack.verifiers.subprocess.run", timeout_verifier_run)
+    monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_verifier_run)
     out = tmp_path / "run"
 
     assert main(_argv(["--out", str(out)])) == 0

@@ -894,3 +894,18 @@ project-management system:
 
 This keeps the spec close to the code while avoiding generated-result churn in
 normal commits.
+
+
+### Verifier timeout cleanup
+
+On POSIX, each verifier starts in a new session/process group. Budget expiry
+sends SIGTERM to that original group, drains output for at most 0.5 seconds,
+then sends SIGKILL even if the leader or its pipes have already closed. A second
+0.5-second drain is bounded; if a pipe remains open, captured partial output is
+retained, readers are closed, and the immediate process is reaped with a bounded
+wait. Interrupts and other communication exceptions also stop and reap the isolated
+verifier before propagating. Timeout scoring remains failed with a null exit code
+and timeout artifacts.
+On non-POSIX platforms, the same bounded terminate/kill policy applies only to
+the immediate verifier; descendant cleanup is not supported. Descendants that
+explicitly escape a POSIX process group are outside this cleanup guarantee.

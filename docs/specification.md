@@ -606,6 +606,7 @@ such as patch diffs or `verify.json` when they are needed to explain a result.
 Full disposable workspaces and large execution logs should normally stay local
 or ignored.
 
+
 Existing `contains`, `regex`, and `json-schema` scoring modes score prompt
 output. `json-schema` parses raw adapter output text as JSON and validates it
 against a pack-local schema subset; malformed JSON or shape mismatches are
@@ -629,6 +630,22 @@ Timeout and environment configuration are not repeated as normal top-level
 the verifier script itself emits them in its own JSON or logs. Non-repo-task
 cases that request `verify-script` fail clearly instead of falling back to
 prompt-output scoring.
+
+
+### Verifier timeout cleanup
+
+On POSIX, each verifier starts in a new session/process group. Budget expiry
+sends SIGTERM to that original group, drains output for at most 0.5 seconds,
+then sends SIGKILL even if the leader or its pipes have already closed. A second
+0.5-second drain is bounded; if a pipe remains open, captured partial output is
+retained, readers are closed, and the immediate process is reaped with a bounded
+wait. Interrupts and other communication exceptions also stop and reap the isolated
+verifier before propagating. Timeout scoring remains failed with a null exit code
+and timeout artifacts.
+On non-POSIX platforms, the same bounded terminate/kill policy applies only to
+the immediate verifier; descendant cleanup is not supported. Descendants that
+explicitly escape a POSIX process group are outside this cleanup guarantee.
+
 
 ## Runtime Adapters
 
