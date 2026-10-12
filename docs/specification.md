@@ -291,7 +291,7 @@ The supported keys are currently `id` and optional `timeout_s`. When present,
 than 2,147,483 seconds and bounds the selected task harness/executor phase.
 NaN, infinities, oversized values, booleans, strings, zero, negative values,
 arrays, and tables are rejected. The same numeric bounds apply to
-`scoring.timeout_s`, which controls the separate verifier phase. It is enforced for the subprocess-backed
+`scoring.timeout_s`, which controls the separate verifier phase. `harness.timeout_s` is enforced for the subprocess-backed
 fenced-patch and external-agent executors. For `fenced-patch`, unified diff
 preflight first tries `git apply --check --recount` so otherwise valid model
 diffs with inaccurate hunk line counts can be applied as complete hunks rather
