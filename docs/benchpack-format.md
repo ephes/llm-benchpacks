@@ -403,9 +403,9 @@ Rules:
   non-table `harness` values, missing `id`, non-string `id`, unknown ids, and
   unexpected keys. The only supported keys are currently `id` and
   `timeout_s`.
-- `harness.timeout_s` is optional. When present, it must be a positive TOML
-  integer or float. Booleans, strings, zero, negative values, arrays, and
-  tables are rejected. It bounds the selected task harness/executor phase, not
+- `harness.timeout_s` is optional. When present, it must be a finite positive TOML
+  integer or float no greater than 2,147,483 seconds. NaN, infinities, oversized
+  integers, booleans, strings, zero, negative values, arrays, and tables are rejected. It bounds the selected task harness/executor phase, not
   the adapter request and not the verifier subprocess.
 - Task timeout is enforced by subprocess-backed task executors. For
   `fenced-patch`, it is passed to the unified diff preflight and apply calls.
@@ -727,9 +727,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   writing the measured row.
 
   `timeout_s` may be declared in the same effective scoring table as
-  `mode = "verify-script"` and `script`. It must be a positive TOML integer or
-  float; booleans, strings, zero, and negative values are rejected at manifest
-  load time. When `timeout_s` is absent, the verifier timeout defaults to
+  `mode = "verify-script"` and `script`. It must be a finite positive TOML integer or
+  float; NaN, infinities, values above 2,147,483 seconds, booleans, strings, zero,
+  and negative values are rejected at manifest load time. When `timeout_s` is absent, the verifier timeout defaults to
   `300.0` seconds. This is manifest-only verifier timeout configuration:
   `harness.timeout_s` is the separate repo-task task-phase timeout. There is no
   CLI timeout flag and no broader timeout policy.
@@ -800,3 +800,11 @@ loudly when a hard requirement is unmet.
 
 Result records must include the pack id and version. Comparisons should warn when
 pack versions differ.
+
+### Finite timeout budgets
+
+Both `scoring.timeout_s` and `harness.timeout_s` must be numeric TOML values
+that convert to a float in the range `0 < timeout_s <= 2147483`. This upper
+bound fits portable signed 32-bit millisecond subprocess waits. NaN, infinities,
+overflowing integers, values above the bound, zero, negative values and booleans are rejected at pack loading. Integer and
+fractional budgets are supported; absent-field defaults are unchanged.

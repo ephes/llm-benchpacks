@@ -6,6 +6,7 @@ Parses ``benchpack.toml`` per ``docs/benchpack-format.md`` into typed dataclasse
 from __future__ import annotations
 
 import json
+import math
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -242,12 +243,15 @@ def _scoring_timeout_from_value(value: Any) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PackError(
-            f"scoring.timeout_s must be a positive number; got {value!r}"
+            f"scoring.timeout_s must be a finite positive number <= 2147483; got {value!r}"
         )
-    timeout_s = float(value)
-    if timeout_s <= 0:
+    try:
+        timeout_s = float(value)
+    except OverflowError:
+        timeout_s = math.inf
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 2_147_483:
         raise PackError(
-            f"scoring.timeout_s must be a positive number; got {value!r}"
+            f"scoring.timeout_s must be a finite positive number <= 2147483; got {value!r}"
         )
     return timeout_s
 
@@ -557,13 +561,16 @@ def _harness_timeout_from_value(value: Any, *, case_id: str) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise InvalidHarnessError(
-            f"case {case_id!r} harness.timeout_s must be a positive number; "
+            f"case {case_id!r} harness.timeout_s must be a finite positive number <= 2147483; "
             f"got {value!r}"
         )
-    timeout_s = float(value)
-    if timeout_s <= 0:
+    try:
+        timeout_s = float(value)
+    except OverflowError:
+        timeout_s = math.inf
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 2_147_483:
         raise InvalidHarnessError(
-            f"case {case_id!r} harness.timeout_s must be a positive number; "
+            f"case {case_id!r} harness.timeout_s must be a finite positive number <= 2147483; "
             f"got {value!r}"
         )
     return timeout_s
