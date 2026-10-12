@@ -18,6 +18,7 @@ class PatchError(ValueError):
 class _Entry:
     kind: str
     path: Path
+    mode: int = 0o100644
 
 
 def patch_path(output_dir: Path, case: Case, repetition: int) -> Path:
@@ -42,7 +43,7 @@ def capture_workspace_patch(
     try:
         diff = directory_diff(prepared.source_fixture.path, prepared.path)
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
-        artifact_path.write_text(diff, encoding="utf-8")
+        artifact_path.write_bytes(diff.encode("utf-8"))
     except OSError as exc:
         raise PatchError(
             f"could not capture patch for repo-task case {case.id!r} "
@@ -75,16 +76,16 @@ def directory_diff(source: Path, workspace: Path) -> str:
         old = source_entries.get(relative_path)
         new = workspace_entries.get(relative_path)
         if old is None:
-            chunks.append(_added_diff(relative_path, new))
-            continue
-        if new is None:
-            chunks.append(_deleted_diff(relative_path, old))
-            continue
-        if old.kind != new.kind:
-            chunks.append(_deleted_diff(relative_path, old))
-            chunks.append(_added_diff(relative_path, new))
-            continue
-        chunks.append(_changed_diff(relative_path, old, new))
+            diff = _added_diff(relative_path, new)
+        elif new is None:
+            diff = _deleted_diff(relative_path, old)
+        elif old.kind != new.kind:
+            diff = _deleted_diff(relative_path, old) + _added_diff(relative_path, new)
+        else:
+            diff = _changed_diff(relative_path, old, new)
+        if diff and not diff.startswith(("diff --git ", "Binary ")):
+            diff = f"diff --git a/{relative_path} b/{relative_path}\n" + diff
+        chunks.append(diff)
 
     return "".join(chunk for chunk in chunks if chunk)
 
@@ -101,7 +102,7 @@ def _snapshot(root: Path) -> dict[str, _Entry]:
             elif child.is_dir():
                 walk(child)
             elif child.is_file():
-                entries[relative_path] = _Entry(kind="file", path=child)
+                entries[relative_path] = _Entry(kind="file", path=child, mode=0o100755 if child.stat().st_mode & 0o100 else 0o100644)
 
     walk(root)
     return entries
@@ -113,14 +114,15 @@ def _added_diff(relative_path: str, entry: _Entry | None) -> str:
     if entry.kind == "symlink":
         return _text_diff(
             [],
-            [_readlink_text(entry.path)],
+            [_readlink_text(entry.path) + "\n"],
             old_label="/dev/null",
             new_label=f"b/{relative_path}",
         )
     text = _decode_text(entry.path)
     if text is None:
         return f"Binary file added: {relative_path}\n"
-    return _text_diff(
+    header = _file_header(relative_path, entry, "new", text)
+    return header + _text_diff(
         [],
         _text_lines(text),
         old_label="/dev/null",
@@ -132,7 +134,7 @@ def _added_diff(relative_path: str, entry: _Entry | None) -> str:
 def _deleted_diff(relative_path: str, entry: _Entry) -> str:
     if entry.kind == "symlink":
         return _text_diff(
-            [_readlink_text(entry.path)],
+            [_readlink_text(entry.path) + "\n"],
             [],
             old_label=f"a/{relative_path}",
             new_label="/dev/null",
@@ -140,13 +142,19 @@ def _deleted_diff(relative_path: str, entry: _Entry) -> str:
     text = _decode_text(entry.path)
     if text is None:
         return f"Binary file deleted: {relative_path}\n"
-    return _text_diff(
+    header = _file_header(relative_path, entry, "deleted", text)
+    return header + _text_diff(
         _text_lines(text),
         [],
         old_label=f"a/{relative_path}",
         new_label="/dev/null",
         emit_empty_header=True,
     )
+
+
+def _file_header(relative_path: str, entry: _Entry, operation: str, text: str) -> str:
+    return (f"diff --git a/{relative_path} b/{relative_path}\n"
+            f"{operation} file mode {entry.mode:o}\n")
 
 
 def _changed_diff(relative_path: str, old: _Entry, new: _Entry) -> str:
@@ -156,22 +164,26 @@ def _changed_diff(relative_path: str, old: _Entry, new: _Entry) -> str:
         if old_target == new_target:
             return ""
         return _text_diff(
-            [old_target],
-            [new_target],
+            [old_target + "\n"],
+            [new_target + "\n"],
             old_label=f"a/{relative_path}",
             new_label=f"b/{relative_path}",
         )
 
     old_bytes = old.path.read_bytes()
     new_bytes = new.path.read_bytes()
+    mode_diff = ""
+    if old.mode != new.mode:
+        mode_diff = (f"diff --git a/{relative_path} b/{relative_path}\n"
+                     f"old mode {old.mode:o}\nnew mode {new.mode:o}\n")
     if old_bytes == new_bytes:
-        return ""
+        return mode_diff
 
     old_text = _decode_bytes(old_bytes)
     new_text = _decode_bytes(new_bytes)
     if old_text is None or new_text is None:
-        return f"Binary files differ: {relative_path}\n"
-    return _text_diff(
+        return mode_diff + f"Binary files differ: {relative_path}\n"
+    return mode_diff + _text_diff(
         _text_lines(old_text),
         _text_lines(new_text),
         old_label=f"a/{relative_path}",
@@ -193,14 +205,17 @@ def _text_diff(
             new_lines,
             fromfile=old_label,
             tofile=new_label,
-            lineterm="",
+            lineterm="\n",
         )
     )
     if not diff_lines and emit_empty_header:
-        diff_lines = [f"--- {old_label}", f"+++ {new_label}"]
+        diff_lines = [f"--- {old_label}\n", f"+++ {new_label}\n"]
     if not diff_lines:
         return ""
-    return "\n".join(diff_lines) + "\n"
+    return "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
+        for line in diff_lines
+    )
 
 
 def _decode_text(path: Path) -> str | None:
@@ -212,11 +227,13 @@ def _decode_bytes(raw: bytes) -> str | None:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         return None
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+    return text
 
 
 def _text_lines(text: str) -> list[str]:
-    return text.splitlines()
+    # Git patch lines are delimited by LF only; CR remains content.
+    lines = text.split("\n")
+    return [line + "\n" for line in lines[:-1]] + ([lines[-1]] if lines[-1] else [])
 
 
 def _readlink_text(path: Path) -> str:

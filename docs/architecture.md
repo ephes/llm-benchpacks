@@ -894,3 +894,14 @@ project-management system:
 
 This keeps the spec close to the code while avoiding generated-result churn in
 normal commits.
+
+
+### Patch artifact fidelity
+
+Regular UTF-8 file diffs preserve LF/CRLF bytes and final-newline state using
+standard no-newline markers. Git mode headers capture changes between regular
+non-executable (100644) and executable (100755) files, including additions and
+deletions. Executability follows the owner execute bit, as in Git. Other
+permission bits, ownership, timestamps and empty directories are not captured.
+Binary files remain descriptive markers rather than replayable patches; symlink
+changes remain target-text evidence rather than replayable symlink metadata.

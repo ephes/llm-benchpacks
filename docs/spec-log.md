@@ -16,6 +16,12 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-12 (patch fidelity)
+
+### Changed
+- Patch capture preserves line endings, final newlines and Git executable modes.
+- Regression tests replay regular-file evidence with `git apply`.
+
 ## 2026-09-11 (hosted Qwen3.8 Flash row and a readable notes column)
 
 ### Changed

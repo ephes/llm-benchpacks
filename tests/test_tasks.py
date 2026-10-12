@@ -936,11 +936,14 @@ print("external stderr trace", file=sys.stderr)
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
     assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
         "-source repo\n"
         "+external repo\n"
+        "diff --git a/nested/created.txt b/nested/created.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/nested/created.txt\n"
         "@@ -0,0 +1 @@\n"
@@ -1516,11 +1519,14 @@ def test_run_repo_task_executor_internal_harness_mutation_reaches_patch_and_veri
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
     assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
+        "diff --git a/README.md b/README.md\n"
         "--- a/README.md\n"
         "+++ b/README.md\n"
         "@@ -1 +1 @@\n"
         "-source repo\n"
         "+harness repo\n"
+        "diff --git a/nested/created.txt b/nested/created.txt\n"
+        "new file mode 100644\n"
         "--- /dev/null\n"
         "+++ b/nested/created.txt\n"
         "@@ -0,0 +1 @@\n"
