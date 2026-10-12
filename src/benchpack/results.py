@@ -110,7 +110,12 @@ class RunReporter:
         scoring_result = (
             dict(scoring_override)
             if scoring_override is not None
-            else {"mode": scoring_cfg.mode, "passed": False}
+            else {
+                "mode": scoring_cfg.mode,
+                "passed": False,
+                **({"error": (adapter_result.error or "adapter failed")[:500]}
+                   if scoring_cfg.mode == "json-schema" else {}),
+            }
             if not adapter_result.ok and scoring_cfg is not None and scoring_cfg.mode != "none"
             else evaluate(scoring_cfg, adapter_result.output_text)
         )

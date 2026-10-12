@@ -686,3 +686,17 @@ def test_failed_adapter_partial_answer_counts_as_scoring_failure(tmp_path: Path,
     assert reporter.record(pack.cases[0], result, {})["scoring"] == {
         "mode": "contains", "passed": False,
     }
+
+
+@pytest.mark.parametrize("error", ["incomplete generation", None])
+def test_failed_adapter_json_schema_scoring_has_error(tmp_path: Path, error) -> None:
+    pack = make_pack(tmp_path, Scoring(mode="json-schema", schema_data={"type": "object"}))
+    reporter = RunReporter(tmp_path / "out", pack)
+    result = make_adapter_result(tmp_path / "out", output_text="{}")
+    result.ok = False
+    result.error = error
+    row = reporter.record(pack.cases[0], result, sample={})
+    assert row["scoring"] == {
+        "mode": "json-schema", "passed": False,
+        "error": error or "adapter failed",
+    }
