@@ -5014,3 +5014,9 @@ working history and open questions.
   entity-resolution lane with tens of thousands of offers is required before
   candidate generation, clustering, memory pressure, or offers/s claims are
   meaningful.
+
+## 2026-10-12 — Stream completion and shape isolation
+
+Require explicit OpenAI SSE completion and normalize malformed text events to
+case failures while retaining partial raw evidence. Covered by mock transport
+regressions; no live benchmark campaign.

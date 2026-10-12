@@ -923,3 +923,14 @@ and Git symlink mode (120000), including additions, deletions, target changes,
 and transitions to or from regular files. Mixed symlink and regular-file patches
 replay through `git apply` and the fenced-patch executor. Binary files remain
 descriptive markers rather than replayable patches.
+
+## OpenAI-compatible streaming completion
+
+The text streaming adapter requires an SSE `data: [DONE]` marker; EOF alone
+is a failed response, even after a finish-reason chunk. Usage-only events
+before the marker are retained. JSON events must be objects with an optional
+choices array of objects, object deltas, and string or null content. Explicit null choices or deltas are rejected. Optional
+usage is an object with nonnegative integer token counts. Structured error
+events and malformed shapes fail that case without interrupting later cases.
+Failed output is empty for scoring; assembled partial text, chunks and the
+invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.

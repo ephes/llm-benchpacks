@@ -198,6 +198,8 @@ class OpenAIChatAdapter:
         ttft_s: float | None = None
         wall_s = 0.0
         error_payload: Any = None
+        completed = False
+        invalid_event = False
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -214,17 +216,47 @@ class OpenAIChatAdapter:
                             continue
                         data = line.removeprefix("data:").strip()
                         if data == "[DONE]":
-                            continue
+                            completed = True
+                            break
 
+                        invalid_event = True
+                        error_payload = {"text": data[:2000]}
                         payload = json.loads(data)
-                        if payload.get("usage"):
-                            usage = payload["usage"]
+                        error_payload = payload
+                        if not isinstance(payload, dict):
+                            raise ValueError("event must be an object")
+                        if "error" in payload:
+                            raise ValueError("backend error event")
+                        event_usage = payload.get("usage")
+                        if event_usage is not None:
+                            if not isinstance(event_usage, dict):
+                                raise ValueError("usage must be an object")
+                            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                                value = event_usage.get(key)
+                                if value is not None and (
+                                    isinstance(value, bool) or not isinstance(value, int) or value < 0
+                                ):
+                                    raise ValueError("usage token counts must be nonnegative integers")
 
-                        choices = payload.get("choices") or []
+                        choices = payload.get("choices", [])
+                        if not isinstance(choices, list):
+                            raise ValueError("choices must be an array")
                         delta = ""
+                        for choice in choices:
+                            if not isinstance(choice, dict):
+                                raise ValueError("choice must be an object")
+                            delta_payload = choice.get("delta", {})
+                            if not isinstance(delta_payload, dict):
+                                raise ValueError("delta must be an object")
+                            content = delta_payload.get("content")
+                            if content is not None and not isinstance(content, str):
+                                raise ValueError("content must be a string or null")
+                        if event_usage is not None:
+                            usage = event_usage
                         if choices:
-                            delta_payload = choices[0].get("delta") or {}
-                            delta = delta_payload.get("content") or ""
+                            delta = choices[0].get("delta", {}).get("content") or ""
+                        invalid_event = False
+                        error_payload = None
                         offset_s = time.monotonic() - start
                         chunks.append({"offset_s": offset_s, "delta": delta})
                         if delta:
@@ -235,12 +267,16 @@ class OpenAIChatAdapter:
             ok = False
             error = f"transport error: {exc!r}"
             error_payload = {"error": str(exc)}
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             ok = False
-            error = f"stream parse error: {exc}"
+            error = f"stream parse error: {str(exc)[:200]}"
         finally:
             wall_s = time.monotonic() - start
             client.close()
+
+        if ok and not completed:
+            ok = False
+            error = "stream ended before [DONE]"
 
         assembled_text = "".join(output_parts)
         response_payload: dict[str, Any] = {
@@ -257,7 +293,7 @@ class OpenAIChatAdapter:
             response_payload["usage"] = usage
         if error is not None:
             response_payload["error"] = error
-        if error_payload is not None:
+        if invalid_event or error_payload is not None:
             response_payload["error_payload"] = error_payload
         request.response_path.write_text(json.dumps(response_payload, indent=2))
 
