@@ -5027,3 +5027,13 @@ Pack loading now rejects nonfinite and overflowing scoring/harness timeouts
 with pack-specific errors. Budgets are capped at 2,147,483 seconds to fit
 portable signed 32-bit millisecond subprocess waits. Normal integer/fractional budgets and defaults are
 unchanged. Regression tests load synthetic TOML without running verifiers.
+
+## 2026-10-12 — Output/input guards and safe static-site publication
+
+Run output now refuses overlap with pack, fixtures, and supplied run metadata
+before adapter construction or mutation. Registry-site export protects the
+source database and all indexed result roots, stages its complete three-file
+snapshot beside the output, and retains/restores the prior site on errors.
+Rollback failure reports the backup recovery path. Synthetic filesystem,
+adapter, and SQLite regressions reproduce the original input deletion and
+partial-publication failures. No model runs or deployment.

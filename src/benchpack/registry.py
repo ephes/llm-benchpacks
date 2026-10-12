@@ -9,6 +9,7 @@ import math
 import re
 import shutil
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from .external_agent_model_calls import (
     ModelCallLogError,
     summarize_model_call_logs,
 )
+from .output_paths import paths_overlap
 from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
@@ -403,6 +405,17 @@ def export_registry_static_site(
     if str(out_dir) == "":
         raise RegistryError("registry site output path must not be empty")
     site_root = Path(out_dir)
+    if site_root.is_symlink():
+        raise RegistryError("registry site output must not be a symlink; choose another --out")
+    try:
+        overlaps_db = paths_overlap(site_root, Path(db_path))
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise RegistryError(f"could not check output/database paths: {exc}") from exc
+    if overlaps_db:
+        raise RegistryError(
+            f"registry site output {site_root} overlaps source database {db_path}; "
+            "choose a dedicated site directory with --out"
+        )
     if site_root.exists():
         if not force:
             raise RegistryError(
@@ -416,6 +429,7 @@ def export_registry_static_site(
                 db_path,
                 run_ids=run_ids,
                 labels=labels,
+                site_root=site_root,
             )
         )
         report_markdown = (
@@ -443,19 +457,54 @@ def export_registry_static_site(
     except ReportError as exc:
         raise RegistryError(str(exc)) from exc
 
-    if site_root.exists():
-        if site_root.is_dir():
-            shutil.rmtree(site_root)
-        else:
-            site_root.unlink()
-    site_root.mkdir(parents=True, exist_ok=True)
     output_files = {
         STATIC_SITE_REPORT_FILENAME: report_markdown,
         STATIC_SITE_INDEX_FILENAME: index_html,
         STATIC_SITE_SNAPSHOT_FILENAME: snapshot_json,
     }
-    for filename, contents in output_files.items():
-        (site_root / filename).write_text(contents, encoding="utf-8")
+    staging_parent = None
+    backup = None
+    try:
+        site_root.parent.mkdir(parents=True, exist_ok=True)
+        staging_parent = Path(tempfile.mkdtemp(
+            prefix=f".{site_root.name}-stage-", dir=site_root.parent
+        ))
+        staging = staging_parent / "site"
+        staging.mkdir()
+        for filename, contents in output_files.items():
+            (staging / filename).write_text(contents, encoding="utf-8")
+        if site_root.exists():
+            backup = Path(tempfile.mkdtemp(prefix=f".{site_root.name}-backup-", dir=site_root.parent))
+            backup.rmdir()
+            site_root.rename(backup)
+        try:
+            staging.rename(site_root)
+        except OSError as publish_error:
+            if backup is not None:
+                try:
+                    backup.rename(site_root)
+                except OSError as rollback_error:
+                    raise RegistryError(
+                        f"site publication failed: {publish_error}; rollback failed: "
+                        f"{rollback_error}; previous site retained at {backup}"
+                    ) from rollback_error
+            raise
+        if backup is not None:
+            try:
+                if backup.is_dir():
+                    shutil.rmtree(backup)
+                else:
+                    backup.unlink()
+            except OSError as exc:
+                raise RegistryError(
+                    f"registry site published at {site_root}, but backup cleanup failed "
+                    f"at {backup}: {exc}"
+                ) from exc
+    except OSError as exc:
+        raise RegistryError(f"could not publish registry site {site_root}: {exc}") from exc
+    finally:
+        if staging_parent is not None:
+            shutil.rmtree(staging_parent, ignore_errors=True)
     return RegistryStaticSiteSummary(
         out_dir=site_root,
         runs=len(runs),
@@ -1070,6 +1119,7 @@ def _agent_wrap_required_int(
 def _load_registry_site_snapshot(
     db_path: Path | str,
     *,
+    site_root: Path,
     run_ids: list[int] | None,
     labels: list[str] | None,
 ) -> tuple[
@@ -1091,6 +1141,18 @@ def _load_registry_site_snapshot(
             conn.execute("PRAGMA query_only = ON")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
+            sources = [Path(row[0]) for row in conn.execute("SELECT result_dir FROM runs")]
+            sources.extend(Path(row[0]) for row in conn.execute("SELECT result_dir FROM agent_wrap_runs"))
+            for source in sources:
+                try:
+                    overlap = paths_overlap(site_root, source)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise RegistryError(f"could not check output/result paths: {exc}") from exc
+                if overlap:
+                    raise RegistryError(
+                        f"registry site output {site_root} overlaps source results {source}; "
+                        "choose a dedicated site directory with --out"
+                    )
             selected_rows = _select_report_run_rows(
                 conn,
                 run_ids=run_ids,

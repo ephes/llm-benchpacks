@@ -866,7 +866,12 @@ The runner refuses to write into an output directory that already contains a
 `run.jsonl`. This prevents two runs sharing the same `<date>-<host-label>`
 from interleaving result rows or overwriting each other's `raw/` files.
 
-- Pass `--force` to delete the existing directory before the new run starts.
+- Pass `--force` to delete the existing dedicated run directory before the new run starts.
+  Resolved output must not overlap the pack directory, declared fixtures, or
+  supplied run-metadata file, including paths reached through symlinks and
+  other filesystem aliases (for example case-insensitive names). This
+  guard runs before adapter construction or output mutation, with or without
+  `--force`; choose a separate `--out` directory when refused.
 - Or pass `--out <dir>` to write somewhere distinct.
 
 `run.jsonl` itself is append-only within a single run: the reporter appends
@@ -1296,7 +1301,21 @@ not require source result directories to exist. It does not read raw payloads,
 workspaces, task logs, verifier artifacts, patch files, or model-call logs; it
 does not mutate the database or source results; and it does not contact
 endpoints. Existing output directories are refused unless `--force` is
-provided.
+provided. Output must be separate from the source database and every indexed
+result directory, including unselected runs and agent-wrap artifact paths.
+Recorded source paths must be absent or accessible for filesystem identity
+checks; uncheckable paths fail closed before publication, even for unselected
+runs or fresh output. Relative agent-wrap provenance paths are interpreted from the export process
+working directory; paths in other checkouts should be recorded as absolute. Symlink
+output directories are refused. All three files are generated in a sibling
+staging directory before publication. Replacement renames the old output to
+a backup, publishes the staged site, and then removes the backup. Write errors
+leave the old output intact; failed publication restores it. If restoration
+also fails, the error names the retained backup for manual recovery. Temporary
+staging cleanup is best-effort and cannot mask the publication outcome. A
+backup-removal failure reports that the new site is published and names the
+leftover backup. This is rollback for reported filesystem errors,
+not a crash-atomic or concurrent-publisher guarantee; serialize site exports.
 
 ### `benchpack registry bundle`
 
