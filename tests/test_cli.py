@@ -4036,3 +4036,24 @@ def test_cli_registry_bundle_create_and_validate(
     assert "imported 1 row from bundled run" in import_output
     assert "run_id 1" in import_output
     assert db_path.is_file()
+
+
+def test_cli_malformed_stream_continues_next_case(tmp_path: Path, monkeypatch) -> None:
+    bodies = iter([
+        'data: []\n\ndata: [DONE]\n\n',
+        'data: {"choices":[{"delta":{"content":"Paris"}}]}\n\ndata: [DONE]\n\n',
+    ])
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, text=next(bodies)))
+    class FakeAdapter(OpenAIChatAdapter):
+        def __init__(self) -> None:
+            super().__init__(transport=transport)
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", FakeAdapter)
+    monkeypatch.chdir(tmp_path)
+    _write_streaming_pack(tmp_path)
+    manifest = tmp_path / "benchpacks/smoke-chat/benchpack.toml"
+    with manifest.open("a") as handle:
+        handle.write('\n[[cases]]\nid = "second"\nkind = "chat"\nprompt = "Next"\n')
+    out = tmp_path / "out"
+    main(_argv(["--out", str(out)]))
+    rows = [json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()]
+    assert [row["ok"] for row in rows] == [False, True]

@@ -526,3 +526,43 @@ def test_openai_chat_streaming_parse_error_keeps_partial_raw_only(
     response_payload = json.loads(req.response_path.read_text())
     assert response_payload["choices"][0]["message"]["content"] == "partial"
     assert response_payload["error"] == result.error
+    assert response_payload["error_payload"] == {"text": "{not json"}
+
+
+@pytest.mark.parametrize('events', [[], [{'choices': [{'delta': {'content': 'partial'}}]}], [{'error': {'message': 'backend failed'}}, '[DONE]']])
+def test_stream_requires_completion(tmp_path: Path, events: list) -> None:
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=DelayedSSEStream(events, 0))))
+    req = make_request(tmp_path, defaults={'stream': True})
+    result = adapter.run(req)
+    assert not result.ok
+    assert result.output_text == ''
+    assert result.error
+    raw = json.loads(req.response_path.read_text())
+    if events and 'error' in events[0]:
+        assert raw['error_payload'] == events[0]
+    if events and 'choices' in events[0]:
+        assert raw['choices'][0]['message']['content'] == 'partial'
+
+
+@pytest.mark.parametrize('payload', [[], None, {'choices': None}, {'choices': [{'delta': None}]}, {'usage': {'completion_tokens': 5}, 'choices': 1}, {'choices': 1}, {'choices': [None]}, {'choices': [{'delta': []}]}, {'choices': [{'delta': {'content': ['bad']}}]}, {'usage': []}, {'usage': {'completion_tokens': 'bad'}}])
+def test_stream_shape_failure_isolated(tmp_path: Path, payload: object) -> None:
+    class ClosingStream(DelayedSSEStream):
+        closed = False
+        def close(self) -> None:
+            self.closed = True
+    stream = ClosingStream([{'choices': [{'delta': {'content': 'partial'}}]}, json.dumps(payload), '[DONE]'], 0)
+    responses = iter([stream, DelayedSSEStream([{'choices': [{'delta': {'content': 'next'}}]}, {'choices': [], 'usage': {'completion_tokens': 1}}, '[DONE]'], 0)])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=next(responses))))
+    req = make_request(tmp_path, defaults={'stream': True})
+    failed = adapter.run(req)
+    assert not failed.ok
+    assert failed.output_text == ''
+    assert len(failed.error) < 250
+    assert stream.closed
+    raw = json.loads(req.response_path.read_text())
+    assert failed.tokens.output is None
+    assert raw['error_payload'] == payload
+    assert raw['choices'][0]['message']['content'] == 'partial'
+    succeeded = adapter.run(req)
+    assert succeeded.ok and succeeded.output_text == 'next'
+    assert succeeded.tokens.output == 1
