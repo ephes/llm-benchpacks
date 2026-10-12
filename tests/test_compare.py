@@ -16,6 +16,9 @@ from benchpack.compare import (
 )
 
 
+from benchpack.report import render_report
+
+
 _UNSET = object()
 
 
@@ -784,3 +787,37 @@ def test_render_comparison_pluralizes_single_input_row(tmp_path: Path) -> None:
 
     assert "`run-a`: `" in output
     assert "(1 row)" in output
+
+
+def test_compare_isolates_unrepresentable_metrics(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    invalid = [10**400, -(10**400), True, False, float("nan"), float("inf")]
+    _write_run(run_dir, rows=[
+        _record(case, wall_s=value, prompt_tokens=value, cached_prompt=value)
+        for case, values in (("mixed", invalid + [2, 4.0]), ("invalid", invalid))
+        for value in values
+    ])
+    original = (run_dir / "run.jsonl").read_bytes()
+    run = load_result_run(run_dir)
+    summaries = {summary.case: summary for summary in summarize_runs([run])}
+    assert summaries["mixed"].wall_s == 3.0
+    assert summaries["mixed"].prompt_tokens == 3.0
+    assert summaries["mixed"].cached_prompt_tokens == 3.0
+    assert summaries["invalid"].wall_s is None
+    output = render_comparison([run])
+    assert "| run | mixed | 8 | 8 | 3.000 |" in output
+    assert "| run | invalid | 6 | 6 | — |" in output
+    assert "3.000" in render_report([run])
+    assert (run_dir / "run.jsonl").read_bytes() == original
+    assert run.records[0]["timing"]["wall_s"] == 10**400
+
+
+def test_compare_reports_integer_decode_limit(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    artifact = run_dir / "run.jsonl"
+    original = '{"timing":{"wall_s":' + '1' * 4301 + '}}\n'
+    artifact.write_text(original)
+    with pytest.raises(CompareError, match=r"run.jsonl:1"):
+        load_result_run(run_dir)
+    assert artifact.read_text() == original

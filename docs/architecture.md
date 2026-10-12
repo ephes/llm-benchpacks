@@ -609,6 +609,11 @@ cached-token rows over total rows, for each case/run group. It computes median
 numeric `timing.prefill_tps` but renders that median only when the case-level
 `prefill parity` status is `comparable`.
 
+The shared metric filter excludes booleans, nonnumeric/nonfinite values, and
+integers that overflow float conversion without modifying loaded records or
+input artifacts. Groups with no valid samples render `—`. JSON decoding failures,
+including Python's integer digit limit, produce a file/line `CompareError`.
+
 The compare utility warns when pack ids or versions differ. The `prefill_tps
 med` column is gated because prefill comparisons require explicit prompt-cache
 parity: non-comparable cases render `—` even when `timing.prefill_tps` values
