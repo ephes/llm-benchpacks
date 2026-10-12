@@ -609,6 +609,15 @@ Full disposable workspaces and large execution logs should normally stay local
 or ignored.
 
 
+Manifest loading requires string `expected` for `contains` and string
+`pattern` for `regex`, and compiles regex patterns before execution. Empty
+strings are valid. JSON-schema output decoding rejects non-JSON numeric
+constants and float/exponent literals that overflow the finite float range.
+Integer literals are not limited to float range, but remain subject to
+Python's integer string digit limit (4300 digits by default). The `integer` type
+accepts finite mathematically integral numbers such as `1.0` and `1e0`,
+excluding booleans and fractions.
+
 Existing `contains`, `regex`, and `json-schema` scoring modes score prompt
 output. `json-schema` parses raw adapter output text as JSON and validates it
 against a pack-local schema subset; malformed JSON or shape mismatches are

@@ -688,7 +688,8 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 : No scoring. The run is recorded but no pass/fail is computed.
 
 `contains`
-: Output must contain the `expected` string.
+: Output must contain the `expected` string. Manifest loading requires a
+  string `expected`; an empty string is valid.
 
 `equals`
 : Reserved; not implemented by the scorer yet. Intended behavior is that output
@@ -698,8 +699,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
 : Output must match the regular expression in `pattern`. The scorer uses
   Python's standard `re.search(pattern, output)` with no implicit flags. Pack
   authors who need multiline, dotall, or other flag behavior should use inline
-  regex flags or explicit character classes in the pattern. The runner raises a
-  `ValueError` when `mode = "regex"` is evaluated without `pattern`.
+  regex flags or explicit character classes in the pattern. Manifest loading raises `PackError` for missing or nonstring `pattern`
+  and invalid regular expressions before any model execution. Empty patterns
+  are valid.
 
 `json-schema`
 : Output must parse as JSON and validate against the pack-relative JSON schema
@@ -709,7 +711,12 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   schemas. The executable scorer implements the compact deterministic subset
   used by bundled packs: `type`, `required`, `properties`,
   `additionalProperties = false`, `items`, `enum`, `const`, string length
-  bounds, and numeric bounds. `const` and `enum` use JSON-value equality:
+  bounds, and numeric bounds. The `integer` type accepts finite mathematically
+  integral numbers such as `1.0` and `1e0`, excluding booleans and fractions.
+  Output decoding rejects NaN, Infinity and -Infinity, including nested values,
+  and float/exponent literals that overflow Python's finite float range.
+  Integer literals are not limited to float range, but remain subject to
+  Python's integer string digit limit (4300 digits by default). `const` and `enum` use JSON-value equality:
   booleans are distinct from numbers, so `true` does not match `1` and `false`
   does not match `0`. Unknown schema keywords are ignored. Invalid JSON model
   output or schema-shape mismatches produce a normal scoring failure, not a

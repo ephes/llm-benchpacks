@@ -4127,3 +4127,59 @@ def test_cli_malformed_nonstream_continues_next_case(tmp_path: Path, monkeypatch
     assert rows[0]["tokens"]["output"] is None
     assert rows[0]["timing"]["total_tps"] is None
     assert rows[1]["tokens"]["output"] == 1
+
+
+@pytest.mark.parametrize(
+    "scoring",
+    [
+        'mode = "contains"',
+        'mode = "contains", expected = 1',
+        'mode = "regex"',
+        'mode = "regex", pattern = 1',
+        'mode = "regex", pattern = "["',
+    ],
+)
+def test_cli_scoring_preflight_makes_no_model_calls(tmp_path, monkeypatch, scoring):
+    from benchpack.packs import PackError
+
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_json_schema_pack(tmp_path)
+    manifest = tmp_path / "benchpacks/json-format/benchpack.toml"
+    manifest.write_text(
+        manifest.read_text().replace(
+            'mode = "json-schema", schema = "fixtures/shape.schema.json"', scoring
+        )
+    )
+    with pytest.raises(PackError):
+        main(
+            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model"]
+        )
+    assert calls == []
+    assert not (tmp_path / "results").exists()
+
+
+def test_cli_nonfinite_scoring_records_next_case(tmp_path, monkeypatch):
+    _install_output_adapter(monkeypatch, "NaN")
+    monkeypatch.chdir(tmp_path)
+    _write_json_schema_pack(tmp_path)
+    pack = tmp_path / "benchpacks/json-format"
+    (pack / "fixtures/shape.schema.json").write_text('{"type":"number"}')
+    with (pack / "benchpack.toml").open("a") as stream:
+        stream.write(
+            '\n[[cases]]\nid = "next"\nkind = "chat"\nprompt = "next"\nscoring = {mode = "contains", expected = "NaN"}\n'
+        )
+    assert (
+        main(
+            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model"]
+        )
+        == 0
+    )
+    out = next((tmp_path / "results").iterdir())
+    records = [
+        json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()
+    ]
+    assert len(records) == 2
+    assert records[0]["scoring"]["passed"] is False
+    assert records[1]["case"] == "next"
+    assert records[1]["scoring"]["passed"] is True

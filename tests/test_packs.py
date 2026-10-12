@@ -2907,3 +2907,40 @@ prompt = "Fix it."
 ''')
     selected = getattr(load_pack(pack_dir).cases[0], field)
     assert selected.timeout_s == float(value)
+
+
+@pytest.mark.parametrize(
+    "mode, field", [("contains", "expected"), ("regex", "pattern")]
+)
+@pytest.mark.parametrize("declaration", ["", " = 123", " = true", " = []"])
+@pytest.mark.parametrize("case_level", [False, True])
+def test_scoring_required_string_preflight(
+    tmp_path, mode, field, declaration, case_level
+):
+    scoring = f'mode = "{mode}"' + (f"\n{field}{declaration}" if declaration else "")
+    body = '[pack]\nid = "examplepack"\nversion = "1"\n'
+    if not case_level:
+        body += "[scoring]\n" + scoring + "\n"
+    body += '[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    if case_level:
+        body += "[cases.scoring]\n" + scoring + "\n"
+    with pytest.raises(PackError, match=f"scoring.{field}"):
+        load_pack(write_manifest(tmp_path, body))
+
+
+@pytest.mark.parametrize("pattern", ["[", "a{4294967296}", "a{" + "9" * 4400 + "}", "(" * 1000 + ")" * 1000])
+def test_scoring_regex_compile_preflight(tmp_path, pattern):
+    body = '[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "regex"\npattern = "["\n[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    with pytest.raises(PackError, match="scoring.pattern"):
+        load_pack(write_manifest(tmp_path, body.replace('pattern = "["', f'pattern = "{pattern}"')))
+
+
+@pytest.mark.parametrize(
+    "mode, field", [("contains", "expected"), ("regex", "pattern")]
+)
+def test_scoring_empty_string_is_valid(tmp_path, mode, field):
+    from benchpack.scoring import evaluate
+
+    body = f'[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "{mode}"\n{field} = ""\n[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    pack = load_pack(write_manifest(tmp_path, body))
+    assert evaluate(pack.scoring, "hello")["passed"] is True
