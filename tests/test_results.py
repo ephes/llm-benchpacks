@@ -674,3 +674,114 @@ def test_write_summary_distinguishes_repetitions(tmp_path: Path) -> None:
 
     assert "capital#1" in text
     assert "capital#2" in text
+
+
+@pytest.mark.parametrize('failure', ['serialize', 'open', 'write', 'short', 'close'])
+def test_record_failure_preserves_file_and_records(tmp_path, monkeypatch, failure):
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(tmp_path / 'run', pack)
+    result = make_adapter_result(reporter.output_dir)
+    reporter.record(pack.cases[0], result, {})
+    previous_bytes = reporter._jsonl_path.read_bytes()
+    previous_records = list(reporter.records)
+    original_open = Path.open
+    injected = []
+
+    class BrokenAppend:
+        def __init__(self, file):
+            self.file = file
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.file.close()
+            if failure == 'close':
+                injected.append('close')
+                raise OSError('injected close failure')
+
+        def __getattr__(self, name):
+            return getattr(self.file, name)
+
+        def write(self, payload):
+            injected.append('write')
+            if failure == 'close':
+                return self.file.write(payload)
+            self.file.write(payload[:10])
+            self.file.flush()
+            if failure == 'short':
+                return 10
+            raise OSError('injected write failure')
+
+    def failing_open(path, *args, **kwargs):
+        if path == reporter._jsonl_path:
+            injected.append('open')
+            if failure == 'open':
+                raise OSError('injected open failure')
+            return BrokenAppend(original_open(path, *args, **kwargs))
+        return original_open(path, *args, **kwargs)
+
+    with monkeypatch.context() as faults:
+        if failure == 'serialize':
+            result.backend = {'unserializable': object()}
+        else:
+            faults.setattr(Path, 'open', failing_open)
+        expected_type = TypeError if failure == 'serialize' else OSError
+        message = {
+            'serialize': 'not JSON serializable', 'open': 'injected open failure',
+            'write': 'injected write failure', 'short': 'Incomplete run.jsonl append',
+            'close': 'injected close failure',
+        }[failure]
+        with pytest.raises(expected_type, match=message):
+            reporter.record(pack.cases[0], result, {})
+    if failure in ('write', 'short', 'close'):
+        assert 'write' in injected
+    if failure == 'close':
+        assert 'close' in injected
+    if failure == 'open':
+        assert injected == ['open']
+    assert reporter.records == previous_records
+    assert reporter._jsonl_path.read_bytes() == previous_bytes
+    result.backend = None
+    reporter.record(pack.cases[0], result, {})
+    persisted = [json.loads(line) for line in reporter._jsonl_path.read_text().splitlines()]
+    assert persisted == reporter.records
+    assert len(persisted) == 2
+    reporter.write_summary({'hostname': 'test'})
+    assert (reporter.output_dir / 'summary.md').read_text().count('| capital |') == 2
+
+
+def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> None:
+    import benchpack.results as results
+
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(tmp_path / 'run', pack)
+    result = make_adapter_result(reporter.output_dir)
+    reporter.record(pack.cases[0], result, {})
+    previous_records = list(reporter.records)
+    original_open = Path.open
+
+    class BrokenWrite:
+        def __enter__(self):
+            self.file = original_open(reporter._jsonl_path, 'a+b', buffering=0)
+            return self
+
+        def __exit__(self, *args):
+            self.file.close()
+
+        def __getattr__(self, name):
+            return getattr(self.file, name)
+
+        def write(self, payload):
+            self.file.write(payload[:10])
+            raise OSError('append failed')
+
+    def fail_truncate(*args):
+        raise OSError('rollback failed')
+
+    monkeypatch.setattr(Path, 'open', lambda *args, **kwargs: BrokenWrite())
+    monkeypatch.setattr(results.os, 'truncate', fail_truncate)
+    with pytest.raises(OSError, match='rollback failed') as caught:
+        reporter.record(pack.cases[0], result, {})
+    assert str(caught.value.__context__) == 'append failed'
+    assert reporter.records == previous_records

@@ -5065,3 +5065,11 @@ partial-publication failures. No model runs or deployment.
 Completed integral JSON integer matching, strict finite JSON output decoding,
 and required contains/regex field validation at manifest loading. Regression
 coverage includes nested numbers and pack/case scoring declarations.
+
+## 2026-10-12 — Reporter append consistency
+
+Record serialization precedes file mutation; summaries advance only after a
+complete append. Caught write or close failures restore the prior byte length under
+single-writer ownership, including interruptions. Fault-injection tests cover
+serialization, open, partial/short writes, close failures, chained rollback
+failures, retry and summary agreement.

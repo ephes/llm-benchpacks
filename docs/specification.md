@@ -1529,3 +1529,10 @@ usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
+
+## Reporter persistence failures
+
+The reporter requires exclusive ownership of run.jsonl. Serialization precedes
+mutation and summaries advance after a complete append and close. Caught write
+or close failures restore the previous file length; rollback failures require
+manual JSONL recovery. This does not guarantee durability across crashes.
