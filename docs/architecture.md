@@ -992,3 +992,15 @@ previous byte length before raising, so a retry appends one complete line.
 This is not crash-proof storage or an fsync durability guarantee. If truncation
 also fails, that error propagates with the append error chained; stop using the
 reporter and repair the JSONL file before retrying.
+
+### Failed workspace preparation
+
+Repo-task copies are built in an exclusively allocated sibling staging directory.
+Only after copying succeeds does the preparer reserve the deterministic destination
+with exclusive directory creation and rename the complete copy into it on the
+supported POSIX platforms (macOS/Linux). Existing
+entries (including dangling symlinks), or entries created during copying, are
+refused. Serialize publication and do not rename run-output directories during it.
+Copy failures leave the final path absent, so the same repetition can be retried.
+Failures retain staging and report its path rather than recursively deleting it;
+a failed rename also retains the empty destination reservation for inspection.

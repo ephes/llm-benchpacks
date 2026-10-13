@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -159,19 +160,31 @@ def prepare_repo_task_workspace(
     source_fixture = validate_repo_task_case(pack, case)
     _reject_escaping_symlinks(source_fixture.path, case, source_fixture)
     destination = workspace_path(output_dir, case, repetition)
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise WorkspaceError(
             f"workspace destination already exists for repo-task case "
             f"{case.id!r}: {destination}"
         )
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging: Path | None = None
+    step = "allocate staging"
     try:
-        shutil.copytree(source_fixture.path, destination, symlinks=True)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
+        step = "copy fixture"
+        shutil.copytree(source_fixture.path, staging, symlinks=True, dirs_exist_ok=True)
+        # Exclusive reservation prevents replacing even an empty foreign directory.
+        # POSIX publication requires other writers not to rename output directories.
+        step = "reserve destination"
+        destination.mkdir()
+        step = "publish workspace (empty destination reservation retained on failure)"
+        staging.rename(destination)
     except (OSError, shutil.Error) as exc:
+        retained = f"; staging retained at {staging}" if staging is not None else ""
         raise WorkspaceError(
             f"could not prepare workspace for repo-task case {case.id!r} "
-            f"from fixture {source_fixture.id!r}"
+            f"from fixture {source_fixture.id!r}: {step}: {exc}"
+            f"{retained}; destination: {destination}"
         ) from exc
 
     return PreparedWorkspace(source_fixture=source_fixture, path=destination)
