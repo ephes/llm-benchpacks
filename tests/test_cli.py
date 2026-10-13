@@ -4129,6 +4129,40 @@ def test_cli_malformed_nonstream_continues_next_case(tmp_path: Path, monkeypatch
     assert rows[1]["tokens"]["output"] == 1
 
 
+@pytest.mark.parametrize("payload", [
+    [], None, {"error": "model not loaded"},
+    {"response": "partial", "done": False, "eval_count": 3},
+    {"response": "Paris", "done": True, "eval_count": 10**400},
+])
+def test_cli_malformed_ollama_response_continues_next_case(tmp_path: Path, monkeypatch, payload: object) -> None:
+    from benchpack.adapters.ollama_generate import OllamaGenerateAdapter
+
+    responses = iter([
+        httpx.Response(200, content=json.dumps(payload)),
+        httpx.Response(200, json={"response": "Paris", "done": True, "eval_count": 1}),
+    ])
+    transport = httpx.MockTransport(lambda _: next(responses))
+
+    class FakeAdapter(OllamaGenerateAdapter):
+        def __init__(self) -> None:
+            super().__init__(transport=transport)
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "ollama-generate", FakeAdapter)
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    monkeypatch.chdir(tmp_path)
+    _write_two_case_pack(tmp_path)
+    out = tmp_path / "out"
+    argv = _argv(["--out", str(out)])
+    argv[argv.index("openai-chat")] = "ollama-generate"
+    main(argv)
+    rows = [json.loads(line) for line in (out / "run.jsonl").read_text().splitlines()]
+    assert [row["ok"] for row in rows] == [False, True]
+    assert rows[0]["tokens"]["output"] is None
+    assert "backend" not in rows[0]
+    assert json.loads((out / rows[0]["raw"]["response_path"]).read_text()) == payload
+    assert rows[1]["tokens"]["output"] == 1
+
+
 @pytest.mark.parametrize(
     "scoring",
     [

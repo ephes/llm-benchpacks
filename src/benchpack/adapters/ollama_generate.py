@@ -5,6 +5,11 @@ forcing Ollama through the OpenAI-compatible shape so that ``prompt_eval_*`` and
 ``eval_*`` duration fields are preserved.  Those fields populate
 ``timing.prefill_tps`` / ``timing.decode_tps``; the raw values stay accessible
 under ``backend``.
+
+A response counts as a completed generation only when it is a JSON object with
+``done: true``, a string ``response``, no ``error`` field and valid native
+metrics.  Everything else is a failed result with empty output and unset
+metrics; the raw response artifact keeps the payload for diagnostics.
 """
 
 from __future__ import annotations
@@ -35,6 +40,8 @@ _BACKEND_FIELDS = (
     "eval_count",
     "eval_duration",
 )
+# Same interoperable JSON integer range as the OpenAI-compatible adapter.
+_MAX_METRIC = 2**53 - 1
 
 
 def _resolve_url(endpoint: str | None) -> str:
@@ -48,6 +55,25 @@ def _tps(count: int | None, duration_ns: int | None) -> float | None:
     if not count or not duration_ns:
         return None
     return round(count / (duration_ns / _NS_PER_S), 4)
+
+
+def _validate_completion(payload: Any) -> None:
+    if not isinstance(payload, dict):
+        raise ValueError("response must be an object")
+    if "error" in payload:
+        raise ValueError("backend error response")
+    if payload.get("done") is not True:
+        raise ValueError("generation is not complete (done must be true)")
+    if not isinstance(payload.get("response"), str):
+        raise ValueError("response text must be a string")
+    for key in _BACKEND_FIELDS:
+        value = payload.get(key)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 0 <= value <= _MAX_METRIC
+        ):
+            raise ValueError(f"{key} must be an integer between 0 and 2**53 - 1")
 
 
 def _build_options(defaults: dict[str, Any]) -> dict[str, Any]:
@@ -99,26 +125,43 @@ class OllamaGenerateAdapter:
             error = f"transport error: {exc!r}"
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
+            decode_failed = False
             try:
-                payload = response.json()
-            except json.JSONDecodeError:
-                payload = {"text": response.text}
-            request.response_path.write_text(json.dumps(payload, indent=2))
+                decoded = response.json()
+                raw_response = json.dumps(decoded, indent=2)
+            except (ValueError, RecursionError):
+                decode_failed = True
+                raw_response = json.dumps({"text": response.text}, indent=2)
+            request.response_path.write_text(raw_response)
             if response.status_code >= 400:
                 ok = False
                 error = f"HTTP {response.status_code}: {response.text[:200]}"
+            elif decode_failed:
+                ok = False
+                error = "response parse error: response is not valid JSON"
+            else:
+                try:
+                    _validate_completion(decoded)
+                except ValueError as exc:
+                    ok = False
+                    error = f"response parse error: {exc}"
+                else:
+                    payload = decoded
         finally:
             wall_s = time.monotonic() - start
             client.close()
 
+        # payload stays empty unless the response is a validated completion.
         prompt_count = payload.get("prompt_eval_count")
         eval_count = payload.get("eval_count")
         prefill_tps = _tps(prompt_count, payload.get("prompt_eval_duration"))
         decode_tps = _tps(eval_count, payload.get("eval_duration"))
 
-        backend = {k: payload[k] for k in _BACKEND_FIELDS if k in payload} or None
+        backend = {
+            k: payload[k] for k in _BACKEND_FIELDS if payload.get(k) is not None
+        } or None
 
-        output_text = payload.get("response", "") if isinstance(payload, dict) else ""
+        output_text = payload.get("response", "")
 
         return AdapterResult(
             adapter=self.name,

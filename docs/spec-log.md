@@ -16,6 +16,19 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (Ollama generate completion contract)
+
+### Changed
+- `ollama-generate` validates the nonstreaming response before publishing
+  output or metrics: an object with `done: true`, a string `response`, no
+  `error` key, and native metrics that are null/absent or integers between 0
+  and `2**53 - 1`. Non-object, non-JSON, backend-error, incomplete and
+  wrong-typed 200 responses fail one case with empty scoring output and unset
+  metrics; the raw response artifact keeps the payload and later cases run.
+- HTTP error responses no longer publish output text or metrics from their body.
+- A completed empty-string answer stays valid. MockTransport and CLI
+  regressions cover each shape and the following successful case.
+
 ## 2026-10-13 (strict manifest identifiers)
 
 ### Changed
