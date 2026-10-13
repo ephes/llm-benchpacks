@@ -526,7 +526,8 @@ the runner fails rather than merging if the destination already exists.
 Repo-task warmups are rejected for now. If repo-task warmups are later allowed,
 each warmup must also get its own disposable workspace and must not share
 mutation state with measured executions. Cleanup and retention options remain
-planned; keeping workspaces for debugging should be explicit, not accidental.
+planned; failed copies retain reported staging trees as described under
+[Failed workspace preparation](#failed-workspace-preparation).
 
 Mutation and verification are isolated to the run-owned workspace and output
 directory. Pack contracts must not require implicit network access or private
@@ -1580,3 +1581,15 @@ manual JSONL recovery. This does not guarantee durability across crashes.
 
 Hardware evidence is best-effort: malformed numeric values and decoding failures
 leave affected fields unavailable without discarding other valid sources.
+
+## Failed workspace preparation
+
+Repo-task copies are built in an exclusively allocated sibling staging directory.
+Only after copying succeeds does the preparer reserve the deterministic destination
+with exclusive directory creation and rename the complete copy into it on the
+supported POSIX platforms (macOS/Linux). Existing
+entries (including dangling symlinks), or entries created during copying, are
+refused. Serialize publication and do not rename run-output directories during it.
+Copy failures leave the final path absent, so the same repetition can be retried.
+Failures retain staging and report its path rather than recursively deleting it;
+a failed rename also retains the empty destination reservation for inspection.

@@ -16,6 +16,14 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (workspace copy failure isolation)
+
+### Changed
+- Stage repo-task fixture copies before reserving/publishing the workspace.
+  Failed copies can be retried; pre-existing and concurrently created destinations
+  remain untouched. Retain and report failed staging trees without recursive cleanup.
+- Added deterministic copy-failure and foreign-destination regressions.
+
 ## 2026-10-13 (platform-independent nesting-limit regressions)
 
 ### Changed
