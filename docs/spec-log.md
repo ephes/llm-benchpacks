@@ -16,6 +16,15 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (strict manifest identifiers)
+
+### Changed
+- Pack, case, fixture, fixture-reference and verifier environment names now
+  require full-string grammar matches. Trailing line breaks and other control
+  characters are rejected during manifest loading before output creation.
+- CLI regressions cover TOML-escaped control characters in every role; legal
+  hyphen/underscore identifiers and bundled packs retain existing behavior.
+
 ## 2026-10-12 (nonstream completion contract)
 
 ### Changed

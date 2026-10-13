@@ -32,6 +32,12 @@ macOS-only tooling.
 
 ## Benchmark Packs
 
+Pack, case, fixture and fixture-reference identifiers and verifier environment
+names must match their entire documented grammar; control characters and
+trailing line breaks are rejected at manifest load time, before output creation.
+See [ID Grammar](benchpack-format.md#id-grammar) for identifier characters and
+[scoring modes](benchpack-format.md#modes) for environment names.
+
 A benchmark pack is a versioned directory containing:
 
 - `benchpack.toml`: metadata, prompt cases, runtime requirements, and scoring mode.

@@ -2944,3 +2944,55 @@ def test_scoring_empty_string_is_valid(tmp_path, mode, field):
     body = f'[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "{mode}"\n{field} = ""\n[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
     pack = load_pack(write_manifest(tmp_path, body))
     assert evaluate(pack.scoring, "hello")["passed"] is True
+
+
+@pytest.mark.parametrize("role", ["pack", "case", "fixture", "fixture_ref", "environment"])
+@pytest.mark.parametrize("suffix", ["\n", "\r", "\t", "\x00"])
+def test_manifest_rejects_control_characters_before_output_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str, suffix: str,
+) -> None:
+    from benchpack.cli import main
+
+    ids = {name: "legal_id-1" for name in ("pack", "case", "fixture", "fixture_ref")}
+    env_name = "LEGAL_ENV_1"
+    if role == "environment":
+        env_name += suffix
+    else:
+        ids[role] += suffix
+    pack_dir = write_manifest(tmp_path, f'''
+[pack]
+id = {json.dumps(ids["pack"])}
+version = "0.1.0"
+
+[[fixtures]]
+id = {json.dumps(ids["fixture"])}
+kind = "repo"
+path = "repo"
+
+[[cases]]
+id = {json.dumps(ids["case"])}
+kind = "repo-task"
+prompt = "test"
+fixture_refs = [{json.dumps(ids["fixture_ref"])}]
+
+[scoring]
+mode = "verify-script"
+script = "verify.py"
+environment = {{ {json.dumps(env_name)} = "value" }}
+''')
+    (pack_dir / "repo").mkdir()
+    (pack_dir / "repo" / "example.txt").write_text("fixture", encoding="utf-8")
+    (pack_dir / "verify.py").write_text("pass", encoding="utf-8")
+
+    def unexpected_hardware():
+        pytest.fail("manifest validation reached run setup")
+
+    monkeypatch.setattr("benchpack.cli.collect_hardware", unexpected_hardware)
+    output = tmp_path / "results"
+    # A bad reference to a valid fixture must fail its grammar check before
+    # looking up the fixture, rather than reporting an unknown fixture.
+    error = PackError if role == "environment" else InvalidIdError
+    message = "fixture_refs entry" if role == "fixture_ref" else "invalid|must match"
+    with pytest.raises(error, match=message):
+        main(["run", str(pack_dir), "--adapter", "openai-chat", "--model", "test", "--out", str(output)])
+    assert not output.exists()

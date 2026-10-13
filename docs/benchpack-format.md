@@ -244,7 +244,9 @@ identifiers, and case ids are also used as filesystem path components (e.g.
 `raw/<case-id>.request.json`). They must match
 `^[A-Za-z0-9][A-Za-z0-9_-]*$`: start with an alphanumeric, then any mix of
 alphanumerics, underscore, and hyphen. No dots, slashes, spaces, or empty
-strings. The runner rejects manifests that violate this at load time.
+strings. The entire identifier must match, including fixture references;
+control characters and trailing line breaks are invalid. The runner rejects
+manifests that violate this at load time before creating output.
 
 ## Case Kinds
 
@@ -744,7 +746,8 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `environment` may be declared in the same effective scoring table as
   `mode = "verify-script"` and `script`. It must be a TOML table whose keys and
   values are strings. Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`; empty names,
-  names containing `-`, `=`, whitespace, or NUL, and names starting with a digit
+  names containing `-`, `=`, whitespace or control characters (including trailing
+  line breaks), and names starting with a digit
   are rejected. Values must be strings; empty string values are allowed, while
   values containing NUL, booleans, numbers, arrays, and nested tables are
   rejected at manifest load time. When `environment` is absent, verifier

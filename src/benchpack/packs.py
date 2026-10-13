@@ -88,7 +88,7 @@ class InvalidScoringSchemaError(PackError):
 
 
 def _validate_id(value: object, role: str) -> str:
-    if not isinstance(value, str) or not ID_PATTERN.match(value):
+    if not isinstance(value, str) or not ID_PATTERN.fullmatch(value):
         raise InvalidIdError(
             f"invalid {role} id {value!r}; must match {ID_PATTERN.pattern}"
         )
@@ -275,7 +275,7 @@ def _scoring_environment_from_value(value: Any) -> dict[str, str] | None:
 
     environment: dict[str, str] = {}
     for key, env_value in value.items():
-        if not isinstance(key, str) or not ENV_NAME_PATTERN.match(key):
+        if not isinstance(key, str) or not ENV_NAME_PATTERN.fullmatch(key):
             raise PackError(
                 "scoring.environment keys must match "
                 f"{ENV_NAME_PATTERN.pattern}; got {key!r}"
@@ -497,7 +497,7 @@ def _fixture_refs_from_case_entry(
             raise InvalidFixtureRefError(
                 f"case {case_id!r} fixture_refs entries must be strings"
             )
-        if not ID_PATTERN.match(raw_ref):
+        if not ID_PATTERN.fullmatch(raw_ref):
             raise InvalidIdError(
                 f"case {case_id!r} fixture_refs entry {raw_ref!r} must match "
                 f"{ID_PATTERN.pattern}"
