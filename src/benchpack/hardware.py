@@ -9,6 +9,7 @@ macOS uses ``sysctl`` and ``system_profiler``.  Linux uses ``lscpu``,
 
 from __future__ import annotations
 
+import math
 import platform
 import socket
 import subprocess
@@ -25,7 +26,7 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
             check=False,
             timeout=timeout,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError, UnicodeError):
         return None
     if completed.returncode != 0:
         return None
@@ -40,7 +41,7 @@ def _sysctl(key: str) -> str | None:
 def _read_file(path: Path) -> str | None:
     try:
         return path.read_text()
-    except OSError:
+    except (OSError, UnicodeError):
         return None
 
 
@@ -54,6 +55,16 @@ def _parse_os_release(text: str) -> dict[str, str]:
     return fields
 
 
+def _parse_nonnegative_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    return number if number >= 0 else None
+
+
 def _parse_memory_mb(value: str) -> int | None:
     parts = value.strip().split()
     if len(parts) < 2:
@@ -63,13 +74,14 @@ def _parse_memory_mb(value: str) -> int | None:
     except ValueError:
         return None
     unit = parts[1].lower()
-    if unit.startswith("tb"):
-        return int(amount * 1024 * 1024)
-    if unit.startswith("gb"):
-        return int(amount * 1024)
-    if unit.startswith("mb"):
-        return int(amount)
-    return None
+    multiplier = next(
+        (scale for prefix, scale in (("tb", 1024 * 1024), ("gb", 1024), ("mb", 1))
+         if unit.startswith(prefix)), None
+    )
+    if multiplier is None:
+        return None
+    mb = amount * multiplier
+    return int(mb) if math.isfinite(mb) and mb >= 0 else None
 
 
 def _parse_system_profiler_hardware(text: str) -> dict[str, Any]:
@@ -93,9 +105,9 @@ def _parse_system_profiler_hardware(text: str) -> dict[str, Any]:
         elif key == "Chip":
             fields["chip"] = value or None
         elif key == "Total Number of Cores":
-            first, *_ = value.split()
-            if first.isdigit():
-                fields["cpu_count"] = int(first)
+            parts = value.split()
+            first = parts[0] if parts else ""
+            fields["cpu_count"] = _parse_nonnegative_int(first)
         elif key == "Memory":
             fields["ram_mb"] = _parse_memory_mb(value)
     return fields
@@ -114,8 +126,9 @@ def _collect_macos() -> dict[str, Any]:
     ram_raw = _sysctl("hw.memsize")
     hardware_model = _sysctl("hw.model")
     chip_raw = cpu_model  # usually includes the Apple chip name
-    cpu_count = int(cpu_count_raw) if cpu_count_raw and cpu_count_raw.isdigit() else None
-    ram_mb = int(ram_raw) // (1024 * 1024) if ram_raw and ram_raw.isdigit() else None
+    cpu_count = _parse_nonnegative_int(cpu_count_raw)
+    ram_bytes = _parse_nonnegative_int(ram_raw)
+    ram_mb = ram_bytes // (1024 * 1024) if ram_bytes is not None else None
 
     sp_hardware = _run(["system_profiler", "SPHardwareDataType"], timeout=10.0)
     sp_fields = _parse_system_profiler_hardware(sp_hardware) if sp_hardware else {}
@@ -148,16 +161,9 @@ def _collect_macos() -> dict[str, Any]:
                 # "VRAM (Total): 8 GB" or "VRAM (Dynamic, Max): ..."
                 _, _, value = stripped.partition(":")
                 value = value.strip()
-                if value.endswith("GB"):
-                    try:
-                        current["vram_mb"] = int(float(value.split()[0]) * 1024)
-                    except ValueError:
-                        pass
-                elif value.endswith("MB"):
-                    try:
-                        current["vram_mb"] = int(float(value.split()[0]))
-                    except ValueError:
-                        pass
+                parsed_memory = _parse_memory_mb(value)
+                if parsed_memory is not None:
+                    current["vram_mb"] = parsed_memory
         if current:
             gpus.append(current)
 
@@ -186,8 +192,8 @@ def _collect_linux() -> dict[str, Any]:
             value = value.strip()
             if key == "Model name" and not cpu_model:
                 cpu_model = value
-            elif key == "CPU(s)" and value.isdigit():
-                cpu_count = int(value)
+            elif key == "CPU(s)":
+                cpu_count = _parse_nonnegative_int(value)
 
     ram_mb: int | None = None
     free = _run(["free", "-m"])
@@ -195,8 +201,8 @@ def _collect_linux() -> dict[str, Any]:
         for line in free.splitlines():
             if line.lower().startswith("mem:"):
                 parts = line.split()
-                if len(parts) >= 2 and parts[1].isdigit():
-                    ram_mb = int(parts[1])
+                if len(parts) >= 2:
+                    ram_mb = _parse_nonnegative_int(parts[1])
                 break
 
     os_release = _read_file(Path("/etc/os-release"))
@@ -215,10 +221,7 @@ def _collect_linux() -> dict[str, Any]:
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 2:
                 vram_mb: int | None
-                try:
-                    vram_mb = int(parts[1])
-                except ValueError:
-                    vram_mb = None
+                vram_mb = _parse_nonnegative_int(parts[1])
                 gpus.append(
                     {
                         "model": parts[0],
@@ -287,7 +290,10 @@ def sample_resources() -> dict[str, Any]:
     )
     if smi:
         try:
-            values = [int(line.strip()) for line in smi.strip().splitlines() if line.strip()]
+            values = [
+                value for line in smi.splitlines()
+                if (value := _parse_nonnegative_int(line.strip())) is not None
+            ]
             if values:
                 sample["gpu_memory_mb"] = max(values)
         except ValueError:

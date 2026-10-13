@@ -4183,3 +4183,24 @@ def test_cli_nonfinite_scoring_records_next_case(tmp_path, monkeypatch):
     assert records[0]["scoring"]["passed"] is False
     assert records[1]["case"] == "next"
     assert records[1]["scoring"]["passed"] is True
+
+
+def test_cli_setup_with_malformed_hardware(tmp_path, monkeypatch) -> None:
+    from benchpack import hardware
+
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    monkeypatch.setattr(hardware.platform, 'system', lambda: 'Darwin')
+    monkeypatch.setattr(hardware, '_sysctl', lambda key: None)
+    monkeypatch.setattr(
+        hardware, '_run',
+        lambda cmd, timeout=5.0: 'Chip: Apple M4\nTotal Number of Cores: \nMemory: nan GB'
+        if cmd[-1] == 'SPHardwareDataType' else None,
+    )
+    assert main(_argv()) == 0
+    out = next((tmp_path / 'results').iterdir())
+    metadata = json.loads((out / 'hardware.json').read_text())
+    assert metadata['cpu_model'] == 'Apple M4'
+    assert metadata['ram_mb'] is None
+    assert 'collector_error' not in metadata

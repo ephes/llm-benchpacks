@@ -578,6 +578,11 @@ include `repo_task`.
 
 ## Hardware Metadata
 
+Malformed, nonfinite or negative memory evidence and empty core counts are
+unavailable (`null`); other valid metadata survives. Command/file decoding
+failures are isolated at the evidence boundary.
+
+
 Host metadata should be best-effort and never block a run unless the user requests
 strict mode.
 
