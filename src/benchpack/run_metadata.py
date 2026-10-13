@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import stat
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -99,11 +101,24 @@ def validate_run_metadata(
 
 
 def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path:
-    """Write normalized run metadata beside the result artifacts."""
+    """Atomically publish normalized run metadata beside the result artifacts."""
 
     output_path = Path(output_dir) / RUN_METADATA_FILENAME
-    output_path.write_text(
-        json.dumps(validate_run_metadata(metadata), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    text = json.dumps(validate_run_metadata(metadata), indent=2, sort_keys=True) + "\n"
+    temporary_path = output_path.with_name(f".{RUN_METADATA_FILENAME}.{uuid.uuid4().hex}.tmp")
+    owned = False
+    try:
+        with temporary_path.open("x", encoding="utf-8") as temporary:
+            owned = True
+            try:
+                mode = stat.S_IMODE(output_path.stat().st_mode)
+            except FileNotFoundError:
+                pass
+            else:
+                temporary_path.chmod(mode)
+            temporary.write(text)
+        temporary_path.replace(output_path)
+    finally:
+        if owned:
+            temporary_path.unlink(missing_ok=True)
     return output_path

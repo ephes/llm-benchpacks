@@ -16,6 +16,15 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (atomic run metadata publication)
+
+### Changed
+- Run metadata is validated and serialized before staging a unique sibling file
+  and atomically replacing `run-metadata.json`. Failed writes or replacement
+  preserve existing provenance and clean up only the call's temporary file.
+- Regression tests cover partial writes, replacement failure, serialization and
+  validation errors, successful publication, and unrelated temporary files.
+
 ## 2026-10-12 (nonstream completion contract)
 
 ### Changed

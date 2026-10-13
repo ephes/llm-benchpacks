@@ -792,6 +792,12 @@ benchpack run <pack> --adapter <adapter> --model <model>
 - `--run-metadata` points at a user-supplied JSON object. When supplied, the
   runner validates it before creating or replacing the output directory and
   writes the normalized object to `run-metadata.json` beside the result.
+  Validation and JSON serialization finish before staging a unique sibling
+  temporary file; atomic replacement publishes the complete artifact. A write
+  or replacement failure preserves existing provenance bytes and removes only
+  the temporary file owned by that call. Existing file permissions are retained;
+  new files honor the process umask. This guarantees atomic visibility, not
+  durability across crashes or power loss.
   Intended fields are structured runtime, model, and operating-condition notes,
   not autodiscovered facts.
 
