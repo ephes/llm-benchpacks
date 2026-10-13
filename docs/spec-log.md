@@ -16,6 +16,14 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (atomic hardware evidence publication)
+
+### Changed
+- Publish hardware evidence through an exclusively created sibling temporary file
+  and atomic replacement, preserving existing evidence and completed run records
+  on write/replace failure. Clean up only the owned temporary file.
+- Added partial-write and replace-failure regressions with and without old evidence.
+
 ## 2026-10-13 (platform-independent nesting-limit regressions)
 
 ### Changed

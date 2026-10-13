@@ -992,3 +992,13 @@ previous byte length before raising, so a retry appends one complete line.
 This is not crash-proof storage or an fsync durability guarantee. If truncation
 also fails, that error propagates with the append error chained; stop using the
 reporter and repair the JSONL file before retrying.
+
+### Hardware evidence publication
+
+The reporter serializes `hardware.json` before creating an exclusive sibling
+UTF-8 temporary file, then atomically replaces the final artifact after closing
+that file. Serialization, write, or replacement failure preserves any previous
+complete hardware artifact (or leaves the final path absent) and leaves completed
+`run.jsonl` records unchanged. Only a temporary file created by this call is
+removed on failure. Existing file permissions are retained; new files honor the
+process umask. Atomic visibility does not guarantee durability after power loss.

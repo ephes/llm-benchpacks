@@ -1580,3 +1580,13 @@ manual JSONL recovery. This does not guarantee durability across crashes.
 
 Hardware evidence is best-effort: malformed numeric values and decoding failures
 leave affected fields unavailable without discarding other valid sources.
+
+## Hardware evidence publication
+
+The reporter serializes `hardware.json` before creating an exclusive sibling
+UTF-8 temporary file, then atomically replaces the final artifact after closing
+that file. Serialization, write, or replacement failure preserves any previous
+complete hardware artifact (or leaves the final path absent) and leaves completed
+`run.jsonl` records unchanged. Only a temporary file created by this call is
+removed on failure. Existing file permissions are retained; new files honor the
+process umask. Atomic visibility does not guarantee durability after power loss.
