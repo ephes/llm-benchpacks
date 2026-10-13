@@ -785,3 +785,98 @@ def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> N
         reporter.record(pack.cases[0], result, {})
     assert str(caught.value.__context__) == 'append failed'
     assert reporter.records == previous_records
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("failure", ["write", "replace"])
+def test_hardware_publication_failure_preserves_evidence(tmp_path, monkeypatch, existing, failure):
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    reporter.record(make_pack(tmp_path).cases[0], make_adapter_result(out), sample={})
+    run_bytes = (out / "run.jsonl").read_bytes()
+    final = out / "hardware.json"
+    old_bytes = b'{"hostname":"old"}\n'
+    if existing:
+        final.write_bytes(old_bytes)
+    real_open = Path.open
+    injected = []
+
+    class PartialWrite:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def write(self, text):
+            self.stream.write(text[:5])
+            self.stream.flush()
+            injected.append(True)
+            raise OSError("injected partial write")
+
+    def failing_open(path, mode="r", *args, **kwargs):
+        stream = real_open(path, mode, *args, **kwargs)
+        if failure == "write" and mode in {"x", "w"}:
+            return PartialWrite(stream)
+        return stream
+
+    def failing_replace(source, target):
+        injected.append(True)
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(Path, "open", failing_open)
+    if failure == "replace":
+        monkeypatch.setattr(Path, "replace", failing_replace)
+    with pytest.raises(OSError, match="injected"):
+        reporter.write_hardware({"hostname": "new"})
+    assert injected == [True]
+    if existing:
+        assert final.read_bytes() == old_bytes
+    else:
+        assert not final.exists()
+    assert list(out.glob(".hardware.json.*.tmp")) == []
+    assert (out / "run.jsonl").read_bytes() == run_bytes
+
+
+def test_hardware_serialization_failure_leaves_no_temporary(tmp_path):
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    with pytest.raises(TypeError):
+        reporter.write_hardware({"invalid": object()})
+    assert not (out / "hardware.json").exists()
+    assert list(out.glob(".hardware.json.*.tmp")) == []
+
+
+def test_hardware_temporary_collision_preserves_foreign_file(tmp_path, monkeypatch):
+    import benchpack.results as results
+
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    foreign = out / ".hardware.json.fixed.tmp"
+    foreign.write_text("foreign")
+
+    class FixedId:
+        hex = "fixed"
+
+    monkeypatch.setattr(results.uuid, "uuid4", lambda: FixedId())
+    with pytest.raises(FileExistsError):
+        reporter.write_hardware({"hostname": "new"})
+    assert foreign.read_text() == "foreign"
+    assert not (out / "hardware.json").exists()
+
+
+def test_hardware_replacement_preserves_permissions_and_cleans_temporary(tmp_path):
+    import stat
+
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    final = out / "hardware.json"
+    final.write_text('{"hostname":"old"}')
+    final.chmod(0o640)
+    reporter.write_hardware({"hostname": "new"})
+    assert json.loads(final.read_text()) == {"hostname": "new"}
+    assert stat.S_IMODE(final.stat().st_mode) == 0o640
+    assert list(out.glob(".hardware.json.*.tmp")) == []

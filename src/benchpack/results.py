@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import os
+import stat
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -181,9 +183,24 @@ class RunReporter:
         return record
 
     def write_hardware(self, hardware: dict[str, Any]) -> None:
-        (self.output_dir / "hardware.json").write_text(
-            json.dumps(hardware, indent=2) + "\n"
-        )
+        text = json.dumps(hardware, indent=2) + "\n"
+        final_path = self.output_dir / "hardware.json"
+        temporary_path = final_path.with_name(f".hardware.json.{uuid.uuid4().hex}.tmp")
+        owned = False
+        try:
+            with temporary_path.open("x", encoding="utf-8") as temporary:
+                owned = True
+                try:
+                    mode = stat.S_IMODE(final_path.stat().st_mode)
+                except FileNotFoundError:
+                    pass
+                else:
+                    temporary_path.chmod(mode)
+                temporary.write(text)
+            temporary_path.replace(final_path)
+        finally:
+            if owned:
+                temporary_path.unlink(missing_ok=True)
 
     def write_run_metadata(self, metadata: dict[str, Any]) -> None:
         write_run_metadata(self.output_dir, metadata)
