@@ -4260,10 +4260,10 @@ def test_cli_manifest_shape_preflight_makes_no_model_calls(tmp_path, monkeypatch
 
 @pytest.mark.parametrize("payload,category", [
     (b'{"sentinel": "\xff"}', "UTF-8"),
-    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+    (b"[[0]]", "nesting"),
 ], ids=["invalid-utf8", "excessive-nesting"])
 @pytest.mark.parametrize("source", ["schema", "metadata"])
-def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, payload, category, source):
+def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, payload, category, source, decoder_nesting_limit):
     from benchpack.packs import InvalidScoringSchemaError
 
     calls = _install_fake_adapter(monkeypatch)
@@ -4289,9 +4289,9 @@ def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, p
 
 @pytest.mark.parametrize("payload,category", [
     (b'{"sentinel": "\xff"}', "UTF-8"),
-    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+    (b"[[0]]", "nesting"),
 ], ids=["invalid-utf8", "excessive-nesting"])
-def test_cli_report_normalizes_metadata_decode_errors(tmp_path, payload, category, capsys):
+def test_cli_report_normalizes_metadata_decode_errors(tmp_path, payload, category, capsys, decoder_nesting_limit):
     run = tmp_path / "run"
     _write_compare_run(run)
     (run / "run-metadata.json").write_bytes(payload)
