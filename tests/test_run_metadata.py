@@ -234,3 +234,16 @@ def test_write_run_metadata_success_preserves_permissions_and_cleans_staging(
     assert stat.S_IMODE(path.stat().st_mode) == expected_mode
     assert set(tmp_path.iterdir()) == {path, unrelated}
     assert unrelated.read_bytes() == b"other writer"
+
+
+@pytest.mark.parametrize("payload,category", [
+    (b'{"sentinel": "\xff"}', "UTF-8"),
+    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+], ids=["invalid-utf8", "excessive-nesting"])
+def test_load_run_metadata_normalizes_decode_errors(tmp_path, payload, category):
+    path = tmp_path / "metadata.json"
+    path.write_bytes(payload)
+    with pytest.raises(RunMetadataError, match=category) as error:
+        load_run_metadata(path)
+    assert "sentinel" not in str(error.value)
+    assert len(str(error.value)) < len(str(path)) + 100

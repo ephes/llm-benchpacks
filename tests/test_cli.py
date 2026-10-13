@@ -4238,3 +4238,63 @@ def test_cli_setup_with_malformed_hardware(tmp_path, monkeypatch) -> None:
     assert metadata['cpu_model'] == 'Apple M4'
     assert metadata['ram_mb'] is None
     assert 'collector_error' not in metadata
+
+
+@pytest.mark.parametrize("manifest", [
+    'pack = "x"',
+    'cases = ["x"]\n[pack]\nid = "smoke-chat"\nversion = "1"',
+    '[pack]\nid = "smoke-chat"\nversion = "1"\n[[cases]]\nid = "one"\nprompt = 42',
+])
+def test_cli_manifest_shape_preflight_makes_no_model_calls(tmp_path, monkeypatch, manifest):
+    from benchpack.packs import PackError
+
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    (tmp_path / "benchpacks/smoke-chat/benchpack.toml").write_text(manifest)
+    with pytest.raises(PackError):
+        main(_argv([]))
+    assert calls == []
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("payload,category", [
+    (b'{"sentinel": "\xff"}', "UTF-8"),
+    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+], ids=["invalid-utf8", "excessive-nesting"])
+@pytest.mark.parametrize("source", ["schema", "metadata"])
+def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, payload, category, source):
+    from benchpack.packs import InvalidScoringSchemaError
+
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "run"
+    if source == "schema":
+        _write_json_schema_pack(tmp_path)
+        (tmp_path / "benchpacks/json-format/fixtures/shape.schema.json").write_bytes(payload)
+        argv = ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model", "--out", str(out)]
+        error_type = InvalidScoringSchemaError
+    else:
+        _write_smoke_pack(tmp_path)
+        metadata = tmp_path / "metadata.json"
+        metadata.write_bytes(payload)
+        argv = _argv(["--out", str(out), "--run-metadata", str(metadata)])
+        error_type = SystemExit
+    with pytest.raises(error_type, match=category) as error:
+        main(argv)
+    assert "sentinel" not in str(error.value)
+    assert calls == []
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("payload,category", [
+    (b'{"sentinel": "\xff"}', "UTF-8"),
+    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+], ids=["invalid-utf8", "excessive-nesting"])
+def test_cli_report_normalizes_metadata_decode_errors(tmp_path, payload, category, capsys):
+    run = tmp_path / "run"
+    _write_compare_run(run)
+    (run / "run-metadata.json").write_bytes(payload)
+    with pytest.raises(SystemExit, match=category):
+        main(["report", str(run)])
+    assert capsys.readouterr().out == ""

@@ -32,6 +32,17 @@ macOS-only tooling.
 
 ## Benchmark Packs
 
+Manifest `pack` values must be tables and `cases` values must be arrays of
+tables. Inline prompts must be strings; empty strings remain valid. Shape and
+prompt type errors raise `PackError` during loading before output preparation
+or model calls.
+
+Scoring schemas and run metadata must decode as UTF-8 JSON. Invalid encoding
+and excessive decoder nesting raise `InvalidScoringSchemaError` and
+`RunMetadataError`, respectively, with short categories and no document bytes.
+Run metadata failures produce a concise CLI error before generation or reporting;
+existing JSON object and field validation still applies.
+
 Pack, case, fixture and fixture-reference identifiers and verifier environment
 names must match their entire documented grammar; control characters and
 trailing line breaks are rejected at manifest load time, before output creation.
