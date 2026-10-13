@@ -1542,6 +1542,22 @@ events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
 
+## Ollama generate completion
+
+A nonstreaming `ollama-generate` response is a completed generation only when
+it decodes to an object with `done: true`, a string `response` and no `error`
+key. A completed empty string is a valid answer. The native metrics
+(`total_duration`, `load_duration`, `prompt_eval_count`, `prompt_eval_duration`,
+`eval_count`, `eval_duration`) are integers between 0 and `2**53 - 1` or
+null/absent (booleans are rejected); null metrics are treated as absent. The
+entire contract is validated before output or metrics are extracted. Any
+other 200 response (non-object JSON, undecodable or non-JSON bodies such as
+HTML, backend errors, `done` false or missing, wrong-typed text or metrics) and
+every HTTP error status return a failed result with empty scoring output and
+unset token, timing and backend metrics, without interrupting later cases.
+Decoded payloads, including partial text, remain in the raw response artifact;
+undecodable responses retain their text there.
+
 ## Reporter persistence failures
 
 The reporter requires exclusive ownership of run.jsonl. Serialization precedes

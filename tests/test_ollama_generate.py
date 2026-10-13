@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 
 from benchpack.adapters import AdapterRequest
 from benchpack.adapters.ollama_generate import OllamaGenerateAdapter
@@ -112,3 +113,99 @@ def test_ollama_generate_marks_failure_on_http_error(tmp_path: Path) -> None:
 
     assert result.ok is False
     assert "500" in (result.error or "")
+
+
+_COMPLETE = {"response": "Paris.", "done": True, "eval_count": 5, "eval_duration": 1_000_000_000}
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("[]", "response must be an object"),
+        ("null", "response must be an object"),
+        ("7", "response must be an object"),
+        ('"text"', "response must be an object"),
+        ("<html>bad gateway</html>", "not valid JSON"),
+        ("9" * 5000, "not valid JSON"),
+        ("[" * 100_000, "not valid JSON"),
+        (json.dumps({**_COMPLETE, "error": "model not loaded"}), "backend error response"),
+        (json.dumps({**_COMPLETE, "error": None}), "backend error response"),
+        (json.dumps({**_COMPLETE, "done": False}), "not complete"),
+        (json.dumps({"response": "partial"}), "not complete"),
+        (json.dumps({**_COMPLETE, "done": "true"}), "not complete"),
+        (json.dumps({"done": True}), "response text must be a string"),
+        (json.dumps({**_COMPLETE, "response": ["Paris."]}), "response text must be a string"),
+        (json.dumps({**_COMPLETE, "response": None}), "response text must be a string"),
+        (json.dumps({**_COMPLETE, "eval_count": "5"}), "eval_count must be an integer"),
+        (json.dumps({**_COMPLETE, "eval_count": True}), "eval_count must be an integer"),
+        (json.dumps({**_COMPLETE, "eval_count": -1}), "eval_count must be an integer"),
+        (json.dumps({**_COMPLETE, "eval_count": 5.0}), "eval_count must be an integer"),
+        (json.dumps({**_COMPLETE, "eval_duration": {"ns": 1}}), "eval_duration must be an integer"),
+        (json.dumps({**_COMPLETE, "total_duration": 2**53}), "total_duration must be an integer"),
+        (json.dumps({**_COMPLETE, "prompt_eval_count": 10**400}), "prompt_eval_count must be an integer"),
+    ],
+)
+def test_ollama_generate_fails_incomplete_or_malformed_success_response(
+    tmp_path: Path, body: str, message: str
+) -> None:
+    adapter = OllamaGenerateAdapter(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body))
+    )
+    req = make_request(tmp_path)
+
+    result = adapter.run(req)
+
+    assert result.ok is False
+    assert result.error is not None and result.error.startswith("response parse error: ")
+    assert message in result.error
+    assert len(result.error) < 200
+    assert result.output_text == ""
+    assert result.tokens.prompt is None and result.tokens.output is None
+    assert result.timing.prefill_tps is None and result.timing.decode_tps is None
+    assert result.backend is None
+    raw = json.loads(req.response_path.read_text())
+    try:
+        assert raw == json.loads(body)
+    except (ValueError, RecursionError):
+        assert raw == {"text": body}
+
+
+def test_ollama_generate_http_error_with_json_body_publishes_no_output(tmp_path: Path) -> None:
+    adapter = OllamaGenerateAdapter(
+        transport=httpx.MockTransport(lambda _: httpx.Response(500, json=_COMPLETE))
+    )
+    req = make_request(tmp_path)
+
+    result = adapter.run(req)
+
+    assert result.ok is False
+    assert (result.error or "").startswith("HTTP 500")
+    assert result.output_text == ""
+    assert result.tokens.output is None
+    assert result.backend is None
+    assert json.loads(req.response_path.read_text()) == _COMPLETE
+
+
+@pytest.mark.parametrize("text", ["", "Paris."])
+def test_ollama_generate_accepts_completed_response_with_null_and_boundary_metrics(
+    tmp_path: Path, text: str
+) -> None:
+    payload = {
+        "response": text,
+        "done": True,
+        "prompt_eval_count": None,
+        "eval_count": 0,
+        "total_duration": 2**53 - 1,
+    }
+    adapter = OllamaGenerateAdapter(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    )
+
+    result = adapter.run(make_request(tmp_path))
+
+    assert result.ok is True
+    assert result.error is None
+    assert result.output_text == text
+    assert result.tokens.prompt is None
+    assert result.tokens.output == 0
+    assert result.backend == {"total_duration": 2**53 - 1, "eval_count": 0}
