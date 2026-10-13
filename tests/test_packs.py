@@ -3027,9 +3027,9 @@ def test_load_pack_accepts_string_prompt_including_empty(tmp_path, prompt):
 
 @pytest.mark.parametrize("payload,category", [
     (b'{"sentinel": "\xff"}', "UTF-8"),
-    (("[" * 1000000 + "0" + "]" * 1000000).encode(), "nesting"),
+    (b"[[0]]", "nesting"),
 ])
-def test_load_pack_normalizes_schema_decode_errors(tmp_path, payload, category):
+def test_load_pack_normalizes_schema_decode_errors(tmp_path, payload, category, decoder_nesting_limit):
     body = '[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "json-schema"\nschema = "schema.json"\n'
     pack_dir = write_manifest(tmp_path, body)
     (pack_dir / "schema.json").write_bytes(payload)

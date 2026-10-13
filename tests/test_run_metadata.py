@@ -238,9 +238,9 @@ def test_write_run_metadata_success_preserves_permissions_and_cleans_staging(
 
 @pytest.mark.parametrize("payload,category", [
     (b'{"sentinel": "\xff"}', "UTF-8"),
-    (("[" * 100000 + "0" + "]" * 100000).encode(), "nesting"),
+    (b"[[0]]", "nesting"),
 ], ids=["invalid-utf8", "excessive-nesting"])
-def test_load_run_metadata_normalizes_decode_errors(tmp_path, payload, category):
+def test_load_run_metadata_normalizes_decode_errors(tmp_path, payload, category, decoder_nesting_limit):
     path = tmp_path / "metadata.json"
     path.write_bytes(payload)
     with pytest.raises(RunMetadataError, match=category) as error:

@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (platform-independent nesting-limit regressions)
+
+### Changed
+- The decoder nesting limit follows the interpreter's C stack, so a document
+  that raises `RecursionError` on macOS decodes on the Linux CI runner and then
+  fails the later JSON-object check instead. The nesting regressions now inject
+  the decoder failure through a shared test fixture instead of relying on a
+  fixed depth. Reader behavior is unchanged: either way the input is rejected
+  with a domain error.
+
 ## 2026-10-13 (manifest shapes and JSON input errors)
 
 ### Changed
