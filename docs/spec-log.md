@@ -16,6 +16,17 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-13 (manifest shapes and JSON input errors)
+
+### Changed
+- Manifest loading rejects non-table pack sections, non-table-array cases and
+  non-string inline prompts through existing pack errors; empty prompts remain
+  valid.
+- Scoring schema and run metadata readers normalize invalid UTF-8 and excessive
+  JSON nesting to their domain errors without including input contents.
+- Loader and CLI regressions cover rejection before output/model calls and
+  metadata report failures. No benchmark runs were started.
+
 ## 2026-10-13 (Ollama generate completion contract)
 
 ### Changed

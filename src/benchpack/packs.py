@@ -235,6 +235,14 @@ def _scoring_schema_from_value(
         raise InvalidScoringSchemaError(
             f"scoring.schema {value!r} could not be read"
         ) from exc
+    except UnicodeDecodeError as exc:
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} is not valid UTF-8"
+        ) from exc
+    except RecursionError as exc:
+        raise InvalidScoringSchemaError(
+            f"scoring.schema {value!r} exceeds JSON nesting limit"
+        ) from exc
     except json.JSONDecodeError as exc:
         raise InvalidScoringSchemaError(
             f"scoring.schema {value!r} is not valid JSON"
@@ -377,7 +385,12 @@ def _prompt_from_case_entry(
             f"case {case_id!r} must define either 'prompt' or 'prompt_file'"
         )
     if has_prompt:
-        return entry["prompt"]
+        prompt = entry["prompt"]
+        if not isinstance(prompt, str):
+            raise InvalidPromptSourceError(
+                f"case {case_id!r} prompt must be a string"
+            )
+        return prompt
 
     prompt_file = entry["prompt_file"]
     if not isinstance(prompt_file, str):
@@ -628,7 +641,9 @@ def load_pack(path: Path | str) -> Pack:
         data = tomllib.load(fh)
     resolved_pack_dir = pack_dir.resolve(strict=True)
 
-    pack_section = data.get("pack") or {}
+    pack_section = data.get("pack", {})
+    if not isinstance(pack_section, dict):
+        raise PackError("[pack] section must be a table")
     pack_id_raw = pack_section.get("id")
     pack_version = pack_section.get("version")
     if not pack_id_raw or not pack_version:
@@ -643,7 +658,11 @@ def load_pack(path: Path | str) -> Pack:
     fixture_ids = {fixture.id for fixture in fixtures}
     fixtures_by_id = {fixture.id: fixture for fixture in fixtures}
 
-    raw_cases = data.get("cases") or []
+    raw_cases = data.get("cases", [])
+    if not isinstance(raw_cases, list) or any(
+        not isinstance(entry, dict) for entry in raw_cases
+    ):
+        raise PackError("cases must be an array of tables")
     cases: list[Case] = []
     seen: set[str] = set()
     for entry in raw_cases:

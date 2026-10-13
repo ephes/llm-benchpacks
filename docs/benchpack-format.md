@@ -1,5 +1,9 @@
 # Benchpack Format
 
+The `pack` value must be a TOML table, and `cases`, when present, must be an
+array of tables (`[[cases]]`). Invalid container shapes fail with `PackError`
+during loading, before output preparation or model calls.
+
 This is the initial manifest sketch. The schema can change until the first
 release.
 
@@ -76,8 +80,8 @@ expected = "Paris"
   must be unique within the pack.
 
 `cases[].prompt`
-: Inline prompt text for a case. Inline prompts remain supported for compact
-  smoke and runtime-measurement cases.
+: Inline prompt text for a case; it must be a string. An empty string is valid.
+  Inline prompts remain supported for compact smoke and runtime-measurement cases.
 
 `cases[].prompt_file`
 : Pack-relative path to a UTF-8 prompt file, for example
@@ -665,6 +669,10 @@ usually remain local or ignored.
 
 A pack can declare default scoring at the top level. Cases override it inline
 when they need a different mode.
+
+Scoring schema files must be UTF-8 JSON objects. Invalid UTF-8 and JSON nesting
+that exceeds the decoder limit raise `InvalidScoringSchemaError` during loading,
+with a short category message that does not include document contents.
 
 ### Pack-level default
 

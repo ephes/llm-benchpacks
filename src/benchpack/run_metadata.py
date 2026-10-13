@@ -24,6 +24,10 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
     metadata_path = Path(path)
     try:
         text = metadata_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise RunMetadataError(
+            f"run metadata file {metadata_path} is not valid UTF-8"
+        ) from exc
     except OSError as exc:
         raise RunMetadataError(
             f"could not read run metadata file {metadata_path}: {exc.strerror}"
@@ -31,6 +35,10 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
 
     try:
         metadata = json.loads(text)
+    except RecursionError as exc:
+        raise RunMetadataError(
+            f"run metadata file {metadata_path} exceeds JSON nesting limit"
+        ) from exc
     except json.JSONDecodeError as exc:
         raise RunMetadataError(
             f"could not parse run metadata file {metadata_path}: {exc.msg}"

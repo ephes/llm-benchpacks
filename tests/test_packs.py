@@ -2996,3 +2996,44 @@ environment = {{ {json.dumps(env_name)} = "value" }}
     with pytest.raises(error, match=message):
         main(["run", str(pack_dir), "--adapter", "openai-chat", "--model", "test", "--out", str(output)])
     assert not output.exists()
+
+
+@pytest.mark.parametrize("value", ['"x"', '42', 'false', '[]', '["x"]'])
+def test_load_pack_rejects_non_table_pack(tmp_path, value):
+    pack_dir = write_manifest(tmp_path, f"pack = {value}\n")
+    with pytest.raises(PackError, match=r"\[pack\].*table"):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize("value", ['"x"', '42', 'false', '{}', '["x"]', '[{} , "x"]'])
+def test_load_pack_rejects_non_table_cases(tmp_path, value):
+    body = f'cases = {value}\n[pack]\nid = "examplepack"\nversion = "1"\n'
+    with pytest.raises(PackError, match="cases.*array of tables"):
+        load_pack(write_manifest(tmp_path, body))
+
+
+@pytest.mark.parametrize("value", ['42', 'true', '["text"]', '{}'])
+def test_load_pack_rejects_non_string_prompt(tmp_path, value):
+    body = f'[pack]\nid = "examplepack"\nversion = "1"\n[[cases]]\nid = "one"\nprompt = {value}\n'
+    with pytest.raises(InvalidPromptSourceError, match="prompt must be a string"):
+        load_pack(write_manifest(tmp_path, body))
+
+
+@pytest.mark.parametrize("prompt", ["", "hello"])
+def test_load_pack_accepts_string_prompt_including_empty(tmp_path, prompt):
+    body = f'[pack]\nid = "examplepack"\nversion = "1"\n[[cases]]\nid = "one"\nprompt = {json.dumps(prompt)}\n'
+    assert load_pack(write_manifest(tmp_path, body)).cases[0].prompt == prompt
+
+
+@pytest.mark.parametrize("payload,category", [
+    (b'{"sentinel": "\xff"}', "UTF-8"),
+    (("[" * 1000000 + "0" + "]" * 1000000).encode(), "nesting"),
+])
+def test_load_pack_normalizes_schema_decode_errors(tmp_path, payload, category):
+    body = '[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "json-schema"\nschema = "schema.json"\n'
+    pack_dir = write_manifest(tmp_path, body)
+    (pack_dir / "schema.json").write_bytes(payload)
+    with pytest.raises(InvalidScoringSchemaError, match=category) as error:
+        load_pack(pack_dir)
+    assert "sentinel" not in str(error.value)
+    assert len(str(error.value)) < 200
