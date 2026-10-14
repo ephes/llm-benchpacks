@@ -1410,7 +1410,18 @@ Bundle creation performs a conservative text secret scan over files it is about
 to copy and over the generated manifest. It fails before leaving a partial
 bundle when obvious bearer tokens, secret-looking JSON fields, credentialed
 URLs, tokenized query strings, or non-UTF-8 text in copied compact artifacts are
-detected. This is not a complete public upload trust policy; authenticated
+detected. Secret-looking JSON fields and environment-style assignments are
+matched by key case-insensitively, including prefixed keys: a JSON string field
+whose key contains `api_key`/`apikey`, `secret`, `password`, `passwd`,
+`credential`, a singular `token`, or ends in `authorization` (`OPENAI_API_KEY`, `HF_TOKEN`,
+`client_secret`, `access_token`) is rejected when its value is a single word of
+at least 8 characters, and so is an upper-case `KEY=value` assignment such as
+`HF_TOKEN=hf_...`. The exact keys `api_key`, `token`, `secret`, `password` and
+`authorization` are rejected for any string value of at least 8 characters.
+Token-accounting keys (`prompt_tokens`, `tokenizer`, `token_budget_field`,
+`totalTokenCount`), values containing whitespace once JSON-decoded, and
+placeholder values starting with `$`, `<` or `{` are not flagged. Quoted
+assignments (`HF_TOKEN='hf_...'`) are flagged like unquoted ones. This is not a complete public upload trust policy; authenticated
 upload, deeper secret scanning, moderation, and object-storage handling remain
 later work.
 

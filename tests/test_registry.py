@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1858,6 +1859,114 @@ def test_registry_bundle_create_rejects_possible_secret(tmp_path: Path) -> None:
         create_result_bundle([result_dir], bundle_dir)
 
     assert not bundle_dir.exists()
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"env": {"OPENAI_API_KEY": "sk-proj-abcdef123456"}},
+        {"env": {"HF_TOKEN": "hf_abcdefghijklmnop"}},
+        {"oauth": {"client_secret": "cs-abcdef123456"}},
+        {"auth": {"access_token": "at-abcdef123456"}},
+        {"auth": {"refreshToken": "rt-abcdef123456"}},
+        {"auth": {"X-Api-Key": "abcdef123456"}},
+        {"notes": "ran with OPENAI_API_KEY=sk-proj-abcdef123456 exported"},
+        {"notes": "export HF_TOKEN=hf_abcdefghijklmnop"},
+        {"notes": "export HF_TOKEN='hf_abcdefghijklmnop'"},
+        {"notes": 'export HF_TOKEN="hf_abcdefghijklmnop"'},
+        {"notes": "DB_PASSWORD=abc\\!defghijkl"},
+    ],
+)
+def test_registry_bundle_create_rejects_prefixed_secret_keys(
+    tmp_path: Path, metadata: dict
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(metadata) + "\n", encoding="utf-8"
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    with pytest.raises(RegistryError, match="possible secret"):
+        create_result_bundle([result_dir], bundle_dir)
+
+    assert not bundle_dir.exists()
+
+
+def test_registry_bundle_create_allows_token_counts_and_placeholders(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text(
+        json.dumps(
+            {
+                "usage": {
+                    "prompt_tokens": "12345678",
+                    "completion_tokens": 512,
+                    "totalTokenCount": "87654321",
+                },
+                "token_budget_field": "max_completion_tokens",
+                "tokenizer": "Qwen/Qwen3-8B-tokenizer",
+                "secret_handling": "no bearer token or credential required",
+                "secret_policy": "no\nbearer\ttoken\nrequired",
+                "api_key_source": "<from-env>",
+                "notes": "HF_TOKEN=$HF_TOKEN MAX_TOKENS=40960000 "
+                "OPENAI_API_KEY=<redacted>",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    bundle_dir = tmp_path / "bundle"
+
+    create_result_bundle([result_dir], bundle_dir)
+
+    validate_result_bundle(bundle_dir)
+
+
+def test_registry_bundle_validate_rejects_prefixed_secret_key(
+    tmp_path: Path,
+) -> None:
+    result_dir = tmp_path / "run-a"
+    _write_result_dir(result_dir)
+    (result_dir / "run-metadata.json").write_text("{}\n", encoding="utf-8")
+    bundle_dir = tmp_path / "bundle"
+    create_result_bundle([result_dir], bundle_dir)
+    secret = b'{"env": {"HF_TOKEN": "hf_abcdefghijklmnop"}}\n'
+    (bundle_dir / "runs" / "run-001-run-a" / "run-metadata.json").write_bytes(secret)
+    manifest_path = bundle_dir / BUNDLE_MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text())
+    for entry in manifest["runs"][0]["files"]:
+        if entry["path"] == "runs/run-001-run-a/run-metadata.json":
+            entry["sha256"] = hashlib.sha256(secret).hexdigest()
+            entry["bytes"] = len(secret)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(RegistryError, match="possible secret"):
+        validate_result_bundle(bundle_dir)
+
+
+def test_tracked_packs_and_results_pass_the_bundle_secret_scan() -> None:
+    root = Path(__file__).resolve().parents[1]
+    if shutil.which("git") is None:
+        pytest.skip("tracked-file sweep needs git")
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "benchpacks", "results", "examples", "data"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+    )
+    if listed.returncode != 0:
+        pytest.skip("tracked-file sweep needs a git checkout")
+    paths = [root / name for name in listed.stdout.decode().split("\0") if name]
+    assert paths
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        registry._assert_no_public_secret(text, str(path.relative_to(root)))
 
 
 def test_registry_bundle_create_rejects_output_inside_result_dir(

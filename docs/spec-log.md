@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-10-14 (bundle secret scan for prefixed keys)
+
+### Changed
+- The bundle secret scan now matches secret-looking JSON keys and upper-case
+  `KEY=value` assignments by case-insensitive substring, so `OPENAI_API_KEY`,
+  `HF_TOKEN`, `client_secret` and `access_token` in run metadata no longer reach
+  public bundles. Token-count keys and prose or placeholder values stay allowed.
+- Added positive/negative regressions and a scan of the tracked packs and
+  results.
+
 ## 2026-10-13 (workspace copy failure isolation)
 
 ### Changed
