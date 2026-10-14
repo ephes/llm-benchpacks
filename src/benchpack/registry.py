@@ -45,6 +45,26 @@ _SECRET_PATTERNS = (
         r"(?i)\"(?:api[_-]?key|token|secret|password|authorization)\"\s*:\s*\"[^\"]{8,}\""
     ),
 )
+# Prefixed keyed secrets: a JSON string field or an environment-style ``KEY=value``
+# assignment whose key passes ``_is_secret_key`` and whose (decoded) value is
+# one credential-shaped word of at least 8 characters. Prose values such as
+# ``"secret_handling": "no bearer token required"`` contain whitespace and are
+# not flagged; neither are ``$VAR``, ``<placeholder>`` or ``{template}`` values.
+_JSON_STRING_FIELD_RE = re.compile(
+    r'"(?P<key>[^"\\]{1,128})"\s*:\s*"(?P<value>(?:\\.|[^"\\])*)"'
+)
+_ENV_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<key>[A-Z][A-Z0-9_]*)="
+    r"\\?[\"']?(?P<value>[^\s\"']+)"
+)
+_SECRET_KEY_RE = re.compile(
+    r"api_?key|secret|password|passwd|credential|authorization$"
+)
+# ``token`` names a credential unless the key is about token accounting:
+# ``prompt_tokens``, ``tokenizer``, ``token_budget_field``, ``tokenCount``.
+_TOKEN_KEY_RE = re.compile(
+    r"token(?!s|izer|_?(?:count|details|budget|limit|usage|start|end))"
+)
 _RUN_COLUMN_DEFINITIONS = (
     ("id", "INTEGER PRIMARY KEY"),
     ("result_dir", "TEXT NOT NULL UNIQUE"),
@@ -2964,9 +2984,44 @@ def _validate_bundle_file_role(relative_path: str, role: str) -> None:
 
 
 def _assert_no_public_secret(text: str, source: str) -> None:
-    for pattern in _SECRET_PATTERNS:
-        if pattern.search(text):
-            raise RegistryError(f"possible secret detected in bundle file {source}")
+    keyed_values = [
+        (match.group("key"), _decoded_json_string(match.group("value")))
+        for match in _JSON_STRING_FIELD_RE.finditer(text)
+    ] + [
+        (match.group("key"), match.group("value"))
+        for match in _ENV_ASSIGNMENT_RE.finditer(text)
+    ]
+    if any(pattern.search(text) for pattern in _SECRET_PATTERNS) or any(
+        _is_secret_key(key) and _is_credential_shaped(value)
+        for key, value in keyed_values
+    ):
+        raise RegistryError(f"possible secret detected in bundle file {source}")
+
+
+def _decoded_json_string(raw: str) -> str:
+    try:
+        return json.loads(f'"{raw}"')
+    except ValueError:
+        return raw
+
+
+def _is_credential_shaped(value: str) -> bool:
+    return (
+        len(value) >= 8
+        and not value.startswith(("$", "<", "{"))
+        and not any(char.isspace() for char in value)
+    )
+
+
+def _is_secret_key(key: str) -> bool:
+    """Whether a JSON or ``KEY=value`` key names a credential.
+
+    Matching is case-insensitive and by substring, so prefixed keys such as
+    ``OPENAI_API_KEY``, ``HF_TOKEN``, ``client_secret`` and ``access_token``
+    count, while token-count fields such as ``prompt_tokens`` do not.
+    """
+    normalized = key.lower().replace("-", "_").replace(".", "_")
+    return bool(_SECRET_KEY_RE.search(normalized) or _TOKEN_KEY_RE.search(normalized))
 
 
 def _assert_file_has_no_public_secret(path: Path, source: str) -> None:
