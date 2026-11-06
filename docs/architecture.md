@@ -824,7 +824,11 @@ patch diffs, and safe model-call JSONL logs when every non-empty line matches
 the allowlisted telemetry shape. Raw payloads, workspaces, normal task logs,
 verifier artifacts, and unsafe model-call logs are omitted by default; file
 omissions include hashes and byte counts when the omitted artifact is an
-existing regular file below the source result directory. Bundle manifests store
+existing regular file below the source result directory. Included files are copied
+once into private staging, then scanned and hashed there; per-run row counts and
+run digests and artifact references also come from that staged snapshot.
+Included model-call logs are rechecked against the telemetry allowlist after
+copying. Bundle manifests store
 bundle-relative paths and source directory names, not canonical local absolute
 paths. Bundle output paths must be disjoint from source result directories so
 `--force` cannot delete source evidence. An owned sibling staging directory is
@@ -919,14 +923,18 @@ normal commits.
 
 ### Verifier timeout cleanup
 
-On POSIX, each verifier starts in a new session/process group. Budget expiry
-sends SIGTERM to that original group, drains output for at most 0.5 seconds,
-then sends SIGKILL even if the leader or its pipes have already closed. A second
-0.5-second drain is bounded; if a pipe remains open, captured partial output is
-retained, readers are closed, and the immediate process is reaped with a bounded
-wait. Interrupts and other communication exceptions also stop and reap the isolated
-verifier before propagating. Timeout scoring remains failed with a null exit code
-and timeout artifacts.
+Verifier stdout/stderr go directly to the existing owned log files, preserving
+all emitted bytes without capturing the streams in memory. Internal diagnostics
+retain at most the final 64 KiB per stream, decoded as UTF-8 with replacement
+for incomplete or invalid sequences. This does not impose a disk quota.
+On POSIX, each verifier starts in a new session/process group. The runner waits
+for the leader and any remaining group members within the same timeout budget,
+including descendants that outlive their parent. Budget expiry sends SIGTERM to
+that original group, waits at most 0.5 seconds, then sends SIGKILL even if the
+leader has exited. The immediate process is reaped with a bounded wait.
+Interrupts and other wait exceptions also stop and reap the isolated verifier
+before propagating. Timeout scoring remains failed with a null exit code and
+timeout artifacts; full logs are retained on timeout and nonzero exit.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.

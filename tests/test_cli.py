@@ -2991,12 +2991,9 @@ def test_cli_repo_task_verify_script_timeout_records_completed_row(
             str(part).endswith("verify/check.py") for part in command
         ):
             timeouts.append(kwargs["timeout"])
-            raise subprocess.TimeoutExpired(
-                command,
-                kwargs["timeout"],
-                output="timeout stdout\n",
-                stderr="timeout stderr\n",
-            )
+            kwargs["stdout"].write(b"timeout stdout\n")
+            kwargs["stderr"].write(b"timeout stderr\n")
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_verifier_run)
@@ -3056,12 +3053,9 @@ def test_cli_repo_task_verify_script_manifest_timeout_reaches_verifier(
             str(part).endswith("verify/check.py") for part in command
         ):
             timeouts.append(kwargs["timeout"])
-            raise subprocess.TimeoutExpired(
-                command,
-                kwargs["timeout"],
-                output="timeout stdout\n",
-                stderr="timeout stderr\n",
-            )
+            kwargs["stdout"].write(b"timeout stdout\n")
+            kwargs["stderr"].write(b"timeout stderr\n")
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_verifier_run)

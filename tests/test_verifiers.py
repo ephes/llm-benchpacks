@@ -356,12 +356,9 @@ def test_run_verifier_timeout_writes_captured_logs_and_failed_result(
     patch.write_text("", encoding="utf-8")
 
     def timeout_run(command, **kwargs):
-        raise subprocess.TimeoutExpired(
-            command,
-            kwargs["timeout"],
-            output="partial stdout\n",
-            stderr=b"partial stderr\n",
-        )
+        kwargs["stdout"].write(b"partial stdout\n")
+        kwargs["stderr"].write(b"partial stderr\n")
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
     monkeypatch.setattr("benchpack.verifiers._run_verifier_command", timeout_run)
 
@@ -552,7 +549,7 @@ def test_verifier_interrupt_reaps_isolated_process(tmp_path: Path, monkeypatch: 
     pack_dir = tmp_path / 'pack'
     write_script(pack_dir, 'import time; time.sleep(30)')
     pack = make_pack(pack_dir)
-    original = subprocess.Popen.communicate
+    original = subprocess.Popen.wait
     seen = []
 
     def interrupt_once(process, *args, **kwargs):
@@ -561,12 +558,73 @@ def test_verifier_interrupt_reaps_isolated_process(tmp_path: Path, monkeypatch: 
             raise KeyboardInterrupt
         return original(process, *args, **kwargs)
 
-    monkeypatch.setattr(subprocess.Popen, 'communicate', interrupt_once)
+    monkeypatch.setattr(subprocess.Popen, 'wait', interrupt_once)
     with pytest.raises(KeyboardInterrupt):
         run_repo_task_verifier(pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
             prepared_workspace=prepared, patch_path=tmp_path / 'patch.diff', output_dir=tmp_path / 'run',
             repetition=1, timeout_s=2)
     assert seen[0].returncode is not None
-    assert seen[0].stdout.closed and seen[0].stderr.closed
+    assert seen[0].stdout is None and seen[0].stderr is None
     with pytest.raises(ProcessLookupError):
         os.kill(seen[0].pid, 0)
+
+
+@pytest.mark.parametrize("outcome", ["success", "nonzero", "timeout"])
+def test_noisy_verifier_uses_file_logs_and_bounded_tails(tmp_path, monkeypatch, outcome):
+    import benchpack.verifiers as verifiers
+    pack_dir = tmp_path / "pack"
+    size = 2 * 1024 * 1024
+    write_script(pack_dir,
+        'import os, sys, time\n'
+        + f'os.write(1, b"o" * {size})\n'
+        + f'os.write(2, b"e" * {size})\n'
+        + ('time.sleep(30)\n' if outcome == "timeout" else f'sys.exit({2 if outcome == "nonzero" else 0})\n'))
+    pack = make_pack(pack_dir)
+    prepared = make_prepared(tmp_path)
+    popen = subprocess.Popen
+    observed = []
+    def spawn(*args, **kwargs):
+        assert hasattr(kwargs["stdout"], "fileno")
+        assert hasattr(kwargs["stderr"], "fileno")
+        observed.append(True)
+        return popen(*args, **kwargs)
+    real_run = verifiers._run_verifier_command
+    diagnostics = []
+    def run(*args, **kwargs):
+        try:
+            completed = real_run(*args, **kwargs)
+        except subprocess.TimeoutExpired as exc:
+            diagnostics.extend((exc.stdout, exc.stderr))
+            raise
+        diagnostics.extend((completed.stdout, completed.stderr))
+        return completed
+    monkeypatch.setattr(verifiers.subprocess, "Popen", spawn)
+    monkeypatch.setattr(verifiers, "_run_verifier_command", run)
+    result = run_repo_task_verifier(
+        pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
+        prepared_workspace=prepared, patch_path=tmp_path / "patch.diff",
+        output_dir=tmp_path / "run", repetition=1, timeout_s=2)
+    assert observed
+    assert (tmp_path / "run" / result.verify["stdout_path"]).read_bytes() == b"o" * size
+    assert (tmp_path / "run" / result.verify["stderr_path"]).read_bytes() == b"e" * size
+    assert diagnostics == ["o" * 65536, "e" * 65536]
+    assert result.scoring["passed"] is (outcome == "success")
+    payload = json.loads((tmp_path / "run" / result.verify["path"]).read_text())
+    assert payload["exit_code"] == (None if outcome == "timeout" else 2 if outcome == "nonzero" else 0)
+    if outcome == "timeout":
+        assert payload["timed_out"] is True
+
+
+def test_verifier_tail_preserves_writer_offset_and_decodes_bounded_bytes(tmp_path):
+    from benchpack.verifiers import _log_tail
+    path = tmp_path / "output.log"
+    data = b"x" * 70000 + b"\xffend\r\n"
+    with path.open("wb") as writer:
+        writer.write(data)
+        writer.flush()
+        writer.seek(7)
+        tail = _log_tail(writer)
+        assert writer.tell() == 7
+    assert tail.endswith("\ufffdend\r\n")
+    assert len(tail) == 65536
+    assert path.read_bytes() == data

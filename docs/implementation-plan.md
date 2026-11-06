@@ -75,7 +75,9 @@ Next actionable slices:
 3. Result registry work remains demand-driven. **Landed 2026-11-06:** result
    bundles stage and validate before rollback-safe forced publication; version-one
    manifests bind unique file paths and required roles to each run and verify
-   row counts and run digests before import. Local import, report, static
+   row counts and run digests before import. A follow-up copies included evidence
+   once, scanning and hashing the staged bytes and deriving run counts/digests
+   from that snapshot. Local import, report, static
    site export with a per-run/per-case comparison matrix, browser-side browse
    filters, static snapshot JSON, bundle create/validate, bundle import,
    duplicate inspection, and local normalized-row JSON query have landed.
@@ -825,6 +827,10 @@ Scope:
   patch capture, stdout/stderr and structured JSON are written under
   `verify/<case-id>/rep-NNN.*`, and result rows include `verify`, `repo_task`,
   and top-level `verify-script` scoring.
+- Direct verifier output to owned log files. **Landed 2026-11-06:** stdout/stderr
+  no longer accumulate in RAM; internal diagnostic tails are capped at 64 KiB
+  per stream. POSIX group waiting and bounded terminate/kill cleanup cover
+  descendants that outlive their parent; no disk quota was added.
 - Add bounded verifier subprocess execution. **Landed 2026-05-02** for
   measured `repo-task` `verify-script` executions only: the runner uses a
   fixed default verifier timeout, records timeouts as completed failed measured
