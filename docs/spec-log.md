@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-06 (trustworthy result bundle publication and manifests)
+
+### Changed
+- Build and validate bundles in owned sibling staging directories. Forced exports
+  preserve the previous complete bundle on copy, scan, manifest or publication
+  failure, with backup recovery diagnostics if rollback fails.
+- Bind files and required roles to unique run directories; reject duplicate paths
+  and mismatched per-run row counts or run digests before SQLite import.
+- Added synthetic filesystem failure and two-run manifest tampering regressions.
+
 ## 2026-10-14 (bundle secret scan for prefixed keys)
 
 ### Changed

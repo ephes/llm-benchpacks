@@ -1379,7 +1379,11 @@ writes a new bundle directory containing `benchpack-bundle.json` plus one
 `runs/run-NNN-<label>/` directory per input. The bundle manifest schema version
 is `1`. The output path must be disjoint from all source result directories:
 the runner rejects both "bundle inside source" and "source inside bundle"
-layouts before honoring `--force`.
+layouts before honoring `--force`. Creation builds and validates an owned sibling
+staging directory before publication. Forced replacement retains the old bundle
+until that validation succeeds and restores it if publication fails. If rollback
+fails, the error reports the retained backup path. Only owned staging and backup
+paths are cleaned; serialize writers to the same output directory.
 
 The copied files are limited to compact report-facing artifacts:
 
@@ -1426,7 +1430,11 @@ upload, deeper secret scanning, moderation, and object-storage handling remain
 later work.
 
 `benchpack registry bundle validate` checks the manifest offline, verifies all
-listed file hashes and sizes, revalidates bundled `run.jsonl` rows and optional
+listed file hashes and sizes, binds each file to its declared run directory,
+rejects duplicate run directories and file paths, and requires exactly one
+`run-jsonl` role plus one matching role for each present optional metadata file.
+Per-run row counts and `run_jsonl_sha256` must match the bundled evidence.
+It revalidates bundled `run.jsonl` rows and optional
 metadata, rejects unlisted files, rejects bundled `raw/`, `workspace/`, or
 `verify/` files, and applies the same conservative decode and secret scan. It
 does not contact endpoints, run packs, import SQLite, mutate benchmark result
