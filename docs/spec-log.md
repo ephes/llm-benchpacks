@@ -16,6 +16,18 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-06 (copied bundle evidence and file-backed verifier output)
+
+### Changed
+- Scan and hash included files after copying into private staging; manifest row
+  counts, run digests and artifact references describe the copied snapshot even
+  if sources change. Recheck the telemetry allowlist on staged model-call logs.
+- Write verifier streams directly to owned logs, retaining only 64 KiB diagnostic
+  tails in memory. Preserve full output on success, nonzero exit and timeout,
+  authoritative JSON and bounded POSIX process-group cleanup. No disk quota.
+- Added source-mutation regressions and synthetic noisy verifiers; kept
+  descendant, interruption, environment and CLI timeout coverage.
+
 ## 2026-11-06 (trustworthy result bundle publication and manifests)
 
 ### Changed

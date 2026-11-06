@@ -645,7 +645,7 @@ means fail with a null verifier exit code, and the verifier receives the
 prepared workspace plus declared case/run metadata as command-line inputs. The
 runner always writes the deterministic verifier JSON/stdout/stderr artifact
 paths for a measured verifier attempt. On timeout, stdout/stderr logs are still
-created, captured partial output is preserved when Python exposes it, and the
+created, all bytes written to those files are preserved, and the
 structured verifier JSON is created or corrected with `exit_code: null`,
 `passed: false`, `timed_out: true`, and the actual configured `timeout_s`
 value. If `scoring.timeout_s` is absent from the effective `verify-script`
@@ -663,14 +663,18 @@ prompt-output scoring.
 
 ### Verifier timeout cleanup
 
-On POSIX, each verifier starts in a new session/process group. Budget expiry
-sends SIGTERM to that original group, drains output for at most 0.5 seconds,
-then sends SIGKILL even if the leader or its pipes have already closed. A second
-0.5-second drain is bounded; if a pipe remains open, captured partial output is
-retained, readers are closed, and the immediate process is reaped with a bounded
-wait. Interrupts and other communication exceptions also stop and reap the isolated
-verifier before propagating. Timeout scoring remains failed with a null exit code
-and timeout artifacts.
+Verifier stdout/stderr go directly to the existing owned log files, preserving
+all emitted bytes without capturing the streams in memory. Internal diagnostics
+retain at most the final 64 KiB per stream, decoded as UTF-8 with replacement
+for incomplete or invalid sequences. This does not impose a disk quota.
+On POSIX, each verifier starts in a new session/process group. The runner waits
+for the leader and any remaining group members within the same timeout budget,
+including descendants that outlive their parent. Budget expiry sends SIGTERM to
+that original group, waits at most 0.5 seconds, then sends SIGKILL even if the
+leader has exited. The immediate process is reaped with a bounded wait.
+Interrupts and other wait exceptions also stop and reap the isolated verifier
+before propagating. Timeout scoring remains failed with a null exit code and
+timeout artifacts; full logs are retained on timeout and nonzero exit.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.
@@ -1410,8 +1414,12 @@ informational but mandatory in the manifest so public review and website
 staging can distinguish untrusted self-reports from curated or independently
 reproduced evidence.
 
-Bundle creation performs a conservative text secret scan over files it is about
-to copy and over the generated manifest. It fails before leaving a partial
+Bundle creation copies each included file once into private staging, then scans
+and hashes those copied bytes and scans the generated manifest. Per-run row
+counts and digests are derived from that same staged snapshot, without rereading
+mutable source files to certify copied evidence. Artifact references and omission
+lists come from the copied rows, and included model-call logs must still pass
+the telemetry allowlist after copying. It fails before leaving a partial
 bundle when obvious bearer tokens, secret-looking JSON fields, credentialed
 URLs, tokenized query strings, or non-UTF-8 text in copied compact artifacts are
 detected. Secret-looking JSON fields and environment-style assignments are

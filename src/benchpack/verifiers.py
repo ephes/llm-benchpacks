@@ -7,9 +7,10 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from .packs import Case, Pack, Scoring
 from .workspaces import PreparedWorkspace
@@ -167,19 +168,15 @@ def run_repo_task_verifier(
         run_kwargs["env"] = {**os.environ, **scoring.environment}
 
     try:
-        completed = _run_verifier_command(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            **run_kwargs,
-        )
-        paths.stdout.write_text(completed.stdout, encoding="utf-8")
-        paths.stderr.write_text(completed.stderr, encoding="utf-8")
-    except subprocess.TimeoutExpired as exc:
-        paths.stdout.write_text(_timeout_stream_to_text(exc.stdout), encoding="utf-8")
-        paths.stderr.write_text(_timeout_stream_to_text(exc.stderr), encoding="utf-8")
+        with paths.stdout.open("wb") as stdout, paths.stderr.open("wb") as stderr:
+            completed = _run_verifier_command(
+                command,
+                stdout=stdout,
+                stderr=stderr,
+                timeout=timeout_s,
+                **run_kwargs,
+            )
+    except subprocess.TimeoutExpired:
         _write_authoritative_json(
             paths.json,
             exit_code=None,
@@ -211,40 +208,68 @@ def run_repo_task_verifier(
 
 
 _TIMEOUT_GRACE_S = 0.5
+_DIAGNOSTIC_TAIL_BYTES = 65536
 
 
-def _run_verifier_command(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
-    """Run verification with bounded cleanup of its original POSIX group."""
+def _log_tail(stream: BinaryIO) -> str:
+    """Read only a bounded UTF-8 diagnostic tail; logs retain the full bytes."""
 
-    kwargs.pop("check", None)
-    kwargs.pop("capture_output", None)
+    # A separate open file description leaves inherited writer offsets alone.
+    with open(stream.name, "rb") as reader:
+        reader.seek(0, os.SEEK_END)
+        reader.seek(max(0, reader.tell() - _DIAGNOSTIC_TAIL_BYTES))
+        return reader.read(_DIAGNOSTIC_TAIL_BYTES).decode("utf-8", errors="replace")
+
+
+def _wait_for_verifier(process: subprocess.Popen, timeout: float) -> None:
+    """Wait for the leader and any remaining members of its POSIX group."""
+
+    deadline = time.monotonic() + timeout
+    process.wait(timeout=timeout)
+    if os.name != "posix":
+        return
+    while True:
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        time.sleep(min(0.01, remaining))
+
+
+def _run_verifier_command(
+    command: list[str], *, timeout: float, stdout: BinaryIO, stderr: BinaryIO,
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[str]:
+    """Write output directly to owned logs with bounded process-group cleanup."""
+
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        command, stdout=stdout, stderr=stderr,
         start_new_session=os.name == "posix", **kwargs,
     )
     try:
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            stdout, stderr = _stop_verifier(process, exc)
-            raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc
-        except BaseException:
-            # A terminal interrupt no longer reaches the isolated group.
-            _stop_verifier(process, subprocess.TimeoutExpired(command, timeout))
-            raise
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-    finally:
-        if process.stdout is not None:
-            process.stdout.close()
-        if process.stderr is not None:
-            process.stderr.close()
+        _wait_for_verifier(process, timeout)
+    except subprocess.TimeoutExpired as exc:
+        _stop_verifier(process)
+        raise subprocess.TimeoutExpired(
+            command, timeout, output=_log_tail(stdout), stderr=_log_tail(stderr)
+        ) from exc
+    except BaseException:
+        # A terminal interrupt no longer reaches the isolated group.
+        _stop_verifier(process)
+        raise
+    return subprocess.CompletedProcess(
+        command, process.returncode, _log_tail(stdout), _log_tail(stderr)
+    )
 
 
-def _stop_verifier(process: subprocess.Popen[str], expired: subprocess.TimeoutExpired) -> tuple[str, str]:
+def _stop_verifier(process: subprocess.Popen) -> None:
     def send(*, kill: bool = False) -> None:
         try:
             if os.name == "posix":
-                # The leader may already have exited while a child holds a pipe.
+                # The leader may already have exited while descendants write logs.
                 os.killpg(process.pid, signal.SIGKILL if kill else signal.SIGTERM)
             elif not kill:
                 process.terminate()
@@ -255,36 +280,13 @@ def _stop_verifier(process: subprocess.Popen[str], expired: subprocess.TimeoutEx
 
     send()
     try:
-        stdout, stderr = process.communicate(timeout=_TIMEOUT_GRACE_S)
-    except subprocess.TimeoutExpired as exc:
-        expired = exc
-        stdout, stderr = expired.stdout, expired.stderr
+        _wait_for_verifier(process, _TIMEOUT_GRACE_S)
+    except subprocess.TimeoutExpired:
+        pass
     finally:
-        # A descendant can close its pipes and ignore TERM. Drain completion
-        # alone is not evidence that the entire group has stopped.
+        # Leader exit alone does not prove that the entire group has stopped.
         send(kill=True)
-    try:
-        stdout, stderr = process.communicate(timeout=_TIMEOUT_GRACE_S)
-    except subprocess.TimeoutExpired as exc:
-        # A descendant that escaped the group can retain a pipe. Do not wait
-        # indefinitely for it; retain the captured bytes and close our readers.
-        stdout, stderr = exc.stdout, exc.stderr
-        if process.stdout is not None:
-            process.stdout.close()
-        if process.stderr is not None:
-            process.stderr.close()
-        process.wait(timeout=_TIMEOUT_GRACE_S)
-    return _timeout_stream_to_text(stdout), _timeout_stream_to_text(stderr)
-
-
-def _timeout_stream_to_text(value: str | bytes | None) -> str:
-    """Normalize captured TimeoutExpired output to text for log artifacts."""
-
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
+    process.wait(timeout=_TIMEOUT_GRACE_S)
 
 
 def _write_authoritative_json(

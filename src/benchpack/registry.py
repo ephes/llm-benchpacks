@@ -10,7 +10,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -2781,19 +2781,32 @@ def _copy_run_into_bundle(
 ) -> tuple[dict[str, Any], int, int]:
     included: list[dict[str, Any]] = []
     omitted: list[dict[str, Any]] = []
-    files_copied = 0
+    source_run_jsonl = _safe_existing_file(run.path, "run.jsonl")
+    if source_run_jsonl is None:
+        raise RegistryError("source run.jsonl is missing or unsafe")
+    shutil.copyfile(source_run_jsonl, run_bundle_dir / "run.jsonl")
+    _assert_file_has_no_public_secret(run_bundle_dir / "run.jsonl", "run.jsonl")
+    included.append(_file_manifest_entry(
+        bundle_root, run_bundle_path / "run.jsonl", "run-jsonl"
+    ))
+    files_copied = 1
+    copied_run = _load_and_validate_result_dir(run_bundle_dir)
+    # Resolve artifact references against the source, using only copied rows.
+    artifact_run = replace(run, records=copied_run.records)
 
-    for relative_path, role in _included_artifacts(run):
+    for relative_path, role in _included_artifacts(artifact_run):
+        if relative_path == "run.jsonl":
+            continue
         source = _safe_existing_file(run.path, relative_path)
         if source is None:
             omitted.append(
                 _omitted_artifact(run.path, relative_path, "missing-or-unsafe")
             )
             continue
-        _assert_file_has_no_public_secret(source, relative_path)
         destination = run_bundle_dir / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+        _assert_file_has_no_public_secret(destination, relative_path)
         included.append(
             _file_manifest_entry(
                 bundle_root,
@@ -2803,15 +2816,22 @@ def _copy_run_into_bundle(
         )
         files_copied += 1
 
-    for relative_path, reason in _omitted_artifacts(run):
+    for relative_path, reason in _omitted_artifacts(artifact_run):
         omitted.append(_omitted_artifact(run.path, relative_path, reason))
 
+    try:
+        copied_logs = summarize_model_call_logs(run_bundle_dir)
+    except ModelCallLogError as exc:
+        raise RegistryError(str(exc)) from exc
+    for summary in copied_logs:
+        if summary.invalid:
+            raise RegistryError(f"unsafe model-call log in copied bundle: {summary.relative_path}")
     run_manifest = {
         "label": run.label,
         "source_result_name": run.path.name,
         "bundle_path": run_bundle_path.as_posix(),
-        "row_count": len(run.records),
-        "run_jsonl_sha256": _sha256(run.path / "run.jsonl"),
+        "row_count": len(copied_run.records),
+        "run_jsonl_sha256": _sha256(run_bundle_dir / "run.jsonl"),
         "files": included,
         "omitted_artifacts": omitted,
     }
