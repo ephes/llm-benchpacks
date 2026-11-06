@@ -83,7 +83,10 @@ Use dedicated output directories outside packs, fixtures, and run metadata.
 site exports also refuse overlap with their database and all indexed result
 directories. They stage all three files before replacement and restore the
 previous site if publication fails; a failed rollback reports a backup path
-for recovery. Serialize exports to the same site directory.
+for recovery. Serialize exports to the same site directory. Result bundles also
+stage and validate before replacement, restore the previous bundle on publication
+failure, and report a retained backup if rollback fails. Serialize bundle exports
+to the same output directory.
 
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
 That public harness uses runner-owned subprocess configuration rather than a

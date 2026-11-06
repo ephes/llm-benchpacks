@@ -689,16 +689,17 @@ def create_result_bundle(
     if str(bundle_root) == "":
         raise RegistryError("bundle output path must not be empty")
     _assert_bundle_output_disjoint_from_sources(bundle_root, runs)
-    if bundle_root.exists():
-        if not force:
-            raise RegistryError(
-                f"bundle output already exists: {bundle_root}; pass --force to replace it"
-            )
-        if bundle_root.is_dir():
-            shutil.rmtree(bundle_root)
-        else:
-            bundle_root.unlink()
-    bundle_root.mkdir(parents=True, exist_ok=True)
+    if (bundle_root.exists() or bundle_root.is_symlink()) and not force:
+        raise RegistryError(
+            f"bundle output already exists: {bundle_root}; pass --force to replace it"
+        )
+    bundle_root.parent.mkdir(parents=True, exist_ok=True)
+    staging_parent = Path(tempfile.mkdtemp(
+        prefix=f".{bundle_root.name}-stage-", dir=bundle_root.parent
+    ))
+    staging = staging_parent / "bundle"
+    staging.mkdir()
+    backup = None
 
     manifest: dict[str, Any] = {
         "schema_version": BUNDLE_SCHEMA_VERSION,
@@ -712,22 +713,52 @@ def create_result_bundle(
     try:
         for index, run in enumerate(runs, start=1):
             run_dir_name = f"run-{index:03d}-{_slug(run.label)}"
-            run_bundle_dir = bundle_root / "runs" / run_dir_name
+            run_bundle_dir = staging / "runs" / run_dir_name
             run_bundle_dir.mkdir(parents=True)
             run_manifest, run_files, run_omitted = _copy_run_into_bundle(
                 run=run,
-                bundle_root=bundle_root,
+                bundle_root=staging,
                 run_bundle_dir=run_bundle_dir,
                 run_bundle_path=Path("runs") / run_dir_name,
             )
             manifest["runs"].append(run_manifest)
             files_copied += run_files
             omitted_count += run_omitted
-        _write_bundle_manifest(bundle_root, manifest)
-    except Exception:
-        if bundle_root.exists():
-            shutil.rmtree(bundle_root)
-        raise
+        _write_bundle_manifest(staging, manifest)
+        validate_result_bundle(staging)
+        if bundle_root.exists() or bundle_root.is_symlink():
+            backup = Path(tempfile.mkdtemp(
+                prefix=f".{bundle_root.name}-backup-", dir=bundle_root.parent
+            ))
+            backup.rmdir()
+            bundle_root.rename(backup)
+        try:
+            staging.rename(bundle_root)
+        except OSError as publish_error:
+            if backup is not None:
+                try:
+                    backup.rename(bundle_root)
+                except OSError as rollback_error:
+                    raise RegistryError(
+                        f"bundle publication failed: {publish_error}; rollback failed: "
+                        f"{rollback_error}; previous bundle retained at {backup}"
+                    ) from rollback_error
+            raise
+        if backup is not None:
+            try:
+                if backup.is_dir() and not backup.is_symlink():
+                    shutil.rmtree(backup)
+                else:
+                    backup.unlink()
+            except OSError as exc:
+                raise RegistryError(
+                    f"bundle published at {bundle_root}, but backup cleanup failed "
+                    f"at {backup}: {exc}"
+                ) from exc
+    except OSError as exc:
+        raise RegistryError(f"could not publish bundle {bundle_root}: {exc}") from exc
+    finally:
+        shutil.rmtree(staging_parent, ignore_errors=True)
 
     return RegistryBundleSummary(
         bundle_dir=bundle_root,
@@ -783,16 +814,28 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         )
 
     expected_files = {BUNDLE_MANIFEST_FILENAME}
+    resolved_files: set[Path] = set()
     file_count = 1
     omitted_count = 0
     loaded_runs: list[ResultRun] = []
+    run_directories: set[Path] = set()
     for run_index, run_manifest in enumerate(runs, start=1):
         if not isinstance(run_manifest, dict):
             raise RegistryError(f"bundle run entry {run_index} must be an object")
         label = _manifest_string(run_manifest, "label", f"run {run_index}")
         bundle_path = _manifest_string(run_manifest, "bundle_path", f"run {run_index}")
         run_dir = _resolve_bundle_relative(bundle_root, bundle_path)
+        if Path(bundle_path).parts[:1] != ("runs",) or len(Path(bundle_path).parts) != 2:
+            raise RegistryError(f"bundle run {run_index} has unexpected bundle_path")
+        if run_dir in run_directories:
+            raise RegistryError(f"bundle run {run_index} duplicates a run directory")
+        run_directories.add(run_dir)
         run = _load_and_validate_result_dir(run_dir)
+        row_count = run_manifest.get("row_count")
+        if type(row_count) is not int or row_count != len(run.records):
+            raise RegistryError(f"bundle run {run_index} row_count mismatch")
+        if run_manifest.get("run_jsonl_sha256") != _sha256(run_dir / "run.jsonl"):
+            raise RegistryError(f"bundle run {run_index} run_jsonl_sha256 mismatch")
         loaded_runs.append(
             ResultRun(
                 path=run.path,
@@ -806,6 +849,7 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         files = run_manifest.get("files")
         if not isinstance(files, list) or not files:
             raise RegistryError(f"bundle run {run_index} requires non-empty files")
+        singleton_roles: set[str] = set()
         for file_entry in files:
             if not isinstance(file_entry, dict):
                 raise RegistryError(
@@ -815,10 +859,25 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
             role = _manifest_string(file_entry, "role", f"run {run_index} file")
             _validate_bundle_file_role(rel_path, role)
             file_path = _resolve_bundle_relative(bundle_root, rel_path)
+            if not Path(rel_path).is_relative_to(Path(bundle_path)):
+                raise RegistryError(f"bundle file belongs to another run: {rel_path}")
+            if not file_path.is_relative_to(run_dir):
+                raise RegistryError(f"bundle file escapes its run: {rel_path}")
+            if file_path in resolved_files:
+                raise RegistryError(f"duplicate bundle file path: {rel_path}")
+            if role in {"run-jsonl", "hardware", "run-metadata"}:
+                singleton_roles.add(role)
+            resolved_files.add(file_path)
             expected_files.add(rel_path)
             _assert_file_digest(file_path, file_entry, rel_path)
             _assert_file_has_no_public_secret(file_path, rel_path)
             file_count += 1
+        required_roles = {"run-jsonl"}
+        for filename, role in (("hardware.json", "hardware"), ("run-metadata.json", "run-metadata")):
+            if (run_dir / filename).is_file():
+                required_roles.add(role)
+        if not required_roles.issubset(singleton_roles):
+            raise RegistryError(f"bundle run {run_index} is missing required file roles")
         omitted = run_manifest.get("omitted_artifacts", [])
         if not isinstance(omitted, list):
             raise RegistryError(

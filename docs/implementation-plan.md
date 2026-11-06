@@ -72,7 +72,10 @@ Next actionable slices:
    a new direct-edit review gap. Do not commit generated `results/*` artifacts
    for this work unless a later curated run-log entry explicitly calls for a
    small retained subset.
-3. Result registry work remains demand-driven. Local import, report, static
+3. Result registry work remains demand-driven. **Landed 2026-11-06:** result
+   bundles stage and validate before rollback-safe forced publication; version-one
+   manifests bind unique file paths and required roles to each run and verify
+   row counts and run digests before import. Local import, report, static
    site export with a per-run/per-case comparison matrix, browser-side browse
    filters, static snapshot JSON, bundle create/validate, bundle import,
    duplicate inspection, and local normalized-row JSON query have landed.

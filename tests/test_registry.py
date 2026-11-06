@@ -2317,3 +2317,146 @@ def test_registry_site_refuses_uncheckable_source(tmp_path: Path, monkeypatch) -
     assert failures
     assert not site.exists()
     assert (result / "run.jsonl").is_file()
+
+
+@pytest.mark.parametrize("failure", ["copy", "secret", "manifest", "publish"])
+def test_bundle_force_preserves_previous_on_failure(tmp_path, monkeypatch, failure):
+    source = tmp_path / "run-a"
+    _write_result_dir(source)
+    bundle = tmp_path / "bundle"
+    create_result_bundle([source], bundle)
+    before = {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()}
+    foreign = tmp_path / ".bundle-stage-foreign"
+    foreign.mkdir()
+    (foreign / "sentinel").write_bytes(b"unrelated")
+    injected = []
+    if failure == "secret":
+        (source / "run-metadata.json").write_text('{"api_key":"synthetic-value-123"}')
+    elif failure in {"copy", "manifest"}:
+        def fail(*args, **kwargs):
+            injected.append(True)
+            raise OSError("injected failure")
+        monkeypatch.setattr(registry.shutil if failure == "copy" else registry,
+                            "copyfile" if failure == "copy" else "_write_bundle_manifest", fail)
+    else:
+        original = Path.rename
+        def fail_publish(path, target):
+            if Path(target) == bundle and "-stage-" in str(path):
+                injected.append(True)
+                raise OSError("injected failure")
+            return original(path, target)
+        monkeypatch.setattr(Path, "rename", fail_publish)
+    with pytest.raises((OSError, RegistryError)):
+        create_result_bundle([source], bundle, force=True)
+    if failure != "secret":
+        assert injected
+    assert {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()} == before
+    assert list(tmp_path.glob(".bundle-stage-*")) == [foreign]
+    assert not list(tmp_path.glob(".bundle-backup-*"))
+    assert (foreign / "sentinel").read_bytes() == b"unrelated"
+
+
+def test_bundle_force_publishes_complete_replacement(tmp_path):
+    source = tmp_path / "run-a"
+    _write_result_dir(source)
+    bundle = tmp_path / "bundle"
+    create_result_bundle([source], bundle)
+    (bundle / "old-sentinel").write_bytes(b"old")
+    (source / "hardware.json").write_text('{"hostname":"synthetic-host"}')
+    summary = create_result_bundle([source], bundle, force=True)
+    assert validate_result_bundle(bundle) == summary
+    assert not (bundle / "old-sentinel").exists()
+    assert not list(tmp_path.glob(".bundle-*-*"))
+
+
+@pytest.mark.parametrize("tamper", ["swapped-files", "duplicate-run-jsonl", "duplicate-metadata",
+                                    "duplicate-run", "count", "bool-count", "digest", "missing-run", "missing-metadata"])
+def test_bundle_manifest_binds_each_run_before_import(tmp_path, tamper):
+    sources = [tmp_path / "run-a", tmp_path / "run-b"]
+    for index, source in enumerate(sources):
+        _write_result_dir(source, [_record(f"case-{index}")])
+        (source / "hardware.json").write_text(json.dumps({"hostname": f"synthetic-{index}"}))
+        (source / "run-metadata.json").write_text('{"notes":"synthetic fixture"}')
+    bundle = tmp_path / "bundle"
+    create_result_bundle(sources, bundle)
+    manifest_path = bundle / BUNDLE_MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text())
+    first, second = manifest["runs"]
+    if tamper == "swapped-files":
+        first["files"], second["files"] = second["files"], first["files"]
+    elif tamper == "duplicate-run-jsonl":
+        first["files"].append(dict(first["files"][0]))
+    elif tamper == "duplicate-metadata":
+        first["files"].append(dict(first["files"][-1]))
+    elif tamper == "duplicate-run":
+        manifest["runs"].append(dict(first))
+    elif tamper == "count":
+        first["row_count"] = 999
+    elif tamper == "bool-count":
+        first["row_count"] = True
+    elif tamper == "digest":
+        first["run_jsonl_sha256"] = "0" * 64
+    else:
+        role = "run-jsonl" if tamper == "missing-run" else "hardware"
+        first["files"] = [entry for entry in first["files"] if entry["role"] != role]
+        # Keep every physical file listed somewhere: generic global checks pass.
+        second["files"].extend(entry for entry in json.loads(manifest_path.read_text())["runs"][0]["files"] if entry["role"] == role)
+    manifest_path.write_text(json.dumps(manifest))
+    match = "duplicate bundle file path" if tamper.startswith("duplicate-") and tamper != "duplicate-run" else None
+    with pytest.raises(RegistryError, match=match):
+        validate_result_bundle(bundle)
+    db = tmp_path / "registry.sqlite"
+    with pytest.raises(RegistryError):
+        import_result_bundles([bundle], db)
+    assert not db.exists()
+
+
+def test_bundle_force_retains_backup_if_rollback_fails(tmp_path, monkeypatch):
+    source = tmp_path / "run-a"
+    _write_result_dir(source)
+    bundle = tmp_path / "bundle"
+    create_result_bundle([source], bundle)
+    before = {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()}
+    original = Path.rename
+    failures = []
+    def fail(path, target):
+        if Path(target) == bundle:
+            failures.append(path)
+            raise OSError("injected rename failure")
+        return original(path, target)
+    monkeypatch.setattr(Path, "rename", fail)
+    with pytest.raises(RegistryError, match="previous bundle retained at") as error:
+        create_result_bundle([source], bundle, force=True)
+    assert len(failures) == 2
+    backups = list(tmp_path.glob(".bundle-backup-*"))
+    assert len(backups) == 1
+    assert str(backups[0]) in str(error.value)
+    assert {p.relative_to(backups[0]): p.read_bytes() for p in backups[0].rglob("*") if p.is_file()} == before
+    assert not list(tmp_path.glob(".bundle-stage-*"))
+
+
+@pytest.mark.parametrize("symlink_kind", ["run", "patch"])
+def test_bundle_manifest_rejects_symlink_directory_alias(tmp_path, symlink_kind):
+    source = tmp_path / "run-a"
+    record = _record()
+    record["patch"] = {"path": "patch/short/rep-001.diff"}
+    _write_result_dir(source, [record])
+    patch = source / record["patch"]["path"]
+    patch.parent.mkdir(parents=True)
+    patch.write_text("synthetic diff\n")
+    bundle = tmp_path / "bundle"
+    create_result_bundle([source], bundle)
+    run = bundle / "runs" / "run-001-run-a"
+    alias = run if symlink_kind == "run" else run / "patch"
+    target = bundle / "payload" if symlink_kind == "run" else run / "other-patches"
+    alias.rename(target)
+    try:
+        alias.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlinks are unavailable")
+    with pytest.raises(RegistryError, match="unlisted file"):
+        validate_result_bundle(bundle)
+    db = tmp_path / "registry.sqlite"
+    with pytest.raises(RegistryError):
+        import_result_bundles([bundle], db)
+    assert not db.exists()

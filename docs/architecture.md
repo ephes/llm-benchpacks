@@ -827,9 +827,14 @@ omissions include hashes and byte counts when the omitted artifact is an
 existing regular file below the source result directory. Bundle manifests store
 bundle-relative paths and source directory names, not canonical local absolute
 paths. Bundle output paths must be disjoint from source result directories so
-`--force` cannot delete source evidence. `benchpack registry bundle validate
+`--force` cannot delete source evidence. An owned sibling staging directory is
+validated before publication; forced replacement uses a sibling backup and
+restores it on publication failure, reporting its location if rollback fails.
+Serialize bundle writers to the same destination.
+`benchpack registry bundle validate
 <bundle-dir>` verifies the manifest, file hashes, row and metadata shape,
-absence of unlisted files, expected role/path shapes, UTF-8 decodability for
+absence of unlisted files, unique run directories and file paths, per-run file
+ownership and mandatory roles, matching row counts and run digests, UTF-8 decodability for
 copied compact artifacts, and a conservative secret scan entirely offline.
 Authenticated upload review, deeper secret scanning, object storage for large
 artifacts, and comparison-explorer views remain later components.
