@@ -39,6 +39,8 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Sync locked dependencies
         run: uv sync --frozen
+      - name: Audit locked runtime and development dependencies
+        run: uv run --frozen python scripts/audit-python.py
       # The product-offer reference verifier runs the full clusterer under the
       # pack's fixed 60 s program limit (about 48 s on an Apple M-series host).
       # A 2-vCPU hosted runner exceeds that limit, so the test is a local-only

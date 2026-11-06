@@ -16,6 +16,15 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-06 (HTTP dependency maintenance)
+
+### Changed
+- Refresh only AnyIO to 4.14.2 and idna to 3.15 in the frozen HTTP transport
+  graph for the reported 2026 advisories; retain adapter and result contracts.
+- Gate CI on a pinned audit of the same frozen Python 3.14 runtime/dev graph.
+  Document local audit scope and failure propagation; preserve the expensive
+  reference-test deselection and cover export/audit failures synthetically.
+
 ## 2026-11-06 (copied bundle evidence and file-backed verifier output)
 
 ### Changed

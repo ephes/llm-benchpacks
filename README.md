@@ -363,6 +363,31 @@ product-offer reference verifier test, whose clusterer exceeds the pack's
 60-second program limit on hosted runners; run the full suite locally before
 changing that pack.
 
+The HTTP transport lock uses AnyIO 4.14.2 and idna 3.15 to address the
+2026 AnyIO and idna advisories. Refresh affected packages with `uv lock
+--upgrade-package <package>` and run the synthetic OpenAI/Ollama adapter and
+streaming tests before accepting transport updates. Provider choices and result
+formats are unchanged.
+
+CI also audits the frozen runtime and `dev` dependencies on Python 3.14 with
+`pip-audit==2.10.1`. Run the same audit command locally with:
+
+```sh
+UV_PYTHON=3.14 uv run --frozen python scripts/audit-python.py
+```
+
+The script exports hashed pins from `uv.lock` into a temporary requirements
+file, excluding only the local project, then queries the advisory service
+without installing or resolving those requirements. Export failures stop the
+command before auditing; advisory and collection failures also fail CI. Markers
+are evaluated for the invoking interpreter, so this CI audit covers the Python
+3.14 graph; run with `UV_PYTHON=3.11` to check the older supported branch too.
+Only the audit tool's top-level version is pinned; its isolated dependencies
+are resolved separately. The audit tool and build backend are outside this graph.
+Audit checks need package-index/advisory access; the orchestration tests use synthetic data
+and make no network requests. The existing expensive-reference test exception
+is unchanged.
+
 For `openai-chat` streaming runs, `--openai-stream-usage include` is the
 default and sends `stream_options.include_usage` so supporting endpoints can
 return token usage chunks. Use `--openai-stream-usage omit` for
