@@ -363,6 +363,12 @@ product-offer reference verifier test, whose clusterer exceeds the pack's
 60-second program limit on hosted runners; run the full suite locally before
 changing that pack.
 
+The HTTP transport lock uses AnyIO 4.14.2 and idna 3.15 to address the
+2026 AnyIO and idna advisories. Refresh affected packages with `uv lock
+--upgrade-package <package>` and run the synthetic OpenAI/Ollama adapter and
+streaming tests before accepting transport updates. Provider choices and result
+formats are unchanged.
+
 For `openai-chat` streaming runs, `--openai-stream-usage include` is the
 default and sends `stream_options.include_usage` so supporting endpoints can
 return token usage chunks. Use `--openai-stream-usage omit` for

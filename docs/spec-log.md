@@ -16,6 +16,12 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-06 (HTTP dependency maintenance)
+
+### Changed
+- Refresh only AnyIO to 4.14.2 and idna to 3.15 in the frozen HTTP transport
+  graph for the reported 2026 advisories; retain adapter and result contracts.
+
 ## 2026-11-06 (copied bundle evidence and file-backed verifier output)
 
 ### Changed
