@@ -11,6 +11,7 @@ from typing import Any
 
 
 RUN_METADATA_FILENAME = "run-metadata.json"
+MAX_METADATA_BYTES = 1024 * 1024
 KNOWN_OBJECT_SECTIONS = ("host", "runtime", "model", "operating_conditions")
 
 
@@ -18,20 +19,29 @@ class RunMetadataError(ValueError):
     """Raised when user-supplied run metadata cannot be loaded."""
 
 
+def read_metadata_text(
+    path: Path, *, max_bytes: int | None = None, kind: str = "metadata"
+) -> str:
+    """Read UTF-8 metadata within an actual-byte ceiling on the opened file."""
+
+    limit = MAX_METADATA_BYTES if max_bytes is None else max_bytes
+    try:
+        with path.open("rb") as source:
+            data = source.read(limit + 1)
+        if len(data) > limit:
+            raise RunMetadataError(f"metadata byte limit ({limit}) exceeded: {path}")
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RunMetadataError(f"{kind} file {path} is not valid UTF-8") from exc
+    except OSError as exc:
+        raise RunMetadataError(f"could not read {kind} file {path}: {exc.strerror}") from exc
+
+
 def load_run_metadata(path: Path | str) -> dict[str, Any]:
     """Load and validate a user-supplied run metadata JSON object."""
 
     metadata_path = Path(path)
-    try:
-        text = metadata_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise RunMetadataError(
-            f"run metadata file {metadata_path} is not valid UTF-8"
-        ) from exc
-    except OSError as exc:
-        raise RunMetadataError(
-            f"could not read run metadata file {metadata_path}: {exc.strerror}"
-        ) from exc
+    text = read_metadata_text(metadata_path, kind="run metadata")
 
     try:
         metadata = json.loads(text)
@@ -42,6 +52,10 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise RunMetadataError(
             f"could not parse run metadata file {metadata_path}: {exc.msg}"
+        ) from exc
+    except ValueError as exc:
+        raise RunMetadataError(
+            f"could not parse run metadata file {metadata_path}: invalid JSON number"
         ) from exc
 
     return validate_run_metadata(metadata, source=metadata_path)

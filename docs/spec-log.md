@@ -16,6 +16,17 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (bounded compact metadata admission)
+
+### Changed
+- Normalize bundle-manifest UTF-8, nesting and integer-decoder failures into
+  bounded domain errors before registry writes.
+- Bound opened-file reads to 1 MiB for hardware/runtime metadata and 8 MiB for
+  bundle manifests, preserving optional absence and extension fields. Apply the
+  sidecar reader to directory reports too.
+- Cover exact/over-limit files, growth during open and malformed manifests with
+  synthetic fixtures. No dependency, schema or release-version changes.
+
 ## 2026-11-07 (benchmark preflight and bounded result input)
 
 ### Changed

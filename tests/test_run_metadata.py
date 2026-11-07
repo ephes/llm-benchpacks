@@ -247,3 +247,29 @@ def test_load_run_metadata_normalizes_decode_errors(tmp_path, payload, category,
         load_run_metadata(path)
     assert "sentinel" not in str(error.value)
     assert len(str(error.value)) < len(str(path)) + 100
+
+
+def test_metadata_bounds_opened_read_even_if_file_grows(tmp_path, monkeypatch):
+    import io
+    import benchpack.run_metadata as metadata
+    monkeypatch.setattr(metadata, 'MAX_METADATA_BYTES', 64, raising=False)
+    path = tmp_path / 'metadata.json'
+    path.write_text('{}')
+    opened = []
+    real_open = Path.open
+
+    class GrowingReader(io.BytesIO):
+        def read(self, size=-1):
+            assert size == 65
+            opened.append(size)
+            return super().read(size)
+
+    def growing_open(candidate, *args, **kwargs):
+        if candidate == path:
+            return GrowingReader(b'{' + b' ' * 1000)
+        return real_open(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', growing_open)
+    with pytest.raises(RunMetadataError, match='byte limit'):
+        load_run_metadata(path)
+    assert opened == [65]

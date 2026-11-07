@@ -2618,3 +2618,50 @@ def test_hardware_decoder_errors_are_controlled_before_import(tmp_path, payload)
             create_result_bundle([run], tmp_path / 'bundle', provenance='self-reported')
     finally:
         sys.set_int_max_str_digits(previous)
+
+
+@pytest.mark.parametrize('payload', [b'\xff', b'[' * 2000 + b']' * 2000, b'{"n":' + b'9' * 5000 + b'}', b'{bad'], ids=['utf8', 'nesting', 'integer', 'syntax'])
+def test_bundle_manifest_decoder_failures_are_controlled(tmp_path, payload, decoder_nesting_limit):
+    bundle = tmp_path / 'bundle'
+    bundle.mkdir()
+    (bundle / BUNDLE_MANIFEST_FILENAME).write_bytes(payload)
+    db = tmp_path / 'registry.sqlite'
+    with pytest.raises(SystemExit) as error:
+        main(['registry', 'bundle', 'import', '--db', str(db), str(bundle)])
+    assert len(str(error.value)) < 600
+    assert payload.decode('utf-8', errors='replace') not in str(error.value)
+    assert not db.exists()
+
+
+@pytest.mark.parametrize('filename', ['hardware.json', 'run-metadata.json'])
+def test_registry_sidecar_byte_limit_before_mutation(tmp_path, monkeypatch, filename):
+    import benchpack.run_metadata as metadata
+    monkeypatch.setattr(metadata, 'MAX_METADATA_BYTES', 64, raising=False)
+    source = tmp_path / 'source'
+    _write_result_dir(source)
+    sidecar = source / filename
+    sidecar.write_bytes(b'{"extension":"' + b'x' * 48 + b'"}')
+    assert sidecar.stat().st_size == 64
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([source], db)
+    sidecar.write_bytes(sidecar.read_bytes() + b' ')
+    with pytest.raises(RegistryError, match='byte limit'):
+        import_result_dirs([source], db)
+    with sqlite3.connect(db) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM runs').fetchone() == (1,)
+
+
+def test_bundle_manifest_exact_byte_limit_and_overflow(tmp_path, monkeypatch):
+    source = tmp_path / 'source'
+    _write_result_dir(source)
+    bundle = tmp_path / 'bundle'
+    create_result_bundle([source], bundle)
+    manifest = bundle / BUNDLE_MANIFEST_FILENAME
+    ceiling = manifest.stat().st_size
+    monkeypatch.setattr(registry, 'MAX_BUNDLE_MANIFEST_BYTES', ceiling, raising=False)
+    validate_result_bundle(bundle)
+    manifest.write_bytes(manifest.read_bytes() + b' ')
+    db = tmp_path / 'registry.sqlite'
+    with pytest.raises(RegistryError, match='byte limit'):
+        import_result_bundles([bundle], db)
+    assert not db.exists()

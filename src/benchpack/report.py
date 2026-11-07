@@ -29,7 +29,7 @@ from .repo_task_outcomes import (
     format_verify_exit_code,
     summarize_repo_task_outcomes,
 )
-from .run_metadata import RunMetadataError, load_optional_run_metadata
+from .run_metadata import RunMetadataError, load_optional_run_metadata, read_metadata_text
 
 
 class ReportError(ValueError):
@@ -484,9 +484,13 @@ def _hardware_cell(run: ResultRun) -> str:
     if not path.is_file():
         return "hardware.json missing"
     try:
-        hardware = json.loads(path.read_text(encoding="utf-8"))
+        hardware = json.loads(read_metadata_text(path))
     except json.JSONDecodeError as exc:
         raise ReportError(f"could not parse {path}: {exc.msg}") from exc
+    except RunMetadataError as exc:
+        raise ReportError(str(exc)) from exc
+    except (ValueError, RecursionError) as exc:
+        raise ReportError(f"could not parse {path}: JSON decoder limit exceeded") from exc
     if not isinstance(hardware, dict):
         raise ReportError(f"expected JSON object in {path}")
     return _hardware_object_cell(hardware)

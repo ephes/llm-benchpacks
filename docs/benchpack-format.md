@@ -846,3 +846,21 @@ decoder-limit failures and durations that cannot convert to finite nonnegative
 floats count as invalid telemetry rows without retaining the row text. Invalid
 UTF-8 and I/O failures are controlled file errors. Safe-field rejection remains
 unchanged; split historical logs exceeding these limits before reporting.
+
+### Compact metadata input ceilings
+
+`hardware.json` and `run-metadata.json` readers admit at most 1 MiB
+(1,048,576 bytes) per file; public `benchpack-bundle.json` manifests admit at
+most 8 MiB (8,388,608 bytes). Each reader requests at most its ceiling plus one
+byte from the opened binary file, so an understated size or growing file cannot
+cause an unbounded read. Exact-ceiling valid JSON is accepted. Split oversized
+bundles/runs or reduce metadata before import; unknown metadata fields remain
+supported within the ceiling. Optional absent sidecars remain absent.
+
+Registry/bundle imports reject oversized or malformed compact metadata before
+opening or modifying the database. Invalid manifest UTF-8, excessive nesting
+and integer decoding limits produce bounded `RegistryError` diagnostics without
+raw values. Run-metadata readers retain `RunMetadataError`; directory reports
+translate metadata read/decode failures to `ReportError`. Malformed JSON syntax
+retains its decoder category, and bundle syntax errors include line and column.
+These limits do not impose an artifact disk quota.

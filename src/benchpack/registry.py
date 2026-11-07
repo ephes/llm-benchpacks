@@ -24,11 +24,12 @@ from .external_agent_model_calls import (
 )
 from .output_paths import paths_overlap
 from .report import ReportError, render_report
-from .run_metadata import RunMetadataError, load_optional_run_metadata
+from .run_metadata import RunMetadataError, load_optional_run_metadata, read_metadata_text
 
 
 REGISTRY_SCHEMA_VERSION = 4
 BUNDLE_SCHEMA_VERSION = 1
+MAX_BUNDLE_MANIFEST_BYTES = 8 * 1024 * 1024
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
 STATIC_SITE_REPORT_FILENAME = "report.md"
@@ -788,11 +789,20 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
     bundle_root = Path(bundle_dir)
     manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
     try:
-        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest_text = read_metadata_text(manifest_path, max_bytes=MAX_BUNDLE_MANIFEST_BYTES)
         _assert_no_public_secret(manifest_text, BUNDLE_MANIFEST_FILENAME)
         manifest = json.loads(manifest_text)
     except json.JSONDecodeError as exc:
-        raise RegistryError(f"could not parse {manifest_path}: {exc.msg}") from exc
+        raise RegistryError(
+            f"could not parse {manifest_path}: {exc.msg} "
+            f"(line {exc.lineno}, column {exc.colno})"
+        ) from exc
+    except RunMetadataError as exc:
+        raise RegistryError(str(exc)) from exc
+    except RegistryError:
+        raise
+    except (ValueError, RecursionError) as exc:
+        raise RegistryError(f"could not parse {manifest_path}: JSON decoder limit exceeded") from exc
     except OSError as exc:
         raise RegistryError(f"could not read {manifest_path}: {exc.strerror}") from exc
     if not isinstance(manifest, dict):
@@ -3105,7 +3115,13 @@ def _is_secret_key(key: str) -> bool:
 
 def _assert_file_has_no_public_secret(path: Path, source: str) -> None:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = (
+            read_metadata_text(path)
+            if path.name in {"hardware.json", "run-metadata.json"}
+            else path.read_text(encoding="utf-8")
+        )
+    except RunMetadataError as exc:
+        raise RegistryError(str(exc)) from exc
     except UnicodeDecodeError as exc:
         raise RegistryError(f"could not decode bundle file {source}") from exc
     except OSError as exc:
@@ -3912,7 +3928,9 @@ def _load_optional_json_object(
     if not path.exists():
         return None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(read_metadata_text(path))
+    except RunMetadataError as exc:
+        raise RegistryError(str(exc)) from exc
     except (UnicodeError, ValueError, RecursionError) as exc:
         raise RegistryError(f"could not parse {path}: invalid JSON or UTF-8") from exc
     except OSError as exc:
