@@ -5270,3 +5270,11 @@ execution. Extracted the existing pilot block-key table for direct pair-oracle
 coverage; synthetic token/unit, counted n-gram, transitivity and B-cubed tests
 protect explanatory ablations. Tie-rank, unit-exclusion and union mutations
 fail the suites. No scientific results or fixture artifacts changed.
+
+## 2026-11-08 — Clickout admission and offline traversal contracts
+
+Malformed decoded clickout shapes/field types now reject only that offer, with
+bounded aggregate diagnostics. Cluster-aware deduplication remains before
+target filtering. Fake HTML/fetch/sleep regressions protect shared seen-state,
+failed/unfetched retries, request caps and soft whole-cluster offer budgets;
+marking queued variants seen causes the retry suite to fail. No live scraping.
