@@ -280,3 +280,18 @@ also one when gold is all singletons; otherwise they decrease. Scoring uses only
 gold must contain every predicted identity. Synthetic fraction oracles cover
 perfect, merged, split and asymmetric partitions and label renaming. Scoring
 remains outside the measured clusterer work; resource measurement is CLI-only.
+
+## Signal-analysis contracts
+
+The pilot, TF-IDF and Amazon–Google analyzers compute ROC-AUC using average
+ranks for ties and average precision at whole equal-score thresholds. Synthetic
+hand-derived fractions and every ordering of tied observations protect these
+independent implementations. ROC-AUC is NaN for empty or single-class inputs;
+AP is NaN without positives, and one for positive-only input. Importing metric
+helpers does not read datasets or import optional scientific libraries.
+
+Pilot blocking keys retain normalized brand and exact category semantics;
+first-title-token blocks use title order. Model-code candidates mix letters and
+digits and exclude pure storage/power/other unit tokens. Character n-grams are
+counted, not deduplicated. Token, block-pair and connected-component oracles run
+without pilot datasets or model calls; no methodology results were remeasured.

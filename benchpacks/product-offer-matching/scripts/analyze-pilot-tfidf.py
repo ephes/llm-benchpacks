@@ -10,7 +10,6 @@ uv without polluting project deps:
 import csv, re, sys, random, collections
 from itertools import combinations
 from pathlib import Path
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 random.seed(0)
 DEFAULT_CSV = Path(__file__).resolve().parent.parent / "pilot-data" / "billiger-pilot-offers.csv"
@@ -61,39 +60,46 @@ def ap(sl):
     return out
 
 
-rows = list(csv.DictReader(open(CSV, encoding="utf-8")))
-oid = [r["offer_id"] for r in rows]
-idx = {o: i for i, o in enumerate(oid)}
-gold = {r["offer_id"]: r["cluster_id"] for r in rows}
-tok = {r["offer_id"]: toks(r["title"]) for r in rows}
-titles = [r["title"] for r in rows]
+def main():
+    from sklearn.feature_extraction.text import TfidfVectorizer
 
-# identical pair sampling to analyze-pilot-signals.py
-blocks = collections.defaultdict(list)
-for r in rows:
-    blocks[(r["brand"].lower().strip(), r["category_label"])].append(r["offer_id"])
-pos, neg = [], []
-for ids in blocks.values():
-    for a, b in combinations(ids, 2):
-        (pos if gold[a] == gold[b] else neg).append((a, b))
-random.shuffle(neg); neg = neg[:min(len(neg), 60000)]
-random.shuffle(pos); pos = pos[:min(len(pos), 60000)]
-pairs = [(p, 1) for p in pos] + [(p, 0) for p in neg]
-print(f"pairs: {len(pos):,} pos / {len(neg):,} neg")
+    rows = list(csv.DictReader(open(CSV, encoding="utf-8")))
+    oid = [r["offer_id"] for r in rows]
+    idx = {o: i for i, o in enumerate(oid)}
+    gold = {r["offer_id"]: r["cluster_id"] for r in rows}
+    tok = {r["offer_id"]: toks(r["title"]) for r in rows}
+    titles = [r["title"] for r in rows]
 
-
-def pair_cos(M):
-    return [(float(M[idx[a]].multiply(M[idx[b]]).sum()), l)  # rows L2-normalized
-            for (a, b), l in pairs]
+    # identical pair sampling to analyze-pilot-signals.py
+    blocks = collections.defaultdict(list)
+    for r in rows:
+        blocks[(r["brand"].lower().strip(), r["category_label"])].append(r["offer_id"])
+    pos, neg = [], []
+    for ids in blocks.values():
+        for a, b in combinations(ids, 2):
+            (pos if gold[a] == gold[b] else neg).append((a, b))
+    random.shuffle(neg); neg = neg[:min(len(neg), 60000)]
+    random.shuffle(pos); pos = pos[:min(len(pos), 60000)]
+    pairs = [(p, 1) for p in pos] + [(p, 0) for p in neg]
+    print(f"pairs: {len(pos):,} pos / {len(neg):,} neg")
 
 
-configs = {
-    "token Jaccard (baseline)": None,
-    "TF-IDF word (1,2)": TfidfVectorizer(lowercase=True, ngram_range=(1, 2), min_df=2),
-    "TF-IDF char_wb (3,5)": TfidfVectorizer(lowercase=True, analyzer="char_wb", ngram_range=(3, 5), min_df=2),
-}
-print(f"{'representation':>28} {'ROC-AUC':>8} {'avg-prec':>9}")
-for name, vec in configs.items():
-    sl = ([(jac(tok[a], tok[b]), l) for (a, b), l in pairs] if vec is None
-          else pair_cos(vec.fit_transform(titles)))
-    print(f"{name:>28} {auc(sl):>8.3f} {ap(sl):>9.3f}")
+    def pair_cos(M):
+        return [(float(M[idx[a]].multiply(M[idx[b]]).sum()), l)  # rows L2-normalized
+                for (a, b), l in pairs]
+
+
+    configs = {
+        "token Jaccard (baseline)": None,
+        "TF-IDF word (1,2)": TfidfVectorizer(lowercase=True, ngram_range=(1, 2), min_df=2),
+        "TF-IDF char_wb (3,5)": TfidfVectorizer(lowercase=True, analyzer="char_wb", ngram_range=(3, 5), min_df=2),
+    }
+    print(f"{'representation':>28} {'ROC-AUC':>8} {'avg-prec':>9}")
+    for name, vec in configs.items():
+        sl = ([(jac(tok[a], tok[b]), l) for (a, b), l in pairs] if vec is None
+              else pair_cos(vec.fit_transform(titles)))
+        print(f"{name:>28} {auc(sl):>8.3f} {ap(sl):>9.3f}")
+
+
+if __name__ == "__main__":
+    main()
