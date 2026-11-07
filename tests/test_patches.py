@@ -59,7 +59,7 @@ def test_capture_workspace_patch_writes_empty_diff_for_no_changes(
     workspace.mkdir(parents=True)
     (source / "README.md").write_text("same\n", encoding="utf-8")
     (workspace / "README.md").write_text("same\n", encoding="utf-8")
-    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace)
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace, baseline_path=source)
 
     record = capture_workspace_patch(prepared, tmp_path / "run", make_case(), 1)
 
@@ -343,7 +343,7 @@ def test_captured_mixed_symlink_patch_replays(tmp_path: Path, operation: str) ->
     elif operation != 'delete':
         os.symlink('./missing//new', workspace / 'link')
 
-    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace)
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace, baseline_path=source)
     record = capture_workspace_patch(prepared, tmp_path / 'run', make_case(), 1)
     patch = (tmp_path / 'run' / record['path']).read_bytes().decode('utf-8')
     subprocess.run(['git', 'apply', '-'], input=patch.encode(), cwd=source, check=True)
@@ -362,3 +362,104 @@ def test_captured_mixed_symlink_patch_replays(tmp_path: Path, operation: str) ->
         else:
             assert (root / 'link').is_symlink()
             assert os.readlink(root / 'link') == './missing//new'
+
+
+@pytest.mark.parametrize("ceiling", ["file", "total", "output", "lines", "work", "entries"])
+def test_patch_capture_resource_ceilings_keep_workspace_without_artifact(tmp_path, monkeypatch, ceiling):
+    import benchpack.patches as patches
+    from benchpack.patches import PatchError
+
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir()
+    workspace.mkdir()
+    (source / "a").write_bytes(b"old\n" * 5)
+    (workspace / "a").write_bytes(b"new\n" * 5)
+    limits = {"file": ("MAX_PATCH_FILE_BYTES", 19),
+              "total": ("MAX_PATCH_INPUT_BYTES", 39),
+              "output": ("MAX_PATCH_OUTPUT_BYTES", 20),
+              "lines": ("MAX_PATCH_LINES", 4),
+              "work": ("MAX_PATCH_DIFF_WORK", 24),
+              "entries": ("MAX_PATCH_ENTRIES", 0)}
+    name, value = limits[ceiling]
+    monkeypatch.setattr(patches, name, value, raising=False)
+    if ceiling in {"lines", "work"}:
+        def forbidden_diff(*args, **kwargs):
+            pytest.fail("diff work began before checking the resource ceiling")
+        monkeypatch.setattr(patches.difflib, "unified_diff", forbidden_diff)
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace, baseline_path=source)
+    out = tmp_path / "run"
+    with pytest.raises(PatchError, match="budget") as error:
+        capture_workspace_patch(prepared, out, make_case(), 1)
+    assert str(workspace) in str(error.value)
+    assert workspace.is_dir()
+    assert not patch_path(out, make_case(), 1).exists()
+
+
+def test_patch_reader_is_bounded_even_when_file_grows_after_stat(tmp_path, monkeypatch):
+    import io
+    import benchpack.patches as patches
+    from benchpack.patches import PatchError
+
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir()
+    workspace.mkdir()
+    target = workspace / "a"
+    target.write_bytes(b"tiny")
+    monkeypatch.setattr(patches, "MAX_PATCH_FILE_BYTES", 8, raising=False)
+    original_open = Path.open
+    reads = []
+    class GrowingReader(io.BytesIO):
+        def read(self, size=-1):
+            reads.append(size)
+            return super().read(size)
+    def open_file(path, *args, **kwargs):
+        if path == target:
+            return GrowingReader(b"x" * 9)
+        return original_open(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "open", open_file)
+    with pytest.raises(PatchError, match="budget"):
+        directory_diff(source, workspace)
+    assert reads == [9]
+
+
+def test_patch_work_budget_is_shared_across_files(tmp_path, monkeypatch):
+    import benchpack.patches as patches
+    from benchpack.patches import PatchError
+
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir()
+    workspace.mkdir()
+    for name in ("a", "b"):
+        (source / name).write_bytes(b"old\n" * 3)
+        (workspace / name).write_bytes(b"new\n" * 3)
+    monkeypatch.setattr(patches, "MAX_PATCH_DIFF_WORK", 17, raising=False)
+    with pytest.raises(PatchError, match="budget"):
+        directory_diff(source, workspace)
+
+
+def test_capture_refuses_unbound_workspace_instead_of_using_live_source(tmp_path):
+    from benchpack.patches import PatchError
+
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir()
+    workspace.mkdir()
+    prepared = PreparedWorkspace(source_fixture=make_fixture(source), path=workspace)
+    with pytest.raises(PatchError, match="no bound baseline"):
+        capture_workspace_patch(prepared, tmp_path / "run", make_case(), 1)
+
+
+def test_patch_capture_accepts_exact_resource_boundaries(tmp_path, monkeypatch):
+    import benchpack.patches as patches
+
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir()
+    workspace.mkdir()
+    (source / "a").write_bytes(b"old\n" * 5)
+    (workspace / "a").write_bytes(b"new\n" * 5)
+    expected = directory_diff(source, workspace)
+    for name, value in {"MAX_PATCH_FILE_BYTES": 20, "MAX_PATCH_INPUT_BYTES": 40,
+                        "MAX_PATCH_LINES": 5, "MAX_PATCH_DIFF_WORK": 25,
+                        "MAX_PATCH_OUTPUT_BYTES": len(expected.encode("utf-8")),
+                        "MAX_PATCH_ENTRIES": 1}.items():
+        monkeypatch.setattr(patches, name, value)
+    assert directory_diff(source, workspace) == expected

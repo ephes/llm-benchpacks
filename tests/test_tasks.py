@@ -932,7 +932,7 @@ print("external stderr trace", file=sys.stderr)
     ) == "created\n"
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
     assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
@@ -1191,7 +1191,7 @@ Path(args.workspace, "done.txt").write_text("should not exist\\n", encoding="utf
     assert not (workspace / "done.txt").exists()
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, make_case(), 1)
     assert "started before timeout" in (
         out / patch_metadata["path"]
@@ -1291,7 +1291,7 @@ workspace.joinpath("parent-done.txt").write_text(
     assert not (workspace / "child-survived.txt").exists()
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, make_case(), 1)
     patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
     assert "parent mutation before timeout" in patch_text
@@ -1515,7 +1515,7 @@ def test_run_repo_task_executor_internal_harness_mutation_reaches_patch_and_veri
     )
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
     assert (out / patch_metadata["path"]).read_text(encoding="utf-8") == (
@@ -1732,7 +1732,7 @@ def test_run_repo_task_executor_internal_harness_realistic_fake_agent_sequence(
     )
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}
     patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
@@ -2282,7 +2282,7 @@ def test_run_repo_task_executor_internal_harness_workspace_mutation_full_surface
     assert not (workspace / "obsolete.txt").exists()
 
     fixture = make_repo_fixture(source)
-    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace)
+    prepared = PreparedWorkspace(source_fixture=fixture, path=workspace, baseline_path=source)
     patch_metadata = capture_workspace_patch(prepared, out, case, 1)
     patch_text = (out / patch_metadata["path"]).read_text(encoding="utf-8")
     assert patch_metadata == {"path": "patch/edit-repo/rep-001.diff"}

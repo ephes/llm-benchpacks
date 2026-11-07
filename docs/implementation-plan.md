@@ -38,6 +38,10 @@ Current posture:
    all three hosts, and Hetzner CUDA memory fit is proven for the narrow
    exclusive-GPU window. Stronger repo-task quality remains mixed and opt-in.
 
+**Landed 2026-11-07:** authenticated endpoint transport preflight and safe compact
+adapter errors; bounded patch capture and run-owned prepared baselines with
+synthetic regressions. See specification for limits and private artifact policy.
+
 Next actionable slices:
 
 1. Direct-edit external-agent output contract. The wrapper now has explicit

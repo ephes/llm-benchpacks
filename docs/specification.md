@@ -214,7 +214,7 @@ support on that harness declaration, and exposes a deterministic optional
 external-agent model-call JSONL artifact path through that context,
 captures deterministic patch
 artifacts from
-source-vs-workspace directory snapshots, writes deterministic task stdout/stderr
+prepared-baseline-vs-workspace directory snapshots, writes deterministic task stdout/stderr
 log artifacts for that task phase, and executes `verify-script` scoring against
 the prepared workspace with a manifest-configurable verifier timeout and a
 fixed `300.0` second default when no timeout is declared. The effective
@@ -226,6 +226,29 @@ Measured repo-task
 records include prepared workspace metadata, patch artifact paths, task log
 artifact paths, verifier artifact paths, final repo-task verifier status, and
 top-level `verify-script` scoring.
+
+Preparation copies the published workspace generation into
+`baseline/<case-id>/rep-NNN/` before any adapter or harness execution. Patch
+capture compares that runner-owned baseline to the post-task workspace, never
+the live fixture. Later fixture content, mode or deletion changes cannot become
+model edits. The existing workspace source id/path still describe manifest
+provenance; the retained baseline describes the actual prepared bytes/modes.
+Harnesses may mutate only the workspace, never the baseline. A failed baseline
+copy aborts preparation and reports retained workspace/baseline paths. Manually
+constructed internal workspaces without a bound baseline cannot be captured.
+
+Patch capture has fixed resource ceilings: 4 MiB per file/link, 32 MiB total input
+across both trees (including unchanged files), 8 MiB UTF-8 emitted patch bytes,
+10,000 entries per tree (including directories), 4,000 LF-delimited lines per
+text input being diffed, and 16,000,000 total old-line × new-line pairs across
+text diffs. Conservative line-pair admission bounds repetitive diff work rather
+than relying on wall-clock time or platform speed. Input reads use a bounded
+size even if a file grows after its size check. Exceeding any ceiling raises
+`PatchError` before publishing a patch/result row; no partial patch is accepted
+as evidence. Workspace and baseline remain available at reported paths. The limits
+admit the largest shipped fixture and ordinary edits to its 3,028-line module;
+large unchanged CSVs do not need text diffing. These are capture limits, not
+disk quotas for workspace preparation or model output.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -491,7 +514,7 @@ failures for deterministic scoring.
 
 The surrounding ordering is fixed unless a later specification slice
 deliberately changes it: prepare the workspace, execute the selected task
-harness, capture `patch/<case-id>/rep-NNN.diff` from source fixture versus
+harness, capture `patch/<case-id>/rep-NNN.diff` from the run-owned prepared baseline versus
 post-task workspace, run any `verify-script`, then write the result record. The
 existing task logs and verifier status are sufficient for this public slice; no
 new row fields are required until a real external harness proves that richer

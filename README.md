@@ -88,6 +88,13 @@ stage and validate before replacement, restore the previous bundle on publicatio
 failure, and report a retained backup if rollback fails. Serialize bundle exports
 to the same output directory.
 
+Repo-task preparation retains the exact workspace generation under
+`baseline/<case-id>/rep-NNN/`; patch capture reads that copy, so later fixture
+edits cannot be attributed to a model. Harnesses must not mutate baselines.
+Capture refuses oversized or expensive diffs under the fixed byte, entry, line
+and line-pair limits in the [specification](docs/specification.md#repo-task-contract),
+reports retained paths and does not accept partial patch evidence.
+
 Repo-task packs may explicitly select `harness = { id = "external-agent" }`.
 That public harness uses runner-owned subprocess configuration rather than a
 manifest command: set `BENCHPACK_EXTERNAL_AGENT_ARGV` to a JSON array of argv
