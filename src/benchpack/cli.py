@@ -15,6 +15,7 @@ from .adapters import Adapter, AdapterRequest, get_adapter
 from .adapters.openai_chat import (
     OPENAI_API_KEY_ENV_KEY,
     OpenAIChatAuthError,
+    validate_openai_config,
     OPENAI_STREAM_USAGE_INCLUDE,
     OPENAI_STREAM_USAGE_KEY,
     OPENAI_STREAM_USAGE_OMIT,
@@ -232,6 +233,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
         try:
             run_metadata = load_run_metadata(args.run_metadata)
         except RunMetadataError as exc:
+            raise SystemExit(str(exc)) from exc
+
+    if args.adapter == "openai-chat":
+        defaults = dict(pack.defaults)
+        if args.openai_api_key_env is not None:
+            defaults[OPENAI_API_KEY_ENV_KEY] = args.openai_api_key_env
+        try:
+            validate_openai_config(args.endpoint, defaults)
+        except OpenAIChatAuthError as exc:
             raise SystemExit(str(exc)) from exc
 
     hardware = collect_hardware()
