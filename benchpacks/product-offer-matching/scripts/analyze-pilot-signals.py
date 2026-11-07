@@ -157,6 +157,15 @@ def union_find_cluster(blocks, link_fn, thr):
     return {oid: f(oid) for oid in par}
 
 
+def blocking_schemes():
+    return {
+        "(brand, category)": lambda r: (r["brand"].lower().strip(), r["category_label"]),
+        "brand only": lambda r: (r["brand"].lower().strip(),),
+        "category only": lambda r: (r["category_label"],),
+        "first title token": lambda r: (first_tok(r["title"]),),
+    }
+
+
 def main():
     rows = list(csv.DictReader(open(CSV, encoding="utf-8")))
     for r in rows:
@@ -187,12 +196,8 @@ def main():
     print(f"total gold positive pairs: {len(gold_pairs):,}")
 
     print("\n", "="*70, "\nSECTION B — blocking recall (pair completeness) & cost\n", "="*70, sep="")
-    schemes = {
-        "(brand, category)": lambda r: (r["brand"].lower().strip(), r["category_label"]),
-        "brand only": lambda r: (r["brand"].lower().strip(),),
-        "category only": lambda r: (r["category_label"],),
-        "first title token": lambda r: (first_tok(r["title"]),),
-    }
+    schemes = blocking_schemes()
+    block_key = schemes["(brand, category)"]
     allpairs = len(rows)*(len(rows)-1)//2
     print(f"{'scheme':>20} {'PC(recall)':>11} {'cand pairs':>12} {'RR':>7} {'maxblk':>7}")
     for name, key in schemes.items():
@@ -207,7 +212,7 @@ def main():
     print("\n", "="*70, "\nSECTION C — signal separability over (brand,category) candidate pairs\n", "="*70, sep="")
     blocks = collections.defaultdict(list)
     for r in rows:
-        blocks[(r["brand"].lower().strip(), r["category_label"])].append(r["offer_id"])
+        blocks[block_key(r)].append(r["offer_id"])
     pos, neg = [], []
     for ids in blocks.values():
         for a, b in combinations(ids, 2):
@@ -266,7 +271,7 @@ def main():
     jvals.sort()
     print(f"\nsplit cause — same-gold in-block pairs scoring < 0.5: {below}/{same} ({below/same:.1%})")
     print(f"  title-Jaccard of same-gold in-block pairs: median {jvals[len(jvals)//2]:.2f}, p25 {jvals[len(jvals)//4]:.2f}, p10 {jvals[len(jvals)//10]:.2f}")
-    keyof = {r["offer_id"]: (r["brand"].lower().strip(), r["category_label"]) for r in rows}
+    keyof = {r["offer_id"]: block_key(r) for r in rows}
     sbb = sum(1 for (a, b) in gold_pairs if keyof[a] != keyof[b])
     print(f"split cause — same-gold pairs in DIFFERENT (brand,category) blocks: {sbb}/{len(gold_pairs)} ({sbb/len(gold_pairs):.1%})")
 

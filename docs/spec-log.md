@@ -5261,3 +5261,12 @@ transitive links, blocking and threshold equality. Empty input now returns
 empty clusters and zero scores; duplicate identities fail before union-find.
 A changed gold pair denominator fails the new scoring suite. Measurement stays
 separate from pure scoring and requires no platform APIs for these tests.
+
+## 2026-11-08 — Signal ranking and blocking regression oracles
+
+Protected all three real AUC/AP implementations with exact-fraction tie/ranking
+and permutation cases. Made TF-IDF analysis import-safe while preserving CLI
+execution. Extracted the existing pilot block-key table for direct pair-oracle
+coverage; synthetic token/unit, counted n-gram, transitivity and B-cubed tests
+protect explanatory ablations. Tie-rank, unit-exclusion and union mutations
+fail the suites. No scientific results or fixture artifacts changed.
