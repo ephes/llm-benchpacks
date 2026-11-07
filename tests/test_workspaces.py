@@ -176,3 +176,36 @@ def test_rename_failure_reports_and_retains_staging_and_reservation(tmp_path, mo
     destination = workspace_path(out, case, 1)
     assert str(destination) in str(error.value)
     assert destination.is_dir() and list(destination.iterdir()) == []
+
+
+@pytest.mark.parametrize('target', ['absolute', 'escape', 'safe'])
+def test_workspace_revalidates_copied_links(tmp_path, monkeypatch, target):
+    import shutil
+    from benchpack.workspaces import prepare_repo_task_workspace, workspace_path
+
+    pack, case = _repo_task(tmp_path)
+    fixture = pack.fixtures[0].path
+    link = fixture / 'link.txt'
+    link.symlink_to('first.txt')
+    copytree = shutil.copytree
+    copied = []
+
+    def swap_before_copy(source, destination, **kwargs):
+        link.unlink()
+        link.symlink_to(str(tmp_path / 'outside') if target == 'absolute'
+                        else '../../outside' if target == 'escape' else 'first.txt')
+        result = copytree(source, destination, **kwargs)
+        copied.append(Path(destination))
+        return result
+
+    monkeypatch.setattr(shutil, 'copytree', swap_before_copy)
+    out = tmp_path / 'run'
+    if target == 'safe':
+        prepared = prepare_repo_task_workspace(pack, case, out, 1)
+        assert (prepared.path / 'link.txt').read_text() == 'source'
+    else:
+        with pytest.raises(WorkspaceError) as error:
+            prepare_repo_task_workspace(pack, case, out, 1)
+        assert copied and str(copied[0]) in str(error.value)
+        assert not workspace_path(out, case, 1).exists()
+        assert copied[0].exists()

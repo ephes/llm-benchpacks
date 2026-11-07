@@ -846,3 +846,21 @@ decoder-limit failures and durations that cannot convert to finite nonnegative
 floats count as invalid telemetry rows without retaining the row text. Invalid
 UTF-8 and I/O failures are controlled file errors. Safe-field rejection remains
 unchanged; split historical logs exceeding these limits before reporting.
+
+### Copied fixture and external-harness output admission
+
+Workspace preparation checks source symlinks and checks them again in the owned
+completed copy before reserving or publishing the destination. Unsafe copied
+links fail preparation; owned staging is retained and named for recovery, and
+no task receives that workspace. Safe internal relative links remain supported.
+
+External subprocess harnesses write stdout/stderr directly to the deterministic
+task artifact files. No output is retained in PIPEs or whole-output strings.
+After the owned process group stops, logs are normalized incrementally in
+64 KiB character chunks to UTF-8, replacing invalid bytes and normalizing
+newlines. Full output is retained on disk without a quota; operators must budget
+disk space. Normalization uses a temporary sibling and replaces each log only
+after completion. A timeout appends the existing short stderr diagnostic.
+Timeout/interruption cleanup signals the owned POSIX group, including surviving
+descendants, and escalates to SIGKILL after the bounded grace period. On other
+platforms cleanup terminates/kills the child process.

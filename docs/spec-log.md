@@ -16,6 +16,17 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (workspace copy and harness containment)
+
+### Changed
+- Revalidate symlinks in completed staging before workspace publication; retain
+  and report unsafe staging while refusing task execution.
+- Capture external harness streams in files and normalize UTF-8 incrementally;
+  preserve deterministic paths, full disk output and timeout diagnostics.
+  Clean up the owned group on timeout/interruption, even after leader exit.
+- Add synthetic copy-swap and multi-megabyte output regressions; preserve the
+  existing missing-executable, nonzero-exit and descendant timeout coverage.
+
 ## 2026-11-07 (benchmark preflight and bounded result input)
 
 ### Changed

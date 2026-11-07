@@ -2679,3 +2679,33 @@ def test_apply_unified_diff_to_workspace_rejects_quoted_workspace_escape(
         "workspace left unchanged.\n"
     )
     assert not outside.exists()
+
+
+def test_external_harness_streams_large_output_to_files(tmp_path, monkeypatch):
+    import benchpack.tasks as tasks
+
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    size = 2 * 1024 * 1024
+    popen = subprocess.Popen
+    calls = []
+
+    def file_backed_popen(*args, **kwargs):
+        assert kwargs['stdout'] != subprocess.PIPE
+        assert kwargs['stderr'] != subprocess.PIPE
+        calls.append(True)
+        return popen(*args, **kwargs)
+
+    monkeypatch.setattr(tasks.subprocess, 'Popen', file_backed_popen)
+    record = run_repo_task_executor(TaskExecutionRequest(
+        output_dir=tmp_path / 'run', case=make_case(), repetition=1,
+        workspace=workspace, model_output_text='', task_timeout_s=10,
+        external_process_harness=ExternalProcessHarness(argv=(sys.executable, '-c',
+            'import os, threading; '
+            f'threads = [threading.Thread(target=os.write, args=(fd, byte * {size} + b"\\xff")) '
+            'for fd, byte in ((1, b"a"), (2, b"b"))]; '
+            '[t.start() for t in threads]; [t.join() for t in threads]')),
+    ))
+    assert calls
+    assert (tmp_path / 'run' / record['stdout_path']).read_text(encoding='utf-8') == 'a' * size + '\ufffd'
+    assert (tmp_path / 'run' / record['stderr_path']).read_text(encoding='utf-8') == 'b' * size + '\ufffd'

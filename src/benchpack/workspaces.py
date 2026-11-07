@@ -173,6 +173,13 @@ def prepare_repo_task_workspace(
         staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
         step = "copy fixture"
         shutil.copytree(source_fixture.path, staging, symlinks=True, dirs_exist_ok=True)
+        step = "validate copied fixture"
+        try:
+            _reject_escaping_symlinks(staging, case, source_fixture)
+        except WorkspaceError as exc:
+            raise WorkspaceError(
+                f"{exc}; staging retained at {staging}; destination: {destination}"
+            ) from exc
         # Exclusive reservation prevents replacing even an empty foreign directory.
         # POSIX publication requires other writers not to rename output directories.
         step = "reserve destination"
