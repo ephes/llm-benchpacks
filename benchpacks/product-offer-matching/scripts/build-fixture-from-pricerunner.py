@@ -3,8 +3,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
+import os
+import shutil
+import tempfile
 import random
+import re
 import zipfile
 from bisect import bisect_right
 from collections import Counter, defaultdict
@@ -23,12 +28,33 @@ def _clean(value: object) -> str:
 
 
 def _read_rows(zip_path: Path, member_name: str) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
+    required = {"Product ID", "Product Title", "Merchant ID", "Category ID",
+                "Category Label", "Cluster ID", "Cluster Label"}
+    rows, seen = [], set()
     with zipfile.ZipFile(zip_path) as archive:
-        with archive.open(member_name) as raw:
-            text = (line.decode("utf-8-sig") for line in raw)
-            for row in csv.DictReader(text):
-                rows.append({key.strip(): _clean(value) for key, value in row.items()})
+        with archive.open(member_name) as raw, io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text:
+            reader = csv.DictReader(text, strict=True)
+            try:
+                fields = reader.fieldnames
+                if fields is None or len(fields) != len(required) or {f.strip() for f in fields} != required:
+                    raise ValueError("source header must contain exactly the seven required columns")
+                reader.fieldnames = [f.strip() for f in fields]
+                for row_number, row in enumerate(reader, start=2):
+                    if None in row or any(value is None for value in row.values()):
+                        raise ValueError(f"source row {row_number}: expected seven cells")
+                    row = {key: _clean(value) for key, value in row.items()}
+                    if not row["Product ID"] or row["Product ID"] in seen:
+                        raise ValueError(f"source row {row_number}: blank or duplicate Product ID")
+                    seen.add(row["Product ID"])
+                    try:
+                        if not re.fullmatch(r"[0-9]+", row["Cluster ID"]):
+                            raise ValueError
+                        row["Cluster ID"] = str(int(row["Cluster ID"]))
+                    except ValueError:
+                        raise ValueError(f"source row {row_number}: invalid Cluster ID") from None
+                    rows.append(row)
+            except (csv.Error, UnicodeError):
+                raise ValueError(f"source CSV encoding/shape error near line {reader.line_num}") from None
     return rows
 
 
@@ -58,6 +84,54 @@ def _write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) ->
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+def _publish_csv(pack_dir: Path, files) -> None:
+    """Single-writer publication with rollback and retained backups on recovery failure."""
+    pack_dir.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=".pricerunner-", dir=pack_dir))
+    published = []
+    keep_recovery = False
+    try:
+        for index, (target, rows, fields) in enumerate(files):
+            staged = stage / "new" / f"{index}.csv"
+            _write_csv(staged, rows, fields)
+            with staged.open(newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                if reader.fieldnames != fields or list(reader) != rows:
+                    raise ValueError("staged fixture validation failed")
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError("fixture target must be a regular file")
+            if target.exists():
+                backup = stage / "backup" / f"{index}.csv"
+                backup.parent.mkdir(exist_ok=True)
+                shutil.copy2(target, backup)
+        manifest = [{"path": str(target.relative_to(pack_dir)), "existed": target.exists()}
+                    for target, _, _ in files]
+        (stage / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        try:
+            for index, (target, _, _) in enumerate(files):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(stage / "new" / f"{index}.csv", target)
+                published.append((index, target))
+        except BaseException:
+            failed = False
+            for index, target in reversed(published):
+                try:
+                    backup = stage / "backup" / f"{index}.csv"
+                    if backup.exists():
+                        os.replace(backup, target)
+                    else:
+                        target.unlink()
+                except OSError:
+                    failed = True
+            if failed:
+                keep_recovery = True
+                raise RuntimeError(f"publication rollback failed; recovery files retained at {stage}")
+            raise
+    finally:
+        if not keep_recovery:
+            shutil.rmtree(stage)
 
 
 def _choose_split(
@@ -250,39 +324,15 @@ def main() -> int:
     pack_dir = Path(args.pack_dir)
     data_dir = pack_dir / "fixtures" / "matcher-repo" / "data"
     verify_dir = pack_dir / "verify"
-    _write_csv(
-        data_dir / "train_offers.csv",
-        train_rows,
-        [
-            "offer_id",
-            "title",
-            "merchant_id",
-            "category_id",
-            "category_label",
-            "cluster_id",
-            "cluster_label",
-        ],
-    )
-    _write_csv(
-        data_dir / "test_offers.csv",
-        test_rows,
-        ["offer_id", "title", "merchant_id", "category_id", "category_label"],
-    )
-    _write_csv(
-        data_dir / "eval_pairs.csv",
-        eval_pairs,
-        ["pair_id", "offer_id_left", "offer_id_right"],
-    )
-    _write_csv(
-        verify_dir / "hidden_test_clusters.csv",
-        hidden_cluster_rows,
-        ["offer_id", "cluster_id"],
-    )
-    _write_csv(
-        verify_dir / "hidden_eval_pair_labels.csv",
-        hidden_pair_labels,
-        ["pair_id", "label"],
-    )
+    _publish_csv(pack_dir, [
+        (data_dir / "train_offers.csv", train_rows,
+         ["offer_id", "title", "merchant_id", "category_id", "category_label", "cluster_id", "cluster_label"]),
+        (data_dir / "test_offers.csv", test_rows,
+         ["offer_id", "title", "merchant_id", "category_id", "category_label"]),
+        (data_dir / "eval_pairs.csv", eval_pairs, ["pair_id", "offer_id_left", "offer_id_right"]),
+        (verify_dir / "hidden_test_clusters.csv", hidden_cluster_rows, ["offer_id", "cluster_id"]),
+        (verify_dir / "hidden_eval_pair_labels.csv", hidden_pair_labels, ["pair_id", "label"]),
+    ])
 
     print(
         json.dumps(

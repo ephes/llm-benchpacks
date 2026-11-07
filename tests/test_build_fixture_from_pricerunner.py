@@ -2,6 +2,7 @@ from collections import Counter
 import csv
 import importlib.util
 import io
+import json
 import random
 import sys
 import zipfile
@@ -136,3 +137,195 @@ def test_pair_source_identity_must_be_unique():
     with pytest.raises(ValueError, match='unique Product IDs'):
         load_builder()._sample_eval_pairs(rows, positive_pairs=0, hard_negative_pairs=0,
                                           easy_negative_pairs=0, rng=random.Random(0))
+
+
+@pytest.mark.parametrize('fault', ['missing_header', 'extra_header', 'duplicate_header', 'surplus', 'short', 'blank_id', 'duplicate_id', 'bad_cluster'])
+def test_source_schema_preflight_preserves_previous_generation(tmp_path, monkeypatch, fault):
+    mod, rows = load_builder(), source_rows()
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    generate(mod, monkeypatch, source, pack)
+    before = {p: p.read_bytes() for p in pack.rglob('*.csv')}
+    fields = FIELDS.copy()
+    if fault == 'missing_header':
+        fields.remove('Product Title')
+        rows = [{k: v for k, v in r.items() if k in fields} for r in rows]
+    elif fault == 'extra_header':
+        fields.append('Unexpected')
+    elif fault == 'duplicate_header':
+        fields.append('Product ID')
+    elif fault == 'blank_id':
+        rows[1]['Product ID'] = '  '
+    elif fault == 'duplicate_id':
+        rows[1]['Product ID'] = rows[0]['Product ID']
+    elif fault == 'bad_cluster':
+        rows[1]['Cluster ID'] = 'SECRET invalid value'
+    write_source(source, rows, fields)
+    if fault in ('surplus', 'short'):
+        with zipfile.ZipFile(source) as archive:
+            text = archive.read(mod.SOURCE_MEMBER).decode('utf-8-sig')
+        lines = text.splitlines()
+        lines[2] = lines[2] + ',SECRET' if fault == 'surplus' else ','.join(lines[2].split(',')[:-1])
+        with zipfile.ZipFile(source, 'w') as archive:
+            archive.writestr(mod.SOURCE_MEMBER, '\n'.join(lines))
+    with pytest.raises(ValueError) as exc:
+        generate(mod, monkeypatch, source, pack)
+    assert 'SECRET' not in str(exc.value)
+    assert len(str(exc.value)) < 200
+    assert {p: p.read_bytes() for p in pack.rglob('*.csv')} == before
+
+
+def test_source_bom_unicode_quoted_multiline_values(tmp_path, monkeypatch):
+    mod, rows = load_builder(), source_rows()
+    rows[0]['Product Title'] = 'Küche, "groß"\nzweite Zeile'
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    generate(mod, monkeypatch, source, pack)
+    titles = [r['title'] for name, rs in outputs(pack).items() if name in ('train_offers.csv', 'test_offers.csv') for r in rs]
+    assert 'Küche, "groß" zweite Zeile' in titles
+
+
+@pytest.mark.parametrize('boundary', ['stage', 'backup', 'publish'])
+@pytest.mark.parametrize('nth', range(1, 6))
+@pytest.mark.parametrize('existing', [False, True])
+def test_generation_failure_is_all_or_previous(tmp_path, monkeypatch, boundary, nth, existing, capsys):
+    mod, rows = load_builder(), source_rows()
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    if existing:
+        generate(mod, monkeypatch, source, pack)
+    before = {p: p.read_bytes() for p in pack.rglob('*.csv')}
+    capsys.readouterr()
+    calls = 0
+    owner, name = (mod, '_write_csv') if boundary == 'stage' else ((mod.shutil, 'copy2') if boundary == 'backup' else (mod.os, 'replace'))
+    original = getattr(owner, name)
+
+    def fail(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == nth:
+            if boundary == 'stage':  # includes failures after a complete write/close
+                original(*args, **kwargs)
+            raise OSError('synthetic I/O failure')
+        return original(*args, **kwargs)
+
+    if boundary == 'backup' and not existing:
+        pytest.skip('no backups exist on first generation')
+    with monkeypatch.context() as patch:
+        patch.setattr(owner, name, fail)
+        with pytest.raises(OSError, match='synthetic'):
+            generate(mod, monkeypatch, source, pack, seed=9)
+    assert calls >= nth
+    assert not capsys.readouterr().out  # success summary only follows publication
+    assert {p: p.read_bytes() for p in pack.rglob('*.csv')} == before
+    assert not list(pack.glob('.pricerunner-*'))
+    generate(mod, monkeypatch, source, pack, seed=9)
+    assert_joins(pack, rows)
+
+
+def test_failed_rollback_retains_recovery_files(tmp_path, monkeypatch):
+    mod, rows = load_builder(), source_rows()
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    generate(mod, monkeypatch, source, pack)
+    calls = 0
+    original = mod.os.replace
+
+    def fail(src, dst):
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            raise OSError('synthetic rollback failure')
+        return original(src, dst)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(mod.os, 'replace', fail)
+        with pytest.raises(RuntimeError, match='recovery files retained at') as exc:
+            generate(mod, monkeypatch, source, pack, seed=9)
+    recovery = Path(str(exc.value).split(' at ', 1)[1])
+    assert recovery.is_dir()
+    assert len(list((recovery / 'backup').glob('*.csv'))) == 5
+
+
+@pytest.mark.parametrize('raw', [b'\xff', b'Product ID,Product Title,Merchant ID,Category ID,Category Label,Cluster ID,Cluster Label\np,"unterminated'])
+def test_invalid_source_encoding_and_csv_fail_without_outputs(tmp_path, monkeypatch, raw):
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    with zipfile.ZipFile(source, 'w') as archive:
+        archive.writestr('pricerunner_aggregate.csv', raw)
+    with pytest.raises(ValueError, match='encoding/shape'):
+        generate(load_builder(), monkeypatch, source, pack)
+    assert not list(pack.rglob('*.csv'))
+
+
+def test_numeric_cluster_aliases_share_one_split_identity(tmp_path):
+    rows = source_rows((2,))
+    rows[1]['Cluster ID'] = '00'
+    source = tmp_path / 'source.zip'
+    write_source(source, rows)
+    mod = load_builder()
+    admitted = mod._read_rows(source, mod.SOURCE_MEMBER)
+    train, test = mod._choose_split(admitted, train_offer_target=1, rng=random.Random(1))
+    assert train == {'0'} and not test
+
+
+def test_staged_content_is_validated_before_publication(tmp_path, monkeypatch):
+    mod, rows = load_builder(), source_rows()
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    generate(mod, monkeypatch, source, pack)
+    before = {p: p.read_bytes() for p in pack.rglob('*.csv')}
+    original = mod._write_csv
+
+    def corrupt(path, rows, fields):
+        original(path, rows, fields)
+        path.write_text('wrong\ncontents\n')
+
+    monkeypatch.setattr(mod, '_write_csv', corrupt)
+    with pytest.raises(ValueError, match='staged fixture validation'):
+        generate(mod, monkeypatch, source, pack)
+    assert {p: p.read_bytes() for p in pack.rglob('*.csv')} == before
+
+
+def test_partial_previous_generation_unlink_rollback_recovery(tmp_path, monkeypatch):
+    mod, rows = load_builder(), source_rows()
+    source, pack = tmp_path / 'source.zip', tmp_path / 'pack'
+    write_source(source, rows)
+    generate(mod, monkeypatch, source, pack)
+    for path in (pack / 'fixtures').rglob('*.csv'):
+        path.unlink()
+    old_labels = {p: p.read_bytes() for p in (pack / 'verify').glob('*.csv')}
+    replace, unlink = mod.os.replace, Path.unlink
+    calls = 0
+
+    def fail_replace(src, dst):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise OSError('publication failure')
+        return replace(src, dst)
+
+    def fail_unlink(path, *args, **kwargs):
+        if path.name in ('train_offers.csv', 'test_offers.csv'):
+            raise OSError('unlink failure')
+        return unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(mod.os, 'replace', fail_replace)
+        patch.setattr(Path, 'unlink', fail_unlink)
+        with pytest.raises(RuntimeError, match='recovery files retained at') as exc:
+            generate(mod, monkeypatch, source, pack, seed=9)
+    recovery = Path(str(exc.value).split(' at ', 1)[1])
+    manifest = json.loads((recovery / 'manifest.json').read_text())
+    assert [entry['existed'] for entry in manifest] == [False, False, False, True, True]
+    # Follow the documented recovery contract using only retained evidence.
+    for i, entry in enumerate(manifest):
+        target = pack / entry['path']
+        backup = recovery / 'backup' / f'{i}.csv'
+        if not entry['existed']:
+            target.unlink(missing_ok=True)
+        elif backup.exists():
+            replace(backup, target)
+    assert {p: p.read_bytes() for p in pack.rglob('*.csv') if recovery not in p.parents} == old_labels
+    mod.shutil.rmtree(recovery)
+    generate(mod, monkeypatch, source, pack, seed=9)
+    assert_joins(pack, rows)
