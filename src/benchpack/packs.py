@@ -21,6 +21,9 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+KNOWN_CASE_KINDS = frozenset({"chat", "completion", "repo-task", "replay"})
+
+
 KNOWN_SCORING_MODES = frozenset(
     {
         "none",
@@ -407,7 +410,7 @@ def _prompt_from_case_entry(
 
     try:
         return resolved_prompt_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise InvalidPromptSourceError(
             f"case {case_id!r} prompt_file {prompt_file!r} could not be read"
         ) from exc
@@ -637,9 +640,16 @@ def _append_referenced_file_fixtures(
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
-    with manifest_path.open("rb") as fh:
-        data = tomllib.load(fh)
-    resolved_pack_dir = pack_dir.resolve(strict=True)
+    try:
+        with manifest_path.open("rb") as fh:
+            data = tomllib.load(fh)
+        resolved_pack_dir = pack_dir.resolve(strict=True)
+    except UnicodeError as exc:
+        raise PackError(f"could not decode manifest {manifest_path}: invalid UTF-8") from exc
+    except ValueError as exc:
+        raise PackError(f"could not parse manifest {manifest_path}: invalid TOML") from exc
+    except OSError as exc:
+        raise PackError(f"could not read manifest {manifest_path}") from exc
 
     pack_section = data.get("pack", {})
     if not isinstance(pack_section, dict):
@@ -648,6 +658,8 @@ def load_pack(path: Path | str) -> Pack:
     pack_version = pack_section.get("version")
     if not pack_id_raw or not pack_version:
         raise PackError("[pack] section must define 'id' and 'version'")
+    if not isinstance(pack_version, str) or not pack_version.strip():
+        raise PackError("[pack].version must be a nonblank string")
     pack_id = _validate_id(pack_id_raw, "pack")
 
     fixtures = _fixtures_from_entries(
@@ -668,6 +680,10 @@ def load_pack(path: Path | str) -> Pack:
     for entry in raw_cases:
         case_id = _validate_id(entry.get("id"), "case")
         case_kind = entry.get("kind", "chat")
+        if not isinstance(case_kind, str) or case_kind not in KNOWN_CASE_KINDS:
+            raise PackError(
+                f"case {case_id!r} kind must be one of {sorted(KNOWN_CASE_KINDS)}"
+            )
         if case_id in seen:
             raise DuplicateCaseIdError(
                 f"duplicate case id {case_id!r} in pack {pack_id!r}"

@@ -1645,3 +1645,20 @@ file, 64 KiB per physical line (including its line ending), and 10,000 nonblank
 rows per file. Limit failures raise `ModelCallLogError`; malformed JSON and
 unrepresentable durations count as invalid rows. Existing safe-field allowlists
 and summaries remain unchanged. Split larger historical logs before reporting.
+
+## Pack and result-reader preflight
+
+Pack workload versions must be nonblank strings, with no semantic-version
+requirement. Case kinds are the string allowlist `chat`, `completion`,
+`repo-task`, and `replay`, defaulting to `chat`. The `completion` and `replay`
+legacy declarations retain their existing behavior; admission does not add
+new execution paths. Invalid manifest I/O/UTF-8/TOML and prompt-file reads
+raise `PackError` subclasses; `benchpack run` converts them to controlled
+nonzero preflight exits before preparing output or making model calls.
+
+The shared `run.jsonl` reader admits at most 1 MiB per physical line including
+line endings, 64 MiB actual bytes per run including blank lines, and 100,000
+retained result records. Limits are checked incrementally before parsing or
+appending excess input. I/O, encoding and JSON decoder errors are `CompareError`;
+registry/bundle preflight preserves validate-before-database behavior. Larger
+historical runs must be split into separate result directories.

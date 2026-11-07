@@ -12,6 +12,9 @@ from typing import Any
 
 
 MISSING = "—"
+MAX_RESULT_LINE_BYTES = 1024 * 1024
+MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
+MAX_RESULT_RECORDS = 100_000
 
 
 class CompareError(ValueError):
@@ -62,22 +65,40 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
         raise CompareError(f"missing run.jsonl in result directory: {path}")
 
     records: list[dict[str, Any]] = []
-    with jsonl_path.open(encoding="utf-8") as fh:
-        for line_number, line in enumerate(fh, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                record = json.loads(stripped)
-            except ValueError as exc:
-                raise CompareError(
-                    f"could not parse {jsonl_path}:{line_number}: {exc}"
-                ) from exc
-            if not isinstance(record, dict):
-                raise CompareError(
-                    f"expected JSON object in {jsonl_path}:{line_number}"
-                )
-            records.append(record)
+    total = 0
+    line_number = 0
+    try:
+        with jsonl_path.open("rb") as fh:
+            while True:
+                line = fh.readline(min(
+                    MAX_RESULT_LINE_BYTES + 1,
+                    MAX_RESULT_RUN_BYTES - total + 1,
+                ))
+                if not line:
+                    break
+                line_number += 1
+                source = f"{jsonl_path}:{line_number}"
+                total += len(line)
+                if total > MAX_RESULT_RUN_BYTES:
+                    raise CompareError(f"run byte limit exceeded in {source}")
+                if len(line) > MAX_RESULT_LINE_BYTES:
+                    raise CompareError(f"record byte limit exceeded in {source}")
+                stripped = line.decode("utf-8").strip()
+                if not stripped:
+                    continue
+                if len(records) >= MAX_RESULT_RECORDS:
+                    raise CompareError(f"record count limit exceeded in {source}")
+                try:
+                    record = json.loads(stripped)
+                except (ValueError, RecursionError) as exc:
+                    raise CompareError(f"could not parse {source}: invalid JSON") from exc
+                if not isinstance(record, dict):
+                    raise CompareError(f"expected JSON object in {source}")
+                records.append(record)
+    except UnicodeError as exc:
+        raise CompareError(f"could not decode {jsonl_path}:{line_number}: invalid UTF-8") from exc
+    except OSError as exc:
+        raise CompareError(f"could not read {jsonl_path}:{line_number}") from exc
 
     if not records:
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")

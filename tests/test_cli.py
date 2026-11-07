@@ -31,7 +31,6 @@ from benchpack.adapters.openai_chat import (
 from benchpack.cli import main
 from benchpack.external_agent_context import ExternalAgentContextError
 from benchpack.packs import (
-    InvalidHarnessError,
     PROVISIONAL_EXTERNAL_AGENT_HARNESS_ID,
     PUBLIC_HARNESS_EXTERNAL_AGENT,
     PUBLIC_HARNESS_FENCED_PATCH,
@@ -1811,7 +1810,7 @@ def test_cli_invalid_harness_timeout_manifest_fails_before_execution(
     )
     out = tmp_path / "run"
 
-    with pytest.raises(InvalidHarnessError, match="harness.timeout_s"):
+    with pytest.raises(SystemExit, match="harness.timeout_s"):
         main(_argv(["--out", str(out)]))
 
     assert calls == []
@@ -4168,8 +4167,6 @@ def test_cli_malformed_ollama_response_continues_next_case(tmp_path: Path, monke
     ],
 )
 def test_cli_scoring_preflight_makes_no_model_calls(tmp_path, monkeypatch, scoring):
-    from benchpack.packs import PackError
-
     calls = _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _write_json_schema_pack(tmp_path)
@@ -4179,7 +4176,7 @@ def test_cli_scoring_preflight_makes_no_model_calls(tmp_path, monkeypatch, scori
             'mode = "json-schema", schema = "fixtures/shape.schema.json"', scoring
         )
     )
-    with pytest.raises(PackError):
+    with pytest.raises(SystemExit):
         main(
             ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model"]
         )
@@ -4240,13 +4237,11 @@ def test_cli_setup_with_malformed_hardware(tmp_path, monkeypatch) -> None:
     '[pack]\nid = "smoke-chat"\nversion = "1"\n[[cases]]\nid = "one"\nprompt = 42',
 ])
 def test_cli_manifest_shape_preflight_makes_no_model_calls(tmp_path, monkeypatch, manifest):
-    from benchpack.packs import PackError
-
     calls = _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _write_smoke_pack(tmp_path)
     (tmp_path / "benchpacks/smoke-chat/benchpack.toml").write_text(manifest)
-    with pytest.raises(PackError):
+    with pytest.raises(SystemExit):
         main(_argv([]))
     assert calls == []
     assert not (tmp_path / "results").exists()
@@ -4258,8 +4253,6 @@ def test_cli_manifest_shape_preflight_makes_no_model_calls(tmp_path, monkeypatch
 ], ids=["invalid-utf8", "excessive-nesting"])
 @pytest.mark.parametrize("source", ["schema", "metadata"])
 def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, payload, category, source, decoder_nesting_limit):
-    from benchpack.packs import InvalidScoringSchemaError
-
     calls = _install_fake_adapter(monkeypatch)
     monkeypatch.chdir(tmp_path)
     out = tmp_path / "run"
@@ -4267,7 +4260,7 @@ def test_cli_json_decode_preflight_makes_no_model_calls(tmp_path, monkeypatch, p
         _write_json_schema_pack(tmp_path)
         (tmp_path / "benchpacks/json-format/fixtures/shape.schema.json").write_bytes(payload)
         argv = ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model", "--out", str(out)]
-        error_type = InvalidScoringSchemaError
+        error_type = SystemExit
     else:
         _write_smoke_pack(tmp_path)
         metadata = tmp_path / "metadata.json"
@@ -4292,3 +4285,88 @@ def test_cli_report_normalizes_metadata_decode_errors(tmp_path, payload, categor
     with pytest.raises(SystemExit, match=category):
         main(["report", str(run)])
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize('failure', [
+    'missing', 'unreadable', 'toml', 'manifest-utf8', 'prompt-utf8', 'schema',
+    'version', 'kind',
+])
+def test_cli_pack_errors_exit_before_output_or_adapter(tmp_path, monkeypatch, failure):
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    manifest = tmp_path / 'benchpacks/smoke-chat/benchpack.toml'
+    injected = []
+    if failure == 'missing':
+        manifest.unlink()
+    elif failure == 'unreadable':
+        original_open = Path.open
+        def denied(path, *args, **kwargs):
+            if path.resolve() == manifest.resolve():
+                injected.append(path)
+                raise PermissionError('synthetic denial')
+            return original_open(path, *args, **kwargs)
+        monkeypatch.setattr(Path, 'open', denied)
+    elif failure == 'toml':
+        manifest.write_text('[pack\nprivate-prompt-sentinel')
+    elif failure == 'manifest-utf8':
+        manifest.write_bytes(b'\xff')
+    elif failure == 'prompt-utf8':
+        manifest.write_text('[pack]\nid="test"\nversion="1"\n[[cases]]\nid="one"\nprompt_file="prompt.txt"\n')
+        (manifest.parent / 'prompt.txt').write_bytes(b'\xff')
+    elif failure == 'schema':
+        manifest.write_text('pack="wrong-shape"')
+    elif failure == 'version':
+        manifest.write_text(manifest.read_text().replace('version = "0.1.0"', 'version = true'))
+    elif failure == 'kind':
+        manifest.write_text(manifest.read_text().replace('kind = "chat"', 'kind = "reop-task"'))
+    out = tmp_path / 'output'
+    # Exercise the installed CLI entry point boundary without running a backend.
+    with pytest.raises(SystemExit) as error:
+        main(_argv(['--out', str(out)]))
+    assert error.value.code and isinstance(error.value.code, str)
+    assert 'Traceback' not in str(error.value)
+    assert 'private-prompt-sentinel' not in str(error.value)
+    assert len(str(error.value)) < 500
+    assert calls == []
+    assert not out.exists()
+    if failure == 'unreadable':
+        assert len(injected) == 1
+
+
+@pytest.mark.parametrize('kind', ['chat', 'completion', 'replay'])
+def test_valid_manifest_records_pass_registry_preflight(tmp_path, monkeypatch, kind):
+    from benchpack.registry import import_result_dirs
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    manifest = tmp_path / 'benchpacks/smoke-chat/benchpack.toml'
+    manifest.write_text(manifest.read_text().replace('kind = "chat"', f'kind = "{kind}"').replace('version = "0.1.0"', 'version = "custom-label"'))
+    out = tmp_path / 'output'
+    assert main(_argv(['--out', str(out)])) == 0
+    assert import_result_dirs([out], tmp_path / 'registry.sqlite')[0].rows_imported == 1
+
+
+@pytest.mark.parametrize('failure', ['toml', 'prompt-utf8'])
+def test_pack_reader_subprocess_exits_without_traceback(tmp_path, failure):
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    manifest = pack / 'benchpack.toml'
+    if failure == 'toml':
+        manifest.write_text('[pack\nprivate-prompt-sentinel')
+    else:
+        manifest.write_text('[pack]\nid="test"\nversion="1"\n[[cases]]\nid="one"\nprompt_file="prompt.txt"\n')
+        (pack / 'prompt.txt').write_bytes(b'\xff')
+    out = tmp_path / 'output'
+    result = subprocess.run([
+        sys.executable, '-c',
+        'from benchpack.cli import main; raise SystemExit(main())', 'run', str(pack),
+        '--adapter', 'openai-chat', '--model', 'synthetic', '--out', str(out),
+    ], cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    expected = 'invalid TOML' if failure == 'toml' else 'could not be read'
+    assert expected in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert 'private-prompt-sentinel' not in result.stderr
+    assert len(result.stderr) < 500
+    assert not out.exists()
