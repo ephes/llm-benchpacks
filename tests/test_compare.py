@@ -821,3 +821,100 @@ def test_compare_reports_integer_decode_limit(tmp_path: Path) -> None:
     with pytest.raises(CompareError, match=r"run.jsonl:1"):
         load_result_run(run_dir)
     assert artifact.read_text() == original
+
+
+@pytest.mark.parametrize('budget', ['line', 'run', 'records'])
+def test_result_ingestion_budgets_and_registry_atomicity(tmp_path, monkeypatch, budget):
+    import benchpack.compare as compare
+    from benchpack.registry import RegistryError, import_result_dirs
+    row = (json.dumps(_record('synthetic')) + '\n').encode()
+    good = tmp_path / 'good'
+    bad = tmp_path / 'bad'
+    good.mkdir()
+    bad.mkdir()
+    (good / 'run.jsonl').write_bytes(row)
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([good], db)
+    before = db.read_bytes()
+    if budget == 'line':
+        monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', len(row), raising=False)
+        payload = row[:-1] + b' \n'
+    elif budget == 'run':
+        monkeypatch.setattr(compare, 'MAX_RESULT_RUN_BYTES', len(row), raising=False)
+        payload = row + b'\n'
+    else:
+        monkeypatch.setattr(compare, 'MAX_RESULT_RECORDS', 1, raising=False)
+        payload = row*2
+    (bad / 'run.jsonl').write_bytes(payload)
+    with pytest.raises(CompareError, match='limit'):
+        load_result_run(bad)
+    with pytest.raises(RegistryError, match='limit'):
+        import_result_dirs([good, bad], db)
+    assert db.read_bytes() == before
+    fresh = tmp_path / 'new.sqlite'
+    with pytest.raises(RegistryError, match='limit'):
+        import_result_dirs([good, bad], fresh)
+    assert not fresh.exists()
+    assert load_result_run(good).records == [_record('synthetic')]
+
+
+def test_result_ingestion_bounds_read_before_allocation(tmp_path, monkeypatch):
+    import io
+    import benchpack.compare as compare
+    run = tmp_path / 'run'
+    run.mkdir()
+    (run / 'run.jsonl').touch()
+    reads = []
+    class Stream(io.BytesIO):
+        def readline(self, size=-1):
+            reads.append(size)
+            assert 0 < size <= 33
+            return super().readline(size)
+        def __iter__(self):
+            raise AssertionError('unbounded iteration')
+    monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', 32, raising=False)
+    monkeypatch.setattr(Path, 'open', lambda self, *a, **kw: Stream(b'x'*1000))
+    with pytest.raises(CompareError, match='limit'):
+        load_result_run(run)
+    assert reads == [33]
+
+
+@pytest.mark.parametrize('failure', ['utf8', 'open', 'read'])
+def test_result_ingestion_normalizes_io_and_decode_errors(tmp_path, monkeypatch, failure):
+    import io
+    run = tmp_path / 'run'
+    run.mkdir()
+    path = run / 'run.jsonl'
+    path.write_bytes(b'\xff\n')
+    injected = []
+    if failure != 'utf8':
+        original_open = Path.open
+        class Stream(io.BytesIO):
+            def readline(self, size=-1):
+                injected.append('read')
+                raise OSError('synthetic read failure')
+        def broken_open(self, *a, **kw):
+            if self == path:
+                if failure == 'open':
+                    injected.append('open')
+                    raise PermissionError('synthetic denial')
+                return Stream()
+            return original_open(self, *a, **kw)
+        monkeypatch.setattr(Path, 'open', broken_open)
+    with pytest.raises(CompareError, match='run.jsonl'):
+        load_result_run(run)
+    if failure != 'utf8':
+        assert injected == [failure]
+
+
+def test_result_line_budget_counts_utf8_bytes(tmp_path, monkeypatch):
+    import benchpack.compare as compare
+    run = tmp_path / 'run'
+    run.mkdir()
+    text = json.dumps({'case': 'ä'*8}, ensure_ascii=False)
+    (run / 'run.jsonl').write_text(text, encoding='utf-8')
+    monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', len(text), raising=False)
+    with pytest.raises(CompareError, match='limit'):
+        load_result_run(run)
+    monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', len(text.encode()))
+    assert load_result_run(run).records == [{'case': 'ä'*8}]

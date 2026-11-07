@@ -16,6 +16,19 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (benchmark preflight and bounded result input)
+
+### Changed
+- Admit nonblank workload string versions and the documented four case kinds;
+  retain custom version labels and completion/replay compatibility. Correct
+  unrelated scoring fixtures that used the undocumented `prompt` case kind.
+- Normalize manifest I/O, encoding and syntax plus prompt-file read failures
+  into pack errors; convert the run CLI's pack boundary to controlled preflight
+  exits. Update existing CLI assertions to the deliberate public error contract.
+- Bound run JSONL ingestion by actual line/run bytes and retained record count;
+  normalize read/decode failures before registry database mutation. Add synthetic
+  failing regressions, boundary-valid imports and bounded streaming probes.
+
 ## 2026-11-07 (imported result contracts)
 
 ### Changed

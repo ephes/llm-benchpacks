@@ -2,7 +2,10 @@
 
 The `pack` value must be a TOML table, and `cases`, when present, must be an
 array of tables (`[[cases]]`). Invalid container shapes fail with `PackError`
-during loading, before output preparation or model calls.
+during loading, before output preparation or model calls. Manifest I/O, UTF-8
+and TOML syntax failures are `PackError`; prompt-file I/O/encoding failures are
+`InvalidPromptSourceError`. The run CLI reports these as concise nonzero errors
+without a traceback, output creation or backend work.
 
 This is the initial manifest sketch. The schema can change until the first
 release.
@@ -45,8 +48,9 @@ expected = "Paris"
 : Stable pack identifier used in result records. Must match the id grammar below.
 
 `pack.version`
-: Version of the workload. Change it when prompts, fixtures, fixture
-  references, or scoring change.
+: Nonblank string identifying the workload version. Labels need not follow
+  semantic versioning and are preserved verbatim. Boolean/numeric versions are
+  invalid. Change it when prompts, fixtures, fixture references, or scoring change.
 
 `defaults`
 : Request defaults shared by cases.
@@ -253,6 +257,11 @@ control characters and trailing line breaks are invalid. The runner rejects
 manifests that violate this at load time before creating output.
 
 ## Case Kinds
+
+`cases[].kind` must be one of the four string values below; omission defaults
+to `chat`. Unknown values and nonstrings fail at manifest load time. Existing
+`completion` and `replay` declarations remain accepted without expanding their
+execution support.
 
 `chat`
 : A direct prompt or message list sent to an adapter.

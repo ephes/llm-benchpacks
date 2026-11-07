@@ -74,7 +74,8 @@ Next actionable slices:
    small retained subset.
 3. Result registry work remains demand-driven. **Landed 2026-11-07:** numeric
    storage admission, controlled hardware decoding, and bounded model-call
-   sidecar ingestion with synthetic regressions. **Landed 2026-11-06:** result
+   sidecar ingestion with synthetic regressions. Manifest kind/version and
+   controlled run preflight plus bounded run JSONL ingestion also landed. **Landed 2026-11-06:** result
    bundles stage and validate before rollback-safe forced publication; version-one
    manifests bind unique file paths and required roles to each run and verify
    row counts and run digests before import. A follow-up copies included evidence

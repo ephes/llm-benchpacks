@@ -32,6 +32,7 @@ from .output_paths import paths_overlap
 from .packs import (
     Case,
     Pack,
+    PackError,
     PUBLIC_HARNESS_EXTERNAL_AGENT,
     Scoring,
     load_pack,
@@ -209,9 +210,12 @@ def _run_case(
 
 def _cmd_run(args: argparse.Namespace) -> int:
     pack_dir = _resolve_pack_dir(args.pack)
-    pack = load_pack(pack_dir)
-    warmup = warmup_from_defaults(pack.defaults)
-    repetitions = repetitions_from_defaults(pack.defaults)
+    try:
+        pack = load_pack(pack_dir)
+        warmup = warmup_from_defaults(pack.defaults)
+        repetitions = repetitions_from_defaults(pack.defaults)
+    except PackError as exc:
+        raise SystemExit(str(exc)) from exc
     try:
         validate_repo_task_cases(pack)
     except WorkspaceError as exc:

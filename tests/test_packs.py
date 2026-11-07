@@ -2921,7 +2921,7 @@ def test_scoring_required_string_preflight(
     body = '[pack]\nid = "examplepack"\nversion = "1"\n'
     if not case_level:
         body += "[scoring]\n" + scoring + "\n"
-    body += '[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    body += '[[cases]]\nid = "one"\nkind = "chat"\nprompt = "hello"\n'
     if case_level:
         body += "[cases.scoring]\n" + scoring + "\n"
     with pytest.raises(PackError, match=f"scoring.{field}"):
@@ -2930,7 +2930,7 @@ def test_scoring_required_string_preflight(
 
 @pytest.mark.parametrize("pattern", ["[", "a{4294967296}", "a{" + "9" * 4400 + "}", "(" * 1000 + ")" * 1000])
 def test_scoring_regex_compile_preflight(tmp_path, pattern):
-    body = '[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "regex"\npattern = "["\n[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    body = '[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "regex"\npattern = "["\n[[cases]]\nid = "one"\nkind = "chat"\nprompt = "hello"\n'
     with pytest.raises(PackError, match="scoring.pattern"):
         load_pack(write_manifest(tmp_path, body.replace('pattern = "["', f'pattern = "{pattern}"')))
 
@@ -2941,7 +2941,7 @@ def test_scoring_regex_compile_preflight(tmp_path, pattern):
 def test_scoring_empty_string_is_valid(tmp_path, mode, field):
     from benchpack.scoring import evaluate
 
-    body = f'[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "{mode}"\n{field} = ""\n[[cases]]\nid = "one"\nkind = "prompt"\nprompt = "hello"\n'
+    body = f'[pack]\nid = "examplepack"\nversion = "1"\n[scoring]\nmode = "{mode}"\n{field} = ""\n[[cases]]\nid = "one"\nkind = "chat"\nprompt = "hello"\n'
     pack = load_pack(write_manifest(tmp_path, body))
     assert evaluate(pack.scoring, "hello")["passed"] is True
 
@@ -2994,6 +2994,8 @@ environment = {{ {json.dumps(env_name)} = "value" }}
     error = PackError if role == "environment" else InvalidIdError
     message = "fixture_refs entry" if role == "fixture_ref" else "invalid|must match"
     with pytest.raises(error, match=message):
+        load_pack(pack_dir)
+    with pytest.raises(SystemExit, match=message):
         main(["run", str(pack_dir), "--adapter", "openai-chat", "--model", "test", "--out", str(output)])
     assert not output.exists()
 
@@ -3037,3 +3039,53 @@ def test_load_pack_normalizes_schema_decode_errors(tmp_path, payload, category, 
         load_pack(pack_dir)
     assert "sentinel" not in str(error.value)
     assert len(str(error.value)) < 200
+
+
+@pytest.mark.parametrize('version', ['true', '42', '1.5', '""', '"   "'])
+def test_pack_version_requires_nonblank_string(tmp_path, version):
+    pack = write_manifest(tmp_path, f'[pack]\nid="test"\nversion={version}\n')
+    with pytest.raises(PackError, match='version'):
+        load_pack(pack)
+
+
+@pytest.mark.parametrize('kind', ['"reop-task"', '42', 'true', '[]', '{}'])
+def test_case_kind_requires_documented_string(tmp_path, kind):
+    pack = write_manifest(tmp_path, f'[pack]\nid="test"\nversion="vNext"\n[[cases]]\nid="one"\nkind={kind}\nprompt="x"\n')
+    with pytest.raises(PackError, match='kind'):
+        load_pack(pack)
+
+
+@pytest.mark.parametrize('kind', [None, 'chat', 'completion', 'repo-task', 'replay'])
+def test_documented_case_kinds_and_workload_labels_remain_loadable(tmp_path, kind):
+    declaration = '' if kind is None else f'kind="{kind}"\n'
+    pack = write_manifest(tmp_path, f'[pack]\nid="test"\nversion="vNext-custom"\n[[cases]]\nid="one"\n{declaration}prompt="x"\n')
+    loaded = load_pack(pack)
+    assert loaded.version == 'vNext-custom'
+    assert loaded.cases[0].kind == (kind or 'chat')
+
+
+@pytest.mark.parametrize('failure', ['missing', 'unreadable', 'toml', 'utf8'])
+def test_manifest_reader_normalizes_source_errors(tmp_path, monkeypatch, failure):
+    path = write_manifest(tmp_path, '[pack]\nid="test"\nversion="1"\n')
+    manifest = path / 'benchpack.toml'
+    injected = []
+    if failure == 'missing':
+        manifest.unlink()
+    elif failure == 'unreadable':
+        original_open = Path.open
+        def denied(self, *a, **kw):
+            if self == manifest:
+                injected.append(self)
+                raise PermissionError('synthetic denial')
+            return original_open(self, *a, **kw)
+        monkeypatch.setattr(Path, 'open', denied)
+    elif failure == 'toml':
+        manifest.write_text('[pack\nprivate-prompt-sentinel')
+    else:
+        manifest.write_bytes(b'\xff')
+    with pytest.raises(PackError, match='benchpack.toml') as error:
+        load_pack(path)
+    assert 'private-prompt-sentinel' not in str(error.value)
+    assert len(str(error.value)) < 500
+    if failure == 'unreadable':
+        assert injected == [manifest]

@@ -669,3 +669,11 @@ finite float-convertible values. Present corrupt `hardware.json` fails import
 before database mutation. Optional model-call telemetry is streamed within
 16 MiB/file, 64 KiB/line including line endings, and 10,000 nonblank rows/file;
 reporting fails clearly when a limit is exceeded. Split larger historical logs.
+
+Pack versions are nonblank string labels (semantic versioning is optional).
+Case kinds are `chat` (the default), `completion`, `repo-task`, or `replay`.
+Invalid manifests and unreadable/invalid UTF-8 prompt files exit cleanly before
+output creation or model calls. Imported `run.jsonl` files are limited to
+1 MiB per physical line including line endings, 64 MiB actual bytes per run,
+and 100,000 records; split larger historical runs into separate directories.
+Compare, report, and registry/bundle imports report controlled read/decode errors.

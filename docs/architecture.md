@@ -618,6 +618,13 @@ The shared metric filter excludes booleans, nonnumeric/nonfinite values, and
 integers that overflow float conversion without modifying loaded records or
 input artifacts. Groups with no valid samples render `—`. JSON decoding failures,
 including Python's integer digit limit, produce a file/line `CompareError`.
+The shared loader reads binary lines with a 1 MiB physical-line byte limit
+(including line endings), 64 MiB total bytes per run including blank lines,
+and 100,000 retained JSON objects. It checks byte budgets before decoding and the record count before parsing
+or appending the next record, including for files that grow during reading. I/O
+and UTF-8 errors also become `CompareError`. Registry and bundle preflight use
+this loader before any database mutation. Split larger historical runs into
+separate result directories before comparison or import.
 
 The compare utility warns when pack ids or versions differ. The `prefill_tps
 med` column is gated because prefill comparisons require explicit prompt-cache
