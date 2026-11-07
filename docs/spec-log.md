@@ -5244,3 +5244,12 @@ negative sampling with indexed sampling without replacement. Impossible counts
 now fail explicitly. Synthetic ZIP end-to-end tests protect cluster-disjoint
 splits, deterministic local IDs and complete public/hidden joins; no fixture
 artifacts or benchmark results were regenerated.
+
+## 2026-11-08 — PriceRunner validated coherent generation
+
+Added seven-column source preflight, unique nonblank source identities and
+integer cluster normalization before splitting. Bounded diagnostics exclude
+source values. All five CSVs now stage and validate before replacement, with
+rollback on publication failure and retained recovery files if rollback fails.
+Synthetic tests cover malformed ZIP members and every staging, backup and
+replacement boundary; usage documents single-writer and crash-recovery limits.

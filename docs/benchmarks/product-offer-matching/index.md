@@ -246,3 +246,24 @@ contribute more), replacing the old category-first weighting. Sampling
 is without replacement and produces the exact requested counts, or raises before
 writing output. The corrected sampler changes seeded pair selections relative
 to the earlier attempt-capped sampler; regenerate all labels together.
+
+PriceRunner source ZIPs must contain exactly the seven source columns: Product
+ID, Product Title, Merchant ID, Category ID, Category Label, Cluster ID and
+Cluster Label. Rows must have seven cells and unique nonblank Product IDs.
+Cluster IDs must consist only of ASCII digits (0–9) and convert to integers; numeric aliases are normalized before
+splitting. UTF-8/BOM and quoted multiline CSV are accepted; embedded newlines
+are normalized to spaces. Diagnostics identify row/column contracts without
+including source values.
+
+All five CSVs are staged and read back before replacing any fixture. Caught
+publication failures restore the previous files (or remove the partial first
+generation). Serialize builds to a pack directory, and do not read fixtures
+during publication: this is recoverable publication, not an atomic concurrent
+reader snapshot or a crash-durable transaction. If rollback itself fails, the
+error reports a retained `.pricerunner-*` directory. Its `backup/0.csv` through
+`backup/4.csv` correspond, in order, to train offers, test offers, eval pairs,
+hidden test clusters and hidden pair labels. Use `manifest.json` to identify each target and whether it existed before the
+build. Delete any target marked `existed: false`; restore remaining backups for
+targets marked `existed: true`. For those existing targets only, a missing backup
+means rollback already restored it.
+Retain the directory until all five files are coherent, then remove it and retry.
