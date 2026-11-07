@@ -196,3 +196,63 @@ def test_summarize_model_call_logs_handles_empty_and_wide_repetition_logs(
     assert summaries[0].token_budget_fields == ()
     assert summaries[0].finish_reasons == ()
     assert summaries[1].calls == 0
+
+
+def _log(tmp_path, payload):
+    path = tmp_path / 'task' / 'synthetic' / 'rep-001.model-calls.jsonl'
+    path.parent.mkdir(parents=True)
+    path.write_bytes(payload)
+    return path
+
+
+def test_model_call_numeric_and_decoder_errors_count_as_invalid(tmp_path):
+    import sys
+    row = {'schema_version': 1, 'sequence': 1, 'model': 'test', 'ok': True}
+    payload = '\n'.join([
+        json.dumps({**row, 'duration_s': 10**400}),
+        '{"duration_s":' + '1'*700 + '}',
+        '{broken',
+        json.dumps(row),
+    ]).encode()
+    _log(tmp_path, payload)
+    previous = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        summary = summarize_model_call_logs(tmp_path)[0]
+    finally:
+        sys.set_int_max_str_digits(previous)
+    assert (summary.calls, summary.valid, summary.invalid) == (4, 1, 3)
+
+
+def test_model_call_budgets(tmp_path, monkeypatch):
+    import pytest
+    import benchpack.external_agent_model_calls as logs
+    row = b'{"schema_version":1,"sequence":1,"model":"test","ok":true}\n'
+    path = _log(tmp_path, row)
+    for name, limit, payload in [
+        ('MAX_MODEL_CALL_LINE_BYTES', len(row), row[:-1] + b' \n'),
+        ('MAX_MODEL_CALL_FILE_BYTES', len(row), row + b'\n'),
+        ('MAX_MODEL_CALL_ROWS', 1, row*2),
+    ]:
+        with monkeypatch.context() as patch:
+            patch.setattr(logs, name, limit, raising=False)
+            path.write_bytes(payload)
+            with pytest.raises(logs.ModelCallLogError, match='limit'):
+                summarize_model_call_logs(tmp_path)
+            path.write_bytes(row)
+            assert summarize_model_call_logs(tmp_path)[0].valid == 1
+
+
+def test_model_call_line_read_is_bounded(tmp_path, monkeypatch):
+    import io
+    import pytest
+    import benchpack.external_agent_model_calls as logs
+    path = _log(tmp_path, b'')
+    class Stream(io.BytesIO):
+        def readline(self, size=-1):
+            assert 0 < size <= 33
+            return super().readline(size)
+    monkeypatch.setattr(logs, 'MAX_MODEL_CALL_LINE_BYTES', 32, raising=False)
+    monkeypatch.setattr(Path, 'open', lambda self, *a, **kw: Stream(b'x'*1000))
+    with pytest.raises(logs.ModelCallLogError, match='limit'):
+        summarize_model_call_logs(tmp_path)

@@ -1630,3 +1630,18 @@ complete hardware artifact (or leaves the final path absent) and leaves complete
 `run.jsonl` records unchanged. Only a temporary file created by this call is
 removed on failure. Existing file permissions are retained; new files honor the
 process umask. Atomic visibility does not guarantee durability after power loss.
+
+## Imported result and model-call admission
+
+Registry import validates all result rows before database creation or mutation.
+Stored token counts are nonnegative signed-64-bit integers, repetitions are
+positive signed-64-bit integers, and verifier exit codes retain signed-64-bit
+semantics. Metrics must convert to finite floats. Present corrupt hardware JSON
+(including invalid UTF-8 or decoder numeric limits) fails with `RegistryError`;
+absent hardware metadata remains optional.
+
+Optional external-agent model-call logs are streamed with limits of 16 MiB per
+file, 64 KiB per physical line (including its line ending), and 10,000 nonblank
+rows per file. Limit failures raise `ModelCallLogError`; malformed JSON and
+unrepresentable durations count as invalid rows. Existing safe-field allowlists
+and summaries remain unchanged. Split larger historical logs before reporting.

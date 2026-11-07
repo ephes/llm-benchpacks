@@ -684,7 +684,12 @@ result directories through the same `run.jsonl` loader used by compare/report,
 then applies a stricter indexing validation over normalized row fields before
 writing SQLite rows. Optional `hardware.json` and `run-metadata.json` are read
 only when present; malformed optional metadata fails clearly because the
-registry is being asked to index it.
+registry is being asked to index it. Hardware encoding and decoder-domain failures
+are bounded `RegistryError` diagnostics, never silently treated as missing.
+All imported integer storage fields must fit signed 64-bit SQLite integers;
+token counts are nonnegative and repetitions are positive. Verifier exit codes
+remain signed. Timing metrics must convert to finite floats without overflow.
+These checks run for every input before opening or modifying the database.
 
 The local registry is currently schema version `4`. The `runs` table stores one
 row per canonical result directory path, import timestamp, row count,

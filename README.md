@@ -662,3 +662,10 @@ The first implementation stays small:
 5. JSONL result artifacts plus a small Markdown summary.
 
 The repository is private while the spec and first runner are still unstable.
+
+Imported registry counts must fit signed 64-bit integers (nonnegative tokens,
+positive repetitions); verifier exit codes remain signed and metrics must be
+finite float-convertible values. Present corrupt `hardware.json` fails import
+before database mutation. Optional model-call telemetry is streamed within
+16 MiB/file, 64 KiB/line including line endings, and 10,000 nonblank rows/file;
+reporting fails clearly when a limit is exceeded. Split larger historical logs.

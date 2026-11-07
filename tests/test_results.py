@@ -641,16 +641,19 @@ def test_write_summary_model_call_error_uses_relative_path(
     model_calls.parent.mkdir(parents=True)
     model_calls.write_text("{}", encoding="utf-8")
 
-    original_read_text = Path.read_text
+    original_open = Path.open
+    failures = []
 
     def unreadable(path: Path, *args, **kwargs):
         if path == model_calls:
+            failures.append(path)
             raise OSError("permission denied")
-        return original_read_text(path, *args, **kwargs)
+        return original_open(path, *args, **kwargs)
 
-    with patch.object(Path, "read_text", unreadable):
+    with patch.object(Path, "open", unreadable):
         reporter.write_summary({"hostname": "h", "platform": "darwin"})
 
+    assert failures == [model_calls]
     text = (out / "summary.md").read_text()
     assert "task/capital/rep-001.model-calls.jsonl" in text
     assert str(out) not in text
