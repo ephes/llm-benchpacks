@@ -846,3 +846,10 @@ decoder-limit failures and durations that cannot convert to finite nonnegative
 floats count as invalid telemetry rows without retaining the row text. Invalid
 UTF-8 and I/O failures are controlled file errors. Safe-field rejection remains
 unchanged; split historical logs exceeding these limits before reporting.
+
+### Registry provenance acquisition
+
+Finish writing `run.jsonl`, `hardware.json` and `run-metadata.json` before import.
+The importer rejects compact files changed during acquisition, stores the digest
+of the JSONL bytes actually parsed, and retains the sidecars it validated.
+Later source replacements are not reopened for the database write.

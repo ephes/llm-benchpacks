@@ -274,6 +274,7 @@ def load_registry_report_runs(
     try:
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             run_rows = _select_report_run_rows(
@@ -303,6 +304,7 @@ def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateG
     try:
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             duplicate_hashes = conn.execute(
@@ -383,6 +385,7 @@ def query_registry_results(
     try:
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             selected_rows = _select_report_run_rows(
@@ -649,6 +652,7 @@ def query_agent_wrap_results(
     try:
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             rows = _select_agent_wrap_rows(
@@ -830,22 +834,14 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         if run_dir in run_directories:
             raise RegistryError(f"bundle run {run_index} duplicates a run directory")
         run_directories.add(run_dir)
+        generation = _compact_generation(run_dir)
         run = _load_and_validate_result_dir(run_dir)
         row_count = run_manifest.get("row_count")
         if type(row_count) is not int or row_count != len(run.records):
             raise RegistryError(f"bundle run {run_index} row_count mismatch")
-        if run_manifest.get("run_jsonl_sha256") != _sha256(run_dir / "run.jsonl"):
+        if run_manifest.get("run_jsonl_sha256") != run.run_jsonl_sha256:
             raise RegistryError(f"bundle run {run_index} run_jsonl_sha256 mismatch")
-        loaded_runs.append(
-            ResultRun(
-                path=run.path,
-                label=label,
-                records=run.records,
-                hardware=run.hardware,
-                run_metadata=run.run_metadata,
-                artifact_root=run.artifact_root,
-            )
-        )
+        loaded_runs.append(replace(run, label=label))
         files = run_manifest.get("files")
         if not isinstance(files, list) or not files:
             raise RegistryError(f"bundle run {run_index} requires non-empty files")
@@ -878,6 +874,8 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
                 required_roles.add(role)
         if not required_roles.issubset(singleton_roles):
             raise RegistryError(f"bundle run {run_index} is missing required file roles")
+        if generation != _compact_generation(run_dir):
+            raise RegistryError(f"compact result input changed during acquisition: {run_dir}")
         omitted = run_manifest.get("omitted_artifacts", [])
         if not isinstance(omitted, list):
             raise RegistryError(
@@ -1218,6 +1216,7 @@ def _load_registry_site_snapshot(
     try:
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             sources = [Path(row[0]) for row in conn.execute("SELECT result_dir FROM runs")]
@@ -2757,7 +2756,26 @@ def _site_float(value: object) -> str:
     return f"{float(value):.2f}"
 
 
+def _compact_generation(path: Path) -> list[tuple[int, ...] | None]:
+    """Identify compact input generations, including optional-file absence."""
+
+    generation = []
+    try:
+        for name in ("run.jsonl", "hardware.json", "run-metadata.json"):
+            try:
+                info = (path / name).stat()
+            except FileNotFoundError:
+                generation.append(None)
+            else:
+                generation.append((info.st_dev, info.st_ino, info.st_size,
+                                   info.st_mtime_ns, info.st_ctime_ns))
+    except OSError as exc:
+        raise RegistryError(f"could not inspect compact result input: {path}") from exc
+    return generation
+
+
 def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
+    generation = _compact_generation(Path(path))
     try:
         run = load_result_run(path)
     except CompareError as exc:
@@ -2765,11 +2783,13 @@ def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
     for row_index, record in enumerate(run.records, start=1):
         _validate_record(record, run.path / "run.jsonl", row_index)
     try:
-        _load_optional_json_object(run.path, "hardware.json")
-        load_optional_run_metadata(run.path)
+        hardware = _load_optional_json_object(run.path, "hardware.json")
+        metadata = load_optional_run_metadata(run.path)
     except (RegistryError, RunMetadataError) as exc:
         raise RegistryError(str(exc)) from exc
-    return run
+    if generation != _compact_generation(run.path):
+        raise RegistryError(f"compact result input changed during acquisition: {run.path}")
+    return replace(run, hardware=hardware, run_metadata=metadata)
 
 
 def _copy_run_into_bundle(
@@ -3418,12 +3438,7 @@ def _import_run(
     run: ResultRun,
 ) -> RegistryImportSummary:
     result_dir = str(run.path.resolve())
-    hardware = _load_optional_json_object(run.path, "hardware.json")
-    try:
-        run_metadata = load_optional_run_metadata(run.path)
-    except RunMetadataError as exc:
-        raise RegistryError(str(exc)) from exc
-    inserted = _run_row_values(run, result_dir, hardware, run_metadata)
+    inserted = _run_row_values(run, result_dir, run.hardware, run.run_metadata)
     conn.execute(
         """
         INSERT INTO runs(
@@ -3705,7 +3720,7 @@ def _run_row_values(
         "label": run.label,
         "imported_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "row_count": len(run.records),
-        "run_jsonl_sha256": _sha256(run.path / "run.jsonl"),
+        "run_jsonl_sha256": run.run_jsonl_sha256,
         "pack_ids_json": _json_dumps(_unique_pack_values(run.records, "id")),
         "pack_versions_json": _json_dumps(_unique_pack_values(run.records, "version")),
         "adapters_json": _json_dumps(_unique_record_values(run.records, "adapter")),

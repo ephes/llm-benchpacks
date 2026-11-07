@@ -2618,3 +2618,82 @@ def test_hardware_decoder_errors_are_controlled_before_import(tmp_path, payload)
             create_result_bundle([run], tmp_path / 'bundle', provenance='self-reported')
     finally:
         sys.set_int_max_str_digits(previous)
+
+
+def test_import_retains_acquired_rows_digest_and_sidecars(tmp_path, monkeypatch):
+    source = tmp_path / 'source'
+    _write_result_dir(source)
+    original_bytes = (source / 'run.jsonl').read_bytes()
+    (source / 'hardware.json').write_text('{"hostname":"old"}')
+    (source / 'run-metadata.json').write_text('{"runtime":{"name":"old"}}')
+    acquire = registry._load_and_validate_result_dir
+
+    def acquire_then_replace(path):
+        run = acquire(path)
+        (source / 'run.jsonl').write_text(json.dumps(_record('new')) + '\n')
+        (source / 'hardware.json').write_text('{"hostname":"new"}')
+        (source / 'run-metadata.json').write_text('{"runtime":{"name":"new"}}')
+        return run
+
+    monkeypatch.setattr(registry, '_load_and_validate_result_dir', acquire_then_replace)
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([source], db)
+    with sqlite3.connect(db) as conn:
+        assert conn.execute('SELECT run_jsonl_sha256, host_hostname, runtime_name FROM runs').fetchone() == (
+            hashlib.sha256(original_bytes).hexdigest(), 'old', 'old')
+        assert conn.execute('SELECT case_id FROM result_rows').fetchone() == ('short',)
+
+
+def test_import_refuses_generation_change_during_acquisition(tmp_path, monkeypatch):
+    source = tmp_path / 'source'
+    _write_result_dir(source)
+    load = registry.load_result_run
+    changed = []
+
+    def load_then_replace(path):
+        run = load(path)
+        replacement = source / 'next.jsonl'
+        replacement.write_text(json.dumps(_record('new')) + '\n')
+        replacement.replace(source / 'run.jsonl')
+        changed.append(True)
+        return run
+
+    monkeypatch.setattr(registry, 'load_result_run', load_then_replace)
+    db = tmp_path / 'registry.sqlite'
+    with pytest.raises(RegistryError, match='changed during acquisition'):
+        import_result_dirs([source], db)
+    assert changed
+    assert not db.exists()
+
+
+@pytest.mark.parametrize('site', [False, True])
+def test_registry_read_pins_one_generation(tmp_path, monkeypatch, site):
+    source = tmp_path / 'source'
+    _write_result_dir(source)
+    (source / 'hardware.json').write_text('{"hostname":"old"}')
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([source], db)
+    with sqlite3.connect(db) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+    select = registry._select_report_run_rows
+    replaced = []
+
+    def select_then_reimport(conn, **kwargs):
+        rows = select(conn, **kwargs)
+        (source / 'run.jsonl').write_text(json.dumps(_record('new')) + '\n' + json.dumps(_record('extra')) + '\n')
+        (source / 'hardware.json').write_text('{"hostname":"new"}')
+        import_result_dirs([source], db)
+        replaced.append(True)
+        return rows
+
+    monkeypatch.setattr(registry, '_select_report_run_rows', select_then_reimport)
+    if site:
+        runs, run_rows, case_rows, metrics, agent_rows = registry._load_registry_site_snapshot(
+            db, site_root=tmp_path / 'site', run_ids=None, labels=None)
+        assert run_rows[0]['row_count'] == 1
+        assert len(case_rows) == 1
+    else:
+        runs = load_registry_report_runs(db)
+    assert replaced
+    assert runs[0].hardware == {'hostname': 'old'}
+    assert [row['case'] for row in runs[0].records] == ['short']

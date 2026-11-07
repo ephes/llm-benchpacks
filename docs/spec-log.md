@@ -16,6 +16,15 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (coherent registry snapshots)
+
+### Changed
+- Hash JSONL during parsing and carry validated compact sidecars into imports;
+  reject compact input changes during acquisition and bundle validation.
+- Pin explicit read transactions across related registry selections, releasing
+  them before rendering. Cover source swaps and two-connection WAL replacement
+  interleavings with synthetic regressions.
+
 ## 2026-11-07 (benchmark preflight and bounded result input)
 
 ### Changed

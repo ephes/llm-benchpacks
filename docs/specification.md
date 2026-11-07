@@ -1662,3 +1662,18 @@ retained result records. Limits are checked incrementally before parsing or
 appending excess input. I/O, encoding and JSON decoder errors are `CompareError`;
 registry/bundle preflight preserves validate-before-database behavior. Larger
 historical runs must be split into separate result directories.
+
+### Coherent registry acquisition and reads
+
+Registry imports retain validated rows, optional hardware/runtime metadata and
+SHA-256 of the exact JSONL bytes parsed (including whitespace). Compact file
+identity, size and nanosecond modification/change timestamps are checked before
+and after acquisition; a changed generation fails before database mutation.
+Subsequent source replacement cannot change the acquired import's provenance.
+Bundle imports also check compact generations through manifest validation.
+Producers must finish publishing compact files before import; these checks do
+not coordinate writers or turn separately published files into a transaction.
+
+Registry readers use explicit query-only read transactions to materialize their
+related selections, including reports, duplicate groups and site tables/counts.
+The transaction ends before rendering or publishing filesystem output.

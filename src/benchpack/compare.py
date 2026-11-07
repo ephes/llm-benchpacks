@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections import Counter
@@ -31,6 +32,7 @@ class ResultRun:
     hardware: dict[str, Any] | None = None
     run_metadata: dict[str, Any] | None = None
     artifact_root: Path | None = None
+    run_jsonl_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
         raise CompareError(f"missing run.jsonl in result directory: {path}")
 
     records: list[dict[str, Any]] = []
+    digest = hashlib.sha256()
     total = 0
     line_number = 0
     try:
@@ -76,6 +79,7 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
                 ))
                 if not line:
                     break
+                digest.update(line)
                 line_number += 1
                 source = f"{jsonl_path}:{line_number}"
                 total += len(line)
@@ -103,7 +107,10 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
     if not records:
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
-    return ResultRun(path=path, label=path.name, records=records, artifact_root=path)
+    return ResultRun(
+        path=path, label=path.name, records=records, artifact_root=path,
+        run_jsonl_sha256=digest.hexdigest(),
+    )
 
 
 def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
@@ -330,6 +337,7 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
                 hardware=run.hardware,
                 run_metadata=run.run_metadata,
                 artifact_root=run.artifact_root,
+                run_jsonl_sha256=run.run_jsonl_sha256,
             )
         )
     return labeled
