@@ -826,3 +826,14 @@ that convert to a float in the range `0 < timeout_s <= 2147483`. This upper
 bound fits portable signed 32-bit millisecond subprocess waits. NaN, infinities,
 overflowing integers, values above the bound, zero, negative values and booleans are rejected at pack loading. Integer and
 fractional budgets are supported; absent-field defaults are unchanged.
+
+### Model-call sidecar ingestion limits
+
+Optional `task/<case-id>/rep-NNN.model-calls.jsonl` logs are read incrementally:
+16 MiB per file, 64 KiB per physical line including line endings, and 10,000
+nonblank rows per file. Limits apply to actual bytes, including blank lines.
+An exceeded budget fails reporting with `ModelCallLogError`. Invalid JSON,
+decoder-limit failures and durations that cannot convert to finite nonnegative
+floats count as invalid telemetry rows without retaining the row text. Invalid
+UTF-8 and I/O failures are controlled file errors. Safe-field rejection remains
+unchanged; split historical logs exceeding these limits before reporting.

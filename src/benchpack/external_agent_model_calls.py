@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any
 
 
+MAX_MODEL_CALL_FILE_BYTES = 16 * 1024 * 1024
+MAX_MODEL_CALL_LINE_BYTES = 64 * 1024
+MAX_MODEL_CALL_ROWS = 10_000
+
 MODEL_CALL_LOG_PATTERN = "task/*/rep-*.model-calls.jsonl"
 _MODEL_CALL_LOG_RE = re.compile(r"^rep-(?P<repetition>[0-9]{3,})\.model-calls\.jsonl$")
 _ALLOWED_KEYS = {
@@ -127,25 +131,16 @@ def _summarize_one_log(
     token_totals: dict[str, int] = {key: 0 for key in _TOKEN_KEYS}
     token_seen: dict[str, bool] = {key: False for key in _TOKEN_KEYS}
 
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except UnicodeDecodeError as exc:
-        raise ModelCallLogError(
-            f"could not decode model-call log {relative_path}"
-        ) from exc
-    except OSError as exc:
-        raise ModelCallLogError(
-            f"could not read model-call log {relative_path}"
-        ) from exc
-
-    for line in lines:
+    for line in _read_log_lines(path, relative_path):
         stripped = line.strip()
         if not stripped:
             continue
+        if calls >= MAX_MODEL_CALL_ROWS:
+            raise ModelCallLogError(f"model-call row limit exceeded in {relative_path}")
         calls += 1
         try:
             value = json.loads(stripped)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             invalid += 1
             continue
         if not _is_valid_call(value):
@@ -206,6 +201,29 @@ def _summarize_one_log(
         if token_seen["cached_prompt_tokens"]
         else None,
     )
+
+
+def _read_log_lines(path: Path, relative_path: str):
+    total = 0
+    try:
+        with path.open("rb") as stream:
+            while True:
+                line = stream.readline(min(
+                    MAX_MODEL_CALL_LINE_BYTES + 1,
+                    MAX_MODEL_CALL_FILE_BYTES - total + 1,
+                ))
+                if not line:
+                    break
+                total += len(line)
+                if total > MAX_MODEL_CALL_FILE_BYTES:
+                    raise ModelCallLogError(f"model-call file byte limit exceeded in {relative_path}")
+                if len(line) > MAX_MODEL_CALL_LINE_BYTES:
+                    raise ModelCallLogError(f"model-call line byte limit exceeded in {relative_path}")
+                yield line.decode("utf-8")
+    except UnicodeError as exc:
+        raise ModelCallLogError(f"could not decode model-call log {relative_path}") from exc
+    except OSError as exc:
+        raise ModelCallLogError(f"could not read model-call log {relative_path}") from exc
 
 
 def _is_valid_call(value: Any) -> bool:
@@ -273,7 +291,11 @@ def _is_nonnegative_int(value: Any) -> bool:
 def _is_nonnegative_number(value: Any) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    return math.isfinite(float(value)) and float(value) >= 0
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return math.isfinite(number) and number >= 0
 
 
 def _append_unique(values: list[str], value: str) -> None:

@@ -2553,3 +2553,68 @@ def test_bundle_rechecks_copied_model_call_allowlist(tmp_path, monkeypatch):
     assert injected
     assert {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()} == before
     assert not list(tmp_path.glob(".bundle-stage-*"))
+
+
+@pytest.mark.parametrize(('section', 'field', 'value'), [
+    ('timing', 'wall_s', 10**400),
+    ('tokens', 'output', 2**64),
+    ('tokens', 'prompt', -1),
+    ('tokens', 'cached_prompt', True),
+    (None, 'repetition', 2**63),
+    (None, 'repetition', 0),
+    ('repo_task', 'verify_exit_code', -(2**63)-1),
+])
+def test_import_rejects_unstorable_numbers_before_mutation(
+    tmp_path, section, field, value,
+):
+    good = tmp_path / 'good'
+    bad = tmp_path / 'bad'
+    _write_result_dir(good)
+    record = _record()
+    record['repo_task'] = {'status': 'failed', 'verify_exit_code': -1}
+    (record if section is None else record[section])[field] = value
+    _write_result_dir(bad, [record])
+    db = tmp_path / 'registry.sqlite'
+    with pytest.raises(RegistryError):
+        import_result_dirs([good, bad], db)
+    assert not db.exists()
+    import_result_dirs([good], db)
+    before = db.read_bytes()
+    with pytest.raises(RegistryError):
+        import_result_dirs([good, bad], db)
+    assert db.read_bytes() == before
+    assert import_result_dirs([good], db)[0].rows_imported == 1
+
+
+def test_import_accepts_sqlite_integer_boundaries(tmp_path):
+    record = _record()
+    record['repetition'] = 2**63-1
+    record['tokens'] = {'prompt': 0, 'output': 2**63-1}
+    record['repo_task'] = {'status': 'failed', 'verify_exit_code': -(2**63)}
+    run = tmp_path / 'run'
+    _write_result_dir(run, [record])
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([run], db)
+    with sqlite3.connect(db) as conn:
+        assert conn.execute('SELECT repetition, output_tokens, verify_exit_code FROM result_rows').fetchone() == (2**63-1, 2**63-1, -(2**63))
+
+
+@pytest.mark.parametrize('payload', [b'\xff', b'{"cores":' + b'1'*700 + b'}'])
+def test_hardware_decoder_errors_are_controlled_before_import(tmp_path, payload):
+    import sys
+    run = tmp_path / 'run'
+    _write_result_dir(run)
+    hardware = run / 'hardware.json'
+    hardware.write_bytes(payload)
+    db = tmp_path / 'registry.sqlite'
+    previous = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        with pytest.raises(RegistryError, match='hardware.json') as error:
+            import_result_dirs([run], db)
+        assert len(str(error.value)) < 400
+        assert not db.exists()
+        with pytest.raises(RegistryError, match='hardware.json'):
+            create_result_bundle([run], tmp_path / 'bundle', provenance='self-reported')
+    finally:
+        sys.set_int_max_str_digits(previous)

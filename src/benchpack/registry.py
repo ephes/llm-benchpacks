@@ -3913,8 +3913,8 @@ def _load_optional_json_object(
         return None
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise RegistryError(f"could not parse {path}: {exc.msg}") from exc
+    except (UnicodeError, ValueError, RecursionError) as exc:
+        raise RegistryError(f"could not parse {path}: invalid JSON or UTF-8") from exc
     except OSError as exc:
         raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
     if not isinstance(value, dict):
@@ -3968,22 +3968,26 @@ def _validate_optional_int(record: dict[str, Any], field: str, source: str) -> N
     value = record.get(field)
     if value is None:
         return
-    if _optional_int(value) is None:
-        raise RegistryError(f"field {field!r} must be an integer or null in {source}")
+    if _optional_int(value) is None or value < 0:
+        raise RegistryError(
+            f"field {field!r} must be a nonnegative signed-64-bit integer or null in {source}"
+        )
 
 
 def _optional_number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    if not math.isfinite(float(value)):
+    try:
+        number = float(value)
+    except OverflowError:
         return None
-    return float(value)
+    return number if math.isfinite(number) else None
 
 
 def _optional_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
-    return value
+    return value if -(2**63) <= value <= 2**63 - 1 else None
 
 
 def _optional_positive_int(value: Any) -> int | None:

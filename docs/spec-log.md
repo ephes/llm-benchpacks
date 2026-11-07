@@ -16,6 +16,17 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (imported result contracts)
+
+### Changed
+- Validate finite metric conversion and signed-64-bit registry storage domains
+  before database mutation; keep nonnegative tokens, positive repetitions and
+  signed verifier exits. Normalize corrupt hardware JSON/UTF-8 diagnostics.
+- Stream optional model-call logs under explicit file/line/row budgets and count
+  overflowing durations and decoder failures as invalid safe telemetry rows.
+- Add synthetic import atomicity, integer-boundary, decoder and streaming-budget
+  regressions. No schema/version change or live benchmark work.
+
 ## 2026-11-06 (HTTP dependency maintenance)
 
 ### Changed
