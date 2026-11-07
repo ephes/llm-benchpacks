@@ -5253,3 +5253,11 @@ source values. All five CSVs now stage and validate before replacement, with
 rollback on publication failure and retained recovery files if rollback fails.
 Synthetic tests cover malformed ZIP members and every staging, backup and
 replacement boundary; usage documents single-writer and crash-recovery limits.
+
+## 2026-11-08 — Pilot baseline mathematical and partition contracts
+
+Added independent exact-fraction scoring oracles and partition tests for
+transitive links, blocking and threshold equality. Empty input now returns
+empty clusters and zero scores; duplicate identities fail before union-find.
+A changed gold pair denominator fails the new scoring suite. Measurement stays
+separate from pure scoring and requires no platform APIs for these tests.

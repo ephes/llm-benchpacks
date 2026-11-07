@@ -10,7 +10,7 @@ price/image) to read the difficulty of the text-only lane.
 The reported throughput is end-to-end (CSV load + tokenize + block + match — the
 work a clusterer program does); scoring is verifier-side and excluded.
 """
-import csv, re, sys, time, resource, subprocess, collections
+import csv, re, sys, time, subprocess, collections
 from itertools import combinations
 from pathlib import Path
 
@@ -32,6 +32,8 @@ def jaccard(a, b):
 def cluster(rows, tok, threshold):
     """Block by (brand, category), link within-block pairs over the Jaccard
     threshold via union-find, return (pred, comparisons, n_blocks, biggest_block)."""
+    if len({r["offer_id"] for r in rows}) != len(rows):
+        raise ValueError("duplicate offer identities")
     parent = {r["offer_id"]: r["offer_id"] for r in rows}
 
     def find(x):
@@ -55,11 +57,13 @@ def cluster(rows, tok, threshold):
             if jaccard(tok[a], tok[b]) >= threshold:
                 union(a, b)
     pred = {oid: find(oid) for oid in parent}
-    return pred, comparisons, len(blocks), max(len(v) for v in blocks.values())
+    return pred, comparisons, len(blocks), max((len(v) for v in blocks.values()), default=0)
 
 
 def score(pred, gold):
     """B-cubed precision/recall/F1 and pairwise cluster F1 vs gold."""
+    if not pred:
+        return dict(bp=0.0, br=0.0, bf=0.0, pf=0.0, npred=0, ngold=0)
     by_pred = collections.defaultdict(list)
     by_gold = collections.defaultdict(list)
     for oid in pred:
@@ -93,7 +97,8 @@ def score(pred, gold):
 
 
 def load(path):
-    rows = list(csv.DictReader(open(path, encoding="utf-8")))
+    with open(path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
     tok = {r["offer_id"]: toks(r["title"]) for r in rows}
     return rows, tok
 
@@ -137,6 +142,7 @@ def main():
                           check=True, capture_output=True, text=True)
     elapsed = next(float(line.split()[1]) for line in proc.stdout.splitlines()
                    if line.startswith("MEASURE_ELAPSED"))
+    import resource
     rss_mb = _rss_mb(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
 
     print(f"\nbest threshold = {best}: B-cubed F1 {s['bf']:.3f}, pairwise F1 {s['pf']:.3f}")
