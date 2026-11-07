@@ -215,8 +215,10 @@ and before each measured adapter execution:
 2. The runner identifies the case's single primary `kind = "repo"` directory
    fixture and creates a fresh run-owned workspace under the output directory.
 3. The workspace preparer rejects absolute symlinks and symlinks escaping the
-   source repo fixture, then copies the source fixture into that workspace. The
-   pack-owned fixture remains read-only by contract and must not be mutated.
+   source repo fixture, then copies it into that workspace and copies the
+   published generation to runner-owned `baseline/<case-id>/rep-NNN/` before
+   model execution. The fixture remains manifest provenance; capture reads only
+   the retained baseline. Harnesses must not mutate fixtures or baselines.
 4. The adapter continues to handle model/runtime calls. The adapter boundary
    remains unchanged; adapters do not receive workspace paths, learn pack
    fixture semantics, or write repository files directly.
@@ -290,10 +292,13 @@ and before each measured adapter execution:
    outcomes leave the workspace unchanged and explain the outcome in stderr.
    External-agent subprocess output is captured verbatim through these same
    stdout/stderr task logs.
-9. After task executor completion, the runner compares the immutable
-   source fixture to the prepared workspace with a deterministic directory
-   snapshot diff and writes `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty
-   changes still create an empty patch file.
+9. After task executor completion, the runner compares the retained prepared
+   baseline to the workspace with a deterministic directory diff and writes
+   `patch/<case-id>/rep-NNN.diff` beside `raw/`. Empty changes create an empty
+   patch. Bounded reads, entry/line/input/output ceilings and a capture-wide
+   line-pair budget bound memory and repetitive diff work (limits in the
+   specification). A ceiling failure reports retained paths and publishes no
+   patch or measured row. Baseline-copy failures abort before model execution.
 10. For measured repo-task executions with `scoring.mode = "verify-script"`, the
    verifier consumes the prepared workspace, case metadata, pack metadata,
    source fixture id, patch artifact path, and requested output path as
@@ -316,7 +321,7 @@ and before each measured adapter execution:
 
 Repo-task artifacts live beside, not inside, `raw/`. The `raw/` directory
 remains for model request/response payloads. Current repo-task artifacts are
-`workspace/`, `patch/<case-id>/rep-NNN.diff`,
+`workspace/`, `baseline/<case-id>/rep-NNN/`, `patch/<case-id>/rep-NNN.diff`,
 `task/<case-id>/rep-NNN.{stdout.log,stderr.log}`, public external-agent
 `task/<case-id>/rep-NNN.context.json` context inputs, optional public
 external-agent `task/<case-id>/rep-NNN.model-calls.jsonl` model-call logs, and

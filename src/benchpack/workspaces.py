@@ -24,6 +24,7 @@ class PreparedWorkspace:
 
     source_fixture: Fixture
     path: Path
+    baseline_path: Path | None = None
 
 
 def validate_repo_task_case(pack: Pack, case: Case) -> Fixture:
@@ -166,6 +167,10 @@ def prepare_repo_task_workspace(
             f"{case.id!r}: {destination}"
         )
 
+    baseline = Path(output_dir) / "baseline" / case.id / f"rep-{repetition:03d}"
+    if baseline.exists() or baseline.is_symlink():
+        raise WorkspaceError(f"workspace baseline already exists: {baseline}")
+
     staging: Path | None = None
     step = "allocate staging"
     try:
@@ -179,12 +184,19 @@ def prepare_repo_task_workspace(
         destination.mkdir()
         step = "publish workspace (empty destination reservation retained on failure)"
         staging.rename(destination)
+        staging = None
+        # Copy the published generation, never reread the live fixture. No model
+        # or harness runs until both copies are ready. Only the runner owns this
+        # baseline; harnesses may mutate the workspace alone.
+        step = "copy prepared baseline"
+        baseline.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(destination, baseline, symlinks=True)
     except (OSError, shutil.Error) as exc:
         retained = f"; staging retained at {staging}" if staging is not None else ""
         raise WorkspaceError(
             f"could not prepare workspace for repo-task case {case.id!r} "
             f"from fixture {source_fixture.id!r}: {step}: {exc}"
-            f"{retained}; destination: {destination}"
+            f"{retained}; destination: {destination}; baseline: {baseline}"
         ) from exc
 
-    return PreparedWorkspace(source_fixture=source_fixture, path=destination)
+    return PreparedWorkspace(source_fixture=source_fixture, path=destination, baseline_path=baseline)

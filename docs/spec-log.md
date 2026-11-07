@@ -16,6 +16,20 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (bounded patch capture and prepared provenance)
+
+### Changed
+- Bound patch input/output bytes, entries, text lines and capture-wide line-pair
+  work; stream bounded reads and diff emission before accepting patch evidence.
+- Retain a run-owned baseline copied from the published workspace before model
+  execution. Capture never rereads live fixture bytes or modes; manifest source
+  metadata retain their provenance meaning. Report retained paths on failure.
+- Add synthetic failing-before ceiling, growing-file, source-generation and
+  baseline-failure regressions plus exact-limit and existing patch replay checks.
+  Size defaults admit the largest shipped fixture and ordinary module edits; a
+  synthetic dataset/module of comparable scale guards that compatibility.
+  No manifest or version changes, live model campaigns or workflow changes.
+
 ## 2026-11-07 (authenticated transport and safe compact errors)
 
 ### Changed

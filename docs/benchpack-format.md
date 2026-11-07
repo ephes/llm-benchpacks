@@ -126,7 +126,7 @@ expected = "Paris"
   not mutate repositories, execute verifiers, or score from fixtures. For
   `repo-task` measured executions only, it copies one referenced `kind = "repo"`
   directory fixture into a disposable run-owned workspace and captures a
-  deterministic source-vs-workspace patch artifact after the adapter call.
+  deterministic prepared-baseline-vs-workspace patch artifact after the adapter call.
 
 `scoring`
 : Optional scoring configuration. May appear at pack level as a default and/or
@@ -386,6 +386,15 @@ should not rely on manifest-declared shell commands, task environment, pack-leve
 harness defaults, or workspace retention because those fields do not exist yet.
 The only task timeout field is the narrow `harness.timeout_s` policy described
 below.
+
+The runner retains the prepared generation at `baseline/<case-id>/rep-NNN/`
+(outside the harness workspace). Patches compare that copy to the workspace;
+fixture id/path metadata remain manifest provenance. Harnesses must not mutate
+the baseline. Capture uses fixed limits documented in the specification: 4 MiB
+per input, 32 MiB total input, 8 MiB patch output, 10,000 tree entries, 4,000
+lines per diffed input and 16,000,000 line pairs across diffs. A ceiling failure
+aborts the measured row with retained paths, without accepting a partial patch.
+These are runner policies, not new manifest configuration fields.
 
 #### Public Harness Selection
 

@@ -176,3 +176,96 @@ def test_rename_failure_reports_and_retains_staging_and_reservation(tmp_path, mo
     destination = workspace_path(out, case, 1)
     assert str(destination) in str(error.value)
     assert destination.is_dir() and list(destination.iterdir()) == []
+
+
+@pytest.mark.parametrize("mutation", ["content", "mode", "delete"])
+def test_patch_uses_prepared_generation_after_source_mutation(tmp_path, monkeypatch, mutation):
+    import os
+    from benchpack.patches import capture_workspace_patch
+    from benchpack.workspaces import prepare_repo_task_workspace
+
+    pack, case = _repo_task(tmp_path)
+    out = tmp_path / "run"
+    prepared = prepare_repo_task_workspace(pack, case, out, 1)
+    source = pack.fixtures[0].path / "first.txt"
+    if mutation == "content":
+        source.write_text("unrelated fixture change")
+    elif mutation == "delete":
+        source.unlink()
+    else:
+        original_stat = Path.stat
+        def changed_mode(path, *args, **kwargs):
+            result = original_stat(path, *args, **kwargs)
+            if path == source:
+                fields = list(result)
+                fields[0] ^= 0o100
+                return os.stat_result(fields)
+            return result
+        monkeypatch.setattr(Path, "stat", changed_mode)
+    record = capture_workspace_patch(prepared, out, case, 1)
+    assert (out / record["path"]).read_bytes() == b""
+
+
+def test_model_patch_uses_copied_baseline_not_live_fixture(tmp_path):
+    from benchpack.patches import capture_workspace_patch
+    from benchpack.workspaces import prepare_repo_task_workspace
+
+    pack, case = _repo_task(tmp_path)
+    out = tmp_path / "run"
+    prepared = prepare_repo_task_workspace(pack, case, out, 1)
+    (pack.fixtures[0].path / "first.txt").write_text("unrelated")
+    (prepared.path / "first.txt").write_text("model edit")
+    record = capture_workspace_patch(prepared, out, case, 1)
+    diff = (out / record["path"]).read_text()
+    assert "-source\n" in diff
+    assert "+model edit\n" in diff
+    assert "unrelated" not in diff
+
+
+def test_baseline_copy_failure_reports_retained_workspace_and_partial_baseline(tmp_path, monkeypatch):
+    import shutil
+    from benchpack.workspaces import prepare_repo_task_workspace, workspace_path
+
+    pack, case = _repo_task(tmp_path)
+    out = tmp_path / "run"
+    destination = workspace_path(out, case, 1)
+    original_copy = shutil.copytree
+    def fail_baseline(source, target, **kwargs):
+        if source == destination:
+            Path(target).mkdir()
+            (Path(target) / "partial").write_text("partial")
+            raise OSError("injected baseline failure")
+        return original_copy(source, target, **kwargs)
+    monkeypatch.setattr(shutil, "copytree", fail_baseline)
+    with pytest.raises(WorkspaceError, match="copy prepared baseline") as error:
+        prepare_repo_task_workspace(pack, case, out, 1)
+    baseline = out / "baseline" / case.id / "rep-001"
+    assert str(destination) in str(error.value)
+    assert str(baseline) in str(error.value)
+    assert (baseline / "partial").read_text() == "partial"
+    assert (destination / "first.txt").read_text() == "source"
+
+
+def test_capture_large_synthetic_fixture_with_ordinary_code_edit(tmp_path):
+    """Represent the largest shipped fixture's scale without using its data."""
+    from benchpack.patches import capture_workspace_patch
+    from benchpack.workspaces import prepare_repo_task_workspace
+
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path
+    # Large unchanged CSV-shaped inputs must fit alongside a 3,028-line module.
+    for name, count in (("test.csv", 220_000), ("train.csv", 130_000), ("eval.csv", 40_000)):
+        with (source / name).open("wb") as handle:
+            for _ in range(count // 1000):
+                handle.write(b"synthetic,data\n" * 1000)
+    lines = [f"constant_{i} = {i}\n" for i in range(3028)]
+    (source / "module.py").write_text("".join(lines))
+    out = tmp_path / "run"
+    prepared = prepare_repo_task_workspace(pack, case, out, 1)
+    lines[1514] = "constant_1514 = -1\n"
+    (prepared.path / "module.py").write_text("".join(lines))
+    record = capture_workspace_patch(prepared, out, case, 1)
+    diff = (out / record["path"]).read_text()
+    assert "-constant_1514 = 1514\n" in diff
+    assert "+constant_1514 = -1\n" in diff
+    assert "test.csv" not in diff
