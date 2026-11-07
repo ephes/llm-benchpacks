@@ -295,3 +295,19 @@ first-title-token blocks use title order. Model-code candidates mix letters and
 digits and exclude pure storage/power/other unit tokens. Character n-grams are
 counted, not deduplicated. Token, block-pair and connected-component oracles run
 without pilot datasets or model calls; no methodology results were remeasured.
+
+## Offline scraper contracts
+
+The pilot scraper admits each clickout separately: a JSON mapping must hold a
+nonempty LeadEvent list whose first row has at least nine cells. Cluster IDs
+are nonblank strings or integers; consumed text is string/null, and price is
+string, finite number or null. Invalid siblings are skipped with one aggregate
+rejection count per page, without logging payloads. Deduplication includes
+cluster identity so recommendations cannot evict target offers.
+
+Synthetic HTML/fetch/sleep tests forbid network transport. They protect hard
+per-search request limits and the shared seen-set rule: mark a variant only
+after a successful fetch, leaving failed and queued-but-unfetched variants
+retryable. Repeated successful variants are skipped across searches. Offer
+budgets remain soft and keep complete clusters, so the last cluster may
+overshoot; only the page target's offers enter that cluster.

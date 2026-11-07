@@ -25,6 +25,7 @@ import base64
 import csv
 import html as htmllib
 import json
+import math
 import re
 import sys
 import time
@@ -81,33 +82,51 @@ def _url_product_id(path: str) -> str | None:
 def _decode_clickouts(html: str) -> list[dict]:
     """Return offer dicts from the per-offer econda clickout payloads + title attr."""
     offers: list[dict] = []
+    rejected = 0
     for tag in re.findall(r'<\w+\b[^>]*data-econda-clickout-params="[^"]+"[^>]*>', html):
         b64 = re.search(r'data-econda-clickout-params="([^"]+)"', tag)
         title = re.search(r'\btitle="([^"]+)"', tag)
         try:
-            payload = json.loads(base64.b64decode(b64.group(1)))
-        except Exception:  # noqa: BLE001
-            continue
-        lead = (payload.get("LeadEvent") or [[]])[0]
-        if len(lead) < 9:
+            payload = json.loads(base64.b64decode(b64.group(1), validate=True))
+            if not isinstance(payload, dict):
+                raise ValueError
+            events = payload.get("LeadEvent")
+            if not isinstance(events, list) or not events:
+                raise ValueError
+            lead = events[0]
+            if not isinstance(lead, list) or len(lead) < 9:
+                raise ValueError
+            if type(lead[1]) not in (str, int) or not str(lead[1]).strip():
+                raise ValueError
+            if any(value is not None and not isinstance(value, str)
+                   for value in (lead[2], lead[4], lead[5], lead[7])):
+                raise ValueError
+            if lead[8] is not None and type(lead[8]) not in (str, int, float):
+                raise ValueError
+            if isinstance(lead[8], float) and not math.isfinite(lead[8]):
+                raise ValueError
+        except (ValueError, TypeError, RecursionError):
+            rejected += 1
             continue
         offers.append(
             {
                 "merchant_title": htmllib.unescape(title.group(1).strip()) if title else "",
                 "cluster_id": lead[1],
                 "norm_name": htmllib.unescape(lead[2]) if lead[2] else "",
-                "category_path": lead[4],
-                "brand": lead[5],
+                "category_path": lead[4] or "",
+                "brand": lead[5] or "",
                 "shop_name": htmllib.unescape(lead[7]) if lead[7] else "",
                 "price": lead[8],
             }
         )
+    if rejected:
+        print(f"  ! clickouts rejected: {rejected}", file=sys.stderr)
     # dedup on (cluster, shop, merchant_title): cluster_id must be in the key so a
     # same-shop/title clickout for a *different* product (recommendation/ad) cannot
     # evict the real target offer before scrape() filters by cluster_id.
     out, seen = [], set()
     for o in offers:
-        key = (o["cluster_id"], o["shop_name"], o["merchant_title"])
+        key = (str(o["cluster_id"]), o["shop_name"], o["merchant_title"])
         if key in seen:
             continue
         seen.add(key)
