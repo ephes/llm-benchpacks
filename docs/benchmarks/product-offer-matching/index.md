@@ -267,3 +267,16 @@ build. Delete any target marked `existed: false`; restore remaining backups for
 targets marked `existed: true`. For those existing targets only, a missing backup
 means rollback already restored it.
 Retain the directory until all five files are coherent, then remove it and retry.
+
+## Pilot baseline contracts
+
+`baseline-clusterer.py` links Jaccard scores at or above the threshold within
+(normalized brand, exact category) blocks and returns connected components,
+including transitive links. Duplicate offer identities fail before clustering;
+an empty CSV returns no clusters, comparisons or blocks. Empty-domain scores
+are zero. An all-singleton prediction has B-cubed precision of one and pairwise F1
+of zero (there are no predicted positive pairs). Its B-cubed recall and F1 are
+also one when gold is all singletons; otherwise they decrease. Scoring uses only the prediction domain;
+gold must contain every predicted identity. Synthetic fraction oracles cover
+perfect, merged, split and asymmetric partitions and label renaming. Scoring
+remains outside the measured clusterer work; resource measurement is CLI-only.
