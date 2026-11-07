@@ -6,6 +6,7 @@ import csv
 import json
 import random
 import zipfile
+from bisect import bisect_right
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,10 @@ def _sample_eval_pairs(
     easy_negative_pairs: int,
     rng: random.Random,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    if any(count < 0 for count in (positive_pairs, hard_negative_pairs, easy_negative_pairs)):
+        raise ValueError("requested pairs must be nonnegative")
+    if len({row["Product ID"] for row in test_rows}) != len(test_rows):
+        raise ValueError("pairs require unique Product IDs")
     by_cluster: dict[str, list[dict[str, str]]] = defaultdict(list)
     by_category: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in test_rows:
@@ -101,38 +106,61 @@ def _sample_eval_pairs(
         for left_index, left in enumerate(cluster_rows):
             for right in cluster_rows[left_index + 1 :]:
                 positives.append((left, right))
+    positive_count = len(positives)
     rng.shuffle(positives)
     positives = positives[:positive_pairs]
 
-    hard_negatives: list[tuple[dict[str, str], dict[str, str]]] = []
-    hard_seen: set[tuple[str, str]] = set()
-    attempts = 0
-    category_ids = [category_id for category_id, values in by_category.items() if len(values) > 1]
-    while len(hard_negatives) < hard_negative_pairs and attempts < hard_negative_pairs * 80:
-        attempts += 1
-        category_id = rng.choice(category_ids)
-        left, right = rng.sample(by_category[category_id], 2)
-        if left["Cluster ID"] == right["Cluster ID"]:
-            continue
-        key = tuple(sorted([left["Product ID"], right["Product ID"]]))
-        if key in hard_seen:
-            continue
-        hard_seen.add(key)
-        hard_negatives.append((left, right))
+    # Index cross-cluster pairs in O(offers) space instead of enumerating the
+    # quadratic negative population. Each row pairs with later clusters only.
+    def population(values):
+        groups = defaultdict(list)
+        for row in values:
+            groups[row["Cluster ID"]].append(row)
+        ordered = [row for group in groups.values() for row in group]
+        ends, cumulative = [], [0]
+        end = 0
+        for group in groups.values():
+            end += len(group)
+            for _ in group:
+                ends.append(end)
+                cumulative.append(cumulative[-1] + len(ordered) - end)
+        return ordered, ends, cumulative
 
-    easy_negatives: list[tuple[dict[str, str], dict[str, str]]] = []
-    easy_seen: set[tuple[str, str]] = set()
-    attempts = 0
-    while len(easy_negatives) < easy_negative_pairs and attempts < easy_negative_pairs * 80:
-        attempts += 1
-        left, right = rng.sample(test_rows, 2)
-        if left["Cluster ID"] == right["Cluster ID"]:
-            continue
-        key = tuple(sorted([left["Product ID"], right["Product ID"]]))
-        if key in easy_seen or key in hard_seen:
-            continue
-        easy_seen.add(key)
-        easy_negatives.append((left, right))
+    def pair_at(pop, rank):
+        ordered, ends, cumulative = pop
+        left = bisect_right(cumulative, rank) - 1
+        return ordered[left], ordered[ends[left] + rank - cumulative[left]]
+
+    all_negatives = population(test_rows)
+    hard_populations = [population(values) for values in by_category.values()]
+    hard_counts = [0]
+    for pop in hard_populations:
+        hard_counts.append(hard_counts[-1] + pop[2][-1])
+    available = (positive_count, hard_counts[-1], all_negatives[2][-1])
+    if positive_pairs > positive_count or hard_negative_pairs > available[1] or (
+        hard_negative_pairs + easy_negative_pairs > available[2]
+    ):
+        raise ValueError("requested pairs exceed available positive or negative population")
+
+    hard_negatives = []
+    for rank in rng.sample(range(hard_counts[-1]), hard_negative_pairs):
+        block = bisect_right(hard_counts, rank) - 1
+        hard_negatives.append(pair_at(hard_populations[block], rank - hard_counts[block]))
+
+    ordered, ends, cumulative = all_negatives
+    positions = {row["Product ID"]: i for i, row in enumerate(ordered)}
+    excluded = []
+    for left, right in hard_negatives:
+        a, b = sorted((positions[left["Product ID"]], positions[right["Product ID"]]))
+        excluded.append(cumulative[a] + b - ends[a])
+    excluded.sort()
+    easy_negatives = []
+    for rank in rng.sample(range(cumulative[-1] - len(excluded)), easy_negative_pairs):
+        # Translate a rank in the complement into the full population.
+        full_rank = rank
+        while (next_rank := rank + bisect_right(excluded, full_rank)) != full_rank:
+            full_rank = next_rank
+        easy_negatives.append(pair_at(all_negatives, full_rank))
 
     pairs = [(left, right, 1) for left, right in positives]
     pairs += [(left, right, 0) for left, right in hard_negatives]
@@ -178,6 +206,8 @@ def main() -> int:
     parser.add_argument("--eval-easy-negative-pairs", type=int, default=3_000)
     args = parser.parse_args()
 
+    if args.train_offers < 0:
+        raise ValueError("train offers must be nonnegative")
     rng = random.Random(args.seed)
     rows = _read_rows(Path(args.pricerunner_zip), args.member_name)
     train_clusters, test_clusters = _choose_split(

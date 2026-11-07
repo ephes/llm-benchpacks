@@ -5236,3 +5236,11 @@ failures, retry and summary agreement.
 Malformed hardware memory/core evidence and decoding errors now leave fields
 unavailable while preserving valid partial metadata; synthetic regressions
 require no model calls.
+
+## 2026-11-08 — PriceRunner pair admission and leakage regressions
+
+Validated pair populations before publication and replaced attempt-capped
+negative sampling with indexed sampling without replacement. Impossible counts
+now fail explicitly. Synthetic ZIP end-to-end tests protect cluster-disjoint
+splits, deterministic local IDs and complete public/hidden joins; no fixture
+artifacts or benchmark results were regenerated.

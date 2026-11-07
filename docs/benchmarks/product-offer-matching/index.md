@@ -230,3 +230,19 @@ External-agent runs are benchmark-grade only when the wrapper prevents broad
 filesystem access or the result is documented as weaker anti-cheat evidence.
 The bundled Pi wrapper runs Pi without filesystem tools and only applies JSON
 replacements for prompt-allowed paths.
+
+## Archived PriceRunner fixture tooling
+
+`build-fixture-from-pricerunner.py` retains the whole-cluster split policy:
+shuffle clusters, then take complete clusters until the training offer target
+is reached (the final cluster may overshoot). Seeded row shuffling and local IDs
+are reproducible; public test offers contain no cluster labels. Synthetic tests
+check all five public/hidden joins and prevent row-level split leakage.
+
+Pair requests must be nonnegative and feasible. Positives share a source cluster;
+hard negatives share a category but differ in cluster; easy negatives come from
+all remaining cross-cluster pairs, excluding selected hard negatives. Hard negatives are uniform over eligible pairs (larger categories therefore
+contribute more), replacing the old category-first weighting. Sampling
+is without replacement and produces the exact requested counts, or raises before
+writing output. The corrected sampler changes seeded pair selections relative
+to the earlier attempt-capped sampler; regenerate all labels together.
