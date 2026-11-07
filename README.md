@@ -691,3 +691,11 @@ output creation or model calls. Imported `run.jsonl` files are limited to
 1 MiB per physical line including line endings, 64 MiB actual bytes per run,
 and 100,000 records; split larger historical runs into separate directories.
 Compare, report, and registry/bundle imports report controlled read/decode errors.
+
+Local product-offer tooling regressions use synthetic data only. Install locked
+Python development dependencies with `uv sync --frozen --all-groups` and run
+`uv run --frozen pytest` plus `uv run --frozen python scripts/audit-python.py`.
+The generated pilot-viewer tests also require Node.js on PATH; they execute the
+emitted JavaScript with a fake DOM, without a browser or network. See the
+[tooling contracts](docs/benchmarks/product-offer-matching/index.md#archived-pricerunner-fixture-tooling)
+for fixture admission, recovery and methodology boundaries.

@@ -85,24 +85,33 @@ const DATA = {data_json};
 
 function median(xs) {{
   const s = [...xs].sort((a,b)=>a-b); const n=s.length;
-  return n ? (n%2 ? s[(n-1)/2] : (s[n/2-1]+s[n/2])/2) : 0;
+  return n ? (n%2 ? s[(n-1)/2] : (s[n/2-1]/2+s[n/2]/2)) : null;
+}}
+
+function price(raw) {{
+  if (raw == null || String(raw).trim() === '') return null;
+  if (!/^[+-]?([0-9]+[.]?[0-9]*|[.][0-9]+)(e[+-]?[0-9]+)?$/i.test(String(raw).trim())) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }}
 
 // group offers -> clusters
-const clusters = {{}};
+const clusters = Object.create(null);
 for (const o of DATA) {{
   const k = o.cluster_id;
   (clusters[k] ||= {{cluster_id:k, label:o.cluster_label, category:o.category_label,
                      query:o.source_query, image:o.image_url, offers:[]}}).offers.push(o);
 }}
 const CLUSTERS = Object.values(clusters).map(c => {{
-  const prices = c.offers.map(o=>parseFloat(o.price_eur)).filter(x=>!isNaN(x));
+  const prices = c.offers.map(o=>price(o.price_eur)).filter(x=>x !== null);
   const med = median(prices);
-  c.min = Math.min(...prices); c.max = Math.max(...prices); c.med = med;
-  c.spread = med ? (c.max - c.min) / med : 0;
+  c.min = prices.length ? Math.min(...prices) : null;
+  c.max = prices.length ? Math.max(...prices) : null; c.med = med;
+  const spread = med > 0 ? (c.max / med - c.min / med) : 0;
+  c.spread = Number.isFinite(spread) ? spread : Number.MAX_VALUE;
   for (const o of c.offers) {{
-    const p = parseFloat(o.price_eur);
-    o._out = med && !isNaN(p) && (p > med*1.8 || p < med*0.55);
+    const p = price(o.price_eur);
+    o._out = med > 0 && p !== null && (p > med*1.8 || p < med*0.55);
   }}
   c.hasOut = c.offers.some(o=>o._out);
   return c;
@@ -110,11 +119,20 @@ const CLUSTERS = Object.values(clusters).map(c => {{
 
 const cats = [...new Set(CLUSTERS.map(c=>c.category))].sort();
 const catSel = document.getElementById('cat');
-catSel.innerHTML = '<option value="">all categories</option>' +
-  cats.map(c=>`<option>${{c}}</option>`).join('');
+for (const [value, label] of [['', 'all categories'], ...cats.map(c=>[c,c])]) {{
+  const option = document.createElement('option');
+  option.value = value; option.textContent = label;
+  catSel.appendChild(option);
+}}
 
 const esc = s => (s??'').replace(/[&<>"]/g, m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[m]));
-const eur = x => isNaN(x)?'—':x.toFixed(2)+' €';
+const eur = x => Number.isFinite(x)?x.toFixed(2)+' €':'—';
+const imageURL = s => {{
+  try {{
+    const url = new URL(s);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  }} catch {{ return ''; }}
+}};
 
 function render() {{
   const q = document.getElementById('q').value.toLowerCase().trim();
@@ -136,7 +154,7 @@ function render() {{
   document.getElementById('stat').textContent =
     `${{cs.length}} clusters · ${{cs.reduce((n,c)=>n+c.offers.length,0)}} offers shown`;
 
-  const byCat = {{}};
+  const byCat = Object.create(null);
   for (const c of cs) (byCat[c.category] ||= []).push(c);
   const main = document.getElementById('main');
   if (!cs.length) {{ main.innerHTML = '<div class="empty">no clusters match</div>'; return; }}
@@ -146,7 +164,7 @@ function render() {{
     <div class="grid">${{byCat[cat].map(c => `
       <div class="cluster">
         <div class="chead">
-          <img class="thumb" loading="lazy" src="${{esc(c.image)}}" alt="">
+          <img class="thumb" loading="lazy" src="${{esc(imageURL(c.image))}}" alt="">
           <div class="cmeta">
             <div class="clabel">${{esc(c.label)}}</div>
             <div class="csub"><span class="cid">${{esc(c.cluster_id)}}</span> · ${{c.offers.length}} offers</div>
@@ -155,7 +173,7 @@ function render() {{
         </div>
         <ul class="offers">${{c.offers.map(o => `
           <li>
-            <span class="price ${{o._out?'out':''}}">${{eur(parseFloat(o.price_eur))}}</span>
+            <span class="price ${{o._out?'out':''}}">${{eur(price(o.price_eur))}}</span>
             <span class="shop" title="${{esc(o.shop_name)}}">${{esc(o.shop_name)}}</span>
             <span class="otitle">${{esc(o.title)}}${{o._out?'<span class="flag">⚠ price</span>':''}}</span>
           </li>`).join('')}}</ul>
@@ -171,6 +189,9 @@ render();
 
 def build(rows: list[dict]) -> str:
     payload = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
+    # Keep JSON text out of every HTML script tokenizer escape state.
+    for char in "<>&  ":
+        payload = payload.replace(char, f"\\u{ord(char):04x}")
     return HTML_TEMPLATE.format(data_json=payload)
 
 

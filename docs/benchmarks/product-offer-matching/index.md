@@ -311,3 +311,20 @@ after a successful fetch, leaving failed and queued-but-unfetched variants
 retryable. Repeated successful variants are skipped across searches. Offer
 budgets remain soft and keep complete clusters, so the last cluster may
 overshoot; only the page target's offers enter that cluster.
+
+## Generated pilot viewer contracts
+
+`build-billiger-viewer.py` treats CSV fields as untrusted text. Category options
+use DOM text/value properties, grouping dictionaries have no prototype keys,
+and card text/attributes are HTML-escaped. Embedded JSON escapes all HTML-sensitive characters and Unicode line
+separators as well as script closers, preventing HTML script escape states. Images accept only absolute HTTP(S) URLs. Synthetic tests execute the
+actual generated JavaScript under Node.js with a fake DOM and parse the rendered
+HTML to check literal hostile values and intact grouping/filtering.
+
+Only complete finite decimal price strings (trimmed, with optional exponent) enter ranges or medians; empty,
+invalid, NaN and infinite values display `—`. Missing ranges/medians are null,
+distinct from a finite zero price. Empty or nonpositive medians disable relative
+outlier detection/spread; otherwise outliers retain the >1.8× / <0.55× median
+rules. Overflowing relative spreads saturate at the largest finite JS number so
+sorting stays finite. Even medians avoid overflowing the sum. Filter, sort,
+median and outlier tests need no network or platform-specific browser.

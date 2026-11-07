@@ -5278,3 +5278,14 @@ bounded aggregate diagnostics. Cluster-aware deduplication remains before
 target filtering. Fake HTML/fetch/sleep regressions protect shared seen-state,
 failed/unfetched retries, request caps and soft whole-cluster offer budgets;
 marking queued variants seen causes the retry suite to fail. No live scraping.
+
+## 2026-11-08 — Safe finite pilot viewer
+
+Replaced category HTML interpolation with DOM text APIs and prototype-bearing
+group dictionaries with null-prototype dictionaries. Image URLs use an HTTP(S)
+allowlist; JSON escapes HTML-sensitive characters/line separators and retains
+script-closing protection; card escaping remains intact. Price parsing,
+ranges, medians and spread sorting now distinguish finite zero from missing
+values and reject nonfinite/partial/non-decimal numeric strings. Generated-script tests
+execute hostile synthetic CSV fields and price/filter/sort cases in Node's VM
+with a fake DOM, without browser/network/platform dependencies.
