@@ -761,12 +761,29 @@ streaming and non-streaming HTTP requests. When omitted, no Authorization
 header is sent, and the runner does not implicitly read `OPENAI_API_KEY` or any
 other default secret variable. If the option is supplied but the named
 environment variable is missing or empty, the adapter fails deterministically
-with an error that names only the environment variable. Raw request artifacts
-remain the JSON request body only; they do not include headers. Result rows,
-summaries, reports, run metadata, task logs, and external-agent context must
-not contain bearer token values. External-agent context may contain the
-configured environment variable name as part of adapter defaults, never the
-resolved token value.
+with an error that names only the environment variable. Endpoint URLs must be
+well-formed HTTP(S) URLs without userinfo. Authenticated remote endpoints require
+HTTPS; HTTP is allowed only for explicit `localhost` or loopback IP literals
+(no DNS-based loopback inference). Unauthenticated local-runtime HTTP remains
+supported. CLI preflight validates this before output creation/replacement, and
+the adapter rechecks before writing raw artifacts or calling transport.
+
+Raw request artifacts contain the JSON body only, without headers. Compact
+adapter errors use fixed categories (`transport error`, response/stream parse
+error, incomplete stream) or HTTP status codes, never backend response or
+exception text. OpenAI result endpoints omit URL query strings and fragments;
+the actual request retains the configured query. `run.jsonl` and generated
+summaries therefore do not inherit credentials echoed by failing backends.
+Raw response artifacts intentionally retain backend bodies, invalid events and
+transport diagnostics for local debugging, which can include echoed secrets.
+Treat `raw/` as private and inspect/redact before sharing; it is not covered by
+the compact-error privacy guarantee. Do not place credentials in endpoint paths,
+prompts, model names, run metadata, or other user-controlled result fields.
+External-agent context contains the configured environment variable name, never
+the resolved header value. Context files retain the full configured endpoint
+(including query/fragment) for harness transport fidelity and must be treated as
+private, just like raw responses. Harnesses own their own transport policy.
+
 
 ## CLI
 
@@ -793,7 +810,8 @@ benchpack run <pack> --adapter <adapter> --model <model>
 - `--model` is passed verbatim to the adapter.
 - `--endpoint` is the runtime URL. Adapters resolve a base URL against their
   conventional path (e.g. `/v1/chat/completions`, `/api/generate`); the
-  resolved URL is recorded in each result record as `endpoint`.
+  resolved URL is recorded in each result record as `endpoint` (OpenAI queries
+  and fragments are omitted from compact records).
 - `--openai-stream-usage` controls only `openai-chat` streaming request bodies.
   The default `include` sends `stream_options: {"include_usage": true}` when
   the pack requests streaming. `omit` still sends `"stream": true` but leaves
@@ -804,9 +822,10 @@ benchpack run <pack> --adapter <adapter> --model <model>
   variable and sends `Authorization: Bearer <token>` on each request. The
   option is explicit and opt-in; the runner does not automatically read
   `OPENAI_API_KEY`. The environment variable name may appear in adapter
-  defaults and external-agent context, but the token value must not be written
-  to raw request/response artifacts, result rows, summaries, task logs,
-  run metadata, reports, or committed documentation.
+  defaults and external-agent context. Raw request bodies exclude headers;
+  raw responses may contain backend-echoed credentials and are private. Compact
+  rows/errors/summaries exclude resolved headers and backend error text. Do not
+  put credentials in task logs, run metadata, reports or committed documentation.
 - `--out` overrides the output directory. The default is
   `results/<YYYY-MM-DD>-<host-label>/`.
 - `--host-label` overrides the auto-derived host label used in the default

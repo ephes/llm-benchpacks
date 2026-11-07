@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -33,13 +35,45 @@ class OpenAIChatAuthError(ValueError):
 
 def _resolve_url(endpoint: str | None) -> str:
     if not endpoint:
-        raise ValueError("openai-chat adapter requires --endpoint")
-    base = endpoint.rstrip("/")
-    if base.endswith("/chat/completions"):
-        return base
-    if base.endswith("/v1"):
-        return base + "/chat/completions"
-    return base + "/v1/chat/completions"
+        raise OpenAIChatAuthError("openai-chat adapter requires --endpoint")
+    try:
+        if any(char.isspace() or ord(char) < 32 for char in endpoint) or "\\" in endpoint:
+            raise ValueError("invalid URL characters")
+        parts = urlsplit(endpoint)
+        if (parts.scheme not in {"http", "https"} or not parts.hostname
+                or parts.username is not None or parts.password is not None
+                or "%" in parts.hostname or parts.netloc.endswith(":")):
+            raise ValueError("invalid endpoint")
+        # Check ports and httpx's own URL parsing before writing any artifacts.
+        parts.port
+        httpx.URL(endpoint)
+    except (ValueError, httpx.InvalidURL) as exc:
+        raise OpenAIChatAuthError("openai-chat endpoint must be a valid HTTP(S) URL without userinfo") from exc
+    path = parts.path.rstrip("/")
+    if not path.endswith("/chat/completions"):
+        path += "/chat/completions" if path.endswith("/v1") else "/v1/chat/completions"
+    return urlunsplit(parts._replace(path=path))
+
+
+def validate_openai_config(endpoint: str | None, defaults: dict[str, Any]) -> tuple[str, dict[str, str] | None]:
+    """Validate transport configuration before output creation or network I/O."""
+    url = _resolve_url(endpoint)
+    headers = _auth_headers(defaults)
+    parts = urlsplit(url)
+    if headers and parts.scheme == "http":
+        host = parts.hostname
+        try:
+            loopback = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            loopback = host == "localhost"
+        if not loopback:
+            raise OpenAIChatAuthError("authenticated openai-chat endpoint requires HTTPS or explicit HTTP loopback")
+    return url, headers
+
+
+def _summary_endpoint(url: str) -> str:
+    # Query strings and fragments may carry credentials; keep them out of rows.
+    return urlunsplit(urlsplit(url)._replace(query="", fragment=""))
 
 
 def _tps(count: int | None, duration_s: float | None) -> float | None:
@@ -129,8 +163,7 @@ class OpenAIChatAdapter:
         self._timeout = timeout
 
     def run(self, request: AdapterRequest) -> AdapterResult:
-        url = _resolve_url(request.endpoint)
-        headers = _auth_headers(request.defaults)
+        url, headers = validate_openai_config(request.endpoint, request.defaults)
         body: dict[str, Any] = {
             "model": request.model,
             "messages": [{"role": "user", "content": request.prompt}],
@@ -169,7 +202,7 @@ class OpenAIChatAdapter:
             response = client.post(url, json=body, headers=headers)
         except httpx.HTTPError as exc:
             ok = False
-            error = f"transport error: {exc!r}"
+            error = "transport error"
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
             decode_failed = False
@@ -183,7 +216,7 @@ class OpenAIChatAdapter:
             request.response_path.write_text(raw_response)
             if response.status_code >= 400:
                 ok = False
-                error = f"HTTP {response.status_code}: {response.text[:200]}"
+                error = f"HTTP {response.status_code}"
             elif decode_failed:
                 ok = False
                 error = "response parse error: response is not valid JSON"
@@ -192,7 +225,7 @@ class OpenAIChatAdapter:
                     usage, output_text = _nonstream_completion(response_payload)
                 except ValueError as exc:
                     ok = False
-                    error = f"response parse error: {str(exc)[:200]}"
+                    error = "response parse error: invalid completion"
         finally:
             wall_s = time.monotonic() - start
             client.close()
@@ -203,7 +236,7 @@ class OpenAIChatAdapter:
 
         return AdapterResult(
             adapter=self.name,
-            endpoint=url,
+            endpoint=_summary_endpoint(url),
             model=request.model,
             ok=ok,
             timing=Timing(wall_s=wall_s),
@@ -249,7 +282,7 @@ class OpenAIChatAdapter:
                     response.read()
                     error_payload = _json_payload_from_response(response)
                     ok = False
-                    error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    error = f"HTTP {response.status_code}"
                 else:
                     for line in response.iter_lines():
                         if not line or not line.startswith("data:"):
@@ -305,11 +338,11 @@ class OpenAIChatAdapter:
                             output_parts.append(delta)
         except httpx.HTTPError as exc:
             ok = False
-            error = f"transport error: {exc!r}"
+            error = "transport error"
             error_payload = {"error": str(exc)}
         except (json.JSONDecodeError, ValueError) as exc:
             ok = False
-            error = f"stream parse error: {str(exc)[:200]}"
+            error = "stream parse error: invalid event"
         finally:
             wall_s = time.monotonic() - start
             client.close()
@@ -346,7 +379,7 @@ class OpenAIChatAdapter:
 
         return AdapterResult(
             adapter=self.name,
-            endpoint=url,
+            endpoint=_summary_endpoint(url),
             model=request.model,
             ok=ok,
             timing=Timing(

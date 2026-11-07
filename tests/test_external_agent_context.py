@@ -23,9 +23,11 @@ from benchpack.tasks import task_artifact_paths
 from benchpack.workspaces import PreparedWorkspace, prepare_repo_task_workspace
 
 
+@pytest.mark.parametrize("endpoint", ["http://example.test/v1", "https://example.test/v1?key=synthetic-query#private"])
 def test_external_agent_context_contents_and_path_are_deterministic(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    endpoint: str,
 ) -> None:
     pack_dir = tmp_path / "pack"
     repo_dir = pack_dir / "fixtures" / "repo"
@@ -97,7 +99,7 @@ harness = { id = "external-agent", timeout_s = 120 }
         task_paths=task_paths,
         adapter_id="openai-chat",
         model="test-model",
-        endpoint="http://example.test/v1",
+        endpoint=endpoint,
         adapter_defaults=defaults,
         run_metadata_path=run_metadata_path,
         model_call_log_path=model_call_log_path,
@@ -153,7 +155,7 @@ harness = { id = "external-agent", timeout_s = 120 }
     assert loaded["adapter"] == {
         "id": "openai-chat",
         "model": "test-model",
-        "endpoint": "http://example.test/v1",
+        "endpoint": endpoint,
         "defaults": original_defaults,
     }
     serialized = json.dumps(loaded, sort_keys=True)

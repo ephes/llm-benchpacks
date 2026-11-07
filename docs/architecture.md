@@ -444,14 +444,22 @@ treated as cache counts.
 
 `endpoint` is the resolved URL the adapter actually called (after appending
 `/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
-argument).  It is recorded so result records remain unambiguous when the same
+argument). OpenAI-compatible result endpoints omit queries and fragments while
+the transport keeps the configured query. It is recorded so result records remain unambiguous when the same
 adapter/model points at different local servers.
 
 Transport-only adapter configuration is not part of the adapter result
 payload. For example, `openai-chat` may receive an explicit auth environment
 variable name through adapter defaults and send a bearer token in HTTP headers,
-but the resolved token value is not written to `run.jsonl`, raw request bodies,
-summaries, task logs, run metadata, reports, or external-agent context.
+but the runner does not serialize the resolved header. The CLI validates the
+endpoint before replacing output; the adapter repeats validation before raw I/O.
+Userinfo and malformed URLs are refused; authenticated transport requires HTTPS
+except for explicit loopback development. Compact errors contain only fixed
+categories/statuses. Backend bodies and exceptions remain in private raw
+response artifacts and may echo secrets, so those artifacts require inspection
+and redaction before sharing. External-agent context retains the full endpoint
+for harness transport fidelity; it is private when it contains query credentials.
+
 
 ### Collector sample
 

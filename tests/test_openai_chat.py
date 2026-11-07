@@ -130,6 +130,7 @@ def test_openai_chat_sends_authorization_header_non_streaming(
     adapter = OpenAIChatAdapter(transport=httpx.MockTransport(handler))
     req = make_request(
         tmp_path,
+        endpoint="https://example.test/v1",
         defaults={
             "temperature": 0,
             "max_tokens": 64,
@@ -296,6 +297,7 @@ def test_openai_chat_sends_authorization_header_streaming(
     adapter = OpenAIChatAdapter(transport=httpx.MockTransport(handler))
     req = make_request(
         tmp_path,
+        endpoint="https://example.test/v1",
         defaults={
             "stream": True,
             OPENAI_API_KEY_ENV_KEY: "BENCHPACK_STREAM_OPENAI_TOKEN",
@@ -691,3 +693,43 @@ def test_nonstream_usage_upper_boundary_valid(tmp_path: Path) -> None:
     adapter = OpenAIChatAdapter(transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)))
     result = adapter.run(make_request(tmp_path))
     assert result.ok and result.tokens.output == count
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint", [
+    "http://remote.test/v1", "https://user:secret@remote.test/v1",
+    "https:///v1", "https://remote.test:bad/v1", "https://remote.test:99999/v1",
+    "https://remote.test\\evil/v1", " https://remote.test/v1",
+    "https://remote.test/\npath", "ftp://remote.test/v1",
+    "http://localhost.evil/v1", "http://127.0.0.1.evil/v1",
+])
+def test_endpoint_policy_rejects_before_artifacts_or_transport(tmp_path, monkeypatch, stream, endpoint):
+    monkeypatch.setenv("TEST_ENDPOINT_KEY", "synthetic-endpoint-key")
+    calls = []
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(
+        lambda req: calls.append(req) or httpx.Response(200, json={"choices": []})))
+    req = make_request(tmp_path, endpoint=endpoint,
+                       defaults={"stream": stream, OPENAI_API_KEY_ENV_KEY: "TEST_ENDPOINT_KEY"})
+    with pytest.raises(ValueError, match="endpoint"):
+        adapter.run(req)
+    assert not calls
+    assert not req.request_path.exists()
+    assert not req.response_path.exists()
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("endpoint", ["https://remote.test/v1", "http://localhost:8080/v1",
+                                      "http://127.0.0.1:8080/v1", "http://[::1]:8080/v1"])
+def test_endpoint_policy_allows_tls_and_explicit_loopback(tmp_path, monkeypatch, stream, endpoint):
+    monkeypatch.setenv("TEST_ENDPOINT_KEY", "synthetic-endpoint-key")
+    calls = []
+    def handler(req):
+        calls.append(req)
+        if stream:
+            return httpx.Response(200, content=b'data: [DONE]\n\n')
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    req = make_request(tmp_path, endpoint=endpoint,
+                       defaults={"stream": stream, OPENAI_API_KEY_ENV_KEY: "TEST_ENDPOINT_KEY"})
+    assert OpenAIChatAdapter(transport=httpx.MockTransport(handler)).run(req).ok
+    assert len(calls) == 1
+    assert calls[0].headers["authorization"] == "Bearer synthetic-endpoint-key"

@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-07 (authenticated transport and safe compact errors)
+
+### Changed
+- Reject malformed/userinfo endpoints and authenticated remote HTTP before run
+  output replacement or adapter raw I/O; retain explicit loopback development.
+- Persist only bounded error categories/statuses and query-free OpenAI result
+  endpoints. Document raw backend evidence as private and potentially sensitive.
+- Add synthetic transport admission and CLI failure/privacy regressions for both
+  adapter modes, with failing-before evidence. No live model campaigns.
+
 ## 2026-11-07 (benchmark preflight and bounded result input)
 
 ### Changed

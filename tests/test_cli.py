@@ -1122,7 +1122,7 @@ def test_cli_openai_api_key_env_reaches_defaults_without_token(
     _write_smoke_pack(tmp_path)
     monkeypatch.setenv("BENCHPACK_OPENAI_TOKEN", "dont-leak-cli-token")
 
-    assert main(_argv(["--openai-api-key-env", "BENCHPACK_OPENAI_TOKEN"])) == 0
+    assert main(_argv(["--endpoint", "https://example.test/v1", "--openai-api-key-env", "BENCHPACK_OPENAI_TOKEN"])) == 0
 
     assert len(calls) == 1
     defaults = calls[0]["defaults"]
@@ -4178,7 +4178,8 @@ def test_cli_scoring_preflight_makes_no_model_calls(tmp_path, monkeypatch, scori
     )
     with pytest.raises(SystemExit):
         main(
-            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model"]
+            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model",
+             "--endpoint", "http://example.test/v1"]
         )
     assert calls == []
     assert not (tmp_path / "results").exists()
@@ -4196,7 +4197,8 @@ def test_cli_nonfinite_scoring_records_next_case(tmp_path, monkeypatch):
         )
     assert (
         main(
-            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model"]
+            ["run", "json-format", "--adapter", "openai-chat", "--model", "test-model",
+             "--endpoint", "http://example.test/v1"]
         )
         == 0
     )
@@ -4370,3 +4372,62 @@ def test_pack_reader_subprocess_exits_without_traceback(tmp_path, failure):
     assert 'private-prompt-sentinel' not in result.stderr
     assert len(result.stderr) < 500
     assert not out.exists()
+
+
+def test_cli_endpoint_policy_precedes_output_replacement(tmp_path, monkeypatch):
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    calls = _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    monkeypatch.setenv("TEST_ENDPOINT_KEY", "synthetic-endpoint-key")
+    out = tmp_path / "run"
+    out.mkdir()
+    previous = out / "run.jsonl"
+    previous.write_text("previous run")
+    with pytest.raises(SystemExit, match="endpoint"):
+        main(_argv(["--out", str(out), "--force", "--endpoint", "http://remote.test/v1",
+                    "--openai-api-key-env", "TEST_ENDPOINT_KEY"]))
+    assert previous.read_text() == "previous run"
+    assert not calls
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("failure", ["http", "transport", "parse"])
+def test_cli_openai_failure_summaries_keep_backend_secrets_private(tmp_path, monkeypatch, capsys, stream, failure):
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    monkeypatch.setattr("benchpack.cli.sample_resources", lambda: {})
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    manifest = tmp_path / "benchpacks" / "smoke-chat" / "benchpack.toml"
+    manifest.write_text(manifest.read_text().replace("stream = false", f"stream = {str(stream).lower()}"))
+    echoed_value = "invented-backend-credential"
+    query_value = "invented-query-credential"
+    monkeypatch.setenv("TEST_ENDPOINT_KEY", echoed_value)
+    echo = f"Authorization: Bearer {echoed_value} https://user:password@remote.test/v1?key={query_value}"
+    calls = []
+    def handler(req):
+        calls.append(req)
+        if failure == "transport":
+            raise httpx.ConnectError(echo, request=req)
+        if failure == "http":
+            return httpx.Response(401, text=echo)
+        if stream:
+            return httpx.Response(200, content=f'data: {json.dumps({"error": echo})}\n\n'.encode())
+        return httpx.Response(200, json={"error": echo})
+    class FakeAdapter(OpenAIChatAdapter):
+        def __init__(self):
+            super().__init__(transport=httpx.MockTransport(handler))
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", FakeAdapter)
+    out = tmp_path / "run"
+    main(_argv(["--out", str(out), "--endpoint", f"https://remote.test/v1?key={query_value}",
+                "--openai-api-key-env", "TEST_ENDPOINT_KEY"]))
+    assert len(calls) == 1
+    row = json.loads((out / "run.jsonl").read_text())
+    assert not row["ok"]
+    assert len(row["error"]) < 100
+    console = capsys.readouterr()
+    compact = (out / "run.jsonl").read_text() + (out / "summary.md").read_text() + console.out + console.err
+    for value in (echoed_value, query_value, "password", "Authorization"):
+        assert value not in compact
+    # Full backend diagnostics are intentionally private local raw evidence.
+    assert echoed_value in next((out / "raw").glob("*.response.json")).read_text()
