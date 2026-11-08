@@ -748,7 +748,13 @@ notes columns. The import path is idempotent by label and stores the compact raw
 row JSON for auditability. Re-import also prunes rows from the same
 `dataset_source` when their labels are absent from the current curated file, so
 the table converges to the maintained dataset instead of accumulating stale
-rows.
+rows. `generated_from` is required, nonblank, and has no surrounding whitespace.
+It is the stable dataset ownership identity, not necessarily the input filename.
+Reusing it intentionally replaces that source's label set, including when the
+file moves. Different sources cannot take over an existing label; ownership
+conflicts fail before schema setup or data changes. Legacy files must be given
+an explicit source identity before import; previously unowned rows require
+operator reconciliation rather than silent takeover.
 
 Schema version `4` adds the same canonical model identity/display and separate
 quantization facet to `agent_wrap_runs`, so quantized aliases such as Qwen3.8
@@ -757,7 +763,11 @@ For mixed-model result directories, canonicalization stays row-local and the
 run-level canonical model fields remain absent unless all rows resolve to one
 base model. `_ensure_schema` rejects future registry versions before issuing
 DDL or backfill writes, preventing an older client from downgrading schema
-markers.
+markers. Identity backfills have a separate persisted `identity_version`: a missing
+or older revision recomputes all identities atomically with schema setup;
+current imports do not rewrite historical identity rows. A client whose identity
+revision is older than the stored one refuses to write, like a future schema. Increment the identity
+revision whenever normalization rules change.
 
 The importer writes only the configured SQLite database. It does not execute
 packs, load adapters, start runtimes, collect hardware, contact endpoints, read
@@ -874,6 +884,14 @@ with the same manifest, file-hash, role/path, row, optional metadata, unlisted
 file, UTF-8, and conservative secret-scan checks before opening SQLite. When
 all inputs validate, it imports the bundled `runs/run-NNN-<label>/` directories
 through the same registry indexing path used for source result directories.
+Validation admits at most 100 runs, 100,000 records and 64 MiB of actual
+`run.jsonl` bytes (including blank lines) cumulatively, shared across all bundles
+in one import. Remaining allowances constrain the streaming loader before
+retaining another run; per-run limits still apply and digests remain streamed.
+Every listed bundle file (patches, model-call logs, metadata and `run.jsonl`) is
+size-checked before hashing or secret scanning: at most 64 MiB per file and
+256 MiB of listed files per import, plus a 16 MiB manifest cap.
+Split larger bundles/import invocations. Admission failure leaves SQLite untouched.
 The imported registry label comes from the bundle manifest's original run
 label; the idempotency key remains the bundled compact run directory path. The
 command does not mutate bundle contents, require source result directories,

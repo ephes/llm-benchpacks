@@ -16,7 +16,9 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
 
-from .compare import CompareError, ResultRun, load_result_run
+from .compare import (
+    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun, load_result_run,
+)
 from .external_agent_model_calls import (
     MODEL_CALL_LOG_PATTERN,
     ModelCallLogError,
@@ -28,6 +30,16 @@ from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
 REGISTRY_SCHEMA_VERSION = 4
+# Increment when the normalized identity format changes, independently of DDL.
+IDENTITY_VERSION = 1
+MAX_BUNDLE_RUNS = 100
+MAX_BUNDLE_RECORDS = MAX_RESULT_RECORDS
+MAX_BUNDLE_BYTES = MAX_RESULT_RUN_BYTES
+# Every listed bundle file (run.jsonl, hardware/run metadata, patches, model-call
+# logs) is stat-checked against these caps before it is hashed or read.
+MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_FILE_BYTES = MAX_RESULT_RUN_BYTES
+MAX_BUNDLE_FILES_BYTES = 4 * MAX_RESULT_RUN_BYTES
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
@@ -574,7 +586,8 @@ def import_result_bundles(
 
     # Validate every bundle before opening the database so multi-bundle imports
     # fail without partial writes when a later bundle is malformed.
-    bundles = [_load_and_validate_result_bundle(path) for path in bundle_dirs]
+    budget = _BundleBudget()
+    bundles = [_load_and_validate_result_bundle(path, budget=budget) for path in bundle_dirs]
     loaded_runs = [run for bundle in bundles for run in bundle.runs]
     if str(db_path) == "":
         raise RegistryError("registry database path must not be empty")
@@ -610,6 +623,8 @@ def import_agent_wrap_results(
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN")
+            _reject_future_registry_schema(conn)
+            _check_agent_wrap_ownership(conn, dataset)
             _ensure_schema(conn)
             rows = dataset["rows"]
             _delete_stale_agent_wrap_rows(conn, dataset, rows)
@@ -782,15 +797,31 @@ def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
     )
 
 
-def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle:
+@dataclass
+class _BundleBudget:
+    runs: int = 0
+    records: int = 0
+    bytes: int = 0
+    file_bytes: int = 0
+
+
+def _load_and_validate_result_bundle(
+    bundle_dir: Path | str, *, budget: _BundleBudget | None = None,
+) -> _ValidatedBundle:
     """Validate a compact public result bundle and load its compact runs."""
 
+    if budget is None:
+        budget = _BundleBudget()
     bundle_root = Path(bundle_dir)
     manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
     try:
-        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest_text = _read_bounded_text(
+            manifest_path, MAX_BUNDLE_MANIFEST_BYTES, BUNDLE_MANIFEST_FILENAME,
+        )
         _assert_no_public_secret(manifest_text, BUNDLE_MANIFEST_FILENAME)
         manifest = json.loads(manifest_text)
+    except UnicodeDecodeError as exc:
+        raise RegistryError(f"could not decode {manifest_path}") from exc
     except json.JSONDecodeError as exc:
         raise RegistryError(f"could not parse {manifest_path}: {exc.msg}") from exc
     except OSError as exc:
@@ -830,7 +861,30 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         if run_dir in run_directories:
             raise RegistryError(f"bundle run {run_index} duplicates a run directory")
         run_directories.add(run_dir)
-        run = _load_and_validate_result_dir(run_dir)
+        if (budget.runs >= MAX_BUNDLE_RUNS or budget.records >= MAX_BUNDLE_RECORDS
+                or budget.bytes >= MAX_BUNDLE_BYTES):
+            raise RegistryError("bundle aggregate ingestion limit exceeded")
+        # The run loader parses optional metadata files; size-check them first.
+        for metadata_name in ("hardware.json", "run-metadata.json"):
+            _bundle_file_size(run_dir / metadata_name, f"{bundle_path}/{metadata_name}")
+        remaining_bytes = MAX_BUNDLE_BYTES - budget.bytes
+        remaining_records = MAX_BUNDLE_RECORDS - budget.records
+        try:
+            run = _load_and_validate_result_dir(
+                run_dir, byte_limit=remaining_bytes, record_limit=remaining_records,
+            )
+        except RegistryError as exc:
+            # A run that fits the per-run limits but not the remaining shared
+            # budget is an aggregate failure, not a defect of that run.
+            if (
+                (remaining_bytes < MAX_RESULT_RUN_BYTES and "run byte limit" in str(exc))
+                or (remaining_records < MAX_RESULT_RECORDS and "record count limit" in str(exc))
+            ):
+                raise RegistryError("bundle aggregate ingestion limit exceeded") from exc
+            raise
+        budget.runs += 1
+        budget.records += len(run.records)
+        budget.bytes += run.source_bytes
         row_count = run_manifest.get("row_count")
         if type(row_count) is not int or row_count != len(run.records):
             raise RegistryError(f"bundle run {run_index} row_count mismatch")
@@ -869,6 +923,7 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
                 singleton_roles.add(role)
             resolved_files.add(file_path)
             expected_files.add(rel_path)
+            _charge_bundle_file(file_path, rel_path, budget)
             _assert_file_digest(file_path, file_entry, rel_path)
             _assert_file_has_no_public_secret(file_path, rel_path)
             file_count += 1
@@ -1095,6 +1150,9 @@ def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, An
         raise RegistryError(f"agent-wrap data must be a JSON object: {path}")
     if dataset.get("schema_version") != 1:
         raise RegistryError(f"agent-wrap data schema_version must be 1: {path}")
+    source = dataset.get("generated_from")
+    if not isinstance(source, str) or not source.strip() or source != source.strip():
+        raise RegistryError("agent-wrap generated_from must be a nonblank source identity without surrounding whitespace")
     target = dataset.get("target")
     if not isinstance(target, dict):
         raise RegistryError(f"agent-wrap data requires target object: {path}")
@@ -2757,9 +2815,9 @@ def _site_float(value: object) -> str:
     return f"{float(value):.2f}"
 
 
-def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
+def _load_and_validate_result_dir(path: Path | str, **limits: int) -> ResultRun:
     try:
-        run = load_result_run(path)
+        run = load_result_run(path, **limits)
     except CompareError as exc:
         raise RegistryError(str(exc)) from exc
     for row_index, record in enumerate(run.records, start=1):
@@ -3103,9 +3161,34 @@ def _is_secret_key(key: str) -> bool:
     return bool(_SECRET_KEY_RE.search(normalized) or _TOKEN_KEY_RE.search(normalized))
 
 
+def _bundle_file_size(path: Path, source: str) -> int:
+    try:
+        size = path.stat().st_size if path.is_file() else 0
+    except OSError as exc:
+        raise RegistryError(f"could not read bundle file {source}: {exc.strerror}") from exc
+    if size > MAX_BUNDLE_FILE_BYTES:
+        raise RegistryError(f"bundle file byte limit exceeded: {source}")
+    return size
+
+
+def _charge_bundle_file(path: Path, source: str, budget: _BundleBudget) -> None:
+    size = _bundle_file_size(path, source)
+    if budget.file_bytes + size > MAX_BUNDLE_FILES_BYTES:
+        raise RegistryError("bundle aggregate ingestion limit exceeded")
+    budget.file_bytes += size
+
+
+def _read_bounded_text(path: Path, limit: int, source: str) -> str:
+    with path.open("rb") as fh:
+        data = fh.read(limit + 1)
+    if len(data) > limit:
+        raise RegistryError(f"bundle file byte limit exceeded: {source}")
+    return data.decode("utf-8")
+
+
 def _assert_file_has_no_public_secret(path: Path, source: str) -> None:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read_bounded_text(path, MAX_BUNDLE_FILE_BYTES, source)
     except UnicodeDecodeError as exc:
         raise RegistryError(f"could not decode bundle file {source}") from exc
     except OSError as exc:
@@ -3241,7 +3324,22 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             ("model_quantization", "TEXT"),
         ),
     )
-    _backfill_normalized_identities(conn)
+    identity_version = conn.execute(
+        "SELECT value FROM registry_meta WHERE key = 'identity_version'"
+    ).fetchone()
+    stored_identity = (
+        int(identity_version[0])
+        if identity_version is not None and str(identity_version[0]).isdigit()
+        else None
+    )
+    # Recompute only when the stored format is missing or older; newer
+    # revisions were already rejected by _reject_future_registry_schema.
+    if stored_identity is None or stored_identity < IDENTITY_VERSION:
+        _backfill_normalized_identities(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO registry_meta(key, value) VALUES ('identity_version', ?)",
+            (str(IDENTITY_VERSION),),
+        )
     _ensure_case_stats_for_existing_runs(conn)
     conn.execute(
         "INSERT OR REPLACE INTO registry_meta(key, value) VALUES (?, ?)",
@@ -3265,6 +3363,16 @@ def _reject_future_registry_schema(conn: sqlite3.Connection) -> None:
                 versions.append(int(row[0]))
             except (TypeError, ValueError) as exc:
                 raise RegistryError("registry schema version metadata is invalid") from exc
+        identity = conn.execute(
+            "SELECT value FROM registry_meta WHERE key = 'identity_version'"
+        ).fetchone()
+        if identity is not None and str(identity[0]).isdigit() and int(identity[0]) > IDENTITY_VERSION:
+            # An older client would add rows with stale identities that a newer
+            # client never recomputes, so it must not write at all.
+            raise RegistryError(
+                f"registry identity revision {identity[0]} is newer than supported "
+                f"revision {IDENTITY_VERSION}"
+            )
     future = max(versions)
     if future > REGISTRY_SCHEMA_VERSION:
         raise RegistryError(
@@ -3619,7 +3727,7 @@ def _import_agent_wrap_row(
         """,
         (
             row["label"],
-            str(dataset.get("generated_from") or ""),
+            dataset["generated_from"],
             imported_at,
             row["date"],
             row["status"],
@@ -3656,12 +3764,26 @@ def _import_agent_wrap_row(
     )
 
 
+def _check_agent_wrap_ownership(conn: sqlite3.Connection, dataset: dict[str, Any]) -> None:
+    # Run before schema setup, in the same transaction as replacement.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_wrap_runs'"
+    ).fetchone() is None:
+        return
+    for row in dataset["rows"]:
+        owner = conn.execute(
+            "SELECT dataset_source FROM agent_wrap_runs WHERE label = ?", (row["label"],)
+        ).fetchone()
+        if owner is not None and owner[0] != dataset["generated_from"]:
+            raise RegistryError(f"agent-wrap label owned by another dataset: {row['label']}")
+
+
 def _delete_stale_agent_wrap_rows(
     conn: sqlite3.Connection,
     dataset: dict[str, Any],
     rows: list[dict[str, Any]],
 ) -> None:
-    source = str(dataset.get("generated_from") or "")
+    source = dataset["generated_from"]
     labels = [row["label"] for row in rows]
     if not labels:
         return
