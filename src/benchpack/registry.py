@@ -16,7 +16,9 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
 
-from .compare import CompareError, ResultRun, load_result_run
+from .compare import (
+    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun, load_result_run,
+)
 from .external_agent_model_calls import (
     MODEL_CALL_LOG_PATTERN,
     ModelCallLogError,
@@ -28,6 +30,11 @@ from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
 REGISTRY_SCHEMA_VERSION = 4
+# Increment when the normalized identity format changes, independently of DDL.
+IDENTITY_VERSION = 1
+MAX_BUNDLE_RUNS = 100
+MAX_BUNDLE_RECORDS = MAX_RESULT_RECORDS
+MAX_BUNDLE_BYTES = MAX_RESULT_RUN_BYTES
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
@@ -574,7 +581,8 @@ def import_result_bundles(
 
     # Validate every bundle before opening the database so multi-bundle imports
     # fail without partial writes when a later bundle is malformed.
-    bundles = [_load_and_validate_result_bundle(path) for path in bundle_dirs]
+    budget = _BundleBudget()
+    bundles = [_load_and_validate_result_bundle(path, budget=budget) for path in bundle_dirs]
     loaded_runs = [run for bundle in bundles for run in bundle.runs]
     if str(db_path) == "":
         raise RegistryError("registry database path must not be empty")
@@ -610,6 +618,7 @@ def import_agent_wrap_results(
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN")
+            _check_agent_wrap_ownership(conn, dataset)
             _ensure_schema(conn)
             rows = dataset["rows"]
             _delete_stale_agent_wrap_rows(conn, dataset, rows)
@@ -782,9 +791,20 @@ def validate_result_bundle(bundle_dir: Path | str) -> RegistryBundleSummary:
     )
 
 
-def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle:
+@dataclass
+class _BundleBudget:
+    runs: int = 0
+    records: int = 0
+    bytes: int = 0
+
+
+def _load_and_validate_result_bundle(
+    bundle_dir: Path | str, *, budget: _BundleBudget | None = None,
+) -> _ValidatedBundle:
     """Validate a compact public result bundle and load its compact runs."""
 
+    if budget is None:
+        budget = _BundleBudget()
     bundle_root = Path(bundle_dir)
     manifest_path = bundle_root / BUNDLE_MANIFEST_FILENAME
     try:
@@ -830,7 +850,16 @@ def _load_and_validate_result_bundle(bundle_dir: Path | str) -> _ValidatedBundle
         if run_dir in run_directories:
             raise RegistryError(f"bundle run {run_index} duplicates a run directory")
         run_directories.add(run_dir)
-        run = _load_and_validate_result_dir(run_dir)
+        if (budget.runs >= MAX_BUNDLE_RUNS or budget.records >= MAX_BUNDLE_RECORDS
+                or budget.bytes >= MAX_BUNDLE_BYTES):
+            raise RegistryError("bundle aggregate ingestion limit exceeded")
+        run = _load_and_validate_result_dir(
+            run_dir, byte_limit=MAX_BUNDLE_BYTES - budget.bytes,
+            record_limit=MAX_BUNDLE_RECORDS - budget.records,
+        )
+        budget.runs += 1
+        budget.records += len(run.records)
+        budget.bytes += run.source_bytes
         row_count = run_manifest.get("row_count")
         if type(row_count) is not int or row_count != len(run.records):
             raise RegistryError(f"bundle run {run_index} row_count mismatch")
@@ -1095,6 +1124,9 @@ def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, An
         raise RegistryError(f"agent-wrap data must be a JSON object: {path}")
     if dataset.get("schema_version") != 1:
         raise RegistryError(f"agent-wrap data schema_version must be 1: {path}")
+    source = dataset.get("generated_from")
+    if not isinstance(source, str) or not source.strip() or source != source.strip():
+        raise RegistryError("agent-wrap generated_from must be a nonblank source identity without surrounding whitespace")
     target = dataset.get("target")
     if not isinstance(target, dict):
         raise RegistryError(f"agent-wrap data requires target object: {path}")
@@ -2757,9 +2789,9 @@ def _site_float(value: object) -> str:
     return f"{float(value):.2f}"
 
 
-def _load_and_validate_result_dir(path: Path | str) -> ResultRun:
+def _load_and_validate_result_dir(path: Path | str, **limits: int) -> ResultRun:
     try:
-        run = load_result_run(path)
+        run = load_result_run(path, **limits)
     except CompareError as exc:
         raise RegistryError(str(exc)) from exc
     for row_index, record in enumerate(run.records, start=1):
@@ -3241,7 +3273,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             ("model_quantization", "TEXT"),
         ),
     )
-    _backfill_normalized_identities(conn)
+    identity_version = conn.execute(
+        "SELECT value FROM registry_meta WHERE key = 'identity_version'"
+    ).fetchone()
+    if identity_version != (str(IDENTITY_VERSION),):
+        _backfill_normalized_identities(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO registry_meta(key, value) VALUES ('identity_version', ?)",
+            (str(IDENTITY_VERSION),),
+        )
     _ensure_case_stats_for_existing_runs(conn)
     conn.execute(
         "INSERT OR REPLACE INTO registry_meta(key, value) VALUES (?, ?)",
@@ -3619,7 +3659,7 @@ def _import_agent_wrap_row(
         """,
         (
             row["label"],
-            str(dataset.get("generated_from") or ""),
+            dataset["generated_from"],
             imported_at,
             row["date"],
             row["status"],
@@ -3656,12 +3696,26 @@ def _import_agent_wrap_row(
     )
 
 
+def _check_agent_wrap_ownership(conn: sqlite3.Connection, dataset: dict[str, Any]) -> None:
+    # Run before schema setup, in the same transaction as replacement.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_wrap_runs'"
+    ).fetchone() is None:
+        return
+    for row in dataset["rows"]:
+        owner = conn.execute(
+            "SELECT dataset_source FROM agent_wrap_runs WHERE label = ?", (row["label"],)
+        ).fetchone()
+        if owner is not None and owner[0] != dataset["generated_from"]:
+            raise RegistryError(f"agent-wrap label owned by another dataset: {row['label']}")
+
+
 def _delete_stale_agent_wrap_rows(
     conn: sqlite3.Connection,
     dataset: dict[str, Any],
     rows: list[dict[str, Any]],
 ) -> None:
-    source = str(dataset.get("generated_from") or "")
+    source = dataset["generated_from"]
     labels = [row["label"] for row in rows]
     if not labels:
         return

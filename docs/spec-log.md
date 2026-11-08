@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-08 (registry growth and dataset ownership)
+
+### Changed
+- Persist the identity normalization revision so current imports avoid historical
+  rewrites while changed revisions still backfill atomically.
+- Require stable agent-wrap source identities; reject cross-source label takeover
+  before schema setup and keep intentional same-source replacement.
+- Bound bundle ingestion across runs, records and streamed JSONL bytes, including
+  multi-bundle imports. Add synthetic failing-before boundary regressions.
+
 ## 2026-11-07 (bounded patch capture and prepared provenance)
 
 ### Changed

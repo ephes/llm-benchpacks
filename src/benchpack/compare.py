@@ -31,6 +31,7 @@ class ResultRun:
     hardware: dict[str, Any] | None = None
     run_metadata: dict[str, Any] | None = None
     artifact_root: Path | None = None
+    source_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,11 @@ class CaseSummary:
     cache_rows: int
 
 
-def load_result_run(result_dir: Path | str) -> ResultRun:
+def load_result_run(
+    result_dir: Path | str, *,
+    byte_limit: int = MAX_RESULT_RUN_BYTES,
+    record_limit: int = MAX_RESULT_RECORDS,
+) -> ResultRun:
     """Load ``run.jsonl`` from a result directory."""
 
     path = Path(result_dir)
@@ -64,6 +69,8 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
     if not jsonl_path.is_file():
         raise CompareError(f"missing run.jsonl in result directory: {path}")
 
+    byte_limit = min(byte_limit, MAX_RESULT_RUN_BYTES)
+    record_limit = min(record_limit, MAX_RESULT_RECORDS)
     records: list[dict[str, Any]] = []
     total = 0
     line_number = 0
@@ -72,21 +79,21 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
             while True:
                 line = fh.readline(min(
                     MAX_RESULT_LINE_BYTES + 1,
-                    MAX_RESULT_RUN_BYTES - total + 1,
+                    byte_limit - total + 1,
                 ))
                 if not line:
                     break
                 line_number += 1
                 source = f"{jsonl_path}:{line_number}"
                 total += len(line)
-                if total > MAX_RESULT_RUN_BYTES:
+                if total > byte_limit:
                     raise CompareError(f"run byte limit exceeded in {source}")
                 if len(line) > MAX_RESULT_LINE_BYTES:
                     raise CompareError(f"record byte limit exceeded in {source}")
                 stripped = line.decode("utf-8").strip()
                 if not stripped:
                     continue
-                if len(records) >= MAX_RESULT_RECORDS:
+                if len(records) >= record_limit:
                     raise CompareError(f"record count limit exceeded in {source}")
                 try:
                     record = json.loads(stripped)
@@ -103,7 +110,7 @@ def load_result_run(result_dir: Path | str) -> ResultRun:
     if not records:
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
-    return ResultRun(path=path, label=path.name, records=records, artifact_root=path)
+    return ResultRun(path=path, label=path.name, records=records, artifact_root=path, source_bytes=total)
 
 
 def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
