@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import AdapterResult
+from .compare import markdown_cell
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .packs import Case, Pack
 from .repo_task_outcomes import (
@@ -332,9 +333,9 @@ class RunReporter:
             )
             lines.append(
                 "| {case} | {adapter} | {model} | {ok} | {wall:.3f} | {tps} | {sc} |".format(
-                    case=case_label,
-                    adapter=record["adapter"],
-                    model=record["model"],
+                    case=_summary_table_cell(str(case_label)),
+                    adapter=_summary_table_cell(str(record["adapter"])),
+                    model=_summary_table_cell(str(record["model"])),
                     ok="yes" if record["ok"] else "no",
                     wall=record["timing"]["wall_s"],
                     tps=(
@@ -427,4 +428,4 @@ def _compact_summary_list(values: tuple[str, ...]) -> str:
 
 
 def _summary_table_cell(value: str) -> str:
-    return value.replace("|", "\\|").replace("\n", " ")
+    return markdown_cell(value)

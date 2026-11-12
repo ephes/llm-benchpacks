@@ -985,8 +985,16 @@ contains no JSON records, or a JSONL row cannot be parsed as a JSON object.
 The initial summary is intentionally small and deterministic:
 
 - Inputs are identified by directory basename and path.
-- Records are grouped by case and input run.
+- Records are grouped by case identity — pack id plus case id — and input run,
+  in one pass per input. Equal case ids from different packs are distinct cases;
+  when the inputs mix pack ids, case cells render as `<pack id>/<case id>`.
 - Case order follows first appearance across the compared rows.
+- Run labels, case ids and other record-derived text are untrusted. Table cells
+  collapse control and line-separator characters to spaces, render `&`, `<` and
+  `>` as HTML entities and backslash-escape `\`, `|`, backticks and square
+  brackets; input bullets and per-case warnings use code spans with a long
+  enough fence, and pack-version warnings use the table-cell escaping. The same
+  rules apply to `benchpack report` and to the tables in run `summary.md` files.
 - `rows` counts measured records and `ok` counts rows with `ok = true`.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
   summarized with `statistics.median`.

@@ -479,6 +479,27 @@ def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
     assert "ollama-generate" in text
 
 
+def test_write_summary_escapes_untrusted_model_cell(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
+    reporter = RunReporter(out, pack)
+    hostile = "m|x <img src=y> [l](http://e)\n| injected |"
+    reporter.record(
+        pack.cases[0],
+        replace(make_adapter_result(out), model=hostile),
+        sample={"memory_mb": None, "gpu_memory_mb": None},
+    )
+    reporter.write_summary({"hostname": "h", "platform": "darwin"})
+    text = (out / "summary.md").read_text()
+    row = next(line for line in text.splitlines() if "ollama-generate" in line and "m\\|x" in line)
+    assert "<img" not in text
+    assert "&lt;img src=y&gt;" in row
+    assert "\\[l\\](http://e)" in row
+    assert "| injected |" not in text
+
+
 def test_write_summary_includes_runtime_metadata_when_supplied(
     tmp_path: Path,
 ) -> None:

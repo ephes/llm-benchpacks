@@ -16,6 +16,18 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-12 (compare case identity and untrusted labels)
+
+### Changed
+- Group compare/report summaries in one pass per run instead of rescanning
+  every record per case.
+- Scope case identity to (pack id, case id) so equal case ids from different
+  packs no longer merge; mixed-pack output labels cases as `<pack>/<case>`.
+  Prefill parity statuses are keyed by that identity.
+- Escape run labels, case ids and record-derived cells in compare, report and
+  run summaries so untrusted text cannot split tables, open code spans or links,
+  or emit raw HTML. Add synthetic grouping, identity and hostile-label tests.
+
 ## 2026-11-08 (registry growth and dataset ownership)
 
 ### Changed
