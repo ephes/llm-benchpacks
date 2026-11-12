@@ -1704,3 +1704,16 @@ retained result records. Limits are checked incrementally before parsing or
 appending excess input. I/O, encoding and JSON decoder errors are `CompareError`;
 registry/bundle preflight preserves validate-before-database behavior. Larger
 historical runs must be split into separate result directories.
+
+### Registry ingestion ownership and work limits
+
+Identity backfills run atomically only when the persisted identity revision is
+missing or older (an older client refuses registries with a newer revision); ordinary current imports preserve historical rows.
+Agent-wrap datasets require a nonblank `generated_from` string without surrounding
+whitespace. Reimporting that identity replaces its label set. Another identity
+cannot overwrite its labels; reconcile legacy unowned rows explicitly.
+Bundle validation/import admits 100 runs, 100,000 records and 64 MiB total
+`run.jsonl` bytes, shared across bundles in one invocation and checked during
+streaming reads before SQLite mutation. Per-run limits remain in force. Each
+listed bundle file is size-checked before hashing or scanning (64 MiB per file,
+256 MiB of listed files per invocation, 16 MiB manifest).
