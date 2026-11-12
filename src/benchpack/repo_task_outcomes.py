@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import stat
 import shlex
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from .patches import MAX_PATCH_OUTPUT_BYTES
+from .safe_files import read_contained_regular
 
 
 MISSING = "—"
@@ -100,8 +102,7 @@ def summarize_repo_task_outcomes(
         repo_status = _repo_status(repo_task.get("status"))
         verify_exit_code = _verify_exit_code(repo_task.get("verify_exit_code"))
         scoring = _scoring_label(record.get("scoring"))
-        patch_bytes = _patch_bytes(record, result_dir)
-        patch_paths = _patch_paths(record, result_dir)
+        patch_bytes, patch_paths = _patch_snapshot(record, result_dir)
         outcomes.append(
             RepoTaskOutcome(
                 case=case,
@@ -192,60 +193,36 @@ def _scoring_label(value: Any) -> str:
     return f"{mode}:{result}"
 
 
-def _patch_bytes(record: dict[str, Any], result_dir: Path | None) -> int | None:
-    patch_path = _safe_patch_path(record, result_dir)
-    if patch_path is None:
-        return None
-    try:
-        patch_stat = patch_path.stat()
-    except OSError:
-        return None
-    if not stat.S_ISREG(patch_stat.st_mode):
-        return None
-    return patch_stat.st_size
-
-
-def _patch_paths(
+def _patch_snapshot(
     record: dict[str, Any],
     result_dir: Path | None,
-) -> tuple[str, ...] | None:
-    patch_path = _safe_patch_path(record, result_dir)
-    if patch_path is None:
-        return None
-    try:
-        patch_stat = patch_path.stat()
-    except OSError:
-        return None
-    if not stat.S_ISREG(patch_stat.st_mode):
-        return None
-    try:
-        lines = patch_path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return None
-    return _extract_patch_paths(lines)
+) -> tuple[int | None, tuple[str, ...] | None]:
+    """Return patch size and touched paths from one bounded file snapshot.
 
+    Both values come from the same opened descriptor, so a patch replaced or
+    grown between checks cannot contribute a size from one generation and paths
+    from another. Unsafe, unavailable, non-regular, oversized or non-UTF-8
+    patches yield unknown paths (and an unknown size when nothing was opened).
+    """
 
-def _safe_patch_path(
-    record: dict[str, Any],
-    result_dir: Path | None,
-) -> Path | None:
     if result_dir is None:
-        return None
+        return None, None
     patch = record.get("patch")
     if not isinstance(patch, dict):
-        return None
+        return None, None
     raw_path = patch.get("path")
     if not isinstance(raw_path, str) or not raw_path:
-        return None
-    if Path(raw_path).is_absolute():
-        return None
-    result_root = result_dir.resolve()
-    patch_path = (result_root / raw_path).resolve(strict=False)
+        return None, None
+    snapshot = read_contained_regular(result_dir, raw_path, MAX_PATCH_OUTPUT_BYTES)
+    if snapshot is None:
+        return None, None
+    if snapshot.data is None:
+        return snapshot.size, None
     try:
-        patch_path.relative_to(result_root)
-    except ValueError:
-        return None
-    return patch_path
+        lines = snapshot.data.decode("utf-8").splitlines()
+    except UnicodeDecodeError:
+        return snapshot.size, None
+    return snapshot.size, _extract_patch_paths(lines)
 
 
 def _extract_patch_paths(lines: list[str]) -> tuple[str, ...]:

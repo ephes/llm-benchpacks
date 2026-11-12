@@ -16,6 +16,22 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-12 (export evidence and publication boundaries)
+
+### Changed
+- Derive repo-task patch byte counts and touched paths from one bounded,
+  no-follow descriptor snapshot; FIFOs, symlinks, oversized and non-UTF-8
+  patches classify as unknown mutation instead of mixing generations or
+  reading without a cap.
+- Read report-set manifests under a 1 MiB cap from a regular file and turn
+  invalid UTF-8 and excessive TOML nesting into report errors.
+- Serialize `registry site` and `registry bundle create` publishers of the same
+  output with a nonblocking `flock` publication lock; a concurrent publisher
+  fails without touching the output, abandoned backups are left for recovery.
+- Copy bundle source artifacts through a no-follow component walk and a
+  verified regular descriptor so a source or ancestor swapped to a symlink
+  cannot publish outside-root bytes.
+
 ## 2026-11-12 (compare case identity and untrusted labels)
 
 ### Changed

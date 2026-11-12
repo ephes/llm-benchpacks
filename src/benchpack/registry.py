@@ -6,10 +6,13 @@ import hashlib
 import html as html_lib
 import json
 import math
+import os
 import re
 import shutil
 import sqlite3
 import tempfile
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,9 +27,10 @@ from .external_agent_model_calls import (
     ModelCallLogError,
     summarize_model_call_logs,
 )
-from .output_paths import paths_overlap
+from .output_paths import PublicationBusyError, paths_overlap, publication_lock
 from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
+from .safe_files import contained_parts, copy_contained_regular, open_contained_regular
 
 
 REGISTRY_SCHEMA_VERSION = 4
@@ -494,6 +498,29 @@ def export_registry_static_site(
         STATIC_SITE_INDEX_FILENAME: index_html,
         STATIC_SITE_SNAPSHOT_FILENAME: snapshot_json,
     }
+    with _publication_guard(site_root, "registry site"):
+        _publish_static_site(site_root, output_files, force=force)
+    return RegistryStaticSiteSummary(
+        out_dir=site_root,
+        runs=len(runs),
+        files=len(output_files),
+    )
+
+
+def _publish_static_site(
+    site_root: Path,
+    output_files: dict[str, str],
+    *,
+    force: bool,
+) -> None:
+    # Re-check under the publication lock: another publisher may have created
+    # or replaced the output since the unlocked fail-fast check.
+    if site_root.is_symlink():
+        raise RegistryError("registry site output must not be a symlink; choose another --out")
+    if site_root.exists() and not force:
+        raise RegistryError(
+            f"registry site output already exists: {site_root}; pass --force to replace it"
+        )
     staging_parent = None
     backup = None
     try:
@@ -537,11 +564,22 @@ def export_registry_static_site(
     finally:
         if staging_parent is not None:
             shutil.rmtree(staging_parent, ignore_errors=True)
-    return RegistryStaticSiteSummary(
-        out_dir=site_root,
-        runs=len(runs),
-        files=len(output_files),
-    )
+
+
+@contextmanager
+def _publication_guard(output: Path, kind: str) -> Iterator[None]:
+    """Serialize publishers of one output; see ``output_paths.publication_lock``."""
+
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(publication_lock(output))
+        except PublicationBusyError as exc:
+            raise RegistryError(str(exc)) from exc
+        except OSError as exc:
+            raise RegistryError(
+                f"could not lock {kind} output {output} for publication: {exc}"
+            ) from exc
+        yield
 
 
 def import_result_dirs(
@@ -700,9 +738,20 @@ def create_result_bundle(
         )
     runs = [_load_and_validate_result_dir(path) for path in result_dirs]
 
-    bundle_root = Path(bundle_dir)
-    if str(bundle_root) == "":
+    if str(bundle_dir) == "":
         raise RegistryError("bundle output path must not be empty")
+    bundle_root = Path(bundle_dir)
+    _assert_bundle_output_disjoint_from_sources(bundle_root, runs)
+    with _publication_guard(bundle_root, "bundle"):
+        return _create_result_bundle_locked(runs, bundle_root, provenance, force)
+
+
+def _create_result_bundle_locked(
+    runs: list[ResultRun],
+    bundle_root: Path,
+    provenance: str,
+    force: bool,
+) -> RegistryBundleSummary:
     _assert_bundle_output_disjoint_from_sources(bundle_root, runs)
     if (bundle_root.exists() or bundle_root.is_symlink()) and not force:
         raise RegistryError(
@@ -2839,10 +2888,8 @@ def _copy_run_into_bundle(
 ) -> tuple[dict[str, Any], int, int]:
     included: list[dict[str, Any]] = []
     omitted: list[dict[str, Any]] = []
-    source_run_jsonl = _safe_existing_file(run.path, "run.jsonl")
-    if source_run_jsonl is None:
+    if _copy_contained_source(run.path, "run.jsonl", run_bundle_dir / "run.jsonl") is None:
         raise RegistryError("source run.jsonl is missing or unsafe")
-    shutil.copyfile(source_run_jsonl, run_bundle_dir / "run.jsonl")
     _assert_file_has_no_public_secret(run_bundle_dir / "run.jsonl", "run.jsonl")
     included.append(_file_manifest_entry(
         bundle_root, run_bundle_path / "run.jsonl", "run-jsonl"
@@ -2855,15 +2902,19 @@ def _copy_run_into_bundle(
     for relative_path, role in _included_artifacts(artifact_run):
         if relative_path == "run.jsonl":
             continue
-        source = _safe_existing_file(run.path, relative_path)
-        if source is None:
+        parts = contained_parts(relative_path)
+        if parts is None:
             omitted.append(
                 _omitted_artifact(run.path, relative_path, "missing-or-unsafe")
             )
             continue
-        destination = run_bundle_dir / relative_path
+        destination = run_bundle_dir.joinpath(*parts)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
+        if _copy_contained_source(run.path, relative_path, destination) is None:
+            omitted.append(
+                _omitted_artifact(run.path, relative_path, "missing-or-unsafe")
+            )
+            continue
         _assert_file_has_no_public_secret(destination, relative_path)
         included.append(
             _file_manifest_entry(
@@ -2998,11 +3049,31 @@ def _dedupe_artifacts(artifacts: list[tuple[str, str]]) -> list[tuple[str, str]]
 
 def _omitted_artifact(root: Path, relative_path: str, reason: str) -> dict[str, Any]:
     entry: dict[str, Any] = {"path": relative_path, "reason": reason}
-    source = _safe_existing_file(root, relative_path)
-    if source is not None:
-        entry["sha256"] = _sha256(source)
-        entry["bytes"] = source.stat().st_size
+    fd = open_contained_regular(root, relative_path)
+    if fd is not None:
+        # Digest and size come from the one verified descriptor.
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            while chunk := os.read(fd, 1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+        finally:
+            os.close(fd)
+        entry["sha256"] = digest.hexdigest()
+        entry["bytes"] = size
     return entry
+
+
+def _copy_contained_source(root: Path, relative_path: str, destination: Path) -> int | None:
+    """Copy one source artifact from a no-follow, verified regular descriptor."""
+
+    try:
+        return copy_contained_regular(
+            root, relative_path, destination, MAX_BUNDLE_FILE_BYTES
+        )
+    except ValueError as exc:
+        raise RegistryError(f"bundle file byte limit exceeded: {relative_path}") from exc
 
 
 def _file_manifest_entry(
@@ -3023,20 +3094,6 @@ def _write_bundle_manifest(bundle_root: Path, manifest: dict[str, Any]) -> None:
     manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     _assert_no_public_secret(manifest_text, BUNDLE_MANIFEST_FILENAME)
     manifest_path.write_text(manifest_text, encoding="utf-8")
-
-
-def _safe_existing_file(root: Path, relative_path: str) -> Path | None:
-    if relative_path == "" or Path(relative_path).is_absolute():
-        return None
-    root_resolved = root.resolve()
-    candidate = (root_resolved / relative_path).resolve(strict=False)
-    try:
-        candidate.relative_to(root_resolved)
-    except ValueError:
-        return None
-    if not candidate.is_file():
-        return None
-    return candidate
 
 
 def _resolve_bundle_relative(bundle_root: Path, relative_path: str) -> Path:

@@ -2131,7 +2131,9 @@ def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, mo
         export_registry_static_site(db, site, force=True)
     assert injected
     assert {p.name: p.read_bytes() for p in site.iterdir()} == before
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["registry.sqlite", "run-a", "site"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        ".site.benchpack-publish.lock", "registry.sqlite", "run-a", "site"
+    ]
 
 
 @pytest.mark.parametrize("protected", ["database", "results", "nested", "symlink"])
@@ -2336,8 +2338,8 @@ def test_bundle_force_preserves_previous_on_failure(tmp_path, monkeypatch, failu
         def fail(*args, **kwargs):
             injected.append(True)
             raise OSError("injected failure")
-        monkeypatch.setattr(registry.shutil if failure == "copy" else registry,
-                            "copyfile" if failure == "copy" else "_write_bundle_manifest", fail)
+        monkeypatch.setattr(registry,
+                            "_copy_contained_source" if failure == "copy" else "_write_bundle_manifest", fail)
     else:
         original = Path.rename
         def fail_publish(path, target):
@@ -2462,14 +2464,28 @@ def test_bundle_manifest_rejects_symlink_directory_alias(tmp_path, symlink_kind)
     assert not db.exists()
 
 
+def _patch_copy_seam(monkeypatch, wrapper):
+    """Route the bundle copy seam through ``wrapper(src, dst, copy)``."""
+
+    original = registry._copy_contained_source
+
+    def seam(root, relative_path, destination):
+        return wrapper(
+            Path(root) / relative_path,
+            destination,
+            lambda: original(root, relative_path, destination),
+        )
+
+    monkeypatch.setattr(registry, "_copy_contained_source", seam)
+
+
 @pytest.mark.parametrize("mutation_phase", ["before-copy", "after-copy"])
 def test_bundle_manifest_uses_copied_run_snapshot(tmp_path, monkeypatch, mutation_phase):
     source = tmp_path / "run-a"
     _write_result_dir(source)
     bundle = tmp_path / "bundle"
-    original = shutil.copyfile
     copied = []
-    def mutate_during_copy(src, dst):
+    def mutate_during_copy(src, dst, copy):
         if Path(src) == source / "run.jsonl":
             rows = [_record(case) for case in ("one", "two")]
             rows[0]["patch"] = {"path": "patch/new/rep-001.diff"}
@@ -2480,13 +2496,13 @@ def test_bundle_manifest_uses_copied_run_snapshot(tmp_path, monkeypatch, mutatio
             changed = "".join(json.dumps(row) + "\n" for row in rows)
             if mutation_phase == "before-copy":
                 Path(src).write_text(changed)
-            result = original(src, dst)
+            result = copy()
             copied.append(Path(dst).read_bytes())
             if mutation_phase == "after-copy":
                 Path(src).write_text(changed)
             return result
-        return original(src, dst)
-    monkeypatch.setattr(registry.shutil, "copyfile", mutate_during_copy)
+        return copy()
+    _patch_copy_seam(monkeypatch, mutate_during_copy)
     create_result_bundle([source], bundle)
     assert len(copied) == 1
     manifest = json.loads((bundle / BUNDLE_MANIFEST_FILENAME).read_text())["runs"][0]
@@ -2508,19 +2524,18 @@ def test_bundle_scans_copied_bytes_before_publication(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     create_result_bundle([source], bundle)
     before = {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()}
-    original_copy = shutil.copyfile
     original_scan = registry._assert_file_has_no_public_secret
     scanned = []
     injected = []
-    def mutate_before_copy(src, dst):
+    def mutate_before_copy(src, dst, copy):
         if Path(src) == metadata:
             injected.append(True)
             metadata.write_text(json.dumps({"api_key": "fictional-credential-12345"}))
-        return original_copy(src, dst)
+        return copy()
     def scan(path, label):
         scanned.append(Path(path))
         return original_scan(path, label)
-    monkeypatch.setattr(registry.shutil, "copyfile", mutate_before_copy)
+    _patch_copy_seam(monkeypatch, mutate_before_copy)
     monkeypatch.setattr(registry, "_assert_file_has_no_public_secret", scan)
     with pytest.raises(RegistryError, match="possible secret"):
         create_result_bundle([source], bundle, force=True)
@@ -2540,14 +2555,13 @@ def test_bundle_rechecks_copied_model_call_allowlist(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     create_result_bundle([source], bundle)
     before = {p.relative_to(bundle): p.read_bytes() for p in bundle.rglob("*") if p.is_file()}
-    original = shutil.copyfile
     injected = []
-    def mutate(src, dst):
+    def mutate(src, dst, copy):
         if Path(src) == log:
             injected.append(True)
             log.write_text('{"prompt":"fictional private prompt","response":"fictional private response"}\n')
-        return original(src, dst)
-    monkeypatch.setattr(registry.shutil, "copyfile", mutate)
+        return copy()
+    _patch_copy_seam(monkeypatch, mutate)
     with pytest.raises(RegistryError, match="unsafe model-call log"):
         create_result_bundle([source], bundle, force=True)
     assert injected
