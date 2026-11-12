@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,6 +53,18 @@ class CaseSummary:
     prompt_rows: int
     cached_prompt_tokens: float | None
     cache_rows: int
+    # Records group by (pack id, case id): equal case ids from different packs
+    # are distinct cases. ``case_label`` is the rendered identity.
+    pack_id: str | None = None
+    case_label: str | None = None
+
+    @property
+    def case_key(self) -> tuple[str | None, str]:
+        return (self.pack_id, self.case)
+
+    @property
+    def display_case(self) -> str:
+        return self.case_label if self.case_label is not None else self.case
 
 
 def load_result_run(
@@ -113,22 +126,56 @@ def load_result_run(
     return ResultRun(path=path, label=path.name, records=records, artifact_root=path, source_bytes=total)
 
 
+def record_pack_id(record: dict[str, Any]) -> str | None:
+    """Return a record's pack id, or ``None`` when it is absent or malformed."""
+
+    pack = record.get("pack")
+    if isinstance(pack, dict) and isinstance(pack.get("id"), str):
+        return pack["id"]
+    return None
+
+
+def group_case_records(
+    records: list[dict[str, Any]],
+) -> dict[tuple[str | None, str], list[dict[str, Any]]]:
+    """Group records by (pack id, case id) in first-seen order, in one pass."""
+
+    groups: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
+    for record in records:
+        case = record.get("case")
+        if isinstance(case, str):
+            groups.setdefault((record_pack_id(record), case), []).append(record)
+    return groups
+
+
+def case_labels(keys: list[tuple[str | None, str]]) -> dict[tuple[str | None, str], str]:
+    """Render case identities; qualify with the pack id when packs are mixed."""
+
+    if len({pack_id for pack_id, _ in keys}) <= 1:
+        return {key: key[1] for key in keys}
+    return {
+        key: f"{key[0] if key[0] is not None else MISSING}/{key[1]}" for key in keys
+    }
+
+
 def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
     """Summarize each run/case pair using medians over numeric samples."""
 
-    case_order: list[str] = []
-    seen_cases: set[str] = set()
-    for run in runs:
-        for record in run.records:
-            case = record.get("case")
-            if isinstance(case, str) and case not in seen_cases:
-                seen_cases.add(case)
-                case_order.append(case)
+    grouped = [group_case_records(run.records) for run in runs]
+    case_order: list[tuple[str | None, str]] = []
+    seen_cases: set[tuple[str | None, str]] = set()
+    for groups in grouped:
+        for key in groups:
+            if key not in seen_cases:
+                seen_cases.add(key)
+                case_order.append(key)
+    labels = case_labels(case_order)
 
     summaries: list[CaseSummary] = []
-    for case in case_order:
-        for run in runs:
-            rows = [record for record in run.records if record.get("case") == case]
+    for key in case_order:
+        pack_id, case = key
+        for run, groups in zip(runs, grouped, strict=True):
+            rows = groups.get(key, [])
             if not rows:
                 summaries.append(
                     CaseSummary(
@@ -146,6 +193,8 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                         prompt_rows=0,
                         cached_prompt_tokens=None,
                         cache_rows=0,
+                        pack_id=pack_id,
+                        case_label=labels[key],
                     )
                 )
                 continue
@@ -170,9 +219,39 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     prompt_rows=len(prompt_values),
                     cached_prompt_tokens=_median_values(cached_prompt_values),
                     cache_rows=len(cached_prompt_values),
+                    pack_id=pack_id,
+                    case_label=labels[key],
                 )
             )
     return summaries
+
+
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+_MARKDOWN_SPECIAL_RE = re.compile(r"([\\|`\[\]])")
+
+
+def markdown_cell(value: object) -> str:
+    """Render untrusted text as one inert Markdown table cell.
+
+    Control/line-separator characters collapse to spaces, HTML-significant
+    characters become entities, and Markdown table/inline syntax is escaped so a
+    label cannot split cells, start code spans, links or raw HTML.
+    """
+
+    text = _CONTROL_RE.sub(" ", str(value))
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return _MARKDOWN_SPECIAL_RE.sub(r"\\\1", text)
+
+
+def markdown_code(value: object) -> str:
+    """Render untrusted text as a single-line Markdown code span."""
+
+    text = _CONTROL_RE.sub(" ", str(value))
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * (longest + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") or not text.strip() else ""
+    # A pipe would still split a table cell; these spans are used outside tables.
+    return f"{fence}{pad}{text}{pad}{fence}"
 
 
 def disambiguate_runs(runs: list[ResultRun]) -> list[ResultRun]:
@@ -194,7 +273,8 @@ def pack_warning_lines(runs: list[ResultRun]) -> list[str]:
     if len(version_set) <= 1:
         return []
     rendered = ", ".join(
-        f"{pack_id} {version}" for pack_id, version in sorted(version_set)
+        f"{markdown_cell(pack_id)} {markdown_cell(version)}"
+        for pack_id, version in sorted(version_set)
     )
     return [
         "WARNING: compared records use different pack ids or versions: "
@@ -208,8 +288,10 @@ def cache_warnings(summaries: list[CaseSummary]) -> list[str]:
     return _cache_warnings(summaries)
 
 
-def prefill_parity_statuses(summaries: list[CaseSummary]) -> dict[str, str]:
-    """Return case-level prefill parity statuses."""
+def prefill_parity_statuses(
+    summaries: list[CaseSummary],
+) -> dict[tuple[str | None, str], str]:
+    """Return prefill parity statuses keyed by ``CaseSummary.case_key``."""
 
     return _prefill_parity_statuses(summaries)
 
@@ -234,12 +316,15 @@ def render_comparison(runs: list[ResultRun]) -> str:
     lines: list[str] = ["# benchpack compare", "", "Inputs:"]
     for run in runs:
         row_word = "row" if len(run.records) == 1 else "rows"
-        lines.append(f"- `{run.label}`: `{run.path}` ({len(run.records)} {row_word})")
+        lines.append(
+            f"- {markdown_code(run.label)}: {markdown_code(run.path)} "
+            f"({len(run.records)} {row_word})"
+        )
     lines.append("")
 
     if len(pack_version_set) == 1:
         pack_id, version = next(iter(pack_version_set))
-        lines.append(f"Pack: `{pack_id}` version `{version}`")
+        lines.append(f"Pack: {markdown_code(pack_id)} version {markdown_code(version)}")
     else:
         lines.extend(pack_warning_lines(runs))
     lines.append("")
@@ -278,7 +363,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
         "-------------------|------------|----------------|"
     )
     for summary in summaries:
-        prefill_parity = prefill_statuses[summary.case]
+        prefill_parity = prefill_statuses[summary.case_key]
         # Summary keeps the median; display is gated by case-level parity.
         prefill_tps = (
             _format_float(summary.prefill_tps, digits=2)
@@ -289,8 +374,8 @@ def render_comparison(runs: list[ResultRun]) -> str:
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {prefill} | "
             "{decode} | {total} | {output} | {prompt} | {cached} | {cache_rows} | "
             "{prefill_parity} |".format(
-                run=summary.run_label,
-                case=summary.case,
+                run=markdown_cell(summary.run_label),
+                case=markdown_cell(summary.display_case),
                 rows=summary.rows,
                 ok=summary.ok,
                 wall=_format_float(summary.wall_s, digits=3),
@@ -359,11 +444,12 @@ def _pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
 
 def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
     warnings: list[str] = []
-    by_case: dict[str, list[CaseSummary]] = {}
+    by_case: dict[tuple[str | None, str], list[CaseSummary]] = {}
     for summary in summaries:
-        by_case.setdefault(summary.case, []).append(summary)
+        by_case.setdefault(summary.case_key, []).append(summary)
 
-    for case, case_summaries in by_case.items():
+    for case_summaries in by_case.values():
+        case = markdown_code(case_summaries[0].display_case)
         has_all_case_rows = all(summary.rows > 0 for summary in case_summaries)
         prompt_medians = {
             summary.prompt_tokens
@@ -377,7 +463,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         if has_complete_prompt_medians and len(prompt_medians) > 1:
             warnings.append(
                 "WARNING: prompt-token medians differ for case "
-                f"`{case}`; cache parity is not comparable across different prompts."
+                f"{case}; cache parity is not comparable across different prompts."
             )
 
         if any(
@@ -386,7 +472,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         ):
             warnings.append(
                 "WARNING: cache metadata incomplete for case "
-                f"`{case}`; some rows lack numeric `tokens.cached_prompt`."
+                f"{case}; some rows lack numeric `tokens.cached_prompt`."
             )
             continue
 
@@ -401,16 +487,18 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         if len(medians) > 1:
             warnings.append(
                 "WARNING: cached prompt-token medians differ for case "
-                f"`{case}`; do not compare prefill speed."
+                f"{case}; do not compare prefill speed."
             )
     return warnings
 
 
-def _prefill_parity_statuses(summaries: list[CaseSummary]) -> dict[str, str]:
-    statuses: dict[str, str] = {}
-    by_case: dict[str, list[CaseSummary]] = {}
+def _prefill_parity_statuses(
+    summaries: list[CaseSummary],
+) -> dict[tuple[str | None, str], str]:
+    statuses: dict[tuple[str | None, str], str] = {}
+    by_case: dict[tuple[str | None, str], list[CaseSummary]] = {}
     for summary in summaries:
-        by_case.setdefault(summary.case, []).append(summary)
+        by_case.setdefault(summary.case_key, []).append(summary)
 
     for case, case_summaries in by_case.items():
         if any(summary.rows == 0 for summary in case_summaries):

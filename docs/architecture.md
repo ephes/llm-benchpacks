@@ -619,7 +619,8 @@ On Linux:
 `benchpack compare` is intentionally outside the execution flow. It does not
 load adapters, collect hardware, execute packs, write result artifacts, or read
 ignored `raw/` files. It reads each input directory's `run.jsonl`, preserves the
-record dictionaries as loaded, groups by case and input run, and renders a
+record dictionaries as loaded, groups by pack-scoped case identity (pack id,
+case id) and input run in a single pass per run, and renders a
 stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
 tokens. It also reports median numeric `tokens.prompt`, median numeric
 `tokens.cached_prompt`, and cache metadata coverage, expressed as numeric

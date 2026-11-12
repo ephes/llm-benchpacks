@@ -40,9 +40,10 @@ def _write_run(
 
 
 def _prefill_statuses(*run_dirs: Path) -> dict[str, str]:
-    return _prefill_parity_statuses(
+    statuses = _prefill_parity_statuses(
         summarize_runs([load_result_run(run_dir) for run_dir in run_dirs])
     )
+    return {case: status for (_pack_id, case), status in statuses.items()}
 
 
 def _record(

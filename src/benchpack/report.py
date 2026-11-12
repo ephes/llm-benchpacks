@@ -11,10 +11,14 @@ from .compare import (
     MISSING,
     ResultRun,
     cache_warnings,
+    case_labels,
     disambiguate_runs,
     format_float,
     format_tokens,
+    group_case_records,
     load_result_run,
+    markdown_cell,
+    markdown_code,
     pack_warning_lines,
     pack_versions,
     prefill_parity_statuses,
@@ -145,7 +149,10 @@ def _render_inputs(runs: list[ResultRun]) -> list[str]:
     lines = ["Inputs:"]
     for run in runs:
         row_word = "row" if len(run.records) == 1 else "rows"
-        lines.append(f"- `{run.label}`: `{run.path}` ({len(run.records)} {row_word})")
+        lines.append(
+            f"- {markdown_code(run.label)}: {markdown_code(run.path)} "
+            f"({len(run.records)} {row_word})"
+        )
     return lines
 
 
@@ -159,7 +166,7 @@ def _render_run_metadata(runs: list[ResultRun]) -> list[str]:
     for run in runs:
         lines.append(
             "| {run} | {pack} | {adapter} | {model} | {endpoint} | {hardware} |".format(
-                run=run.label,
+                run=markdown_cell(run.label),
                 pack=_markdown_cell(_pack_cell(run)),
                 adapter=_markdown_cell(_unique_record_values(run.records, ("adapter",))),
                 model=_markdown_cell(_unique_record_values(run.records, ("model",))),
@@ -184,12 +191,12 @@ def _render_runtime_metadata(runs: list[ResultRun]) -> list[str]:
         if metadata is None:
             lines.append(
                 "| {run} | run-metadata.json missing | {missing} | {missing} | "
-                "{missing} |".format(run=run.label, missing=MISSING)
+                "{missing} |".format(run=markdown_cell(run.label), missing=MISSING)
             )
             continue
         lines.append(
             "| {run} | {runtime} | {model} | {conditions} | {notes} |".format(
-                run=run.label,
+                run=markdown_cell(run.label),
                 runtime=_markdown_cell(_metadata_section_cell(metadata, "runtime")),
                 model=_markdown_cell(_metadata_section_cell(metadata, "model")),
                 conditions=_markdown_cell(
@@ -208,15 +215,16 @@ def _render_case_outcomes(runs: list[ResultRun]) -> list[str]:
         "| run | case | rows | ok | scoring pass | scoring fail | unscored |",
         "|-----|------|------|----|--------------|--------------|----------|",
     ]
-    for run in runs:
-        for case in _case_order(run.records):
-            rows = [record for record in run.records if record.get("case") == case]
+    grouped = [group_case_records(run.records) for run in runs]
+    labels = case_labels([key for groups in grouped for key in groups])
+    for run, groups in zip(runs, grouped, strict=True):
+        for key, rows in groups.items():
             scoring = _scoring_counts(rows)
             lines.append(
                 "| {run} | {case} | {rows} | {ok} | {passed} | {failed} | "
                 "{unscored} |".format(
-                    run=run.label,
-                    case=case,
+                    run=markdown_cell(run.label),
+                    case=markdown_cell(labels[key]),
                     rows=len(rows),
                     ok=sum(1 for row in rows if row.get("ok") is True),
                     passed=scoring["passed"],
@@ -255,7 +263,7 @@ def _render_external_agent_model_calls(runs: list[ResultRun]) -> list[str]:
                 "{adapters} | {endpoints} | {duration} | {prompt} | "
                 "{output} | {cached} | {response_formats} | "
                 "{token_budget_fields} | {finish_reasons} |".format(
-                    run=run.label,
+                    run=markdown_cell(run.label),
                     case=_markdown_cell(summary.case),
                     repetition=summary.repetition,
                     calls=summary.calls,
@@ -332,7 +340,7 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
             "{failed_source_mutation} | {failed_non_source_mutation} | "
             "{failed_unknown_mutation} | "
             "{other} |".format(
-                run=run.label,
+                run=markdown_cell(run.label),
                 total=counts.total,
                 passed=counts.passed,
                 failed_no_mutation=counts.failed_no_mutation,
@@ -346,7 +354,7 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
             rows.append(
                 "| {run} | {case} | {repetition} | {repo_status} | "
                 "{verify_exit} | {scoring} | {patch_bytes} | {result} |".format(
-                    run=run.label,
+                    run=markdown_cell(run.label),
                     case=_markdown_cell(outcome.case),
                     repetition=format_repetition(outcome.repetition),
                     repo_status=_markdown_cell(outcome.repo_status),
@@ -385,7 +393,7 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
 
 def _render_compare_medians(
     summaries,
-    statuses: dict[str, str],
+    statuses: dict[tuple[str | None, str], str],
     warning_lines: list[str],
 ) -> list[str]:
     lines = [
@@ -411,7 +419,7 @@ def _render_compare_medians(
         ]
     )
     for summary in summaries:
-        prefill_parity = statuses[summary.case]
+        prefill_parity = statuses[summary.case_key]
         prefill_tps = (
             format_float(summary.prefill_tps, digits=2)
             if prefill_parity == "comparable"
@@ -421,8 +429,8 @@ def _render_compare_medians(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {prefill} | "
             "{decode} | {total} | {output} | {prompt} | {cached} | "
             "{cache_rows} | {prefill_parity} |".format(
-                run=summary.run_label,
-                case=summary.case,
+                run=markdown_cell(summary.run_label),
+                case=markdown_cell(summary.display_case),
                 rows=summary.rows,
                 ok=summary.ok,
                 wall=format_float(summary.wall_s, digits=3),
@@ -563,17 +571,6 @@ def _join_values(values: tuple[str, ...]) -> str:
     return ", ".join(values) if values else MISSING
 
 
-def _case_order(records: list[dict[str, Any]]) -> list[str]:
-    cases: list[str] = []
-    seen: set[str] = set()
-    for record in records:
-        case = record.get("case")
-        if isinstance(case, str) and case not in seen:
-            seen.add(case)
-            cases.append(case)
-    return cases
-
-
 def _scoring_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     counts = {"passed": 0, "failed": 0, "unscored": 0}
     for row in rows:
@@ -588,4 +585,4 @@ def _scoring_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _markdown_cell(value: str) -> str:
-    return value.replace("|", "\\|").replace("\n", " ")
+    return markdown_cell(value)
