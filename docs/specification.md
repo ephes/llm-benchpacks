@@ -1090,15 +1090,25 @@ outcome label such as `passed`, `failed-no-mutation`,
 `failed-source-mutation`, `failed-non-source-mutation`, or
 `failed-unknown-mutation`. The source/non-source split is derived from patch
 artifact paths only; generated/cache artifacts such as `__pycache__` and
-`.pytest_cache` do not count as source mutations. This is a read-only summary
-and does not add fields to `run.jsonl`.
+`.pytest_cache` do not count as source mutations. The patch byte count and the
+patch paths are both derived from one bounded snapshot read through a single
+opened descriptor: the patch path is walked component by component from the
+result directory without following symlinks, must name a regular file (FIFOs
+and devices are refused without blocking), and is read up to 8 MiB
+(`MAX_PATCH_OUTPUT_BYTES`). Unsafe or unavailable patches report no byte count;
+oversized or non-UTF-8 patches report their size but unknown paths. Either way a
+failed row is `failed-unknown-mutation`. This is a read-only summary and does
+not add fields to `run.jsonl`.
 
 The optional `--set <manifest.toml>` mode loads a source TOML report-set
 manifest and expands it to the same existing result-directory inputs before the
 normal report loader runs. `--set` and positional result directories are
 mutually exclusive, and the command requires exactly one input source: either
 one or more positional result directories or one report-set manifest. The
-manifest shape is intentionally narrow:
+manifest must be a regular file of at most 1 MiB (`MAX_REPORT_SET_BYTES`) and
+valid UTF-8; oversized, non-regular, non-UTF-8, unparseable or excessively
+nested manifests fail with a report error before any result directory is
+inspected. The manifest shape is intentionally narrow:
 
 ```toml
 version = 1
@@ -1415,8 +1425,16 @@ leave the old output intact; failed publication restores it. If restoration
 also fails, the error names the retained backup for manual recovery. Temporary
 staging cleanup is best-effort and cannot mask the publication outcome. A
 backup-removal failure reports that the new site is published and names the
-leftover backup. This is rollback for reported filesystem errors,
-not a crash-atomic or concurrent-publisher guarantee; serialize site exports.
+leftover backup. This is rollback for reported filesystem errors, not a
+crash-atomic guarantee. Publishers of the same output are serialized by a
+nonblocking exclusive OS lock (`flock`) on
+`<parent>/.<name>.benchpack-publish.lock`, keyed by the resolved parent and
+output name. The lock is held from the locked existence re-check through
+staging, swap, rollback and backup cleanup; a second concurrent publisher fails
+immediately with "being published by another process" without touching the
+output. The kernel releases the lock when the holder exits, even when killed.
+The lock file is left in place, and backups abandoned by a killed publisher are
+never removed or restored automatically; recover them explicitly.
 
 ### `benchpack registry bundle`
 
@@ -1437,7 +1455,19 @@ layouts before honoring `--force`. Creation builds and validates an owned siblin
 staging directory before publication. Forced replacement retains the old bundle
 until that validation succeeds and restores it if publication fails. If rollback
 fails, the error reports the retained backup path. Only owned staging and backup
-paths are cleaned; serialize writers to the same output directory.
+paths are cleaned. Concurrent `bundle create` runs for the same output are
+serialized by the same publication lock as `registry site`: the second writer
+fails with "being published by another process" before creating staging or
+touching the output.
+
+Source artifacts are copied through one descriptor each: the relative path is
+walked from the source result directory component by component with
+`O_NOFOLLOW`, `.`/`..`/empty components are refused, and only a verified
+regular file is copied (at most `MAX_BUNDLE_FILE_BYTES`). Bundle bytes, sizes,
+digests and secret scanning all use that copied snapshot. A source or ancestor
+that is a symlink, or that is replaced by one before the copy, is never
+followed: optional artifacts are listed as `missing-or-unsafe` omitted artifacts
+without a digest, and an unsafe `run.jsonl` fails creation without publishing.
 
 The copied files are limited to compact report-facing artifacts:
 

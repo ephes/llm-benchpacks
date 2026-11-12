@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,9 @@ from .repo_task_outcomes import (
 from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
+MAX_REPORT_SET_BYTES = 1024 * 1024
+
+
 class ReportError(ValueError):
     """Raised when report inputs cannot be loaded."""
 
@@ -44,16 +49,23 @@ def load_report_set(path: Path | str) -> list[Path]:
     """Load a report-set manifest and expand it to result directories."""
 
     manifest_path = Path(path)
+    raw = _read_report_set_bytes(manifest_path)
     try:
-        with manifest_path.open("rb") as fh:
-            data = tomllib.load(fh)
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ReportError(
+            f"report set manifest is not valid UTF-8: {manifest_path}: {exc.reason} "
+            f"at byte {exc.start}"
+        ) from exc
+    try:
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise ReportError(
             f"could not parse report set manifest {manifest_path}: {exc}"
         ) from exc
-    except OSError as exc:
+    except RecursionError as exc:
         raise ReportError(
-            f"could not read report set manifest {manifest_path}: {exc}"
+            f"could not parse report set manifest {manifest_path}: nesting too deep"
         ) from exc
 
     if not isinstance(data, dict):
@@ -100,6 +112,42 @@ def load_report_set(path: Path | str) -> list[Path]:
         expanded.append(result_dir)
 
     return expanded
+
+
+def _read_report_set_bytes(manifest_path: Path) -> bytes:
+    """Read a report-set manifest under MAX_REPORT_SET_BYTES from one descriptor."""
+
+    try:
+        fd = os.open(manifest_path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    except OSError as exc:
+        raise ReportError(
+            f"could not read report set manifest {manifest_path}: {exc.strerror}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ReportError(
+                f"report set manifest must be a regular file: {manifest_path}"
+            )
+        os.set_blocking(fd, True)
+        chunks: list[bytes] = []
+        total = 0
+        while total <= MAX_REPORT_SET_BYTES:
+            chunk = os.read(fd, MAX_REPORT_SET_BYTES + 1 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+    except OSError as exc:
+        raise ReportError(
+            f"could not read report set manifest {manifest_path}: {exc.strerror}"
+        ) from exc
+    finally:
+        os.close(fd)
+    if total > MAX_REPORT_SET_BYTES:
+        raise ReportError(
+            f"report set manifest exceeds {MAX_REPORT_SET_BYTES} bytes: {manifest_path}"
+        )
+    return b"".join(chunks)
 
 
 def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
