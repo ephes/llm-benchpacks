@@ -16,6 +16,28 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-13 (agent dataset and registry boundaries)
+
+### Changed
+- Bound agent datasets to 16 MiB and 10,000 rows through one regular-file
+  descriptor; refuse leaf symlinks, special files, growth past the byte cap,
+  invalid UTF-8 and ambiguous duplicate JSON members before registry mutation.
+- Add synthetic byte/row boundary, FIFO, replacement, growth and duplicate-key
+  regressions, retaining valid arrays and ordinary curated fixtures.
+- Admit only finite nonnegative float-representable wall time and nonnegative
+  signed 64-bit diff/node-test counters before opening a mutating connection.
+- Verify the existing prune/upsert transaction with real SQLite late-insert
+  errors and KeyboardInterrupt after pruning and an earlier update; independent
+  reopen preserves the complete old state, and repeated retry converges.
+- Close all owned registry connections explicitly after transaction exit and
+  retain caller-owned helper connections. Cover repeated reads/imports with
+  GC disabled plus ordinary and BaseException failure paths.
+- Batch report/query/site selection under the connection's actual SQLite
+  variable budget, retaining deduplication, global ordering and final limits;
+  explicitly begin read transactions so a concurrent WAL writer cannot mix
+  generations between batches or site tables. Verify low-limit exports against
+  unrestricted results and refuse missing selectors before publication.
+
 ## 2026-11-12 (export evidence and publication boundaries)
 
 ### Changed

@@ -1,5 +1,18 @@
 # Implementation Plan
 
+## Completed registry boundary work (2026-11-13)
+
+- Agent dataset admission: regular descriptor, 16 MiB actual bytes, 10,000
+  rows, duplicate-member refusal and SQLite-compatible numeric domains.
+- Real late-insert failure/interruption oracles verify atomic source pruning
+  and replacement, independent reopen and idempotent retry.
+- Explicitly close owned registry connections on every exit; batch large
+  report/query/site selections under SQLite's variable budget in one read
+  snapshot, retaining global order, deduplication and final query limits.
+- Synthetic fixtures cover special files, growth, ambiguous JSON, numeric
+  boundaries, disabled-GC connection lifetime, low SQL limits and a concurrent
+  WAL writer. No live benchmark endpoint is required.
+
 ## Active Backlog Queue
 
 Status date: 2026-09-02.
