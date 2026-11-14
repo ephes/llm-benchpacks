@@ -261,6 +261,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 f"output {out_dir} overlaps protected input {source}; "
                 "choose a dedicated run directory with --out"
             )
+    if out_dir.is_symlink():
+        # The reporter pins its output directory without following the final
+        # link; name the real directory instead of failing mid-setup.
+        raise SystemExit(
+            f"output {out_dir} is a symbolic link; pass the real directory with --out"
+        )
     adapter = get_adapter(args.adapter)
     existing = out_dir / "run.jsonl"
     if existing.exists():
@@ -274,7 +280,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    reporter = RunReporter(out_dir, pack)
+    try:
+        reporter = RunReporter(out_dir, pack)
+    except OSError as exc:
+        raise SystemExit(f"could not open output directory {out_dir}: {exc}") from exc
     if run_metadata is not None:
         reporter.write_run_metadata(run_metadata)
     persisted_run_metadata_path = (

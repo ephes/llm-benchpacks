@@ -6,6 +6,9 @@
   extension values and oversized integer decoder failures.
 - Refuse redirected reporter artifacts and exchanged output directories after
   harness execution; use no-follow regular descriptors and atomic publication.
+  A symlinked `run --out` directory is refused up front with a clear message.
+- Registry import and bundle checks hash exactly the admitted `run.jsonl`
+  bytes instead of reopening the file by path.
 - Preserve the last successful summary on write/close/replace failures. Roll back
   JSONL appends on the owned descriptor, retain primary errors on failed rollback
   and stop further append/summary operations on uncertain streams.

@@ -714,7 +714,9 @@ Result ingestion rejects duplicate JSON members at every nesting level. It opens
 `run.jsonl` without following a final symlink, admits the actual regular-file
 descriptor nonblocking, then applies the existing byte/record limits. Compare,
 report and registry import share this interpretation; refused imports leave the
-registry unchanged. Result directory aliases remain supported.
+registry unchanged. Result directory aliases remain supported for ingestion;
+`benchpack run --out` must name the real output directory, and a symlinked
+output directory is refused before the run starts.
 
 Runtime metadata must be unambiguous finite JSON, including extension objects:
 duplicate members, NaN/Infinity, overflowing exponents and undecodable oversized

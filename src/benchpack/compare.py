@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -35,6 +36,9 @@ class ResultRun:
     run_metadata: dict[str, Any] | None = None
     artifact_root: Path | None = None
     source_bytes: int = 0
+    # SHA-256 of exactly the run.jsonl bytes admitted through the opened
+    # descriptor; None for runs rebuilt from the registry index.
+    source_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,7 @@ def load_result_run(
     records: list[dict[str, Any]] = []
     total = 0
     line_number = 0
+    digest = hashlib.sha256()
     try:
         fd = open_contained_regular(path, "run.jsonl")
         if fd is None:
@@ -104,6 +109,7 @@ def load_result_run(
                 line_number += 1
                 source = f"{jsonl_path}:{line_number}"
                 total += len(line)
+                digest.update(line)
                 if total > byte_limit:
                     raise CompareError(f"run byte limit exceeded in {source}")
                 if len(line) > MAX_RESULT_LINE_BYTES:
@@ -128,7 +134,10 @@ def load_result_run(
     if not records:
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
-    return ResultRun(path=path, label=path.name, records=records, artifact_root=path, source_bytes=total)
+    return ResultRun(
+        path=path, label=path.name, records=records, artifact_root=path,
+        source_bytes=total, source_sha256=digest.hexdigest(),
+    )
 
 
 def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

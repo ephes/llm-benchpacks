@@ -4515,3 +4515,17 @@ args, _ = parser.parse_known_args()
         assert not (tmp_path / 'run' / 'summary.md').exists()
     else:
         assert len((tmp_path / 'run' / 'run.jsonl').read_text().splitlines()) == 1
+
+
+def test_cli_run_refuses_symlinked_output_directory(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_adapter(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    real = tmp_path / "real-out"
+    real.mkdir()
+    alias = tmp_path / "alias-out"
+    alias.symlink_to(real, target_is_directory=True)
+
+    with pytest.raises(SystemExit, match="symbolic link"):
+        main(_argv(["--out", str(alias)]))
+    assert list(real.iterdir()) == []

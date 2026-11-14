@@ -1902,7 +1902,9 @@ limits, invalid JSON values and serialization failures become `RunMetadataError`
 before output creation or adapter/harness calls. Normalized metadata is serialized
 with `allow_nan=False`; valid extension objects roundtrip.
 
-The reporter binds its output directory identity at construction and verifies
+`benchpack run --out` must name a real directory: a symlinked output directory
+is refused before any output is created (ancestors may still be links). The
+reporter binds its output directory identity at construction and verifies
 that identity on every write after harness execution. It uses no-follow,
 nonblocking regular descriptors for `run.jsonl`; multiply linked append targets
 are refused. Hardware, metadata and summary destinations must be absent or
