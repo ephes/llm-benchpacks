@@ -37,6 +37,9 @@ working history and open questions.
   explicitly begin read transactions so a concurrent WAL writer cannot mix
   generations between batches or site tables. Verify low-limit exports against
   unrestricted results and refuse missing selectors before publication.
+- Prune stale agent-wrap rows in variable-budget batches instead of one
+  `NOT IN` list over every incoming label; report a missing dataset path as
+  missing and name the path in symlink/special-file refusals.
 
 ## 2026-11-12 (export evidence and publication boundaries)
 

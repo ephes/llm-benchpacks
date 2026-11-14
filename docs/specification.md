@@ -1334,7 +1334,10 @@ node-test counters must be nonnegative signed 64-bit integers. Validation
 finishes before opening a write transaction. Pruning and every upsert form
 one transaction: a late SQL failure or interruption restores the previous
 source rows, earlier updates, unrelated sources and schema together. Retrying
-the same dataset converges to one row per label.
+the same dataset converges to one row per label. Pruning reads the source's
+stored labels and deletes stale ones in batches, so a dataset within the row
+limit also fits connections with a small SQLite variable limit (999 before
+SQLite 3.32). A missing dataset path is reported as missing, with the path.
 
 `benchpack registry agent-wrap query` emits a JSON array selected from
 `agent_wrap_runs`, ordered by pass/fail/interrupted status and wall-clock time.

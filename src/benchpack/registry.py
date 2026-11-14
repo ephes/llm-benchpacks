@@ -1230,7 +1230,11 @@ def _unique_agent_dataset_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]
 def _read_agent_dataset(path: Path) -> bytes:
     fd = open_contained_regular(path.parent, path.name)
     if fd is None:
-        raise RegistryError("agent-wrap data requires a readable regular file without symlinks")
+        if not os.path.lexists(path):
+            raise RegistryError(f"could not read {path}: no such file")
+        raise RegistryError(
+            f"agent-wrap data {path} requires a readable regular file without symlinks"
+        )
     try:
         if os.fstat(fd).st_size > MAX_AGENT_DATASET_BYTES:
             raise RegistryError("agent-wrap dataset byte limit exceeded")
@@ -3916,18 +3920,29 @@ def _delete_stale_agent_wrap_rows(
     rows: list[dict[str, Any]],
 ) -> None:
     source = dataset["generated_from"]
-    labels = [row["label"] for row in rows]
+    labels = {row["label"] for row in rows}
     if not labels:
         return
-    placeholders = ",".join("?" for _ in labels)
-    conn.execute(
-        f"""
-        DELETE FROM agent_wrap_runs
-        WHERE dataset_source = ?
-          AND label NOT IN ({placeholders})
-        """,
-        (source, *labels),
+    # Compute the stale set from one single-parameter read instead of binding every
+    # incoming label, so a dataset within its row limit also fits connections
+    # with a small SQLITE_LIMIT_VARIABLE_NUMBER (999 before SQLite 3.32).
+    stale = sorted(
+        label
+        for (label,) in conn.execute(
+            "SELECT label FROM agent_wrap_runs WHERE dataset_source = ?", (source,)
+        )
+        if label not in labels
     )
+    batch_size = conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) - 1
+    if batch_size < 1:
+        raise RegistryError("agent-wrap prune exceeds SQLite variable limit")
+    for start in range(0, len(stale), batch_size):
+        batch = stale[start:start + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        conn.execute(
+            f"DELETE FROM agent_wrap_runs WHERE dataset_source = ? AND label IN ({placeholders})",
+            (source, *batch),
+        )
 
 
 def _run_row_values(

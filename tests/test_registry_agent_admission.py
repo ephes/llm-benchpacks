@@ -210,3 +210,38 @@ def test_duplicate_dataset_members_refused_without_mutation(tmp_path, member):
         assert "Synthetic" not in str(error.value)
     assert db.read_bytes() == before
     assert not (tmp_path / "new.sqlite").exists()
+
+
+def test_agent_replacement_prunes_within_small_variable_budget(tmp_path, monkeypatch):
+    data, db = tmp_path / "data.json", tmp_path / "db.sqlite"
+    _dataset(data, labels=[f"row-{i:03}" for i in range(200)])
+    registry.import_agent_wrap_results(data, db)
+    connect = sqlite3.connect
+
+    def limited(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        # Above one row upsert's parameters, below the kept and the stale label counts.
+        conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 80)
+        return conn
+
+    monkeypatch.setattr(registry.sqlite3, "connect", limited)
+    # More kept labels and more stale labels than one statement may bind.
+    kept = [f"row-{i:03}" for i in range(0, 200, 2)] + [f"new-{i:02}" for i in range(5)]
+    _dataset(data, labels=kept)
+    registry.import_agent_wrap_results(data, db)
+    with closing(connect(db)) as conn:
+        labels = {label for (label,) in conn.execute("SELECT label FROM agent_wrap_runs")}
+    assert labels == set(kept)
+
+
+def test_missing_and_symlinked_datasets_name_the_path(tmp_path):
+    db = tmp_path / "db.sqlite"
+    missing = tmp_path / "missing.json"
+    with pytest.raises(registry.RegistryError, match="could not read .*missing.json: no such file"):
+        registry.import_agent_wrap_results(missing, db)
+    real, link = tmp_path / "real.json", tmp_path / "link.json"
+    _dataset(real)
+    link.symlink_to(real)
+    with pytest.raises(registry.RegistryError, match="link.json requires a readable regular file"):
+        registry.import_agent_wrap_results(link, db)
+    assert not db.exists()
