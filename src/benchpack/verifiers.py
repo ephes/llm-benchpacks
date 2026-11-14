@@ -7,11 +7,12 @@ import math
 import os
 import queue
 import signal
+import stat
 import subprocess
 import sys
-import tempfile
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -226,6 +227,9 @@ def run_repo_task_verifier(
 
 
 _TIMEOUT_GRACE_S = 0.5
+# After the verifier's process group is gone, a descendant that escaped it can
+# still hold the pipes open; stop waiting for their EOF after this long.
+_EOF_GRACE_S = 1.0
 _DIAGNOSTIC_TAIL_BYTES = 65536
 
 
@@ -293,6 +297,33 @@ def _run_verifier_command(
     counts = [0, 0]
     closed: set[int] = set()
     deadline = time.monotonic() + timeout
+
+    def write_chunk(index: int, chunk: bytes) -> bool:
+        """Write within the log ceilings; False when the chunk did not fit."""
+        allowed = min(MAX_VERIFY_LOG_STREAM_BYTES - counts[index],
+                      MAX_VERIFY_LOG_TOTAL_BYTES - sum(counts))
+        written = min(len(chunk), max(allowed, 0))
+        logs[index].write(chunk[:written])
+        counts[index] += written
+        return written == len(chunk)
+
+    def drain(until: float) -> None:
+        """Keep what a stopped verifier still wrote (e.g. a SIGTERM traceback)."""
+        while len(closed) < 2:
+            remaining = until - time.monotonic()
+            if remaining <= 0:
+                return
+            try:
+                index, chunk = events.get(timeout=min(0.05, remaining))
+            except queue.Empty:
+                continue
+            if isinstance(chunk, OSError) or not chunk:
+                closed.add(index)
+                continue
+            if not write_chunk(index, chunk):
+                return
+
+    gone_at: float | None = None
     try:
         for thread in readers:
             thread.start()
@@ -309,8 +340,15 @@ def _run_verifier_command(
                     group_alive = True
                 except ProcessLookupError:
                     group_alive = False
-            if len(closed) == 2 and not group_alive and process.returncode is not None:
-                break
+            if not group_alive and process.returncode is not None:
+                if len(closed) == 2:
+                    break
+                now = time.monotonic()
+                if gone_at is None:
+                    gone_at = now
+                elif now - gone_at >= _EOF_GRACE_S:
+                    # Only an escaped descendant can still hold the pipes.
+                    break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(command, timeout)
@@ -323,15 +361,11 @@ def _run_verifier_command(
             if not chunk:
                 closed.add(index)
                 continue
-            allowed = min(MAX_VERIFY_LOG_STREAM_BYTES - counts[index],
-                          MAX_VERIFY_LOG_TOTAL_BYTES - sum(counts))
-            written = min(len(chunk), allowed)
-            logs[index].write(chunk[:written])
-            counts[index] += written
-            if written < len(chunk):
+            if not write_chunk(index, chunk):
                 raise VerifierOutputLimit("verifier log output limit exceeded")
     except subprocess.TimeoutExpired as exc:
         _stop_verifier(process)
+        drain(time.monotonic() + _TIMEOUT_GRACE_S)
         stdout.flush()
         stderr.flush()
         raise subprocess.TimeoutExpired(
@@ -425,12 +459,20 @@ def _write_authoritative_json(
     payload["exit_code"] = exit_code
     payload["passed"] = passed
     serialized = json.dumps(payload, sort_keys=True, allow_nan=False) + "\n"
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
-    temporary = Path(name)
+    try:
+        previous = path.lstat()
+    except FileNotFoundError:
+        previous = None
+    temporary = path.parent / f".{path.name}-{uuid.uuid4().hex}.tmp"
+    # Like safe_files.atomic_write_at: 0o666 lets the umask apply to new files,
+    # and an existing regular file keeps its permissions.
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o666)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             stream.write(serialized)
             stream.flush()
+            if previous is not None and stat.S_ISREG(previous.st_mode):
+                os.fchmod(stream.fileno(), stat.S_IMODE(previous.st_mode))
             os.fsync(stream.fileno())
         os.replace(temporary, path)
     finally:

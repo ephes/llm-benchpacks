@@ -167,6 +167,9 @@ def _reject_escaping_symlinks(source_root: Path, case: Case, fixture: Fixture) -
                 budget.bytes += info.st_size * 2
             elif not stat.S_ISDIR(info.st_mode):
                 raise WorkspaceError("repo fixture must contain regular files, directories or symlinks")
+    except WorkspaceError as exc:
+        # Pack validation runs this for every case: name the refused case and fixture.
+        raise WorkspaceError(f"repo-task case {case.id!r} fixture {fixture.id!r}: {exc}") from exc
     except OSError as exc:
         raise WorkspaceError(f"could not inspect repo-task case {case.id!r} fixture {fixture.id!r}") from exc
 

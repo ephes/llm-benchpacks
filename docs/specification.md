@@ -701,7 +701,14 @@ that original group, waits at most 0.5 seconds, then sends SIGKILL even if the
 leader has exited. The immediate process is reaped with a bounded wait.
 Interrupts and other wait exceptions also stop and reap the isolated verifier
 before propagating. Timeout scoring remains failed with a null exit code and
-timeout artifacts; admitted log bytes are retained on timeout and nonzero exit.
+timeout artifacts; admitted log bytes are retained on timeout and nonzero exit,
+including output the verifier writes during the SIGTERM grace period (drained
+for at most another 0.5 seconds within the log ceilings). Once the leader and
+its group are gone, the runner waits at most 1 second more for pipe EOF: a
+descendant that escaped the group (for example via `setsid`) and still holds
+the pipes no longer turns a finished verifier into a timeout. Supplemental
+verifier JSON is republished with the previous file's permissions, or the
+process umask for a new file.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.

@@ -4,14 +4,13 @@
 
 - Bound verifier JSON admission; preserve exit-code authority and previous
   evidence when atomic publication fails.
+  Keep verifier output written after SIGTERM, do not wait on pipes an escaped
+  descendant holds open, keep JSON permissions, and read prompts/fixtures with
+  text-mode newlines as before.
 - Enforce verifier log disk ceilings and shared fixture workspace/baseline work
   allowances, including growth during copying, before model/harness execution.
 - Bound manifest, schema, prompt and text-fixture admission with a cumulative
   pack allowance; reject ambiguous duplicate schema members before execution.
-# Changelog
-
-## Unreleased
-
 - Bind harness workspace reads, writes, existence checks and deletion to opened
   directories; preserve internal file symlinks while rejecting exchanged paths.
   Links among the trusted base's ancestors (macOS `/tmp`, a linked home) keep

@@ -3367,7 +3367,7 @@ def test_cli_repo_task_rejects_fixture_symlink_escape_before_adapter(
     except OSError as exc:
         pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
 
-    with pytest.raises(SystemExit, match="absolute symlink"):
+    with pytest.raises(SystemExit, match=r"repo-task case '[^']+' fixture '[^']+': .*absolute symlink"):
         main(_argv(["--out", str(tmp_path / "run")]))
 
     assert calls == []

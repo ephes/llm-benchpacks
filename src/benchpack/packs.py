@@ -107,7 +107,15 @@ class _PackInputBudget:
             raise error_type(f"{role} exceeds cumulative pack input byte limit")
         self.used += count
 
-    def read(self, path: Path, limit: int, role: str, error_type: type[PackError]) -> str:
+    def read(
+        self,
+        path: Path,
+        limit: int,
+        role: str,
+        error_type: type[PackError],
+        *,
+        universal_newlines: bool = True,
+    ) -> str:
         allowance = min(limit, MAX_PACK_INPUT_BYTES - self.used)
         snapshot = read_contained_regular(path.parent, path.name, allowance)
         if snapshot is None:
@@ -116,9 +124,13 @@ class _PackInputBudget:
             raise error_type(f"{role} exceeds file or cumulative pack input byte limit")
         self.charge(len(snapshot.data), role, error_type)
         try:
-            return snapshot.data.decode("utf-8")
+            text = snapshot.data.decode("utf-8")
         except UnicodeError as exc:
             raise error_type(f"{role} could not be read: invalid UTF-8: {path.name}") from exc
+        if universal_newlines:
+            # Same text as Path.read_text: CRLF/CR become LF (packs authored on Windows).
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+        return text
 
 
 def _unique_schema_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -696,7 +708,8 @@ def load_pack(path: Path | str) -> Pack:
     manifest_path = pack_dir / "benchpack.toml"
     budget = _PackInputBudget()
     try:
-        text = budget.read(manifest_path, MAX_MANIFEST_BYTES, "manifest", PackError)
+        # The manifest was always parsed from bytes; TOML handles its own newlines.
+        text = budget.read(manifest_path, MAX_MANIFEST_BYTES, "manifest", PackError, universal_newlines=False)
         data = tomllib.loads(text)
         resolved_pack_dir = pack_dir.resolve(strict=True)
     except UnicodeError as exc:

@@ -1458,6 +1458,30 @@ prompt_file = "prompts/example.md"
     assert pack.cases[0].raw["prompt_file"] == "prompts/example.md"
 
 
+def test_load_pack_prompt_file_keeps_text_mode_newlines(tmp_path: Path) -> None:
+    """Prompts authored on Windows read as before: CRLF and CR become LF."""
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "crlfprompt"
+version = "0.1.0"
+
+[[cases]]
+id = "from-file"
+kind = "chat"
+prompt_file = "prompts/example.md"
+""",
+    )
+    prompt_dir = pack_dir / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "example.md").write_bytes(b"Line one.\r\nLine two.\rLine three.\n")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == "Line one.\nLine two.\nLine three.\n"
+
+
 def test_load_pack_keeps_inline_prompt_support(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,

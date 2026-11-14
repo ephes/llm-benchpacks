@@ -815,3 +815,87 @@ def test_pipe_eof_and_retired_group_still_require_reaping_leader(tmp_path, monke
     assert result.returncode == 0
     assert process.waits >= 4
     assert process.stdout.closed and process.stderr.closed
+
+
+def _run(tmp_path: Path, body: str, timeout_s: float = 5.0):
+    prepared = make_prepared(tmp_path)
+    pack_dir = tmp_path / "pack"
+    write_script(pack_dir, body)
+    pack = make_pack(pack_dir)
+    return run_repo_task_verifier(
+        pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,  # type: ignore[arg-type]
+        prepared_workspace=prepared, patch_path=tmp_path / "patch.diff", output_dir=tmp_path / "run",
+        repetition=1, timeout_s=timeout_s,
+    )
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="POSIX signals")
+def test_verifier_output_written_after_sigterm_is_kept(tmp_path: Path) -> None:
+    # The handler is installed before 'started' is printed; a generous timeout
+    # leaves slow machines time to get there before SIGTERM arrives.
+    body = (
+        "import signal, sys, time\n"
+        "def stop(*_):\n"
+        "    sys.stderr.write('terminated cleanly\\n'); sys.stderr.flush(); sys.exit(3)\n"
+        "signal.signal(signal.SIGTERM, stop)\n"
+        "print('started', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    result = _run(tmp_path, body, timeout_s=3.0)
+    payload = json.loads((tmp_path / "run" / result.verify["path"]).read_text())
+    assert payload["timed_out"] is True
+    assert "started" in (tmp_path / "run" / result.verify["stdout_path"]).read_text()
+    assert "terminated cleanly" in (tmp_path / "run" / result.verify["stderr_path"]).read_text()
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="POSIX sessions")
+def test_escaped_descendant_holding_pipes_does_not_turn_success_into_timeout(tmp_path: Path) -> None:
+    import os
+    import signal
+    import time
+
+    ready = tmp_path / "escaped-ready"
+    child = (
+        "import os, time; from pathlib import Path; os.setsid(); "
+        f"Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(20)"
+    )
+    body = (
+        "import subprocess, sys, time\nfrom pathlib import Path\n"
+        f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+        f"while not Path({str(ready)!r}).exists(): time.sleep(0.01)\n"
+        "print('done', flush=True)\n"
+        "sys.exit(0)\n"
+    )
+    started = time.monotonic()
+    try:
+        result = _run(tmp_path, body, timeout_s=10.0)
+        assert time.monotonic() - started < 8
+        assert result.exit_code == 0
+        assert result.scoring == {"mode": "verify-script", "passed": True}
+        assert "done" in (tmp_path / "run" / result.verify["stdout_path"]).read_text()
+    finally:
+        if ready.exists():
+            try:
+                os.kill(int(ready.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="POSIX modes")
+def test_verifier_json_keeps_previous_mode_and_follows_umask(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    body = "import sys\nsys.exit(0)\n"
+    old = os.umask(0o022)
+    try:
+        result = _run(tmp_path, body)
+        path = tmp_path / "run" / result.verify["path"]
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        path.chmod(0o640)
+        from benchpack import verifiers
+
+        verifiers._write_authoritative_json(path, exit_code=0, passed=True)
+        assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    finally:
+        os.umask(old)
