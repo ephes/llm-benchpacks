@@ -16,11 +16,11 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from statistics import median
 from typing import Any, Iterable
 
 from .compare import (
-    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun, load_result_run,
+    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun,
+    finite_median, load_result_run,
 )
 from .external_agent_model_calls import (
     MODEL_CALL_LOG_PATTERN,
@@ -943,7 +943,7 @@ def _load_and_validate_result_bundle(
         row_count = run_manifest.get("row_count")
         if type(row_count) is not int or row_count != len(run.records):
             raise RegistryError(f"bundle run {run_index} row_count mismatch")
-        if run_manifest.get("run_jsonl_sha256") != _sha256(run_dir / "run.jsonl"):
+        if run_manifest.get("run_jsonl_sha256") != _admitted_sha256(run):
             raise RegistryError(f"bundle run {run_index} run_jsonl_sha256 mismatch")
         loaded_runs.append(
             ResultRun(
@@ -953,6 +953,8 @@ def _load_and_validate_result_bundle(
                 hardware=run.hardware,
                 run_metadata=run.run_metadata,
                 artifact_root=run.artifact_root,
+                source_bytes=run.source_bytes,
+                source_sha256=run.source_sha256,
             )
         )
         files = run_manifest.get("files")
@@ -2926,7 +2928,7 @@ def _site_median(values: Iterable[object]) -> float | None:
     ]
     if not numeric:
         return None
-    return float(median(numeric))
+    return finite_median(numeric)
 
 
 def _optional_text(value: object) -> str | None:
@@ -3019,7 +3021,7 @@ def _copy_run_into_bundle(
         "source_result_name": run.path.name,
         "bundle_path": run_bundle_path.as_posix(),
         "row_count": len(copied_run.records),
-        "run_jsonl_sha256": _sha256(run_bundle_dir / "run.jsonl"),
+        "run_jsonl_sha256": _admitted_sha256(copied_run),
         "files": included,
         "omitted_artifacts": omitted,
     }
@@ -3974,7 +3976,7 @@ def _run_row_values(
         "label": run.label,
         "imported_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "row_count": len(run.records),
-        "run_jsonl_sha256": _sha256(run.path / "run.jsonl"),
+        "run_jsonl_sha256": _admitted_sha256(run),
         "pack_ids_json": _json_dumps(_unique_pack_values(run.records, "id")),
         "pack_versions_json": _json_dumps(_unique_pack_values(run.records, "version")),
         "adapters_json": _json_dumps(_unique_record_values(run.records, "adapter")),
@@ -4128,7 +4130,7 @@ def _record_metric_values(
 def _median_or_none(values: list[float]) -> float | None:
     if not values:
         return None
-    return float(median(values))
+    return finite_median(values)
 
 
 def _validate_record(record: dict[str, Any], jsonl_path: Path, row_index: int) -> None:
@@ -4289,6 +4291,13 @@ def _string_or_none(value: Any, key: str) -> str | None:
 
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _admitted_sha256(run: ResultRun) -> str:
+    """Digest of the run.jsonl bytes that were validated, never a reopened path."""
+    if run.source_sha256 is None:
+        raise RegistryError(f"run.jsonl digest unavailable for {run.path}")
+    return run.source_sha256
 
 
 def _sha256(path: Path) -> str:

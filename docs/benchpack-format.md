@@ -879,3 +879,14 @@ fixture ceilings above. Refusal raises a controlled pack error before execution.
 JSON schemas must use unique member names in every object, including nested
 `properties` and definitions. Duplicate `type`, `required` or any other member
 is an error in either order; split/repair invalid packs before running them.
+
+### Result and metadata interpretation
+
+Pack manifests are unchanged. Runtime metadata extensions must contain finite,
+unambiguous JSON; duplicate members and nonfinite numbers are rejected before a
+run. Every object in imported `run.jsonl` also requires unique member names.
+Result artifacts are runner-owned: an external harness must not replace
+`run.jsonl`, `summary.md`, `hardware.json`, `run-metadata.json` or their output
+directory with links or another directory generation. These parent write checks
+do not sandbox a same-user harness. See the specification for failure/recovery
+and opened-descriptor admission rules.

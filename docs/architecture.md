@@ -652,9 +652,9 @@ numeric `tokens.prompt` coverage, and when complete cached prompt-token medians
 differ. Prompt-token coverage is used as a warning gate but is not rendered as a
 separate coverage column. It also computes one case-level `prefill parity`
 status from the same summaries and repeats it on every run row for that case.
-The status priority is `missing-case`, `prompt-missing`, `prompt-diff`,
-`cache-missing`, `cache-diff`, then `comparable`, so cache parity is considered
-only after case and prompt parity hold. Missing case/run groups suppress
+The status priority is `missing-case`, `prompt-missing`, `prompt-mixed`,
+`prompt-diff`, `cache-missing`, `cache-mixed`, `cache-diff`, then `comparable`,
+so cache parity is considered only after case and prompt parity hold. Missing case/run groups suppress
 prompt-token and cached-token median mismatch warnings for that case. Compare
 does not read `raw/` files or infer prompt/cache state from timing or prompt
 shape.
@@ -1126,3 +1126,22 @@ The external executor owns process-group cleanup and stream closure on every
 exceptional exit, including interrupts. `report.load_report_runs` deduplicates
 input file identities and supplies remaining report-wide byte/record allowances
 to the existing bounded comparison reader.
+
+## Result evidence and publication integrity
+
+Comparison summaries retain prompt/cache homogeneity alongside coverage and finite
+medians. Directory and SQLite-backed reports use the same conservative parity
+helper; no result schema or registry migration is required.
+
+Result ingestion reuses `safe_files.open_contained_regular` for final-file
+admission and recursive unique-member decoding. Registry import validates all
+inputs through this reader before opening a database for mutation.
+
+Reporter writes re-admit the original output-directory identity across harness
+execution. JSONL appends use single-link no-follow regular descriptors with
+rollback on the owned descriptor. Sidecar and summary publication reuse
+`safe_files.atomic_write_at` within the admitted directory, keeping prior bytes
+and modes on publication failure. An unsuccessful rollback preserves the primary
+exception, attaches a bounded recovery note, and disables append/summary operations
+on that reporter. Metadata admission recursively validates unambiguous finite
+JSON and normalizes extension objects before filesystem effects.

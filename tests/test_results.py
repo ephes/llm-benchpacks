@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -708,7 +709,7 @@ def test_record_failure_preserves_file_and_records(tmp_path, monkeypatch, failur
     reporter.record(pack.cases[0], result, {})
     previous_bytes = reporter._jsonl_path.read_bytes()
     previous_records = list(reporter.records)
-    original_open = Path.open
+    original_open = os.fdopen
     injected = []
 
     class BrokenAppend:
@@ -737,19 +738,19 @@ def test_record_failure_preserves_file_and_records(tmp_path, monkeypatch, failur
                 return 10
             raise OSError('injected write failure')
 
-    def failing_open(path, *args, **kwargs):
-        if path == reporter._jsonl_path:
+    def failing_open(fd, *args, **kwargs):
+        if kwargs.get("closefd") is False:
             injected.append('open')
             if failure == 'open':
                 raise OSError('injected open failure')
-            return BrokenAppend(original_open(path, *args, **kwargs))
-        return original_open(path, *args, **kwargs)
+            return BrokenAppend(original_open(fd, *args, **kwargs))
+        return original_open(fd, *args, **kwargs)
 
     with monkeypatch.context() as faults:
         if failure == 'serialize':
             result.backend = {'unserializable': object()}
         else:
-            faults.setattr(Path, 'open', failing_open)
+            faults.setattr(os, 'fdopen', failing_open)
         expected_type = TypeError if failure == 'serialize' else OSError
         message = {
             'serialize': 'not JSON serializable', 'open': 'injected open failure',
@@ -783,11 +784,14 @@ def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> N
     result = make_adapter_result(reporter.output_dir)
     reporter.record(pack.cases[0], result, {})
     previous_records = list(reporter.records)
-    original_open = Path.open
+    original_open = os.fdopen
 
     class BrokenWrite:
+        def __init__(self, fd):
+            self.fd = fd
+
         def __enter__(self):
-            self.file = original_open(reporter._jsonl_path, 'a+b', buffering=0)
+            self.file = original_open(self.fd, 'a+b', buffering=0, closefd=False)
             return self
 
         def __exit__(self, *args):
@@ -803,12 +807,16 @@ def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> N
     def fail_truncate(*args):
         raise OSError('rollback failed')
 
-    monkeypatch.setattr(Path, 'open', lambda *args, **kwargs: BrokenWrite())
-    monkeypatch.setattr(results.os, 'truncate', fail_truncate)
-    with pytest.raises(OSError, match='rollback failed') as caught:
+    monkeypatch.setattr(os, 'fdopen', lambda fd, *args, **kwargs: BrokenWrite(fd))
+    monkeypatch.setattr(results.os, 'ftruncate', fail_truncate)
+    with pytest.raises(OSError, match='append failed') as caught:
         reporter.record(pack.cases[0], result, {})
-    assert str(caught.value.__context__) == 'append failed'
+    assert any('rollback failed' in note and 'uncertain' in note for note in caught.value.__notes__)
     assert reporter.records == previous_records
+    with pytest.raises(OSError, match='uncertain'):
+        reporter.record(pack.cases[0], result, {})
+    with pytest.raises(OSError, match='uncertain'):
+        reporter.write_summary({})
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -822,7 +830,7 @@ def test_hardware_publication_failure_preserves_evidence(tmp_path, monkeypatch, 
     old_bytes = b'{"hostname":"old"}\n'
     if existing:
         final.write_bytes(old_bytes)
-    real_open = Path.open
+    real_open = os.fdopen
     injected = []
 
     class PartialWrite:
@@ -841,19 +849,19 @@ def test_hardware_publication_failure_preserves_evidence(tmp_path, monkeypatch, 
             injected.append(True)
             raise OSError("injected partial write")
 
-    def failing_open(path, mode="r", *args, **kwargs):
-        stream = real_open(path, mode, *args, **kwargs)
-        if failure == "write" and mode in {"x", "w"}:
+    def failing_open(fd, mode="r", *args, **kwargs):
+        stream = real_open(fd, mode, *args, **kwargs)
+        if failure == "write" and mode == "wb":
             return PartialWrite(stream)
         return stream
 
-    def failing_replace(source, target):
+    def failing_replace(source, target, **kwargs):
         injected.append(True)
         raise OSError("injected replace failure")
 
-    monkeypatch.setattr(Path, "open", failing_open)
+    monkeypatch.setattr(os, "fdopen", failing_open)
     if failure == "replace":
-        monkeypatch.setattr(Path, "replace", failing_replace)
+        monkeypatch.setattr(os, "replace", failing_replace)
     with pytest.raises(OSError, match="injected"):
         reporter.write_hardware({"hostname": "new"})
     assert injected == [True]
@@ -861,7 +869,7 @@ def test_hardware_publication_failure_preserves_evidence(tmp_path, monkeypatch, 
         assert final.read_bytes() == old_bytes
     else:
         assert not final.exists()
-    assert list(out.glob(".hardware.json.*.tmp")) == []
+    assert list(out.glob(".benchpack-*.tmp")) == []
     assert (out / "run.jsonl").read_bytes() == run_bytes
 
 
@@ -871,21 +879,21 @@ def test_hardware_serialization_failure_leaves_no_temporary(tmp_path):
     with pytest.raises(TypeError):
         reporter.write_hardware({"invalid": object()})
     assert not (out / "hardware.json").exists()
-    assert list(out.glob(".hardware.json.*.tmp")) == []
+    assert list(out.glob(".benchpack-*.tmp")) == []
 
 
 def test_hardware_temporary_collision_preserves_foreign_file(tmp_path, monkeypatch):
-    import benchpack.results as results
+    import benchpack.safe_files as safe_files
 
     out = tmp_path / "run"
     reporter = RunReporter(out, make_pack(tmp_path))
-    foreign = out / ".hardware.json.fixed.tmp"
+    foreign = out / ".benchpack-fixed.tmp"
     foreign.write_text("foreign")
 
     class FixedId:
         hex = "fixed"
 
-    monkeypatch.setattr(results.uuid, "uuid4", lambda: FixedId())
+    monkeypatch.setattr(safe_files.uuid, "uuid4", lambda: FixedId())
     with pytest.raises(FileExistsError):
         reporter.write_hardware({"hostname": "new"})
     assert foreign.read_text() == "foreign"
@@ -903,4 +911,168 @@ def test_hardware_replacement_preserves_permissions_and_cleans_temporary(tmp_pat
     reporter.write_hardware({"hostname": "new"})
     assert json.loads(final.read_text()) == {"hostname": "new"}
     assert stat.S_IMODE(final.stat().st_mode) == 0o640
-    assert list(out.glob(".hardware.json.*.tmp")) == []
+    assert list(out.glob(".benchpack-*.tmp")) == []
+
+
+@pytest.mark.parametrize('artifact', ['run.jsonl', 'summary.md', 'hardware.json', 'run-metadata.json'])
+def test_reporter_refuses_redirected_artifacts(tmp_path, artifact):
+    out = tmp_path / 'run'
+    reporter = RunReporter(out, make_pack(tmp_path))
+    result = make_adapter_result(out)
+    sentinel = tmp_path / 'sentinel'
+    sentinel.write_bytes(b'untouched')
+    (out / artifact).symlink_to(sentinel)
+    with pytest.raises(OSError):
+        if artifact == 'run.jsonl':
+            reporter.record(reporter.pack.cases[0], result, {})
+        elif artifact == 'summary.md':
+            reporter.write_summary({})
+        elif artifact == 'hardware.json':
+            reporter.write_hardware({})
+        else:
+            reporter.write_run_metadata({})
+    assert sentinel.read_bytes() == b'untouched'
+    assert reporter.records == []
+
+
+@pytest.mark.parametrize('replacement', ['symlink', 'directory'])
+def test_reporter_refuses_output_directory_exchange(tmp_path, replacement):
+    out = tmp_path / 'run'
+    reporter = RunReporter(out, make_pack(tmp_path))
+    result = make_adapter_result(out)
+    out.rename(tmp_path / 'original')
+    target = tmp_path / 'target'
+    target.mkdir()
+    if replacement == 'symlink':
+        out.symlink_to(target, target_is_directory=True)
+    else:
+        out.mkdir()
+    with pytest.raises(OSError):
+        reporter.record(reporter.pack.cases[0], result, {})
+    with pytest.raises(OSError):
+        reporter.write_summary({})
+    assert list(target.iterdir()) == []
+    assert reporter.records == []
+
+
+@pytest.mark.parametrize('existing', [False, True])
+@pytest.mark.parametrize('failure', ['write', 'short', 'flush', 'close', 'replace'])
+def test_summary_failure_preserves_last_success(tmp_path, monkeypatch, existing, failure):
+    out = tmp_path / 'run'
+    reporter = RunReporter(out, make_pack(tmp_path))
+    result = make_adapter_result(out)
+    reporter.record(reporter.pack.cases[0], result, {})
+    final = out / 'summary.md'
+    previous = b'last successful summary\n'
+    if existing:
+        final.write_bytes(previous)
+        final.chmod(0o640)
+    unrelated = out / '.benchpack-unrelated.tmp'
+    unrelated.write_bytes(b'foreign')
+    persisted = (out / 'run.jsonl').read_bytes()
+    original_fdopen = os.fdopen
+    original_write_text = Path.write_text
+    injected = []
+
+    class BrokenStream:
+        def __init__(self, stream):
+            self.stream = stream
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.stream.close()
+            if failure == 'close':
+                injected.append(failure)
+                raise OSError('injected close failure')
+        def __getattr__(self, name):
+            return getattr(self.stream, name)
+        def write(self, data):
+            if failure in {'write', 'short'}:
+                self.stream.write(data[:5])
+                injected.append(failure)
+                if failure == 'short':
+                    return 5
+                raise OSError('injected write failure')
+            return self.stream.write(data)
+        def flush(self):
+            if failure == 'flush':
+                injected.append(failure)
+                raise OSError('injected flush failure')
+            return self.stream.flush()
+
+    def stream(fd, *args, **kwargs):
+        return BrokenStream(original_fdopen(fd, *args, **kwargs))
+    def replace(*args, **kwargs):
+        injected.append('replace')
+        raise OSError('injected replace failure')
+    def old_inplace(path, data, *args, **kwargs):
+        if path == final:
+            original_write_text(path, data[:5], *args, **kwargs)
+            raise OSError('injected in-place write failure')
+        return original_write_text(path, data, *args, **kwargs)
+
+    with monkeypatch.context() as faults:
+        faults.setattr(os, 'fdopen', stream)
+        faults.setattr(Path, 'write_text', old_inplace)
+        if failure == 'replace':
+            faults.setattr(os, 'replace', replace)
+        with pytest.raises(OSError):
+            reporter.write_summary({})
+    assert injected == [failure]
+    assert final.read_bytes() == previous if existing else not final.exists()
+    assert (out / 'run.jsonl').read_bytes() == persisted
+    assert list(out.glob('.benchpack-*.tmp')) == [unrelated]
+    reporter.write_summary({})
+    assert '| capital |' in final.read_text()
+    if existing:
+        import stat
+        assert stat.S_IMODE(final.stat().st_mode) == 0o640
+    assert unrelated.read_bytes() == b'foreign'
+
+
+def test_append_rollback_uses_owned_descriptor_after_path_exchange(tmp_path, monkeypatch):
+    out = tmp_path / 'run'
+    reporter = RunReporter(out, make_pack(tmp_path))
+    result = make_adapter_result(out)
+    reporter.record(reporter.pack.cases[0], result, {})
+    previous = reporter._jsonl_path.read_bytes()
+    retained = out / 'retained.jsonl'
+    sentinel = tmp_path / 'sentinel'
+    sentinel.write_bytes(b'untouched')
+    original_fdopen = os.fdopen
+    class BrokenStream:
+        def __init__(self, fd, *args, **kwargs):
+            self.stream = original_fdopen(fd, *args, **kwargs)
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.stream.close()
+        def __getattr__(self, name):
+            return getattr(self.stream, name)
+        def write(self, data):
+            self.stream.write(data[:10])
+            reporter._jsonl_path.rename(retained)
+            reporter._jsonl_path.symlink_to(sentinel)
+            raise OSError('primary append failure')
+    with monkeypatch.context() as faults:
+        faults.setattr(os, 'fdopen', BrokenStream)
+        with pytest.raises(OSError, match='primary append failure'):
+            reporter.record(reporter.pack.cases[0], result, {})
+    assert sentinel.read_bytes() == b'untouched'
+    assert retained.read_bytes() == previous
+    assert len(reporter.records) == 1
+    with pytest.raises(OSError):
+        reporter.record(reporter.pack.cases[0], result, {})
+
+
+def test_reporter_refuses_hardlinked_append_target(tmp_path):
+    out = tmp_path / 'run'
+    reporter = RunReporter(out, make_pack(tmp_path))
+    result = make_adapter_result(out)
+    sentinel = tmp_path / 'sentinel'
+    sentinel.write_bytes(b'untouched')
+    os.link(sentinel, reporter._jsonl_path)
+    with pytest.raises(OSError, match='single-link regular'):
+        reporter.record(reporter.pack.cases[0], result, {})
+    assert sentinel.read_bytes() == b'untouched'
+    assert reporter.records == []

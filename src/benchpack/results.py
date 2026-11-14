@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import stat
-import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +26,9 @@ from .repo_task_outcomes import (
     format_verify_exit_code,
     summarize_repo_task_outcomes,
 )
-from .run_metadata import write_run_metadata
+from .run_metadata import validate_run_metadata
 from .scoring import evaluate
+from .safe_files import admitted_directory, atomic_write_at, trusted_root
 
 
 def _relativize(path: str, base: Path) -> str:
@@ -53,7 +54,32 @@ class RunReporter:
         self.raw_dir = self.output_dir / "raw"
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.records: list[dict[str, Any]] = []
+        self._jsonl_uncertain = False
         self._jsonl_path = self.output_dir / "run.jsonl"
+        self._trusted_output = trusted_root(self.output_dir)
+        with admitted_directory(self._trusted_output) as directory:
+            opened = os.fstat(directory)
+            self._directory_identity = (opened.st_dev, opened.st_ino)
+
+    @contextmanager
+    def _directory(self):
+        with admitted_directory(self._trusted_output) as directory:
+            opened = os.fstat(directory)
+            if (opened.st_dev, opened.st_ino) != self._directory_identity:
+                raise OSError("reporter output directory was exchanged")
+            yield directory
+
+    @contextmanager
+    def _artifact(self, directory: int, name: str):
+        fd = os.open(name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                     0o666, dir_fd=directory)
+        try:
+            opened = os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                raise OSError("reporter artifact must be a single-link regular file")
+            yield fd
+        finally:
+            os.close(fd)
 
     def case_paths(self, case: Case) -> tuple[Path, Path]:
         return (
@@ -110,6 +136,7 @@ class RunReporter:
         repo_task: dict[str, Any] | None = None,
         scoring_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        self._require_certain_stream()
         scoring_cfg = case.scoring or self.pack.scoring
         scoring_result = (
             dict(scoring_override)
@@ -169,48 +196,42 @@ class RunReporter:
         payload = (json.dumps(record) + "\n").encode("utf-8")
         # This reporter exclusively owns the file; no concurrent appenders.
         # Unbuffered writes make rollback independent of pending text buffers.
-        previous_length: int | None = None
-        try:
-            with self._jsonl_path.open("a+b", buffering=0) as fh:
-                fh.seek(0, 2)
-                previous_length = fh.tell()
-                if fh.write(payload) != len(payload):
-                    raise OSError("Incomplete run.jsonl append")
-        except BaseException:
-            if previous_length is not None:
-                os.truncate(self._jsonl_path, previous_length)
-            raise
+        with self._directory() as directory:
+            with self._artifact(directory, "run.jsonl") as fd:
+                previous_length = os.fstat(fd).st_size
+                try:
+                    with os.fdopen(fd, "a+b", buffering=0, closefd=False) as fh:
+                        fh.seek(0, 2)
+                        if fh.write(payload) != len(payload):
+                            raise OSError("Incomplete run.jsonl append")
+                except BaseException as exc:
+                    try:
+                        os.ftruncate(fd, previous_length)
+                    except BaseException:
+                        self._jsonl_uncertain = True
+                        exc.add_note("run.jsonl rollback failed; stream uncertain; "
+                                     "further appends and summaries refused")
+                    raise
         self.records.append(record)
         return record
 
     def write_hardware(self, hardware: dict[str, Any]) -> None:
-        text = json.dumps(hardware, indent=2) + "\n"
-        final_path = self.output_dir / "hardware.json"
-        temporary_path = final_path.with_name(f".hardware.json.{uuid.uuid4().hex}.tmp")
-        owned = False
-        try:
-            with temporary_path.open("x", encoding="utf-8") as temporary:
-                owned = True
-                try:
-                    mode = stat.S_IMODE(final_path.stat().st_mode)
-                except FileNotFoundError:
-                    pass
-                else:
-                    temporary_path.chmod(mode)
-                temporary.write(text)
-            temporary_path.replace(final_path)
-        finally:
-            if owned:
-                temporary_path.unlink(missing_ok=True)
+        data = (json.dumps(hardware, indent=2) + "\n").encode("utf-8")
+        with self._directory() as directory:
+            atomic_write_at(directory, "hardware.json", data)
 
     def write_run_metadata(self, metadata: dict[str, Any]) -> None:
-        write_run_metadata(self.output_dir, metadata)
+        data = (json.dumps(validate_run_metadata(metadata), indent=2,
+                           sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+        with self._directory() as directory:
+            atomic_write_at(directory, "run-metadata.json", data)
 
     def write_summary(
         self,
         hardware: dict[str, Any],
         run_metadata: dict[str, Any] | None = None,
     ) -> None:
+        self._require_certain_stream()
         lines: list[str] = []
         lines.append(f"# {self.pack.id} ({self.pack.version})")
         lines.append("")
@@ -347,7 +368,14 @@ class RunReporter:
                 )
             )
         lines.append("")
-        (self.output_dir / "summary.md").write_text("\n".join(lines))
+        data = "\n".join(lines).encode("utf-8")
+        with self._directory() as directory:
+            atomic_write_at(directory, "summary.md", data)
+
+    def _require_certain_stream(self) -> None:
+        if self._jsonl_uncertain:
+            raise OSError("run.jsonl stream uncertain after failed rollback; "
+                          "inspect the artifact and start a fresh reporter/output")
 
 
 def _compact_summary_mapping(values: dict[str, Any]) -> str:

@@ -226,3 +226,36 @@ def test_oversized_run_metadata_rejected_before_parse(tmp_path, monkeypatch, fil
     with pytest.raises(registry.RegistryError, match="bundle file byte limit"):
         registry.import_result_bundles([bundle], db)
     assert not parsed and not db.exists()
+
+
+@pytest.mark.parametrize("replacement", ["symlink", "fifo"])
+def test_import_hashes_admitted_bytes_not_a_replaced_path(tmp_path, monkeypatch, replacement):
+    import hashlib
+    import os
+    import threading
+
+    result = tmp_path / "run-a"
+    _write_result_dir(result)
+    admitted = (result / "run.jsonl").read_bytes()
+    decoy = tmp_path / "decoy.jsonl"
+    decoy.write_text(json.dumps(_record("decoy")) + "\n")
+    validate = registry._load_and_validate_result_dir
+
+    def swap_after_validation(path, **limits):
+        run = validate(path, **limits)
+        (result / "run.jsonl").unlink()
+        if replacement == "symlink":
+            (result / "run.jsonl").symlink_to(decoy)
+        else:
+            os.mkfifo(result / "run.jsonl")
+        return run
+
+    monkeypatch.setattr(registry, "_load_and_validate_result_dir", swap_after_validation)
+    db = tmp_path / "registry.sqlite"
+    worker = threading.Thread(target=registry.import_result_dirs, args=([result], db), daemon=True)
+    worker.start()
+    worker.join(30)
+    assert not worker.is_alive(), "import stalled on a replaced run.jsonl"
+    with sqlite3.connect(db) as conn:
+        (stored,) = conn.execute("SELECT run_jsonl_sha256 FROM runs").fetchone()
+    assert stored == hashlib.sha256(admitted).hexdigest()

@@ -9,6 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .compare import unique_json_object
+
 
 RUN_METADATA_FILENAME = "run-metadata.json"
 KNOWN_OBJECT_SECTIONS = ("host", "runtime", "model", "operating_conditions")
@@ -34,7 +36,7 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
         ) from exc
 
     try:
-        metadata = json.loads(text)
+        metadata = json.loads(text, object_pairs_hook=unique_json_object)
     except RecursionError as exc:
         raise RunMetadataError(
             f"run metadata file {metadata_path} exceeds JSON nesting limit"
@@ -42,6 +44,10 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise RunMetadataError(
             f"could not parse run metadata file {metadata_path}: {exc.msg}"
+        ) from exc
+    except ValueError as exc:
+        raise RunMetadataError(
+            f"could not parse run metadata file {metadata_path}: invalid JSON domain"
         ) from exc
 
     return validate_run_metadata(metadata, source=metadata_path)
@@ -105,14 +111,20 @@ def validate_run_metadata(
                     f"or number in {source}"
                 )
 
-    return dict(metadata)
+    try:
+        # Strict serialization validates the entire extension tree, including
+        # overflowed exponent literals; decoding returns normalized JSON values.
+        text = json.dumps(metadata, allow_nan=False)
+        return json.loads(text, object_pairs_hook=unique_json_object)
+    except (ValueError, TypeError, OverflowError, RecursionError) as exc:
+        raise RunMetadataError(f"invalid JSON domain in run metadata file {source}") from exc
 
 
 def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path:
     """Atomically publish normalized run metadata beside the result artifacts."""
 
     output_path = Path(output_dir) / RUN_METADATA_FILENAME
-    text = json.dumps(validate_run_metadata(metadata), indent=2, sort_keys=True) + "\n"
+    text = json.dumps(validate_run_metadata(metadata), indent=2, sort_keys=True, allow_nan=False) + "\n"
     temporary_path = output_path.with_name(f".{RUN_METADATA_FILENAME}.{uuid.uuid4().hex}.tmp")
     owned = False
     try:

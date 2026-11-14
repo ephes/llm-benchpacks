@@ -920,3 +920,28 @@ artifact to the model and corrupt every aggregate built from the dataset.
 Implemented 2026-09-01. The two terminated attempts are described in the
 "Two Discarded Attempts" section of
 `docs/benchmarks/django-resume-electron-wrap/qwen38-oneshot-20260831.md`.
+
+## 2026-11-14: conservative repetition-level prefill parity
+
+Require homogeneous complete prompt/cache samples before comparing prefill speed.
+Matching medians cannot establish a common cache regime. Keep mixed states
+explicit rather than attempting to pair repetitions across independently run packs.
+Use overflow-safe central averaging for every shared median consumer.
+
+## 2026-11-14: opened result evidence
+
+Treat JSON member duplication as ambiguous evidence and reject it recursively.
+Bind bounded reads to a no-follow regular descriptor, admitting it nonblocking
+so replacement with a FIFO cannot stall import/report. Keep directory aliases.
+
+## 2026-11-14: reporter ownership and failed publication
+
+Validate the full runtime metadata JSON domain before running a benchmark.
+Reuse admitted directory descriptors and atomic sibling publication for parent
+artifacts rather than path-only checks after untrusted harness work. Retain the
+output directory's identity across that work and refuse linked append targets.
+Keep summary publication independent of JSONL persistence; a staging failure
+preserves the last successful summary. Compensate failed appends on the opened
+descriptor. If compensation fails, preserve the useful primary error and mark
+the stream uncertain instead of continuing with misleading in-memory evidence.
+Same-user subprocesses remain trusted for arbitrary filesystem access.
