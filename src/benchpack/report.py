@@ -11,6 +11,7 @@ from typing import Any
 
 from .compare import (
     MISSING,
+    CompareError,
     MAX_RESULT_RUN_BYTES,
     MAX_RESULT_RECORDS,
     ResultRun,
@@ -20,9 +21,10 @@ from .compare import (
     format_float,
     format_tokens,
     group_case_records,
-    load_result_run,
+    load_result_runs,
     markdown_cell,
     markdown_code,
+    metric_warnings,
     pack_warning_lines,
     pack_versions,
     prefill_parity_statuses,
@@ -160,43 +162,25 @@ def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
 
     if not result_dirs:
         raise ReportError("benchpack report requires at least one result directory")
-    runs = []
-    seen = set()
-    total_bytes = total_records = 0
     try:
-        for path in result_dirs:
-            if not Path(path).is_dir():
-                raise ReportError(f'result input must be a directory: {path}')
-            if not (Path(path) / 'run.jsonl').is_file():
-                raise ReportError(f'missing run.jsonl in result directory: {path}')
-            canonical = (Path(path) / 'run.jsonl').resolve(strict=True)
-            info = canonical.stat()
-            identity = (info.st_dev, info.st_ino)
-            if identity in seen:
-                continue
-            if (len(runs) >= MAX_REPORT_RUNS or total_bytes >= MAX_REPORT_BYTES
-                    or total_records >= MAX_REPORT_RECORDS):
-                raise ReportError('report total run/byte/record limit exceeded')
-            run = load_result_run(
-                path, byte_limit=MAX_REPORT_BYTES - total_bytes,
-                record_limit=MAX_REPORT_RECORDS - total_records,
-            )
-            seen.add(identity)
-            total_bytes += run.source_bytes
-            total_records += len(run.records)
-            runs.append(run)
-        return runs
-    except (ValueError, OSError, RuntimeError) as exc:
-        raise ReportError(f'could not admit report inputs: {exc}') from exc
+        return load_result_runs(
+            result_dirs, run_limit=MAX_REPORT_RUNS,
+            byte_limit=MAX_REPORT_BYTES, record_limit=MAX_REPORT_RECORDS,
+        )
+    except CompareError as exc:
+        raise ReportError(f"could not admit result inputs: {exc}") from exc
 
 
 def render_report(runs: list[ResultRun]) -> str:
     """Render a pasteable Markdown report for loaded result runs."""
 
     runs = disambiguate_runs(runs)
-    summaries = summarize_runs(runs)
+    try:
+        summaries = summarize_runs(runs)
+    except CompareError as exc:
+        raise ReportError(str(exc)) from exc
     statuses = prefill_parity_statuses(summaries)
-    warning_lines = pack_warning_lines(runs) + cache_warnings(summaries)
+    warning_lines = pack_warning_lines(runs) + metric_warnings(runs) + cache_warnings(summaries)
 
     lines: list[str] = ["# benchpack report", ""]
     lines.extend(_render_inputs(runs))
@@ -476,7 +460,7 @@ def _render_compare_medians(
     lines = [
         "## Compare Medians",
         "",
-        "Medians use the same metric filtering, cache coverage, warning, and "
+        "Medians use only successful (`ok: true`) rows and the same metric filtering, cache coverage, warning, and "
         "prefill-parity rules as `benchpack compare`.",
         "",
     ]
@@ -489,10 +473,10 @@ def _render_compare_medians(
             "| run | case | rows | ok | wall_s med | ttft_s med | "
             "prefill_tps med | decode_tps med | total_tps med | "
             "output_tokens med | prompt_tokens med | cached_prompt med | "
-            "cache rows | prefill parity |",
+            "cache rows | prefill parity | failed |",
             "|-----|------|------|----|------------|------------|-----------------|"
             "----------------|---------------|-------------------|-------------------|"
-            "-------------------|------------|----------------|",
+            "-------------------|------------|----------------|--------|",
         ]
     )
     for summary in summaries:
@@ -505,7 +489,7 @@ def _render_compare_medians(
         lines.append(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {prefill} | "
             "{decode} | {total} | {output} | {prompt} | {cached} | "
-            "{cache_rows} | {prefill_parity} |".format(
+            "{cache_rows} | {prefill_parity} | {failed} |".format(
                 run=markdown_cell(summary.run_label),
                 case=markdown_cell(summary.display_case),
                 rows=summary.rows,
@@ -518,8 +502,9 @@ def _render_compare_medians(
                 output=format_tokens(summary.output_tokens),
                 prompt=format_tokens(summary.prompt_tokens),
                 cached=format_tokens(summary.cached_prompt_tokens),
-                cache_rows=f"{summary.cache_rows}/{summary.rows}",
+                cache_rows=f"{summary.cache_rows}/{summary.ok}",
                 prefill_parity=prefill_parity,
+                failed=summary.rows - summary.ok,
             )
         )
     return lines

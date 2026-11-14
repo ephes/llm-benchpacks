@@ -19,6 +19,20 @@
 - Keep comparison medians finite and require homogeneous repetition-level
   prompt/cache counts before publishing comparable prefill speed.
 
+- Reject duplicate members in model-output JSON and cap escaped scoring
+  diagnostics at 1024 UTF-8 bytes with explicit truncation.
+- Bound hardware probe output to 64 KiB, share collector deadlines, and retire
+  owned process groups on success, timeout, excess output or collection failure.
+  Probe cleanup never raises, so an unkillable or unreaped leader leaves the
+  probe unavailable instead of aborting a benchmark run.
+- Refuse mixed runtime/pack-version identities in comparisons. Use successful
+  rows for metrics/cache parity and show failure counts; all-failed groups have
+  unavailable metrics. Registry report/site export also refuses mixed runs;
+  importing them still preserves each row identity.
+- Require finite nonnegative timing/rates and exact nonnegative token counts.
+  Share compare/report cumulative input limits and opened-file deduplication;
+  compare requires at least two distinct inputs.
+
 - Bound verifier JSON admission; preserve exit-code authority and previous
   evidence when atomic publication fails.
   Keep verifier output written after SIGTERM, do not wait on pipes an escaped

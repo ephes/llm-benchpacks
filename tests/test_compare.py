@@ -941,7 +941,8 @@ def test_finite_median_consumers(tmp_path, values, expected):
     run = tmp_path / 'run'
     _write_run(run, rows=[_record('short', wall_s=v) for v in values])
     loaded = load_result_run(run)
-    assert summarize_runs([loaded])[0].wall_s == expected
+    admitted = [value for value in values if value >= 0]
+    assert summarize_runs([loaded])[0].wall_s == finite_median(admitted)
     for text in (render_comparison([loaded]), render_report([loaded])):
         assert 'inf' not in text.lower()
 
@@ -1075,3 +1076,178 @@ def test_registry_extreme_finite_medians_stay_finite(tmp_path):
         elif isinstance(value, float):
             assert math.isfinite(value)
     check(snapshot)
+
+
+@pytest.mark.parametrize('field', ['model', 'adapter', 'version'])
+@pytest.mark.parametrize('renderer', [summarize_runs, render_comparison, render_report])
+def test_mixed_runtime_identity_refused(tmp_path, field, renderer):
+    rows = [_record('short'), _record('short')]
+    if field == 'version':
+        rows[1]['pack']['version'] = 'other'
+    else:
+        rows[1][field] = 'other'
+    _write_run(tmp_path / 'mixed', rows=rows)
+    with pytest.raises(ValueError, match='mixed.*identity'):
+        renderer([load_result_run(tmp_path / 'mixed')])
+
+
+def test_successful_population_excludes_fast_failures(tmp_path):
+    rows = [_record('short', wall_s=9, cached_prompt=0)]
+    rows += [_record('short', ok=False, wall_s=0.01, cached_prompt=8,
+                     prompt_tokens=100) for _ in range(5)]
+    _write_run(tmp_path / 'mixed', rows=rows)
+    run = load_result_run(tmp_path / 'mixed')
+    summary = summarize_runs([run])[0]
+    assert summary.wall_s == 9
+    assert summary.ok == 1 and summary.rows == 6
+    assert summary.prompt_tokens == 10 and summary.prompt_rows == 1
+    assert summary.cached_prompt_tokens == 0 and summary.cache_rows == 1
+    assert _prefill_parity_statuses([summary])[summary.case_key] == 'comparable'
+    for renderer in (render_comparison, render_report):
+        output = renderer([run])
+        assert 'failed' in output and '5' in output
+
+
+def test_failed_samples_cannot_establish_cache_parity(tmp_path):
+    _write_run(tmp_path / 'failed', rows=[_record('short', ok=False, cached_prompt=0)])
+    run = load_result_run(tmp_path / 'failed')
+    summary = summarize_runs([run])[0]
+    assert summary.wall_s is None and summary.output_tokens is None
+    assert summary.prompt_rows == summary.cache_rows == 0
+    assert _prefill_parity_statuses([summary])[summary.case_key] == 'no-success'
+    assert summary.rows == 1 and summary.ok == 0
+
+
+def test_missing_runtime_identity_is_not_a_known_model(tmp_path):
+    rows = [_record('short'), _record('short')]
+    rows[1].pop('model')
+    _write_run(tmp_path / 'mixed', rows=rows)
+    with pytest.raises(CompareError, match='mixed runtime identity: model'):
+        summarize_runs([load_result_run(tmp_path / 'mixed')])
+
+
+@pytest.mark.parametrize('command', ['compare', 'report'])
+def test_cli_mixed_identity_has_controlled_error(tmp_path, command, capsys):
+    from benchpack.cli import main
+    rows = [_record('short'), _record('short')]
+    rows[1]['adapter'] = 'other'
+    _write_run(tmp_path / 'mixed', rows=rows)
+    _write_run(tmp_path / 'ordinary')
+    args = [command, str(tmp_path / 'mixed'), str(tmp_path / 'ordinary')]
+    with pytest.raises(SystemExit, match='mixed runtime identity'):
+        main(args)
+    assert capsys.readouterr().out == ''
+
+
+def test_scoring_failure_is_still_a_completed_metric_sample(tmp_path):
+    row = _record('short', wall_s=9)
+    row['scoring'] = {'mode': 'contains', 'passed': False}
+    _write_run(tmp_path / 'completed', rows=[row])
+    assert summarize_runs([load_result_run(tmp_path / 'completed')])[0].wall_s == 9
+
+
+@pytest.mark.parametrize('section, field, attribute, invalid', [
+    ('timing', 'wall_s', 'wall_s', -0.01),
+    ('timing', 'decode_tps', 'decode_tps', -1),
+    ('tokens', 'output', 'output_tokens', -1),
+    ('tokens', 'prompt', 'prompt_tokens', 1.25),
+    ('tokens', 'cached_prompt', 'cached_prompt_tokens', -1),
+    ('tokens', 'cached_prompt', 'cached_prompt_tokens', 0.5),
+])
+def test_comparison_metric_domains(tmp_path, section, field, attribute, invalid):
+    row = _record('short', cached_prompt=0)
+    row[section][field] = invalid
+    _write_run(tmp_path / 'invalid', rows=[row])
+    run = load_result_run(tmp_path / 'invalid')
+    summary = summarize_runs([run])[0]
+    assert getattr(summary, attribute) is None
+    for renderer in (render_comparison, render_report):
+        warnings = [line for line in renderer([run]).splitlines()
+                    if line.startswith('WARNING:') and 'invalid metric' in line]
+        assert len(warnings) == 1
+        assert len(warnings[0].encode()) < 300
+    assert run.records[0][section][field] == invalid
+
+
+@pytest.mark.parametrize('command', ['compare', 'report'])
+@pytest.mark.parametrize('limit', ['MAX_REPORT_RUNS', 'MAX_REPORT_BYTES', 'MAX_REPORT_RECORDS'])
+def test_compare_and_report_share_total_input_limits(tmp_path, monkeypatch, command, limit):
+    from benchpack.cli import main
+    import benchpack.report as report
+    for name in ('a', 'b', 'c'):
+        _write_run(tmp_path / name, rows=[_record('short')])
+    value = {'MAX_REPORT_RUNS': 2, 'MAX_REPORT_RECORDS': 2,
+             'MAX_REPORT_BYTES': (tmp_path / 'a/run.jsonl').stat().st_size * 2}[limit]
+    monkeypatch.setattr(report, limit, value)
+    with pytest.raises(SystemExit, match='limit'):
+        main([command, *(str(tmp_path / name) for name in ('a', 'b', 'c'))])
+
+
+def test_compare_requires_two_distinct_opened_inputs(tmp_path):
+    from benchpack.cli import main
+    _write_run(tmp_path / 'a')
+    (tmp_path / 'alias').symlink_to(tmp_path / 'a', target_is_directory=True)
+    with pytest.raises(SystemExit, match='two distinct'):
+        main(['compare', str(tmp_path / 'a'), str(tmp_path / 'alias')])
+
+
+def test_invalid_metric_warnings_are_bounded_and_zero_is_evidence(tmp_path):
+    row = _record('short', wall_s=0, ttft_s=0, prefill_tps=0,
+                  decode_tps=0, total_tps=0, output_tokens=0,
+                  prompt_tokens=0.0, cached_prompt=0.0)
+    _write_run(tmp_path / 'zeros', rows=[row])
+    run = load_result_run(tmp_path / 'zeros')
+    summary = summarize_runs([run])[0]
+    assert summary.wall_s == summary.output_tokens == summary.prompt_tokens == 0
+    assert _prefill_parity_statuses([summary])[summary.case_key] == 'comparable'
+    assert 'invalid metric' not in render_comparison([run])
+    run.records.extend(run.records * 999)
+    for record in run.records:
+        record['timing']['wall_s'] = -1
+    for renderer in (render_comparison, render_report):
+        warnings = [line for line in renderer([run]).splitlines()
+                    if 'invalid metric' in line]
+        assert len(warnings) == 1 and len(warnings[0]) < 300
+        assert '1000' in warnings[0]
+
+
+def test_token_domain_refuses_rounding_and_booleans(tmp_path):
+    rows = [_record('short', prompt_tokens=value, cached_prompt=value)
+            for value in (True, -1, 1.5, 2**53 + 1)]
+    _write_run(tmp_path / 'invalid', rows=rows)
+    summary = summarize_runs([load_result_run(tmp_path / 'invalid')])[0]
+    assert summary.prompt_rows == summary.cache_rows == 0
+    assert summary.prompt_tokens is None
+
+
+def test_opened_identity_not_preopen_stat_controls_dedup(tmp_path, monkeypatch):
+    import os
+    import benchpack.compare as compare
+    from benchpack.report import load_report_runs
+    _write_run(tmp_path / 'a', rows=[_record('short', wall_s=1)])
+    _write_run(tmp_path / 'b', rows=[_record('short', wall_s=2)])
+    real_open = os.open
+    opened = []
+    def swapped_open(path, flags, *args, **kwargs):
+        if Path(path).name == 'run.jsonl':
+            opened.append(path)
+        if len(opened) == 2 and Path(path).name == 'run.jsonl':
+            # Exchange at the actual open boundary, after any path stat.
+            return real_open(tmp_path / 'a/run.jsonl', flags, *args, **kwargs)
+        return real_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(compare.os, 'open', swapped_open)
+    runs = load_report_runs([tmp_path / 'a', tmp_path / 'b'])
+    assert len(runs) == 1
+
+
+def test_compare_deduplicates_aliases_before_total_budget(tmp_path, monkeypatch, capsys):
+    import os
+    import benchpack.report as report
+    from benchpack.cli import main
+    _write_run(tmp_path / 'a')
+    _write_run(tmp_path / 'b')
+    (tmp_path / 'alias').mkdir()
+    os.link(tmp_path / 'a/run.jsonl', tmp_path / 'alias/run.jsonl')
+    monkeypatch.setattr(report, 'MAX_REPORT_RUNS', 2)
+    assert main(['compare', *(str(tmp_path / name) for name in ('a', 'alias', 'b'))]) == 0
+    assert '| alias |' not in capsys.readouterr().out

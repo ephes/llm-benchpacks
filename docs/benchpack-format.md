@@ -741,6 +741,9 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   `additionalProperties = false`, `items`, `enum`, `const`, string length
   bounds, and numeric bounds. The `integer` type accepts finite mathematically
   integral numbers such as `1.0` and `1e0`, excluding booleans and fractions.
+  Output decoding rejects duplicate object members at every depth, even when
+  their values agree. Diagnostics use bounded previews and an explicit
+  `[truncated]` marker, with at most 1024 UTF-8 bytes per error.
   Output decoding rejects NaN, Infinity and -Infinity, including nested values,
   and float/exponent literals that overflow Python's finite float range.
   Integer literals are not limited to float range, but remain subject to

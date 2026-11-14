@@ -624,12 +624,13 @@ case id) and input run in a single pass per run, and renders a
 stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
 tokens. It also reports median numeric `tokens.prompt`, median numeric
 `tokens.cached_prompt`, and cache metadata coverage, expressed as numeric
-cached-token rows over total rows, for each case/run group. It computes median
+cached-token rows over successful rows, for each case/run group. It computes median
 numeric `timing.prefill_tps` but renders that median only when the case-level
 `prefill parity` status is `comparable`.
 
-The shared metric filter excludes booleans, nonnumeric/nonfinite values, and
-integers that overflow float conversion without modifying loaded records or
+The shared metric filter excludes booleans, nonnumeric/nonfinite values,
+negative timing/rates, fractional or negative token counts, and token integers that
+cannot convert exactly to finite floats without modifying loaded records or
 input artifacts. Groups with no valid samples render `—`. JSON decoding failures,
 including Python's integer digit limit, produce a file/line `CompareError`.
 The shared loader reads binary lines with a 1 MiB physical-line byte limit
@@ -652,7 +653,7 @@ numeric `tokens.prompt` coverage, and when complete cached prompt-token medians
 differ. Prompt-token coverage is used as a warning gate but is not rendered as a
 separate coverage column. It also computes one case-level `prefill parity`
 status from the same summaries and repeats it on every run row for that case.
-The status priority is `missing-case`, `prompt-missing`, `prompt-mixed`,
+The status priority is `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`,
 `prompt-diff`, `cache-missing`, `cache-mixed`, `cache-diff`, then `comparable`,
 so cache parity is considered only after case and prompt parity hold. Missing case/run groups suppress
 prompt-token and cached-token median mismatch warnings for that case. Compare
@@ -1145,3 +1146,27 @@ and modes on publication failure. An unsuccessful rollback preserves the primary
 exception, attaches a bounded recovery note, and disables append/summary operations
 on that reporter. Metadata admission recursively validates unambiguous finite
 JSON and normalizes extension objects before filesystem effects.
+
+## Bounded evidence ownership
+
+The scorer's recursive object-pairs hook refuses duplicate output members before
+validation. Shared bounded representations render values and escaped property
+paths, and a final 1024-byte UTF-8 ceiling bounds every error without changing raw
+evidence or the scoring verdict.
+
+Hardware probes use nonblocking bounded pipe reads and POSIX process groups.
+Every exit retires the group, reaps the leader and closes owned streams; setup
+failures also enter cleanup. Cleanup has a 0.25-second reap allowance. All
+metadata commands receive remaining time from one 10-second monotonic deadline;
+resource sampling uses 5 seconds. Output above 64 KiB across both pipes is
+unavailable. Descendants that escape the owned session are outside this contract.
+
+`load_result_runs` opens each run file once, deduplicates its descriptor identity,
+and passes remaining cumulative bytes/records into the shared stream parser.
+Compare and report use this admission path (100 runs, 64 MiB, 100,000 records).
+Before grouping, summaries reject mixed adapter/model identities and multiple
+versions of one pack. Registry imports still preserve mixed row identities,
+but report/site rendering refuses those inputs before publication. Only completed rows supply metrics and cache coverage;
+all rows still supply outcome counts. One shared metric-domain predicate and
+one bounded aggregate warning keep the two renderers consistent. See the
+[specification](specification.md#comparison-metric-and-input-admission).

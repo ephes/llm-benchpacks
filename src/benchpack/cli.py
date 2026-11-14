@@ -20,7 +20,7 @@ from .adapters.openai_chat import (
     OPENAI_STREAM_USAGE_KEY,
     OPENAI_STREAM_USAGE_OMIT,
 )
-from .compare import CompareError, load_result_run, render_comparison
+from .compare import CompareError, render_comparison
 from .external_agent_context import (
     ExternalAgentContextError,
     build_external_agent_context,
@@ -470,10 +470,13 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     if len(args.result_dirs) < 2:
         raise SystemExit("benchpack compare requires at least two result directories")
     try:
-        runs = [load_result_run(path) for path in args.result_dirs]
-    except CompareError as exc:
+        runs = load_report_runs(args.result_dirs)
+        if len(runs) < 2:
+            raise CompareError("benchpack compare requires at least two distinct result directories")
+        output = render_comparison(runs)
+    except (CompareError, ReportError) as exc:
         raise SystemExit(str(exc)) from exc
-    print(render_comparison(runs))
+    print(output)
     return 0
 
 

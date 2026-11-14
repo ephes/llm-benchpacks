@@ -10,7 +10,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from .safe_files import open_contained_regular
 
@@ -87,7 +87,21 @@ def load_result_run(
         raise CompareError(f"result input must be a directory: {path}")
 
     jsonl_path = path / "run.jsonl"
+    try:
+        fd = open_contained_regular(path, "run.jsonl")
+        if fd is None:
+            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+        with os.fdopen(fd, "rb") as fh:
+            return _read_result_run(path, fh, byte_limit=byte_limit, record_limit=record_limit)
+    except OSError as exc:
+        raise CompareError(f"could not read {jsonl_path}") from exc
 
+
+def _read_result_run(
+    path: Path, fh: BinaryIO, *, byte_limit: int, record_limit: int,
+) -> ResultRun:
+    """Parse one already opened input with the remaining actual-byte allowance."""
+    jsonl_path = path / "run.jsonl"
     byte_limit = min(byte_limit, MAX_RESULT_RUN_BYTES)
     record_limit = min(record_limit, MAX_RESULT_RECORDS)
     records: list[dict[str, Any]] = []
@@ -95,37 +109,33 @@ def load_result_run(
     line_number = 0
     digest = hashlib.sha256()
     try:
-        fd = open_contained_regular(path, "run.jsonl")
-        if fd is None:
-            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
-        with os.fdopen(fd, "rb") as fh:
-            while True:
-                line = fh.readline(min(
-                    MAX_RESULT_LINE_BYTES + 1,
-                    byte_limit - total + 1,
-                ))
-                if not line:
-                    break
-                line_number += 1
-                source = f"{jsonl_path}:{line_number}"
-                total += len(line)
-                digest.update(line)
-                if total > byte_limit:
-                    raise CompareError(f"run byte limit exceeded in {source}")
-                if len(line) > MAX_RESULT_LINE_BYTES:
-                    raise CompareError(f"record byte limit exceeded in {source}")
-                stripped = line.decode("utf-8").strip()
-                if not stripped:
-                    continue
-                if len(records) >= record_limit:
-                    raise CompareError(f"record count limit exceeded in {source}")
-                try:
-                    record = json.loads(stripped, object_pairs_hook=unique_json_object)
-                except (ValueError, RecursionError) as exc:
-                    raise CompareError(f"could not parse {source}: invalid JSON") from exc
-                if not isinstance(record, dict):
-                    raise CompareError(f"expected JSON object in {source}")
-                records.append(record)
+        while True:
+            line = fh.readline(min(
+                MAX_RESULT_LINE_BYTES + 1,
+                byte_limit - total + 1,
+            ))
+            if not line:
+                break
+            line_number += 1
+            source = f"{jsonl_path}:{line_number}"
+            total += len(line)
+            digest.update(line)
+            if total > byte_limit:
+                raise CompareError(f"run byte limit exceeded in {source}")
+            if len(line) > MAX_RESULT_LINE_BYTES:
+                raise CompareError(f"record byte limit exceeded in {source}")
+            stripped = line.decode("utf-8").strip()
+            if not stripped:
+                continue
+            if len(records) >= record_limit:
+                raise CompareError(f"record count limit exceeded in {source}")
+            try:
+                record = json.loads(stripped, object_pairs_hook=unique_json_object)
+            except (ValueError, RecursionError) as exc:
+                raise CompareError(f"could not parse {source}: invalid JSON") from exc
+            if not isinstance(record, dict):
+                raise CompareError(f"expected JSON object in {source}")
+            records.append(record)
     except UnicodeError as exc:
         raise CompareError(f"could not decode {jsonl_path}:{line_number}: invalid UTF-8") from exc
     except OSError as exc:
@@ -138,6 +148,46 @@ def load_result_run(
         path=path, label=path.name, records=records, artifact_root=path,
         source_bytes=total, source_sha256=digest.hexdigest(),
     )
+
+
+def load_result_runs(
+    result_dirs: list[Path | str], *, run_limit: int = 100,
+    byte_limit: int = MAX_RESULT_RUN_BYTES, record_limit: int = MAX_RESULT_RECORDS,
+) -> list[ResultRun]:
+    """Admit a bounded collection, deduplicating the descriptors actually read."""
+    runs: list[ResultRun] = []
+    seen: set[tuple[int, int]] = set()
+    total_bytes = total_records = 0
+    for raw_path in result_dirs:
+        path = Path(raw_path)
+        if not path.is_dir():
+            raise CompareError(f"result input must be a directory: {path}")
+        jsonl_path = path / "run.jsonl"
+        fd = open_contained_regular(path, "run.jsonl")
+        if fd is None:
+            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+        try:
+            info = os.fstat(fd)
+            identity = (info.st_dev, info.st_ino)
+            if identity in seen:
+                continue
+            if (len(runs) >= run_limit or total_bytes >= byte_limit
+                    or total_records >= record_limit):
+                raise CompareError("total run/byte/record limit exceeded")
+            with os.fdopen(fd, "rb", closefd=False) as fh:
+                run = _read_result_run(
+                    path, fh, byte_limit=byte_limit - total_bytes,
+                    record_limit=record_limit - total_records,
+                )
+            seen.add(identity)
+            total_bytes += run.source_bytes
+            total_records += len(run.records)
+            runs.append(run)
+        except OSError as exc:
+            raise CompareError(f"could not read {jsonl_path}") from exc
+        finally:
+            os.close(fd)
+    return runs
 
 
 def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -182,9 +232,33 @@ def case_labels(keys: list[tuple[str | None, str]]) -> dict[tuple[str | None, st
     }
 
 
+def validate_run_identity(run: ResultRun) -> None:
+    """Refuse pooled runtime identities and multiple versions of one pack."""
+    for field in ("adapter", "model"):
+        identities = set()
+        for record in run.records:
+            value = record.get(field)
+            if value is not None and not isinstance(value, str):
+                raise CompareError(f"mixed or invalid runtime identity: {field}; split result runs")
+            identities.add(value)
+        if len(identities) > 1:
+            raise CompareError(f"mixed runtime identity: {field}; split result runs")
+    versions: dict[str | None, set[str | None]] = {}
+    for record in run.records:
+        pack = record.get("pack")
+        version = pack.get("version") if isinstance(pack, dict) else None
+        if version is not None and not isinstance(version, str):
+            raise CompareError("mixed or invalid pack version identity; split result runs")
+        versions.setdefault(record_pack_id(record), set()).add(version)
+    if any(len(values) > 1 for values in versions.values()):
+        raise CompareError("mixed pack version identity; split result runs")
+
+
 def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
     """Summarize each run/case pair using medians over numeric samples."""
 
+    for run in runs:
+        validate_run_identity(run)
     grouped = [group_case_records(run.records) for run in runs]
     case_order: list[tuple[str | None, str]] = []
     seen_cases: set[tuple[str | None, str]] = set()
@@ -223,22 +297,23 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                 )
                 continue
 
-            prompt_values = _numeric_metric_values(rows, ("tokens", "prompt"))
+            successful = [row for row in rows if row.get("ok") is True]
+            prompt_values = _numeric_metric_values(successful, ("tokens", "prompt"))
             cached_prompt_values = _numeric_metric_values(
-                rows, ("tokens", "cached_prompt")
+                successful, ("tokens", "cached_prompt")
             )
             summaries.append(
                 CaseSummary(
                     run_label=run.label,
                     case=case,
                     rows=len(rows),
-                    ok=sum(1 for row in rows if row.get("ok") is True),
-                    wall_s=_median_metric(rows, ("timing", "wall_s")),
-                    ttft_s=_median_metric(rows, ("timing", "ttft_s")),
-                    prefill_tps=_median_metric(rows, ("timing", "prefill_tps")),
-                    decode_tps=_median_metric(rows, ("timing", "decode_tps")),
-                    total_tps=_median_metric(rows, ("timing", "total_tps")),
-                    output_tokens=_median_metric(rows, ("tokens", "output")),
+                    ok=len(successful),
+                    wall_s=_median_metric(successful, ("timing", "wall_s")),
+                    ttft_s=_median_metric(successful, ("timing", "ttft_s")),
+                    prefill_tps=_median_metric(successful, ("timing", "prefill_tps")),
+                    decode_tps=_median_metric(successful, ("timing", "decode_tps")),
+                    total_tps=_median_metric(successful, ("timing", "total_tps")),
+                    output_tokens=_median_metric(successful, ("tokens", "output")),
                     prompt_tokens=finite_median(prompt_values),
                     prompt_rows=len(prompt_values),
                     cached_prompt_tokens=finite_median(cached_prompt_values),
@@ -355,7 +430,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
         lines.extend(pack_warning_lines(runs))
     lines.append("")
     lines.append(
-        "Note: medians ignore null metric values."
+        "Note: medians use only successful (`ok: true`) rows and ignore null metric values."
     )
     lines.append("")
     lines.append(
@@ -371,7 +446,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
 
     summaries = summarize_runs(runs)
     prefill_statuses = prefill_parity_statuses(summaries)
-    warning_lines = cache_warnings(summaries)
+    warning_lines = metric_warnings(runs) + cache_warnings(summaries)
     for warning in warning_lines:
         lines.append(warning)
     if warning_lines:
@@ -381,12 +456,12 @@ def render_comparison(runs: list[ResultRun]) -> str:
         "| run | case | rows | ok | wall_s med | ttft_s med | "
         "prefill_tps med | decode_tps med | total_tps med | "
         "output_tokens med | prompt_tokens med | cached_prompt med | "
-        "cache rows | prefill parity |"
+        "cache rows | prefill parity | failed |"
     )
     lines.append(
         "|-----|------|------|----|------------|------------|-----------------|"
         "----------------|---------------|-------------------|-------------------|"
-        "-------------------|------------|----------------|"
+        "-------------------|------------|----------------|--------|"
     )
     for summary in summaries:
         prefill_parity = prefill_statuses[summary.case_key]
@@ -399,7 +474,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
         lines.append(
             "| {run} | {case} | {rows} | {ok} | {wall} | {ttft} | {prefill} | "
             "{decode} | {total} | {output} | {prompt} | {cached} | {cache_rows} | "
-            "{prefill_parity} |".format(
+            "{prefill_parity} | {failed} |".format(
                 run=markdown_cell(summary.run_label),
                 case=markdown_cell(summary.display_case),
                 rows=summary.rows,
@@ -412,8 +487,9 @@ def render_comparison(runs: list[ResultRun]) -> str:
                 output=_format_tokens(summary.output_tokens),
                 prompt=_format_tokens(summary.prompt_tokens),
                 cached=_format_tokens(summary.cached_prompt_tokens),
-                cache_rows=f"{summary.cache_rows}/{summary.rows}",
+                cache_rows=f"{summary.cache_rows}/{summary.ok}",
                 prefill_parity=prefill_parity,
+                failed=summary.rows - summary.ok,
             )
         )
     lines.append("")
@@ -448,6 +524,8 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
                 hardware=run.hardware,
                 run_metadata=run.run_metadata,
                 artifact_root=run.artifact_root,
+                source_bytes=run.source_bytes,
+                source_sha256=run.source_sha256,
             )
         )
     return labeled
@@ -476,7 +554,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
 
     for case_summaries in by_case.values():
         case = markdown_code(case_summaries[0].display_case)
-        has_all_case_rows = all(summary.rows > 0 for summary in case_summaries)
+        has_all_case_rows = all(summary.ok > 0 for summary in case_summaries)
         prompt_medians = {
             summary.prompt_tokens
             for summary in case_summaries
@@ -484,7 +562,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         }
         has_complete_prompt_medians = (
             has_all_case_rows
-            and all(summary.prompt_rows == summary.rows for summary in case_summaries)
+            and all(summary.prompt_rows == summary.ok for summary in case_summaries)
         )
         if has_complete_prompt_medians and len(prompt_medians) > 1:
             warnings.append(
@@ -493,7 +571,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
             )
 
         if any(
-            summary.rows > 0 and summary.cache_rows < summary.rows
+            summary.ok > 0 and summary.cache_rows < summary.ok
             for summary in case_summaries
         ):
             warnings.append(
@@ -538,7 +616,11 @@ def _prefill_parity_statuses(
             statuses[case] = "missing-case"
             continue
 
-        if any(summary.prompt_rows < summary.rows for summary in case_summaries):
+        if any(summary.ok == 0 for summary in case_summaries):
+            statuses[case] = "no-success"
+            continue
+
+        if any(summary.prompt_rows < summary.ok for summary in case_summaries):
             statuses[case] = "prompt-missing"
             continue
 
@@ -551,7 +633,7 @@ def _prefill_parity_statuses(
             statuses[case] = "prompt-diff"
             continue
 
-        if any(summary.cache_rows < summary.rows for summary in case_summaries):
+        if any(summary.cache_rows < summary.ok for summary in case_summaries):
             statuses[case] = "cache-missing"
             continue
 
@@ -583,15 +665,48 @@ def _numeric_metric_values(
         if not isinstance(section, dict):
             continue
         value = section.get(field_name)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        try:
-            numeric_value = float(value)
-        except OverflowError:
-            continue
-        if math.isfinite(numeric_value):
+        numeric_value = _metric_value(value, section_name)
+        if numeric_value is not None:
             values.append(numeric_value)
     return values
+
+
+def _metric_value(value: Any, section: str) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    if not math.isfinite(number) or number < 0:
+        return None
+    if section == "tokens" and (not number.is_integer() or int(number) != value):
+        return None
+    return number
+
+
+def metric_warnings(runs: list[ResultRun]) -> list[str]:
+    """One bounded warning for invalid supplied metrics, without raw values."""
+    invalid = 0
+    for run in runs:
+        for row in run.records:
+            for section, fields in (
+                ("timing", ("wall_s", "ttft_s", "prefill_tps", "decode_tps", "total_tps")),
+                ("tokens", ("prompt", "output", "cached_prompt")),
+            ):
+                values = row.get(section)
+                if not isinstance(values, dict):
+                    continue
+                for field in fields:
+                    value = values.get(field)
+                    if value is not None and _metric_value(value, section) is None:
+                        invalid += 1
+    if not invalid:
+        return []
+    return [
+        f"WARNING: {invalid} invalid metric samples ignored; timing/rates require "
+        "finite nonnegative values and tokens require exact nonnegative counts."
+    ]
 
 
 def finite_median(values: list[float]) -> float | None:

@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from benchpack import report, tasks
+from benchpack import compare, report, tasks
 from tests.test_report import _write_run
 
 
@@ -32,13 +32,13 @@ def test_report_deduplicates_canonical_run_identity(tmp_path, monkeypatch):
     alias = tmp_path / 'alias'
     alias.symlink_to(run, target_is_directory=True)
     calls = []
-    load = report.load_result_run
+    load = compare._read_result_run
 
-    def track(path, **kwargs):
+    def track(path, stream, **kwargs):
         calls.append(path)
-        return load(path, **kwargs)
+        return load(path, stream, **kwargs)
 
-    monkeypatch.setattr(report, 'load_result_run', track)
+    monkeypatch.setattr(compare, '_read_result_run', track)
     runs = report.load_report_runs([run, alias, run / '..' / 'run'])
     assert len(runs) == len(calls) == 1
 
@@ -117,11 +117,11 @@ def test_report_passes_remaining_allowance_into_reader(tmp_path, monkeypatch, bu
     limit = size + size // 2 if budget == 'BYTES' else 3
     monkeypatch.setattr(report, f'MAX_REPORT_{budget}', limit)
     calls = []
-    load = report.load_result_run
-    def track(path, **kwargs):
+    load = compare._read_result_run
+    def track(path, stream, **kwargs):
         calls.append(kwargs)
-        return load(path, **kwargs)
-    monkeypatch.setattr(report, 'load_result_run', track)
+        return load(path, stream, **kwargs)
+    monkeypatch.setattr(compare, '_read_result_run', track)
     with pytest.raises(report.ReportError):
         report.load_report_runs(paths)
     assert len(calls) == 2
