@@ -12,7 +12,7 @@ import shutil
 import sqlite3
 import tempfile
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,6 +44,8 @@ MAX_BUNDLE_BYTES = MAX_RESULT_RUN_BYTES
 MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_BUNDLE_FILE_BYTES = MAX_RESULT_RUN_BYTES
 MAX_BUNDLE_FILES_BYTES = 4 * MAX_RESULT_RUN_BYTES
+MAX_AGENT_DATASET_BYTES = 16 * 1024 * 1024
+MAX_AGENT_DATASET_ROWS = 10_000
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_MANIFEST_FILENAME = "benchpack-bundle.json"
 STATIC_SITE_INDEX_FILENAME = "index.html"
@@ -288,8 +290,9 @@ def load_registry_report_runs(
         raise RegistryError(f"registry database not found: {db}")
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             run_rows = _select_report_run_rows(
@@ -317,8 +320,9 @@ def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateG
         raise RegistryError(f"registry database not found: {db}")
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             duplicate_hashes = conn.execute(
@@ -397,8 +401,9 @@ def query_registry_results(
         raise RegistryError(f"registry database not found: {db}")
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             selected_rows = _select_report_run_rows(
@@ -601,7 +606,7 @@ def import_result_dirs(
         db.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN")
             _ensure_schema(conn)
@@ -634,7 +639,7 @@ def import_result_bundles(
         db.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN")
             _ensure_schema(conn)
@@ -658,7 +663,7 @@ def import_agent_wrap_results(
         db.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN")
             _reject_future_registry_schema(conn)
@@ -700,8 +705,9 @@ def query_agent_wrap_results(
         raise RegistryError(f"registry database not found: {db}")
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             rows = _select_agent_wrap_rows(
@@ -1022,6 +1028,31 @@ def _assert_report_schema(conn: sqlite3.Connection, db: Path) -> None:
         )
 
 
+def _select_in_batches(
+    conn: sqlite3.Connection,
+    sql: str,
+    values: Iterable[Any],
+    params: tuple[object, ...] = (),
+) -> list[sqlite3.Row]:
+    """Expand a trusted SQL selection within this connection's variable budget.
+
+    Fixed filter/limit parameters follow the selection parameters. Callers own
+    the read transaction and restore global ordering/limits where needed.
+    """
+    unique = list(dict.fromkeys(values))
+    batch_size = conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) - len(params)
+    if batch_size < 1:
+        raise RegistryError("registry query filters exceed SQLite variable limit")
+    rows: list[sqlite3.Row] = []
+    for start in range(0, len(unique), batch_size):
+        batch = unique[start:start + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        rows.extend(conn.execute(
+            sql.replace("{placeholders}", placeholders), (*batch, *params),
+        ).fetchall())
+    return rows
+
+
 def _select_report_run_rows(
     conn: sqlite3.Connection,
     *,
@@ -1030,16 +1061,16 @@ def _select_report_run_rows(
     command: str,
 ) -> list[sqlite3.Row]:
     if run_ids:
-        placeholders = ",".join("?" for _ in run_ids)
-        rows = conn.execute(
-            f"""
+        rows = _select_in_batches(
+            conn, """
             SELECT id, result_dir, label, hardware_json, run_metadata_json
             FROM runs
             WHERE id IN ({placeholders})
             ORDER BY id
             """,
-            tuple(run_ids),
-        ).fetchall()
+            run_ids,
+        )
+        rows.sort(key=lambda row: int(row["id"]))
         found_ids = {int(row["id"]) for row in rows}
         missing = [run_id for run_id in run_ids if run_id not in found_ids]
         if missing:
@@ -1047,16 +1078,16 @@ def _select_report_run_rows(
         return rows
 
     if labels:
-        placeholders = ",".join("?" for _ in labels)
-        rows = conn.execute(
-            f"""
+        rows = _select_in_batches(
+            conn, """
             SELECT id, result_dir, label, hardware_json, run_metadata_json
             FROM runs
             WHERE label IN ({placeholders})
             ORDER BY id
             """,
-            tuple(labels),
-        ).fetchall()
+            labels,
+        )
+        rows.sort(key=lambda row: int(row["id"]))
         found_labels = {str(row["label"]) for row in rows}
         missing = [label for label in labels if label not in found_labels]
         if missing:
@@ -1187,12 +1218,52 @@ def _validate_agent_wrap_query_filters(
             )
 
 
+def _unique_agent_dataset_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise RegistryError("agent-wrap data contains duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _read_agent_dataset(path: Path) -> bytes:
+    fd = open_contained_regular(path.parent, path.name)
+    if fd is None:
+        if not os.path.lexists(path):
+            raise RegistryError(f"could not read {path}: no such file")
+        raise RegistryError(
+            f"agent-wrap data {path} requires a readable regular file without symlinks"
+        )
+    try:
+        if os.fstat(fd).st_size > MAX_AGENT_DATASET_BYTES:
+            raise RegistryError("agent-wrap dataset byte limit exceeded")
+        with os.fdopen(fd, "rb") as fh:
+            fd = None  # The file object now owns the descriptor.
+            data = fh.read(MAX_AGENT_DATASET_BYTES + 1)
+        if len(data) > MAX_AGENT_DATASET_BYTES:
+            raise RegistryError("agent-wrap dataset byte limit exceeded")
+        return data
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
 def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, Any]:
     path = Path(data_path)
     try:
-        dataset = json.loads(path.read_text(encoding="utf-8"))
+        dataset = json.loads(
+            _read_agent_dataset(path).decode("utf-8"),
+            object_pairs_hook=_unique_agent_dataset_object,
+        )
+    except RegistryError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise RegistryError("could not decode agent-wrap data as UTF-8") from exc
     except json.JSONDecodeError as exc:
-        raise RegistryError(f"could not parse {path}: {exc.msg}") from exc
+        raise RegistryError("could not parse agent-wrap JSON data") from exc
+    except (ValueError, RecursionError) as exc:
+        raise RegistryError("could not parse agent-wrap JSON data") from exc
     except OSError as exc:
         raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
     if not isinstance(dataset, dict):
@@ -1210,6 +1281,8 @@ def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, An
     rows = dataset.get("rows")
     if not isinstance(rows, list) or not rows:
         raise RegistryError(f"agent-wrap data requires non-empty rows list: {path}")
+    if len(rows) > MAX_AGENT_DATASET_ROWS:
+        raise RegistryError("agent-wrap dataset row limit exceeded")
     labels: set[str] = set()
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
@@ -1258,6 +1331,12 @@ def _validate_agent_wrap_row(row: dict[str, Any], source: str) -> None:
     wall_seconds = row["timing"].get("wall_seconds")
     if isinstance(wall_seconds, bool) or not isinstance(wall_seconds, (int, float)):
         raise RegistryError(f"{source} timing.wall_seconds must be numeric")
+    try:
+        valid_wall = math.isfinite(float(wall_seconds)) and wall_seconds >= 0
+    except OverflowError:
+        valid_wall = False
+    if not valid_wall:
+        raise RegistryError(f"{source} timing.wall_seconds must be finite, nonnegative and float-representable")
     _agent_wrap_required_string(row["timing"], "wall_display", f"{source} timing")
     for key in ("files_changed", "insertions", "deletions"):
         _agent_wrap_required_int(row["diff"], key, f"{source} diff")
@@ -1297,8 +1376,9 @@ def _agent_wrap_required_int(
     source: str,
 ) -> int:
     value = values.get(key)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise RegistryError(f"{source} requires non-negative integer {key}")
+    if (isinstance(value, bool) or not isinstance(value, int)
+            or not 0 <= value <= 2**63 - 1):
+        raise RegistryError(f"{source} requires non-negative signed 64-bit integer {key}")
     return value
 
 
@@ -1323,8 +1403,9 @@ def _load_registry_site_snapshot(
         raise RegistryError(f"registry database not found: {db}")
 
     try:
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("PRAGMA query_only = ON")
+            conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
             sources = [Path(row[0]) for row in conn.execute("SELECT result_dir FROM runs")]
@@ -1364,9 +1445,8 @@ def _select_site_run_rows(
     conn: sqlite3.Connection,
     run_ids: list[int],
 ) -> list[sqlite3.Row]:
-    placeholders = ",".join("?" for _ in run_ids)
-    return conn.execute(
-        f"""
+    return _select_in_batches(
+        conn, """
         SELECT id, label, row_count, imported_at, run_jsonl_sha256,
                pack_ids_json, pack_versions_json, adapters_json, models_json,
                endpoints_json, host_hostname, host_platform, host_label,
@@ -1381,17 +1461,16 @@ def _select_site_run_rows(
         WHERE id IN ({placeholders})
         ORDER BY id
         """,
-        tuple(run_ids),
-    ).fetchall()
+        sorted(set(run_ids)),
+    )
 
 
 def _select_site_case_rows(
     conn: sqlite3.Connection,
     run_ids: list[int],
 ) -> list[sqlite3.Row]:
-    placeholders = ",".join("?" for _ in run_ids)
-    return conn.execute(
-        f"""
+    return _select_in_batches(
+        conn, """
         SELECT r.id AS run_id, r.label AS run_label, s.pack_id,
                s.pack_version, s.case_id, s.row_count, s.ok_count,
                s.prompt_token_rows, s.prompt_token_median,
@@ -1406,17 +1485,16 @@ def _select_site_case_rows(
         WHERE s.run_id IN ({placeholders})
         ORDER BY s.run_id, s.pack_id, s.pack_version, s.case_id
         """,
-        tuple(run_ids),
-    ).fetchall()
+        sorted(set(run_ids)),
+    )
 
 
 def _select_site_metric_rows(
     conn: sqlite3.Connection,
     run_ids: list[int],
 ) -> list[_SiteComparisonMetric]:
-    placeholders = ",".join("?" for _ in run_ids)
-    rows = conn.execute(
-        f"""
+    rows = _select_in_batches(
+        conn, """
         SELECT r.id AS run_id, r.label AS run_label, r.host_label,
                r.host_hostname, r.host_platform, r.host_identity, r.host_display,
                r.runtime_name, r.model_metadata_id, r.model_quantization, rr.model,
@@ -1430,8 +1508,8 @@ def _select_site_metric_rows(
         WHERE rr.run_id IN ({placeholders})
         ORDER BY rr.run_id, rr.pack_id, rr.pack_version, rr.case_id, rr.row_index
         """,
-        tuple(run_ids),
-    ).fetchall()
+        sorted(set(run_ids)),
+    )
 
     grouped: dict[tuple[object, ...], list[sqlite3.Row]] = {}
     for row in rows:
@@ -1507,9 +1585,8 @@ def _select_registry_query_rows(
     scoring_passed: bool | None,
     limit: int | None,
 ) -> list[sqlite3.Row]:
-    placeholders = ",".join("?" for _ in run_ids)
-    conditions = [f"rr.run_id IN ({placeholders})"]
-    params: list[object] = list(run_ids)
+    conditions = ["rr.run_id IN ({placeholders})"]
+    params: list[object] = []
     for column, value in (
         ("rr.pack_id", pack_id),
         ("rr.case_id", case_id),
@@ -1535,8 +1612,8 @@ def _select_registry_query_rows(
         limit_sql = " LIMIT ?"
         params.append(limit)
 
-    return conn.execute(
-        f"""
+    rows = _select_in_batches(
+        conn, f"""
         SELECT r.id AS run_id, r.label, r.result_dir, r.imported_at,
                r.host_label, r.host_platform, r.host_repo_commit,
                r.comparison_mode, r.comparison_boundary,
@@ -1556,8 +1633,10 @@ def _select_registry_query_rows(
         ORDER BY rr.run_id, rr.row_index
         {limit_sql}
         """,
-        tuple(params),
-    ).fetchall()
+        run_ids, tuple(params),
+    )
+    rows.sort(key=lambda row: (row["run_id"], row["row_index"]))
+    return rows[:limit] if limit is not None else rows
 
 
 def _select_agent_wrap_rows(
@@ -3841,18 +3920,29 @@ def _delete_stale_agent_wrap_rows(
     rows: list[dict[str, Any]],
 ) -> None:
     source = dataset["generated_from"]
-    labels = [row["label"] for row in rows]
+    labels = {row["label"] for row in rows}
     if not labels:
         return
-    placeholders = ",".join("?" for _ in labels)
-    conn.execute(
-        f"""
-        DELETE FROM agent_wrap_runs
-        WHERE dataset_source = ?
-          AND label NOT IN ({placeholders})
-        """,
-        (source, *labels),
+    # Compute the stale set from one single-parameter read instead of binding every
+    # incoming label, so a dataset within its row limit also fits connections
+    # with a small SQLITE_LIMIT_VARIABLE_NUMBER (999 before SQLite 3.32).
+    stale = sorted(
+        label
+        for (label,) in conn.execute(
+            "SELECT label FROM agent_wrap_runs WHERE dataset_source = ?", (source,)
+        )
+        if label not in labels
     )
+    batch_size = conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) - 1
+    if batch_size < 1:
+        raise RegistryError("agent-wrap prune exceeds SQLite variable limit")
+    for start in range(0, len(stale), batch_size):
+        batch = stale[start:start + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        conn.execute(
+            f"DELETE FROM agent_wrap_runs WHERE dataset_source = ? AND label IN ({placeholders})",
+            (source, *batch),
+        )
 
 
 def _run_row_values(

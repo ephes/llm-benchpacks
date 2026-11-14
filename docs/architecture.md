@@ -852,6 +852,20 @@ thinking level, and limit. These commands do not inspect target workspaces,
 contact providers, or read generated raw logs; they only normalize and query
 curated comparison metadata.
 
+Agent dataset admission uses a no-follow, nonblocking regular-file descriptor
+and bounds both declared size and actual bytes before JSON decoding. A JSON
+object-pairs hook refuses duplicate members at every depth; row-count and row
+validation finish before opening the registry for writes.
+
+Every registry entry point explicitly closes its owned SQLite connection after
+its transaction exits, including on BaseException; helpers borrow connections
+without closing them. Multi-query reads start an explicit query-only read
+transaction. Run-id/label selections and site/query row retrieval use batches
+within the connection's public SQLite variable limit, reserving parameters for
+filters and limits. Deduplication and global ordering are restored across
+batches; query limits apply to the final combined result. All batches and site
+tables share the same read snapshot.
+
 `benchpack registry bundle create --out <bundle-dir> <result-dir>...` is a
 separate export path over existing result directories, not over the SQLite
 database. It copies only compact report-facing files into a new directory:

@@ -1247,6 +1247,13 @@ submission bundle. The local registry may store the canonical local result
 directory path for idempotent re-imports; public bundle/export privacy rules
 are handled by the separate bundle command below.
 
+Registry commands close owned database connections deterministically after
+commit or rollback, including interruption. Report, query and site selections
+may exceed SQLite's per-statement parameter limit: the reader batches parameters
+within one read snapshot, deduplicates selected ids/labels and preserves global
+ordering. A query's `--limit` applies once to the final selection. Missing
+selectors fail the whole operation before any site files are published.
+
 ### `benchpack registry duplicates`
 
 ```text
@@ -1314,6 +1321,23 @@ artifact, and notes fields. Labels are unique within the dataset and are the
 database idempotency key. Re-import converges rows for the same dataset source
 to the current file by deleting source-matched labels that are no longer
 present.
+
+Agent datasets are admitted before database creation or mutation: at most
+16 MiB of actual UTF-8 input and 10,000 rows. The leaf path must be a regular
+file, without a symlink; its parent directory may be reached through a link.
+Size and contents come from one descriptor, with an actual read limit even
+if the file grows. Duplicate JSON members at every object depth are refused
+without including member names or values in the error. Repeated array values
+are allowed. Split larger curated histories into independently owned sources.
+Wall time must be finite, nonnegative and representable as a float; diff and
+node-test counters must be nonnegative signed 64-bit integers. Validation
+finishes before opening a write transaction. Pruning and every upsert form
+one transaction: a late SQL failure or interruption restores the previous
+source rows, earlier updates, unrelated sources and schema together. Retrying
+the same dataset converges to one row per label. Pruning reads the source's
+stored labels and deletes stale ones in batches, so a dataset within the row
+limit also fits connections with a small SQLite variable limit (999 before
+SQLite 3.32). A missing dataset path is reported as missing, with the path.
 
 `benchpack registry agent-wrap query` emits a JSON array selected from
 `agent_wrap_runs`, ordered by pass/fail/interrupted status and wall-clock time.
