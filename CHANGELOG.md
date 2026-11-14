@@ -4,6 +4,8 @@
 
 - Bind harness workspace reads, writes, existence checks and deletion to opened
   directories; preserve internal file symlinks while rejecting exchanged paths.
+  Links among the trusted base's ancestors (macOS `/tmp`, a linked home) keep
+  working; new published files follow the process umask.
 - Limit harness text reads to 16 MiB of actual bytes and each inventory to
   100,000 visited entries; refuse special inputs and incomplete discovery.
 - Publish full-file replacements from encoded sibling temporaries; preserve old
@@ -16,4 +18,5 @@
 - Deduplicate report inputs by canonical file identity and enforce report-wide
   limits of 100 runs, 64 MiB of run bytes and 100,000 records.
 - Stop external harness process groups, reap leaders and close streams on every
-  exceptional exit while preserving interrupts and collection errors.
+  exceptional exit while preserving interrupts and collection errors; the final
+  group kill after a timeout tolerates macOS EPERM for an already exiting group.

@@ -198,7 +198,7 @@ def test_timeout_cleanup_failure_is_not_a_successful_timeout(tmp_path, monkeypat
             return '', ''
         def wait(self, **kwargs):
             return 0
-    def signal_group(pgid, number, case_id):
+    def signal_group(pgid, number, case_id, **kwargs):
         if number == signal.SIGKILL:
             raise tasks.TaskError('cannot kill synthetic group')
     monkeypatch.setattr(tasks.subprocess, 'Popen', lambda *a, **kw: Process())

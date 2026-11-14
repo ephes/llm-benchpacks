@@ -1089,7 +1089,10 @@ process umask. Atomic visibility does not guarantee durability after power loss.
 ### Opened task boundaries and report admission
 
 Harness helpers and runner-owned task/context publication share the no-follow
-opened-directory primitives in `safe_files.py`. Workspace text reads keep one
+opened-directory primitives in `safe_files.py`. Each walk starts at a trusted
+base (the workspace root's parent, the run output directory, or the context
+file's parent) that is opened normally, so symlinked system ancestors keep
+working; only components below the base refuse links. Workspace text reads keep one
 regular-file descriptor through byte admission and decoding; writes stage an
 exclusive sibling before replacement. Task logs fail explicitly if only one
 stream publishes. External context serialization precedes filesystem effects.

@@ -1788,8 +1788,11 @@ removes the link entry. Directory inventories do not traverse directory symlinks
 Text reads admit only regular files and at most 16 MiB of actual bytes, including
 growth after open. Each inventory visits at most 100,000 entries of any kind and
 raises `TaskError` on overflow; no partial tuple is returned. Output ordering
-remains deterministic. Workspace roots and their directory ancestors must be real
-directories; symlink roots are refused.
+remains deterministic. Directories below the workspace root must be real
+directories and symlink roots are refused; links among the root's own ancestors
+(for example macOS `/tmp` -> `/private/tmp` or a linked home) are trusted and
+resolved once. Runner-owned task logs apply the same no-follow walk below the
+run output directory; external-agent context files below their parent directory.
 
 Full-file replacements encode UTF-8 before opening output, stage bytes in an
 exclusive sibling file, flush, preserve existing regular-file permissions and

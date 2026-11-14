@@ -15,7 +15,7 @@ from pathlib import PurePosixPath
 from time import monotonic, sleep
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
-from .safe_files import admitted_directory, atomic_write_at
+from .safe_files import admitted_directory, atomic_write_at, trusted_root
 
 
 # Keep timeout cleanup bounded while still giving cooperative harnesses a moment
@@ -63,17 +63,21 @@ class AgentSessionHarnessRequest:
     def workspace_path(self, relative_path: str) -> Path:
         """Resolve a harness workspace-relative path, rejecting escapes."""
 
-        workspace_root = Path(os.path.abspath(self.workspace))
+        workspace_root = trusted_root(self.workspace)
         try:
             return _resolve_workspace_relative_path(relative_path, workspace_root)
         except _PatchContractError as exc:
             raise TaskError(f"unsafe harness workspace path: {exc}") from exc
 
+    def _admission_base(self) -> Path:
+        # The workspace root itself is walked without following links.
+        return trusted_root(self.workspace).parent
+
     def read_workspace_text(self, relative_path: str) -> str:
         """Read bounded UTF-8 text through an admitted regular-file fd."""
         path = self.workspace_path(relative_path)
         try:
-            with admitted_directory(path.parent) as directory:
+            with admitted_directory(path.parent, base=self._admission_base()) as directory:
                 # Open relative to the admitted parent;
                 # no path component can be followed again after admission.
                 fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -101,7 +105,7 @@ class AgentSessionHarnessRequest:
     def _inventory(self, *, directories: bool) -> tuple[str, ...]:
         paths = []
         count = 0
-        root = Path(os.path.abspath(self.workspace))
+        root = trusted_root(self.workspace)
 
         def walk(directory, prefix):
             nonlocal count
@@ -131,7 +135,7 @@ class AgentSessionHarnessRequest:
                             paths.append(relative)
 
         try:
-            with admitted_directory(root) as directory:
+            with admitted_directory(root, base=root.parent) as directory:
                 walk(directory, '')
         except (OSError, RecursionError) as exc:
             kind = 'directories' if directories else 'files'
@@ -149,7 +153,7 @@ class AgentSessionHarnessRequest:
     def workspace_file_exists(self, relative_path: str) -> bool:
         path = self.workspace_path(relative_path)
         try:
-            with admitted_directory(path.parent) as directory:
+            with admitted_directory(path.parent, base=self._admission_base()) as directory:
                 mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode
                 if stat.S_ISLNK(mode):
                     raise OSError('workspace entry was exchanged')
@@ -160,7 +164,7 @@ class AgentSessionHarnessRequest:
             raise TaskError(f'could not inspect harness workspace file {relative_path!r}') from exc
 
     def delete_workspace_file(self, relative_path: str) -> bool:
-        root = Path(os.path.abspath(self.workspace))
+        root = trusted_root(self.workspace)
         try:
             _resolve_workspace_relative_path(relative_path, root)
             raw = _raw_workspace_relative_path(relative_path, root)
@@ -172,7 +176,7 @@ class AgentSessionHarnessRequest:
             parent = raw.parent.resolve(strict=False)
             if not parent.is_relative_to(root):
                 raise OSError('workspace parent escaped')
-            with admitted_directory(parent) as directory:
+            with admitted_directory(parent, base=root.parent) as directory:
                 info = os.stat(raw.name, dir_fd=directory, follow_symlinks=False)
                 if stat.S_ISLNK(info.st_mode):
                     if not self.workspace_file_exists(relative_path):
@@ -190,7 +194,8 @@ class AgentSessionHarnessRequest:
         path = self.workspace_path(relative_path)
         try:
             data = content.encode('utf-8')
-            with admitted_directory(path.parent, create=True) as directory:
+            with admitted_directory(path.parent, base=self._admission_base(),
+                                    create=True) as directory:
                 atomic_write_at(directory, path.name, data)
         except (OSError, UnicodeError) as exc:
             raise TaskError(f'could not write harness workspace file {relative_path!r}') from exc
@@ -543,8 +548,11 @@ def _stop_external_process_group(
         raise
     finally:
         # A descendant can close its inherited pipes yet ignore termination.
+        # communicate() has usually reaped the leader by now: macOS answers
+        # EPERM for a group whose remaining members are already exiting, which
+        # is the goal state here, not a runner error.
         try:
-            _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+            _signal_external_process_group(pgid, signal.SIGKILL, case_id, exiting_ok=True)
         except BaseException as cleanup:
             if primary is None:
                 raise
@@ -555,6 +563,8 @@ def _signal_external_process_group(
     pgid: int,
     signal_number: signal.Signals,
     case_id: str,
+    *,
+    exiting_ok: bool = False,
 ) -> None:
     """Send one signal to a harness process group, tolerating already-dead groups."""
 
@@ -562,6 +572,13 @@ def _signal_external_process_group(
         os.killpg(pgid, signal_number)
     except ProcessLookupError:
         return
+    except PermissionError as exc:
+        if exiting_ok:
+            return
+        raise TaskError(
+            f"could not stop external subprocess harness process group for "
+            f"repo-task case {case_id!r}"
+        ) from exc
     except OSError as exc:
         raise TaskError(
             f"could not stop external subprocess harness process group for "
@@ -672,7 +689,8 @@ def _write_task_logs(
         # Encode both streams before touching either destination.
         streams = [(paths.stdout, stdout.encode('utf-8')),
                    (paths.stderr, stderr.encode('utf-8'))]
-        with admitted_directory(paths.stdout.parent, create=True) as directory:
+        with admitted_directory(paths.stdout.parent, base=request.output_dir,
+                                create=True) as directory:
             # Reject either unsafe final destination before publishing stdout.
             for path, _ in streams:
                 try:
@@ -911,7 +929,7 @@ def _apply_replacement_file_to_workspace(
             "unchanged.\n",
         )
 
-    workspace_root = Path(os.path.abspath(workspace))
+    workspace_root = trusted_root(Path(workspace))
     try:
         destination = _resolve_workspace_relative_path(path, workspace_root)
     except _PatchContractError as exc:
@@ -919,7 +937,8 @@ def _apply_replacement_file_to_workspace(
     published = False
     try:
         data = content.encode('utf-8')
-        with admitted_directory(destination.parent, create=True) as directory:
+        with admitted_directory(destination.parent, base=workspace_root.parent,
+                                create=True) as directory:
             atomic_write_at(directory, destination.name, data)
             published = True
     except (OSError, UnicodeError) as exc:
