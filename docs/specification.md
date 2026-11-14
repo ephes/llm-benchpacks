@@ -1798,3 +1798,11 @@ bytes; an admission failure after publication is a runner error and never claims
 an unchanged workspace. The two `git apply` checks and final apply share one
 monotonic task timeout. Expiry before apply leaves the workspace unchanged; an
 apply timeout retains the existing potentially-partial-edit runner failure.
+
+Task stdout/stderr destinations must be regular files or absent. Both are
+admitted before mutation and published atomically relative to an opened task
+output directory; parent/final symlinks fail as runner errors. The pair is not a
+transaction: if the second stream fails, the error names already-published logs
+and no success record is returned. External-agent context JSON is serialized
+before filesystem effects and published from an owned sibling temporary. Readers
+see a complete old or new generation; failed writes preserve the previous file.

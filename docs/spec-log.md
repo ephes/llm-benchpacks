@@ -5364,3 +5364,8 @@ remain unchanged; root/directory exchanges and special-file reads fail closed.
 
 B22 preserves source bytes/mode across replacement failures and charges both
 patch preflights and application to a single monotonic execution allowance.
+
+## 2026-11-14 — runner artifact ownership
+
+B23 rejects task-output link substitution, reports partial log publication, and
+atomically publishes serialized external-agent context generations.

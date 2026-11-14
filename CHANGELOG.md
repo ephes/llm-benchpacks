@@ -9,3 +9,7 @@
 - Publish full-file replacements from encoded sibling temporaries; preserve old
   bytes and permissions on encoding/write/flush/replace failure.
 - Share one monotonic deadline across both patch checks and application.
+- Refuse task-log symlinks before mutation and publish logs relative to admitted
+  directories, reporting any streams already published when another fails.
+- Serialize external-agent context before effects and atomically publish each
+  complete JSON generation, preserving the prior file on failure.

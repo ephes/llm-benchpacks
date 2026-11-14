@@ -266,16 +266,10 @@ def task_record(paths: TaskArtifactPaths, output_dir: Path) -> dict[str, str]:
 def write_noop_task_logs(output_dir: Path, case: Case, repetition: int) -> dict[str, str]:
     """Write empty task logs for callers that need placeholder artifacts."""
 
-    paths = task_artifact_paths(output_dir, case, repetition)
-    try:
-        paths.stdout.parent.mkdir(parents=True, exist_ok=True)
-        paths.stdout.write_text("", encoding="utf-8")
-        paths.stderr.write_text("", encoding="utf-8")
-    except OSError as exc:
-        raise TaskError(
-            f"could not write task logs for repo-task case {case.id!r}"
-        ) from exc
-    return task_record(paths, output_dir)
+    return _write_task_logs(
+        TaskExecutionRequest(output_dir, case, repetition, Path(output_dir), ""),
+        stdout="", stderr="",
+    )
 
 
 def run_model_patch_task(
@@ -621,13 +615,27 @@ def _write_task_logs(
     """Write deterministic task stdout/stderr logs for one execution."""
 
     paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
+    published = []
     try:
-        paths.stdout.parent.mkdir(parents=True, exist_ok=True)
-        paths.stdout.write_text(stdout, encoding="utf-8")
-        paths.stderr.write_text(stderr, encoding="utf-8")
-    except OSError as exc:
+        # Encode both streams before touching either destination.
+        streams = [(paths.stdout, stdout.encode('utf-8')),
+                   (paths.stderr, stderr.encode('utf-8'))]
+        with admitted_directory(paths.stdout.parent, create=True) as directory:
+            # Reject either unsafe final destination before publishing stdout.
+            for path, _ in streams:
+                try:
+                    mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISREG(mode):
+                    raise OSError('task log destination must be regular')
+            for path, data in streams:
+                atomic_write_at(directory, path.name, data)
+                published.append(path.name)
+    except (OSError, UnicodeError) as exc:
         raise TaskError(
-            f"could not write task logs for repo-task case {request.case.id!r}"
+            f"could not write task logs for repo-task case {request.case.id!r}; "
+            f"published logs: {', '.join(published) or 'none'}"
         ) from exc
     return task_record(paths, request.output_dir)
 
