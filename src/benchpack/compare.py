@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from statistics import median
 from typing import Any
+
+from .safe_files import open_contained_regular
 
 
 MISSING = "—"
@@ -57,6 +59,8 @@ class CaseSummary:
     # are distinct cases. ``case_label`` is the rendered identity.
     pack_id: str | None = None
     case_label: str | None = None
+    prompt_homogeneous: bool = False
+    cache_homogeneous: bool = False
 
     @property
     def case_key(self) -> tuple[str | None, str]:
@@ -79,8 +83,6 @@ def load_result_run(
         raise CompareError(f"result input must be a directory: {path}")
 
     jsonl_path = path / "run.jsonl"
-    if not jsonl_path.is_file():
-        raise CompareError(f"missing run.jsonl in result directory: {path}")
 
     byte_limit = min(byte_limit, MAX_RESULT_RUN_BYTES)
     record_limit = min(record_limit, MAX_RESULT_RECORDS)
@@ -88,7 +90,10 @@ def load_result_run(
     total = 0
     line_number = 0
     try:
-        with jsonl_path.open("rb") as fh:
+        fd = open_contained_regular(path, "run.jsonl")
+        if fd is None:
+            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+        with os.fdopen(fd, "rb") as fh:
             while True:
                 line = fh.readline(min(
                     MAX_RESULT_LINE_BYTES + 1,
@@ -109,7 +114,7 @@ def load_result_run(
                 if len(records) >= record_limit:
                     raise CompareError(f"record count limit exceeded in {source}")
                 try:
-                    record = json.loads(stripped)
+                    record = json.loads(stripped, object_pairs_hook=unique_json_object)
                 except (ValueError, RecursionError) as exc:
                     raise CompareError(f"could not parse {source}: invalid JSON") from exc
                 if not isinstance(record, dict):
@@ -124,6 +129,16 @@ def load_result_run(
         raise CompareError(f"run.jsonl has no records: {jsonl_path}")
 
     return ResultRun(path=path, label=path.name, records=records, artifact_root=path, source_bytes=total)
+
+
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject ambiguous JSON members recursively while retaining extensions."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
 
 
 def record_pack_id(record: dict[str, Any]) -> str | None:
@@ -215,10 +230,12 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     decode_tps=_median_metric(rows, ("timing", "decode_tps")),
                     total_tps=_median_metric(rows, ("timing", "total_tps")),
                     output_tokens=_median_metric(rows, ("tokens", "output")),
-                    prompt_tokens=_median_values(prompt_values),
+                    prompt_tokens=finite_median(prompt_values),
                     prompt_rows=len(prompt_values),
-                    cached_prompt_tokens=_median_values(cached_prompt_values),
+                    cached_prompt_tokens=finite_median(cached_prompt_values),
                     cache_rows=len(cached_prompt_values),
+                    prompt_homogeneous=len(set(prompt_values)) == 1,
+                    cache_homogeneous=len(set(cached_prompt_values)) == 1,
                     pack_id=pack_id,
                     case_label=labels[key],
                 )
@@ -489,6 +506,13 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
                 "WARNING: cached prompt-token medians differ for case "
                 f"{case}; do not compare prefill speed."
             )
+    for key, status in _prefill_parity_statuses(summaries).items():
+        if status in {"prompt-mixed", "cache-mixed"}:
+            case = by_case[key][0].display_case
+            warnings.append(
+                f"WARNING: mixed prompt/cache samples for case {markdown_code(case)}; "
+                "do not compare prefill speed."
+            )
     return warnings
 
 
@@ -509,6 +533,10 @@ def _prefill_parity_statuses(
             statuses[case] = "prompt-missing"
             continue
 
+        if any(not summary.prompt_homogeneous for summary in case_summaries):
+            statuses[case] = "prompt-mixed"
+            continue
+
         prompt_medians = {summary.prompt_tokens for summary in case_summaries}
         if len(prompt_medians) > 1:
             statuses[case] = "prompt-diff"
@@ -516,6 +544,10 @@ def _prefill_parity_statuses(
 
         if any(summary.cache_rows < summary.rows for summary in case_summaries):
             statuses[case] = "cache-missing"
+            continue
+
+        if any(not summary.cache_homogeneous for summary in case_summaries):
+            statuses[case] = "cache-mixed"
             continue
 
         cached_medians = {summary.cached_prompt_tokens for summary in case_summaries}
@@ -529,7 +561,7 @@ def _prefill_parity_statuses(
 
 
 def _median_metric(rows: list[dict[str, Any]], path: tuple[str, str]) -> float | None:
-    return _median_values(_numeric_metric_values(rows, path))
+    return finite_median(_numeric_metric_values(rows, path))
 
 
 def _numeric_metric_values(
@@ -553,10 +585,21 @@ def _numeric_metric_values(
     return values
 
 
-def _median_values(values: list[float]) -> float | None:
+def finite_median(values: list[float]) -> float | None:
+    """Return an overflow-safe median of already admitted finite samples."""
     if not values:
         return None
-    return float(median(values))
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    result = ordered[middle]
+    if len(ordered) % 2 == 0:
+        lower = ordered[middle - 1]
+        # Same-sign subtraction cannot overflow; opposite signs can be halved
+        # independently. Keep identical subnormal samples unchanged, too.
+        result = (lower + (result - lower) / 2
+                  if (lower >= 0) == (result >= 0)
+                  else lower / 2 + result / 2)
+    return result if math.isfinite(result) else None
 
 
 def _format_float(value: float | None, digits: int) -> str:

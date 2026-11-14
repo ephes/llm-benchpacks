@@ -874,7 +874,11 @@ def test_result_ingestion_bounds_read_before_allocation(tmp_path, monkeypatch):
         def __iter__(self):
             raise AssertionError('unbounded iteration')
     monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', 32, raising=False)
-    monkeypatch.setattr(Path, 'open', lambda self, *a, **kw: Stream(b'x'*1000))
+    import os
+    def stream(fd, *args, **kwargs):
+        os.close(fd)
+        return Stream(b'x'*1000)
+    monkeypatch.setattr(os, 'fdopen', stream)
     with pytest.raises(CompareError, match='limit'):
         load_result_run(run)
     assert reads == [33]
@@ -889,19 +893,23 @@ def test_result_ingestion_normalizes_io_and_decode_errors(tmp_path, monkeypatch,
     path.write_bytes(b'\xff\n')
     injected = []
     if failure != 'utf8':
-        original_open = Path.open
+        import os
+        original_open = os.open
         class Stream(io.BytesIO):
             def readline(self, size=-1):
                 injected.append('read')
                 raise OSError('synthetic read failure')
-        def broken_open(self, *a, **kw):
-            if self == path:
-                if failure == 'open':
-                    injected.append('open')
-                    raise PermissionError('synthetic denial')
-                return Stream()
-            return original_open(self, *a, **kw)
-        monkeypatch.setattr(Path, 'open', broken_open)
+        def broken_open(name, *a, **kw):
+            if Path(name).name == 'run.jsonl' and failure == 'open':
+                injected.append('open')
+                raise PermissionError('synthetic denial')
+            return original_open(name, *a, **kw)
+        def stream(fd, *args, **kwargs):
+            os.close(fd)
+            return Stream()
+        monkeypatch.setattr(os, 'open', broken_open)
+        if failure == 'read':
+            monkeypatch.setattr(os, 'fdopen', stream)
     with pytest.raises(CompareError, match='run.jsonl'):
         load_result_run(run)
     if failure != 'utf8':
@@ -919,3 +927,151 @@ def test_result_line_budget_counts_utf8_bytes(tmp_path, monkeypatch):
         load_result_run(run)
     monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', len(text.encode()))
     assert load_result_run(run).records == [{'case': 'ä'*8}]
+
+
+@pytest.mark.parametrize('values,expected', [
+    ([1e308, 1e308], 1e308), ([-1e308, -1e308], -1e308),
+    ([-1e308, 1e308], 0.0), ([2.0, 4.0], 3.0),
+    ([5e-324, 5e-324], 5e-324),
+])
+def test_finite_median_consumers(tmp_path, values, expected):
+    from benchpack.compare import finite_median
+    from benchpack.report import render_report
+    assert finite_median(values) == expected
+    run = tmp_path / 'run'
+    _write_run(run, rows=[_record('short', wall_s=v) for v in values])
+    loaded = load_result_run(run)
+    assert summarize_runs([loaded])[0].wall_s == expected
+    for text in (render_comparison([loaded]), render_report([loaded])):
+        assert 'inf' not in text.lower()
+
+
+@pytest.mark.parametrize('field,status', [('prompt', 'prompt-mixed'), ('cached_prompt', 'cache-mixed')])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_prefill_rejects_equal_median_mixed_regimes(tmp_path, field, status, reverse):
+    from benchpack.registry import import_result_dirs, load_registry_report_runs
+    runs = []
+    for name, values in [('mixed', [0, 100]), ('uniform', [50, 50])]:
+        rows = [_record('short', prompt_tokens=100, cached_prompt=50) for _ in values]
+        for row, value in zip(rows, values):
+            row['tokens'][field] = value
+        if reverse:
+            rows.reverse()
+        path = tmp_path / name
+        _write_run(path, rows=rows)
+        runs.append(load_result_run(path))
+    assert _prefill_parity_statuses(summarize_runs(runs)) == {('runtime-sweep', 'short'): status}
+    for text in (render_comparison(runs), render_report(runs)):
+        assert status in text
+        assert '| comparable |' not in text
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([r.path for r in runs], db)
+    assert status in render_report(load_registry_report_runs(db))
+
+
+@pytest.mark.parametrize('duplicate', [
+    '"ok":true,"ok":false', '"ok":false,"ok":true',
+    '"timing":{"wall_s":1,"wall_s":2}',
+    '"timing":{"wall_s":2,"wall_s":1}',
+    '"pack":{"id":"a","id":"b"}',
+    '"extra":{"nested":[{"x":1,"x":2}]}',
+])
+def test_duplicate_result_members_refuse_import_without_mutation(tmp_path, duplicate):
+    from benchpack.registry import RegistryError, import_result_dirs
+    good = tmp_path / 'good'
+    bad = tmp_path / 'bad'
+    _write_run(good, rows=[_record('short')])
+    bad.mkdir()
+    (bad / 'run.jsonl').write_text('{"case":"short",' + duplicate + '}\n')
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([good], db)
+    previous = db.read_bytes()
+    with pytest.raises(CompareError, match='invalid JSON'):
+        load_result_run(bad)
+    with pytest.raises(RegistryError):
+        import_result_dirs([good, bad], db)
+    assert db.read_bytes() == previous
+    fresh = tmp_path / 'fresh.sqlite'
+    with pytest.raises(RegistryError):
+        import_result_dirs([bad], fresh)
+    assert not fresh.exists()
+
+
+@pytest.mark.parametrize('replacement', ['fifo', 'symlink'])
+def test_result_open_admits_actual_descriptor(tmp_path, monkeypatch, replacement):
+    import os
+    from benchpack.registry import RegistryError, import_result_dirs
+    run = tmp_path / 'run'
+    _write_run(run)
+    path = run / 'run.jsonl'
+    target = tmp_path / 'target.jsonl'
+    target.write_text('{"case":"sentinel"}\n')
+    original_open = os.open
+    original_path_open = Path.open
+    swapped = []
+
+    def swap():
+        if not swapped:
+            swapped.append(True)
+            path.unlink()
+            if replacement == 'fifo':
+                os.mkfifo(path)
+            else:
+                path.symlink_to(target)
+
+    def descriptor_open(name, flags, *args, **kwargs):
+        if Path(name).name == 'run.jsonl':
+            swap()
+            assert flags & os.O_NONBLOCK
+            assert flags & os.O_NOFOLLOW
+        return original_open(name, flags, *args, **kwargs)
+
+    def pathname_open(name, *args, **kwargs):
+        if name == path:
+            swap()
+            # Fail promptly on the old blocking path instead of hanging pytest.
+            if replacement == 'fifo':
+                pytest.fail('result reader attempted a blocking pathname open')
+        return original_path_open(name, *args, **kwargs)
+
+    monkeypatch.setattr(os, 'open', descriptor_open)
+    monkeypatch.setattr(Path, 'open', pathname_open)
+    with pytest.raises(CompareError):
+        load_result_run(run)
+    assert swapped
+    db = tmp_path / 'registry.sqlite'
+    with pytest.raises(RegistryError):
+        import_result_dirs([run], db)
+    assert not db.exists()
+    assert target.read_text() == '{"case":"sentinel"}\n'
+
+
+def test_result_extensions_survive_unambiguous_ingestion(tmp_path):
+    row = _record('short')
+    row['extension'] = {'nested': [{'key': 'value'}]}
+    _write_run(tmp_path / 'run', rows=[row])
+    assert load_result_run(tmp_path / 'run').records == [row]
+
+
+def test_registry_extreme_finite_medians_stay_finite(tmp_path):
+    import math
+    from benchpack.registry import import_result_dirs, export_registry_static_site
+    run = tmp_path / 'run'
+    _write_run(run, rows=[_record('short', wall_s=1e308), _record('short', wall_s=1e308)])
+    db = tmp_path / 'registry.sqlite'
+    import_result_dirs([run], db)
+    site = tmp_path / 'site'
+    export_registry_static_site(db, site)
+    snapshot = json.loads((site / 'snapshot.json').read_text())
+    assert 'Infinity' not in (site / 'snapshot.json').read_text()
+    # Every numeric value in the published snapshot remains finite.
+    def check(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                check(child)
+        elif isinstance(value, list):
+            for child in value:
+                check(child)
+        elif isinstance(value, float):
+            assert math.isfinite(value)
+    check(snapshot)

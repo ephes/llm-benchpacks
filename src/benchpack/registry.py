@@ -16,11 +16,11 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from statistics import median
 from typing import Any, Iterable
 
 from .compare import (
-    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun, load_result_run,
+    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun,
+    finite_median, load_result_run,
 )
 from .external_agent_model_calls import (
     MODEL_CALL_LOG_PATTERN,
@@ -2926,7 +2926,7 @@ def _site_median(values: Iterable[object]) -> float | None:
     ]
     if not numeric:
         return None
-    return float(median(numeric))
+    return finite_median(numeric)
 
 
 def _optional_text(value: object) -> str | None:
@@ -4128,7 +4128,7 @@ def _record_metric_values(
 def _median_or_none(values: list[float]) -> float | None:
     if not values:
         return None
-    return float(median(values))
+    return finite_median(values)
 
 
 def _validate_record(record: dict[str, Any], jsonl_path: Path, row_index: int) -> None:

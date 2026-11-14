@@ -1008,13 +1008,13 @@ The initial summary is intentionally small and deterministic:
   rules apply to `benchpack report` and to the tables in run `summary.md` files.
 - `rows` counts measured records and `ok` counts rows with `ok = true`.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
-  summarized with `statistics.median`.
-- `timing.prefill_tps` is summarized with `statistics.median` but displayed as
+  summarized with overflow-safe finite medians.
+- `timing.prefill_tps` is summarized with overflow-safe finite medians but displayed as
   `prefill_tps med` only when the case-level `prefill parity` status is
   `comparable`; all other statuses render `—` for that column.
-- `tokens.prompt` is summarized with `statistics.median` when numeric samples
+- `tokens.prompt` is summarized with overflow-safe finite medians when numeric samples
   are present so cache interpretation is visible beside generated-token counts.
-- `tokens.cached_prompt` is summarized with `statistics.median` when numeric
+- `tokens.cached_prompt` is summarized with overflow-safe finite medians when numeric
   samples are present, and `cache rows` displays numeric cached-token rows over
   total rows for the case/run group.
 - `prefill parity` displays a deterministic case-level prompt/cache
@@ -1045,19 +1045,20 @@ The `prefill parity` status uses the following priority order:
 1. `missing-case`: at least one compared run has zero rows for the case.
 2. `prompt-missing`: a non-empty case/run group has rows without numeric
    `tokens.prompt`.
-3. `prompt-diff`: prompt metadata is complete, but prompt-token medians differ.
-4. `cache-missing`: prompt parity holds, but a non-empty case/run group lacks
-   complete numeric `tokens.cached_prompt`.
-5. `cache-diff`: prompt and cache metadata are complete, but cached
-   prompt-token medians differ.
-6. `comparable`: every compared run has rows, complete numeric prompt/cache
-   token metadata, matching prompt medians, and matching cached prompt medians.
+3. `prompt-mixed`: prompt counts vary within a run/case.
+4. `prompt-diff`: complete homogeneous prompt counts differ across runs.
+5. `cache-missing`: prompt parity holds, but cache metadata is incomplete.
+6. `cache-mixed`: cached prompt counts vary within a run/case.
+7. `cache-diff`: complete homogeneous cache counts differ across runs.
+8. `comparable`: all runs have rows and complete homogeneous prompt/cache
+   counts which match across runs.
 
 `prefill_tps med` is a gated speed column, not independent parity evidence. It
 uses only normalized `run.jsonl` `timing.prefill_tps` values that pass the
 shared numeric metric filter, and it remains `—` when parity is
-`missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`, or
-`cache-diff`, even if timing values exist. New normalized rows can include
+`missing-case`, `prompt-missing`, `prompt-mixed`, `prompt-diff`,
+`cache-missing`, `cache-mixed`, or `cache-diff`, even if timing values exist. New
+normalized rows can include
 `tokens.prompt` and `tokens.cached_prompt`, but older rows may lack one or both
 fields and missing values are not parity evidence. The table shows cache
 metadata coverage because missing cached-token metadata is a common parity
@@ -1871,3 +1872,56 @@ the leader with bounded waits, then close captured streams. Cleanup preserves
 the original exception and attaches cleanup errors as notes. Descendants are
 signalled using the session's original process-group id even if its leader has
 already exited. The OS reaps orphaned descendants; the runner reaps its own child.
+
+### Finite medians and repetition parity
+
+Shared comparison medians use overflow-safe averaging of the two central finite
+samples. A nonrepresentable aggregate is unavailable. This applies to compare,
+report and registry summaries. Prefill parity requires complete homogeneous
+prompt and cache counts within every run/case and equal counts across runs.
+Mixed repetitions yield `prompt-mixed` or `cache-mixed`, even when medians match;
+reordering repetitions cannot establish parity. Status priority is missing-case,
+prompt-missing, prompt-mixed, prompt-diff, cache-missing, cache-mixed, cache-diff,
+comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
+
+### Unambiguous opened result ingestion
+
+Every JSON object in `run.jsonl`, including extension objects, must have unique
+member names. Duplicate members produce `CompareError` (registry import wraps
+this as `RegistryError`) before mutation. Open the final result file with
+no-follow/nonblocking flags and require an opened regular descriptor before any
+reads. FIFO/device/link replacements fail promptly. The result directory itself
+may be an alias; the final file may not be a symlink. Existing bounded reads and
+UTF-8/error contracts apply to this same descriptor.
+
+### Runtime metadata JSON and reporter write ownership
+
+`--run-metadata` rejects duplicate members recursively and accepts only finite
+JSON numbers throughout known sections and extension trees. Decoder integer
+limits, invalid JSON values and serialization failures become `RunMetadataError`
+before output creation or adapter/harness calls. Normalized metadata is serialized
+with `allow_nan=False`; valid extension objects roundtrip.
+
+The reporter binds its output directory identity at construction and verifies
+that identity on every write after harness execution. It uses no-follow,
+nonblocking regular descriptors for `run.jsonl`; multiply linked append targets
+are refused. Hardware, metadata and summary destinations must be absent or
+regular files, with no final symlinks; publication uses exclusive sibling
+staging and descriptor-relative atomic replacement. Parent directory exchanges
+are refused. Existing regular-file modes survive replacement, and new files
+follow the process umask. Raw adapter/harness artifacts retain their own contracts.
+These boundaries protect parent-owned writes, not arbitrary same-user child
+filesystem activity. Serialize runs to each output tree.
+
+Summary content is fully serialized before staging. Write, short-write, flush,
+close or replace failures leave the last successful summary intact and remove
+only the owned temporary. A successful retry summarizes the reporter's persisted
+rows. This is atomic visibility, not a multi-file transaction or crash durability
+guarantee for the entire run.
+
+An append failure compensates with `ftruncate` on the same open descriptor,
+without reopening a pathname. The primary append exception is re-raised; a
+failed compensation adds bounded recovery context and marks the reporter stream
+uncertain. No memory record is added, and subsequent appends and summary writes
+refuse. Preserve/inspect the possibly partial `run.jsonl` and start a fresh
+output directory; do not treat an uncertain stream as complete evidence.

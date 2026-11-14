@@ -4468,3 +4468,50 @@ def test_pack_admission_refuses_before_adapter_verifier_and_output(tmp_path, mon
         main(['run', str(pack), '--adapter', 'openai-chat', '--model', 'synthetic', '--out', str(out)])
     assert calls == []
     assert not out.exists()
+
+
+@pytest.mark.parametrize('payload', [
+    '{"host":{"identity":"a","identity":"b"}}',
+    '{"extension":{"nested":[NaN]}}', '{"extension":{"n":1e999}}',
+    '{"extension":{"n":' + '9' * 5000 + '}}',
+], ids=['duplicate', 'nan', 'overflow', 'huge-integer'])
+def test_cli_metadata_domain_fails_before_output_and_adapter(tmp_path, monkeypatch, payload):
+    calls = _install_output_adapter(monkeypatch, 'unused')
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    metadata = tmp_path / 'metadata.json'
+    metadata.write_text(payload)
+    out = tmp_path / 'run'
+    with pytest.raises(SystemExit, match='run metadata'):
+        main(_argv(['--out', str(out), '--run-metadata', str(metadata)]))
+    assert not out.exists()
+    assert calls == []
+
+
+@pytest.mark.parametrize('artifact', ['run.jsonl', 'summary.md'])
+def test_external_harness_cannot_redirect_reporter_writes(tmp_path, monkeypatch, artifact):
+    _install_output_adapter(monkeypatch, 'no patch')
+    monkeypatch.chdir(tmp_path)
+    _write_repo_task_pack(
+        tmp_path,
+        case_extra=f'harness = {{ id = "{PUBLIC_HARNESS_EXTERNAL_AGENT}", timeout_s = 5 }}',
+    )
+    sentinel = tmp_path / 'sentinel'
+    sentinel.write_bytes(b'untouched')
+    script = _write_fake_external_agent(tmp_path, '''
+import argparse
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('--output-dir')
+args, _ = parser.parse_known_args()
+# The harness receives task paths; its cwd is the prepared workspace. The
+# synthetic fixture deliberately attacks the explicitly known run output.
+''' + f'Path({str(tmp_path / "run" / artifact)!r}).symlink_to({str(sentinel)!r})\n')
+    monkeypatch.setenv('BENCHPACK_EXTERNAL_AGENT_ARGV', json.dumps([sys.executable, str(script)]))
+    with pytest.raises(OSError):
+        main(_argv(['--out', str(tmp_path / 'run')]))
+    assert sentinel.read_bytes() == b'untouched'
+    if artifact == 'run.jsonl':
+        assert not (tmp_path / 'run' / 'summary.md').exists()
+    else:
+        assert len((tmp_path / 'run' / 'run.jsonl').read_text().splitlines()) == 1

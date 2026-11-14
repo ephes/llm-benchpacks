@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Reject ambiguous/nonfinite runtime metadata before execution, including nested
+  extension values and oversized integer decoder failures.
+- Refuse redirected reporter artifacts and exchanged output directories after
+  harness execution; use no-follow regular descriptors and atomic publication.
+- Preserve the last successful summary on write/close/replace failures. Roll back
+  JSONL appends on the owned descriptor, retain primary errors on failed rollback
+  and stop further append/summary operations on uncertain streams.
+
+- Refuse duplicate result JSON members and admit `run.jsonl` through an opened
+  no-follow regular descriptor before bounded comparison/import reads.
+
+- Keep comparison medians finite and require homogeneous repetition-level
+  prompt/cache counts before publishing comparable prefill speed.
+
 - Bound verifier JSON admission; preserve exit-code authority and previous
   evidence when atomic publication fails.
   Keep verifier output written after SIGTERM, do not wait on pipes an escaped

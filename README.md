@@ -429,10 +429,13 @@ numeric median only when that case's `prefill parity` status is `comparable`;
 otherwise it renders `—`. Compare also prints cache metadata coverage as
 numeric cached-token rows over total rows for each case/run group and a
 case-level `prefill parity` status repeated on each run row. The status is one
-of `missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
-`cache-diff`, or `comparable`, in that priority order. Compare warns when
-metadata is incomplete, complete prompt-token medians differ, or complete
-cached-token medians differ. Prompt-token coverage is used to decide whether a
+of `missing-case`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
+`cache-mixed`, `cache-diff`, or `comparable`, in that priority order. Compare
+requires complete homogeneous prompt/cache samples within each run
+and equal counts across runs. Mixed regimes suppress prefill speed even when
+medians match. Compare warns about mixed or incomplete metadata and differing
+counts. Shared medians remain finite through overflow-safe averaging. Prompt-token
+coverage is used to decide whether a
 prompt mismatch warning is meaningful, but the table does not add a second
 coverage column. Old rows may lack `tokens.prompt`, `tokens.cached_prompt`, or
 `timing.prefill_tps`, and missing values do not establish parity or prefill
@@ -706,3 +709,21 @@ for fixture admission, recovery and methodology boundaries.
 `benchpack report` deduplicates input file identities and admits at most 100 runs,
 64 MiB of total `run.jsonl` bytes and 100,000 records. Split larger reports into
 smaller groups; existing per-run limits also apply.
+
+Result ingestion rejects duplicate JSON members at every nesting level. It opens
+`run.jsonl` without following a final symlink, admits the actual regular-file
+descriptor nonblocking, then applies the existing byte/record limits. Compare,
+report and registry import share this interpretation; refused imports leave the
+registry unchanged. Result directory aliases remain supported.
+
+Runtime metadata must be unambiguous finite JSON, including extension objects:
+duplicate members, NaN/Infinity, overflowing exponents and undecodable oversized
+integers fail before output creation or model calls. Reporter artifacts refuse
+symlinks/special files and output-directory exchange after harness execution;
+append targets also refuse hard links. Hardware, runtime metadata and summaries
+publish complete sibling files atomically, preserving the last successful file
+on staging/replace failure. Failed JSONL appends roll back on the opened file;
+if rollback fails, the append error stays primary with a recovery note, and that
+reporter refuses further appends or summaries. Inspect the retained artifact and
+start a new output directory. These checks protect parent artifact writes;
+same-user harness execution is not filesystem isolation.

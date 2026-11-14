@@ -4,6 +4,17 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-14: round 94 result contracts
+
+- Validated the entire runtime metadata JSON domain before execution.
+- Bound reporter writes to the original output-directory identity and regular
+  descriptors, with local malicious harness regressions.
+- Preserved prior summaries on publication failures and primary append errors
+  when descriptor rollback fails; uncertain streams refuse further writes.
+- Refused recursive duplicate result members and FIFO/link replacement on open.
+- Fixed overflow in finite even-length medians and rejected mixed prompt/cache
+  repetition regimes across directory and registry reports.
+
 ## Format
 
 ```text

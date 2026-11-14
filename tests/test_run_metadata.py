@@ -247,3 +247,32 @@ def test_load_run_metadata_normalizes_decode_errors(tmp_path, payload, category,
         load_run_metadata(path)
     assert "sentinel" not in str(error.value)
     assert len(str(error.value)) < len(str(path)) + 100
+
+
+@pytest.mark.parametrize('text', [
+    '{"host":{"identity":"first","identity":"second"}}',
+    '{"model":{"canonical_id":"first","canonical_id":"second"}}',
+    '{"extension":{"nested":[NaN]}}', '{"extension":{"n":Infinity}}',
+    '{"extension":{"n":1e999}}', '{"extension":{"n":' + '9' * 5000 + '}}',
+], ids=['duplicate-host', 'duplicate-model', 'nan', 'infinity', 'overflow', 'huge-integer'])
+def test_metadata_rejects_ambiguous_nonfinite_and_huge_numbers(tmp_path, text):
+    path = tmp_path / 'metadata.json'
+    path.write_text(text)
+    with pytest.raises(RunMetadataError):
+        load_run_metadata(path)
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
+def test_metadata_writer_refuses_nonfinite_before_effects(tmp_path, value):
+    path = tmp_path / RUN_METADATA_FILENAME
+    path.write_bytes(b'previous')
+    with pytest.raises(RunMetadataError):
+        write_run_metadata(tmp_path, {'extension': {'nested': [value]}})
+    assert path.read_bytes() == b'previous'
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_metadata_extension_roundtrip(tmp_path):
+    metadata = {'extension': {'nested': [None, True, 3, 1.25, {'label': 'valid'}]}}
+    path = write_run_metadata(tmp_path, metadata)
+    assert load_run_metadata(path) == metadata
