@@ -146,7 +146,7 @@ def test_cleanup_uses_owned_group_after_leader_exit(monkeypatch):
         def wait(self, *, timeout):
             assert timeout == tasks._EXTERNAL_PROCESS_TIMEOUT_GRACE_S
             return 0
-    def send(pgid, number, case):
+    def send(pgid, number, case, **kwargs):
         signals.append((pgid, number))
     monkeypatch.setattr(tasks, '_signal_external_process_group', send)
     monkeypatch.setattr(tasks, 'sleep', lambda _: None)
@@ -172,7 +172,7 @@ def test_cleanup_errors_do_not_replace_interrupt_and_close_both_streams(tmp_path
             raise primary
         def wait(self, **kwargs):
             return 0
-    def signal_group(pgid, number, case_id):
+    def signal_group(pgid, number, case_id, **kwargs):
         if number == signal.SIGTERM:
             raise OSError('terminate failed')
     monkeypatch.setattr(tasks.subprocess, 'Popen', lambda *a, **kw: Process())

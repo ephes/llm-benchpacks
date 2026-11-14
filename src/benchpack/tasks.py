@@ -508,8 +508,10 @@ def _run_external_process_command(
 
 def _reap_external_process_group(process, case_id):
     """Bounded cleanup even when collection fails or the leader has exited."""
+    # The leader stays unreaped here, so macOS may answer EPERM for a group
+    # whose only member is that zombie: the goal state, not a cleanup failure.
     try:
-        _signal_external_process_group(process.pid, signal.SIGTERM, case_id)
+        _signal_external_process_group(process.pid, signal.SIGTERM, case_id, exiting_ok=True)
         # Keep the leader unreaped during grace so ownership remains attached
         # until the final group signal, even if it exits before descendants.
         sleep(_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
@@ -517,7 +519,7 @@ def _reap_external_process_group(process, case_id):
         # start_new_session makes pid the owned pgid. Do not look it up via
         # a leader that may already have exited while descendants survive.
         try:
-            _signal_external_process_group(process.pid, signal.SIGKILL, case_id)
+            _signal_external_process_group(process.pid, signal.SIGKILL, case_id, exiting_ok=True)
         finally:
             process.wait(timeout=_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
 

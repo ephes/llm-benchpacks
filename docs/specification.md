@@ -1792,7 +1792,8 @@ remains deterministic. Directories below the workspace root must be real
 directories and symlink roots are refused; links among the root's own ancestors
 (for example macOS `/tmp` -> `/private/tmp` or a linked home) are trusted and
 resolved once. Runner-owned task logs apply the same no-follow walk below the
-run output directory; external-agent context files below their parent directory.
+run output directory; an external-agent context file's own parent directory
+must not be a link.
 
 Full-file replacements encode UTF-8 before opening output, stage bytes in an
 exclusive sibling file, flush, preserve existing regular-file permissions and
