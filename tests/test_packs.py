@@ -1458,6 +1458,30 @@ prompt_file = "prompts/example.md"
     assert pack.cases[0].raw["prompt_file"] == "prompts/example.md"
 
 
+def test_load_pack_prompt_file_keeps_text_mode_newlines(tmp_path: Path) -> None:
+    """Prompts authored on Windows read as before: CRLF and CR become LF."""
+    pack_dir = write_manifest(
+        tmp_path,
+        """
+[pack]
+id = "crlfprompt"
+version = "0.1.0"
+
+[[cases]]
+id = "from-file"
+kind = "chat"
+prompt_file = "prompts/example.md"
+""",
+    )
+    prompt_dir = pack_dir / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "example.md").write_bytes(b"Line one.\r\nLine two.\rLine three.\n")
+
+    pack = load_pack(pack_dir)
+
+    assert pack.cases[0].prompt == "Line one.\nLine two.\nLine three.\n"
+
+
 def test_load_pack_keeps_inline_prompt_support(tmp_path: Path) -> None:
     pack_dir = write_manifest(
         tmp_path,
@@ -3072,13 +3096,13 @@ def test_manifest_reader_normalizes_source_errors(tmp_path, monkeypatch, failure
     if failure == 'missing':
         manifest.unlink()
     elif failure == 'unreadable':
-        original_open = Path.open
-        def denied(self, *a, **kw):
-            if self == manifest:
-                injected.append(self)
+        original_open = os.open
+        def denied(file, *a, **kw):
+            if file == manifest.name:
+                injected.append(manifest)
                 raise PermissionError('synthetic denial')
-            return original_open(self, *a, **kw)
-        monkeypatch.setattr(Path, 'open', denied)
+            return original_open(file, *a, **kw)
+        monkeypatch.setattr(os, 'open', denied)
     elif failure == 'toml':
         manifest.write_text('[pack\nprivate-prompt-sentinel')
     else:
@@ -3089,3 +3113,121 @@ def test_manifest_reader_normalizes_source_errors(tmp_path, monkeypatch, failure
     assert len(str(error.value)) < 500
     if failure == 'unreadable':
         assert injected == [manifest]
+
+
+@pytest.mark.parametrize('role,constant', [('manifest', 'MAX_MANIFEST_BYTES'),
+    ('schema', 'MAX_SCHEMA_BYTES'), ('prompt', 'MAX_PROMPT_BYTES'),
+    ('fixture', 'MAX_TEXT_FIXTURE_BYTES')])
+def test_pack_file_budget_refuses_before_materialization(tmp_path, monkeypatch, role, constant):
+    import benchpack.packs as packs
+    monkeypatch.setattr(packs, constant, 64, raising=False)
+    body = '[pack]\nid="examplepack"\nversion="1"\n'
+    if role == 'schema':
+        body += '[scoring]\nmode="json-schema"\nschema="input"\n'
+        content = '{"description":"' + 'x' * 100 + '"}'
+    elif role == 'prompt':
+        body += '[[cases]]\nid="one"\nprompt_file="input"\n'
+        content = 'x' * 100
+    elif role == 'fixture':
+        body += '[[fixtures]]\nid="text"\nkind="text"\npath="input"\n[[cases]]\nid="one"\nprompt="x"\nfixture_refs=["text"]\n'
+        content = 'x' * 100
+    else:
+        body += '# ' + 'x' * 100
+        content = ''
+    pack_dir = write_manifest(tmp_path, body)
+    (pack_dir / 'input').write_text(content)
+    with pytest.raises(PackError, match='limit'):
+        load_pack(pack_dir)
+
+
+def test_cumulative_pack_budget_counts_each_fixture_use(tmp_path, monkeypatch):
+    import benchpack.packs as packs
+    body = '[pack]\nid="examplepack"\nversion="1"\n[[fixtures]]\nid="text"\nkind="text"\npath="input"\n'
+    body += ''.join(f'[[cases]]\nid="c{i}"\nprompt="x"\nfixture_refs=["text"]\n' for i in range(10))
+    pack_dir = write_manifest(tmp_path, body)
+    (pack_dir / 'input').write_text('x' * 100)
+    monkeypatch.setattr(packs, 'MAX_PACK_INPUT_BYTES', len(body.encode()) + 500, raising=False)
+    with pytest.raises(PackError, match='limit'):
+        load_pack(pack_dir)
+
+
+@pytest.mark.parametrize('member,values', [('type', ('"string"', '"object"')),
+    ('required', ('[]', '["a"]')), ('properties', ('{}', '{"a":{}}'))])
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_schema_duplicate_members_refused(tmp_path, member, values, nested, reverse):
+    first, second = reversed(values) if reverse else values
+    schema = '{' + f'"{member}":{first},"{member}":{second}' + '}'
+    if nested:
+        schema = '{"properties":{"a":' + schema + '}}'
+    body = '[pack]\nid="examplepack"\nversion="1"\n[scoring]\nmode="json-schema"\nschema="schema.json"\n'
+    pack_dir = write_manifest(tmp_path, body)
+    (pack_dir / 'schema.json').write_text(schema)
+    with pytest.raises(InvalidScoringSchemaError, match='duplicate') as error:
+        load_pack(pack_dir)
+    assert len(str(error.value)) < 200
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='FIFO')
+@pytest.mark.parametrize('role', ['manifest', 'prompt', 'schema'])
+def test_pack_special_file_refusal_does_not_block(tmp_path, role):
+    body = '[pack]\nid="examplepack"\nversion="1"\n'
+    if role == 'prompt':
+        body += '[[cases]]\nid="one"\nprompt_file="input"\n'
+    elif role == 'schema':
+        body += '[scoring]\nmode="json-schema"\nschema="input"\n'
+    pack_dir = write_manifest(tmp_path, body)
+    path = pack_dir / ('benchpack.toml' if role == 'manifest' else 'input')
+    path.unlink(missing_ok=True)
+    os.mkfifo(path)
+    code = ('from benchpack.packs import load_pack, PackError; '
+            'from pathlib import Path\n'
+            'try:\n'
+            f' load_pack(Path({str(pack_dir)!r}))\n'
+            'except PackError:\n pass\n'
+            'else:\n raise AssertionError("special input admitted")\n')
+    subprocess.run([sys.executable, '-c', code], check=True, timeout=3)
+
+
+@pytest.mark.parametrize('role', ['manifest', 'schema', 'prompt'])
+def test_pack_read_growth_stops_at_allowance(tmp_path, monkeypatch, role):
+    import benchpack.packs as packs
+    body = '[pack]\nid="examplepack"\nversion="1"\n'
+    if role == 'schema':
+        body += '[scoring]\nmode="json-schema"\nschema="input"\n'
+        content = '{}'
+    elif role == 'prompt':
+        body += '[[cases]]\nid="one"\nprompt_file="input"\n'
+        content = 'normal prompt'
+    else:
+        content = body
+    pack_dir = write_manifest(tmp_path, body)
+    target = pack_dir / ('benchpack.toml' if role == 'manifest' else 'input')
+    target.write_text(content)
+    constant = {'manifest': 'MAX_MANIFEST_BYTES', 'schema': 'MAX_SCHEMA_BYTES', 'prompt': 'MAX_PROMPT_BYTES'}[role]
+    monkeypatch.setattr(packs, constant, 64, raising=False)
+    read = os.read
+    observed = []
+    def grow(fd, count):
+        chunk = read(fd, count)
+        if os.fstat(fd).st_ino == target.stat().st_ino:
+            observed.append(len(chunk))
+            if len(observed) == 1:
+                with target.open('ab') as out:
+                    out.write(b' ' * 1000)
+        return chunk
+    monkeypatch.setattr(os, 'read', grow)
+    with pytest.raises(PackError, match='limit'):
+        load_pack(pack_dir)
+    assert observed and sum(observed) == 65
+
+
+def test_oversized_manifest_is_refused_without_reading_bytes(tmp_path, monkeypatch):
+    import benchpack.packs as packs
+    pack_dir = write_manifest(tmp_path, '[pack]\nid="examplepack"\nversion="1"\n')
+    monkeypatch.setattr(packs, 'MAX_MANIFEST_BYTES', 4, raising=False)
+    def unexpected_read(*args):
+        raise AssertionError('oversized input must fail at fstat')
+    monkeypatch.setattr(os, 'read', unexpected_read)
+    with pytest.raises(PackError, match='limit'):
+        load_pack(pack_dir)

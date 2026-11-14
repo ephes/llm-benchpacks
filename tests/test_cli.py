@@ -3367,7 +3367,7 @@ def test_cli_repo_task_rejects_fixture_symlink_escape_before_adapter(
     except OSError as exc:
         pytest.skip(f"symlinks cannot be created on this filesystem: {exc}")
 
-    with pytest.raises(SystemExit, match="absolute symlink"):
+    with pytest.raises(SystemExit, match=r"repo-task case '[^']+' fixture '[^']+': .*absolute symlink"):
         main(_argv(["--out", str(tmp_path / "run")]))
 
     assert calls == []
@@ -4303,13 +4303,14 @@ def test_cli_pack_errors_exit_before_output_or_adapter(tmp_path, monkeypatch, fa
     if failure == 'missing':
         manifest.unlink()
     elif failure == 'unreadable':
-        original_open = Path.open
+        import os
+        original_open = os.open
         def denied(path, *args, **kwargs):
-            if path.resolve() == manifest.resolve():
-                injected.append(path)
+            if path == manifest.name:
+                injected.append(manifest)
                 raise PermissionError('synthetic denial')
             return original_open(path, *args, **kwargs)
-        monkeypatch.setattr(Path, 'open', denied)
+        monkeypatch.setattr(os, 'open', denied)
     elif failure == 'toml':
         manifest.write_text('[pack\nprivate-prompt-sentinel')
     elif failure == 'manifest-utf8':
@@ -4432,3 +4433,38 @@ def test_cli_openai_failure_summaries_keep_backend_secrets_private(tmp_path, mon
         assert value not in compact
     # Full backend diagnostics are intentionally private local raw evidence.
     assert echoed_value in next((out / "raw").glob("*.response.json")).read_text()
+
+
+@pytest.mark.parametrize('role', ['manifest', 'schema', 'prompt', 'fixture', 'duplicate-schema'])
+def test_pack_admission_refuses_before_adapter_verifier_and_output(tmp_path, monkeypatch, role):
+    import benchpack.packs as packs
+    calls = _install_fake_adapter(monkeypatch)
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    body = '[pack]\nid="bounded"\nversion="1"\n'
+    if role in ['schema', 'duplicate-schema']:
+        body += '[scoring]\nmode="json-schema"\nschema="input"\n'
+        (pack / 'input').write_text('{"type":"string","type":"object"}' if role == 'duplicate-schema'
+            else '{"description":"' + 'x' * 100 + '"}')
+        if role == 'schema':
+            monkeypatch.setattr(packs, 'MAX_SCHEMA_BYTES', 64)
+        body += '[[cases]]\nid="one"\nprompt="hello"\n'
+    elif role == 'fixture':
+        body += '[[fixtures]]\nid="text"\nkind="text"\npath="input"\n[[cases]]\nid="one"\nprompt="x"\nfixture_refs=["text"]\n'
+        (pack / 'input').write_text('x' * 100)
+        monkeypatch.setattr(packs, 'MAX_TEXT_FIXTURE_BYTES', 64)
+    elif role == 'prompt':
+        body += '[[cases]]\nid="one"\nprompt_file="input"\n'
+        (pack / 'input').write_text('x' * 100)
+        monkeypatch.setattr(packs, 'MAX_PROMPT_BYTES', 64)
+    else:
+        monkeypatch.setattr(packs, 'MAX_MANIFEST_BYTES', 4)
+    (pack / 'benchpack.toml').write_text(body)
+    def unexpected_verifier(**kwargs):
+        raise AssertionError('refused input must not reach verifier')
+    monkeypatch.setattr('benchpack.cli.run_repo_task_verifier', unexpected_verifier)
+    out = tmp_path / 'output'
+    with pytest.raises(SystemExit, match='limit|duplicate'):
+        main(['run', str(pack), '--adapter', 'openai-chat', '--model', 'synthetic', '--out', str(out)])
+    assert calls == []
+    assert not out.exists()

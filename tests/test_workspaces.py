@@ -64,12 +64,12 @@ def _repo_task(tmp_path):
 
 
 def test_copy_failure_leaves_reported_staging_and_allows_retry(tmp_path, monkeypatch):
-    import shutil
+    import benchpack.workspaces as workspaces
     from benchpack.workspaces import prepare_repo_task_workspace, workspace_path
 
     pack, case = _repo_task(tmp_path)
     out = tmp_path / "run"
-    real_copytree = shutil.copytree
+    real_copytree = workspaces._copy_fixture_tree
     copied = []
 
     def fail_copy(source, destination, **kwargs):
@@ -79,27 +79,27 @@ def test_copy_failure_leaves_reported_staging_and_allows_retry(tmp_path, monkeyp
         copied.append(destination)
         raise OSError("injected copy failure")
 
-    monkeypatch.setattr(shutil, "copytree", fail_copy)
+    monkeypatch.setattr(workspaces, "_copy_fixture_tree", fail_copy)
     with pytest.raises(WorkspaceError) as error:
         prepare_repo_task_workspace(pack, case, out, 1)
     assert len(copied) == 1
     assert not workspace_path(out, case, 1).exists()
     assert str(copied[0]) in str(error.value)
     assert (copied[0] / "first.txt").read_text() == "partial"
-    monkeypatch.setattr(shutil, "copytree", real_copytree)
+    monkeypatch.setattr(workspaces, "_copy_fixture_tree", real_copytree)
     prepared = prepare_repo_task_workspace(pack, case, out, 1)
     assert (prepared.path / "first.txt").read_text() == "source"
 
 
 @pytest.mark.parametrize("foreign_kind", ["empty", "file", "symlink"])
 def test_concurrent_destination_is_preserved(tmp_path, monkeypatch, foreign_kind):
-    import shutil
+    import benchpack.workspaces as workspaces
     from benchpack.workspaces import prepare_repo_task_workspace, workspace_path
 
     pack, case = _repo_task(tmp_path)
     out = tmp_path / "run"
     destination = workspace_path(out, case, 1)
-    real_copytree = shutil.copytree
+    real_copytree = workspaces._copy_fixture_tree
     called = []
 
     def concurrent_copy(source, target, **kwargs):
@@ -113,7 +113,7 @@ def test_concurrent_destination_is_preserved(tmp_path, monkeypatch, foreign_kind
         called.append(True)
         return result
 
-    monkeypatch.setattr(shutil, "copytree", concurrent_copy)
+    monkeypatch.setattr(workspaces, "_copy_fixture_tree", concurrent_copy)
     with pytest.raises(WorkspaceError) as error:
         prepare_repo_task_workspace(pack, case, out, 1)
     assert called == [True]
@@ -223,20 +223,20 @@ def test_model_patch_uses_copied_baseline_not_live_fixture(tmp_path):
 
 
 def test_baseline_copy_failure_reports_retained_workspace_and_partial_baseline(tmp_path, monkeypatch):
-    import shutil
+    import benchpack.workspaces as workspaces
     from benchpack.workspaces import prepare_repo_task_workspace, workspace_path
 
     pack, case = _repo_task(tmp_path)
     out = tmp_path / "run"
     destination = workspace_path(out, case, 1)
-    original_copy = shutil.copytree
+    original_copy = workspaces._copy_fixture_tree
     def fail_baseline(source, target, **kwargs):
         if source == destination:
             Path(target).mkdir()
             (Path(target) / "partial").write_text("partial")
             raise OSError("injected baseline failure")
         return original_copy(source, target, **kwargs)
-    monkeypatch.setattr(shutil, "copytree", fail_baseline)
+    monkeypatch.setattr(workspaces, "_copy_fixture_tree", fail_baseline)
     with pytest.raises(WorkspaceError, match="copy prepared baseline") as error:
         prepare_repo_task_workspace(pack, case, out, 1)
     baseline = out / "baseline" / case.id / "rep-001"
@@ -269,3 +269,102 @@ def test_capture_large_synthetic_fixture_with_ordinary_code_edit(tmp_path):
     assert "-constant_1514 = 1514\n" in diff
     assert "+constant_1514 = -1\n" in diff
     assert "test.csv" not in diff
+
+
+@pytest.mark.parametrize('limit_kind', ['entries', 'bytes'])
+def test_fixture_preflight_refuses_before_allocating_output(tmp_path, monkeypatch, limit_kind):
+    import benchpack.workspaces as workspaces
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path
+    if limit_kind == 'entries':
+        for i in range(5):
+            (source / str(i)).mkdir()
+        monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_ENTRIES', 10, raising=False)
+    else:
+        monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_BYTES', 11, raising=False)
+    with pytest.raises(WorkspaceError, match='limit'):
+        workspaces.prepare_repo_task_workspace(pack, case, tmp_path / 'run', 1)
+    assert not (tmp_path / 'run').exists()
+    assert (source / 'first.txt').read_text() == 'source'
+
+
+def test_fixture_growth_is_bounded_during_copy(tmp_path, monkeypatch):
+    import os
+    import benchpack.workspaces as workspaces
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path / 'first.txt'
+    monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_BYTES', 20, raising=False)
+    read = os.read
+    grown = []
+    def grow_after_read(fd, count):
+        chunk = read(fd, min(count, 3))
+        if chunk and not grown:
+            with source.open('ab') as stream:
+                stream.write(b'g' * 100)
+            grown.append(True)
+        return chunk
+    monkeypatch.setattr(os, 'read', grow_after_read)
+    with pytest.raises(WorkspaceError, match='limit') as error:
+        workspaces.prepare_repo_task_workspace(pack, case, tmp_path / 'run', 1)
+    assert grown
+    assert 'staging retained at' in str(error.value)
+    assert sum(p.stat().st_size for p in (tmp_path / 'run').rglob('*') if p.is_file()) <= 20
+
+
+def test_fixture_budget_includes_baseline_and_preserves_links(tmp_path, monkeypatch):
+    import benchpack.workspaces as workspaces
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path
+    (source / 'link').symlink_to('first.txt')
+    monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_BYTES', 12, raising=False)
+    monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_ENTRIES', 6, raising=False)
+    prepared = workspaces.prepare_repo_task_workspace(pack, case, tmp_path / 'run', 1)
+    for root in [prepared.path, prepared.baseline_path]:
+        assert (root / 'first.txt').read_text() == 'source'
+        assert (root / 'link').is_symlink()
+        assert (root / 'link').readlink() == Path('first.txt')
+
+
+def test_fixture_entry_growth_is_bounded_during_copy(tmp_path, monkeypatch):
+    import os
+    import benchpack.workspaces as workspaces
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path
+    monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_ENTRIES', 6, raising=False)
+    scan = os.scandir
+    seen = []
+    def add_entries(path):
+        if Path(path) == source:
+            seen.append(path)
+            if len(seen) == 2:
+                for i in range(10):
+                    (source / str(i)).mkdir()
+        return scan(path)
+    monkeypatch.setattr(os, 'scandir', add_entries)
+    with pytest.raises(WorkspaceError, match='entry limit') as error:
+        workspaces.prepare_repo_task_workspace(pack, case, tmp_path / 'run', 1)
+    assert 'staging retained' in str(error.value)
+    assert len(list((tmp_path / 'run' / 'workspace' / case.id).rglob('*'))) <= 7
+
+
+def test_fixture_growth_consumes_shared_baseline_allowance(tmp_path, monkeypatch):
+    import os
+    import benchpack.workspaces as workspaces
+    pack, case = _repo_task(tmp_path)
+    source = pack.fixtures[0].path / 'first.txt'
+    monkeypatch.setattr(workspaces, 'MAX_FIXTURE_COPY_BYTES', 16, raising=False)
+    read = os.read
+    grown = []
+    def grow_once(fd, count):
+        chunk = read(fd, min(count, 3))
+        if chunk and not grown:
+            with source.open('ab') as out:
+                out.write(b'grow')
+            grown.append(True)
+        return chunk
+    monkeypatch.setattr(os, 'read', grow_once)
+    with pytest.raises(WorkspaceError, match='copy prepared baseline.*byte limit') as error:
+        workspaces.prepare_repo_task_workspace(pack, case, tmp_path / 'run', 1)
+    assert 'baseline:' in str(error.value)
+    assert (tmp_path / 'run' / 'workspace' / case.id / 'rep-001' / 'first.txt').read_bytes() == b'sourcegrow'
+    assert sum(p.stat().st_size for p in (tmp_path / 'run').rglob('*') if p.is_file()) <= 16

@@ -855,3 +855,27 @@ decoder-limit failures and durations that cannot convert to finite nonnegative
 floats count as invalid telemetry rows without retaining the row text. Invalid
 UTF-8 and I/O failures are controlled file errors. Safe-field rejection remains
 unchanged; split historical logs exceeding these limits before reporting.
+
+### Fixed verifier and repo-fixture ceilings
+
+Verifier supplemental JSON is limited to 1 MiB from a no-follow regular file;
+refusal is supplemental and does not override exit status. Verifier logs have
+8 MiB per-stream and 12 MiB combined disk ceilings. Overflow terminates the
+owned process group and fails verification with `output_limit: true`.
+Repo-fixture preparation permits 20,000 entries and 512 MiB total copied bytes
+across workspace plus baseline, checked before output allocation and during
+copying. Directory/root/link entries count; symlinks remain links. Large packs
+should reduce their fixtures rather than rely on unbounded staging.
+
+### Pack text and schema admission
+
+`benchpack.toml` and each scoring schema have a 1 MiB file ceiling. Prompt files
+and referenced text fixtures have a 4 MiB ceiling each. All must be regular
+files; reads remain bounded if files grow. Loading has a shared 16 MiB allowance
+for manifest bytes, schema/prompt/fixture reads per use, inline prompt copies
+and fixture delimiters. Repeated references consume the allowance again.
+Directory fixtures are not text inputs; repo copies use the separate shared
+fixture ceilings above. Refusal raises a controlled pack error before execution.
+JSON schemas must use unique member names in every object, including nested
+`properties` and definitions. Duplicate `type`, `required` or any other member
+is an error in either order; split/repair invalid packs before running them.

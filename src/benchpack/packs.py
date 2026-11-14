@@ -13,6 +13,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .safe_files import read_contained_regular
+
+MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_SCHEMA_BYTES = 1024 * 1024
+MAX_PROMPT_BYTES = 4 * 1024 * 1024
+MAX_TEXT_FIXTURE_BYTES = 4 * 1024 * 1024
+MAX_PACK_INPUT_BYTES = 16 * 1024 * 1024
+
 
 # Pack and case ids are used as filesystem path components and as stable keys
 # in result records.  Constrain them up-front so the reporter can trust them
@@ -90,6 +98,51 @@ class InvalidScoringSchemaError(PackError):
     """Raised when a json-schema scoring declaration is invalid."""
 
 
+@dataclass
+class _PackInputBudget:
+    used: int = 0
+
+    def charge(self, count: int, role: str, error_type: type[PackError]) -> None:
+        if self.used + count > MAX_PACK_INPUT_BYTES:
+            raise error_type(f"{role} exceeds cumulative pack input byte limit")
+        self.used += count
+
+    def read(
+        self,
+        path: Path,
+        limit: int,
+        role: str,
+        error_type: type[PackError],
+        *,
+        universal_newlines: bool = True,
+    ) -> str:
+        allowance = min(limit, MAX_PACK_INPUT_BYTES - self.used)
+        snapshot = read_contained_regular(path.parent, path.name, allowance)
+        if snapshot is None:
+            raise error_type(f"{role} could not be read as a regular file: {path.name}")
+        if snapshot.data is None:
+            raise error_type(f"{role} exceeds file or cumulative pack input byte limit")
+        self.charge(len(snapshot.data), role, error_type)
+        try:
+            text = snapshot.data.decode("utf-8")
+        except UnicodeError as exc:
+            raise error_type(f"{role} could not be read: invalid UTF-8: {path.name}") from exc
+        if universal_newlines:
+            # Same text as Path.read_text: CRLF/CR become LF (packs authored on Windows).
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+        return text
+
+
+def _unique_schema_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            # Fixed diagnostic: never echo a potentially huge/private member name.
+            raise InvalidScoringSchemaError("scoring.schema contains duplicate JSON members")
+        result[key] = value
+    return result
+
+
 def _validate_id(value: object, role: str) -> str:
     if not isinstance(value, str) or not ID_PATTERN.fullmatch(value):
         raise InvalidIdError(
@@ -153,6 +206,7 @@ def _scoring_from_dict(
     data: dict[str, Any] | None,
     *,
     resolved_pack_dir: Path,
+    budget: _PackInputBudget,
 ) -> Scoring | None:
     if not data:
         return None
@@ -184,6 +238,7 @@ def _scoring_from_dict(
         schema,
         mode=mode,
         resolved_pack_dir=resolved_pack_dir,
+        budget=budget,
     )
     known = {
         "mode",
@@ -213,6 +268,7 @@ def _scoring_schema_from_value(
     *,
     mode: str,
     resolved_pack_dir: Path,
+    budget: _PackInputBudget,
 ) -> dict[str, Any] | None:
     if mode != "json-schema":
         return None
@@ -233,7 +289,10 @@ def _scoring_schema_from_value(
             f"scoring.schema {value!r} must point to an existing JSON file"
         )
     try:
-        loaded = json.loads(schema_path.read_text(encoding="utf-8"))
+        loaded = json.loads(
+            budget.read(schema_path, MAX_SCHEMA_BYTES, "scoring.schema", InvalidScoringSchemaError),
+            object_pairs_hook=_unique_schema_members,
+        )
     except OSError as exc:
         raise InvalidScoringSchemaError(
             f"scoring.schema {value!r} could not be read"
@@ -246,7 +305,7 @@ def _scoring_schema_from_value(
         raise InvalidScoringSchemaError(
             f"scoring.schema {value!r} exceeds JSON nesting limit"
         ) from exc
-    except json.JSONDecodeError as exc:
+    except ValueError as exc:
         raise InvalidScoringSchemaError(
             f"scoring.schema {value!r} is not valid JSON"
         ) from exc
@@ -375,6 +434,7 @@ def _prompt_from_case_entry(
     *,
     case_id: str,
     resolved_pack_dir: Path,
+    budget: _PackInputBudget,
 ) -> str | None:
     has_prompt = "prompt" in entry
     has_prompt_file = "prompt_file" in entry
@@ -393,6 +453,7 @@ def _prompt_from_case_entry(
             raise InvalidPromptSourceError(
                 f"case {case_id!r} prompt must be a string"
             )
+        budget.charge(len(prompt.encode("utf-8")), "inline prompt", InvalidPromptSourceError)
         return prompt
 
     prompt_file = entry["prompt_file"]
@@ -409,7 +470,8 @@ def _prompt_from_case_entry(
     )
 
     try:
-        return resolved_prompt_path.read_text(encoding="utf-8")
+        return budget.read(resolved_prompt_path, MAX_PROMPT_BYTES,
+                           f"case {case_id!r} prompt_file", InvalidPromptSourceError)
     except (OSError, UnicodeError) as exc:
         raise InvalidPromptSourceError(
             f"case {case_id!r} prompt_file {prompt_file!r} could not be read"
@@ -606,6 +668,7 @@ def _append_referenced_file_fixtures(
     fixture_refs: list[str],
     fixtures_by_id: dict[str, Fixture],
     case_id: str,
+    budget: _PackInputBudget,
 ) -> str:
     assembled = prompt
     for fixture_id in fixture_refs:
@@ -615,7 +678,8 @@ def _append_referenced_file_fixtures(
 
         fixture_path = fixture.raw["path"]
         try:
-            fixture_contents = fixture.path.read_text(encoding="utf-8")
+            fixture_contents = budget.read(fixture.path, MAX_TEXT_FIXTURE_BYTES,
+                                           f"case {case_id!r} fixture file", InvalidFixtureError)
         except OSError as exc:
             raise InvalidFixtureError(
                 f"case {case_id!r} fixture {fixture_id!r} file "
@@ -632,6 +696,8 @@ def _append_referenced_file_fixtures(
             fixture_block += "\n"
         fixture_block += footer
         separator = "\n" if assembled.endswith("\n") else "\n\n"
+        overhead = len((separator + header + "\n" + footer + "\n").encode("utf-8"))
+        budget.charge(overhead, "assembled prompt", InvalidFixtureError)
         assembled = f"{assembled}{separator}{fixture_block}"
 
     return assembled
@@ -640,13 +706,15 @@ def _append_referenced_file_fixtures(
 def load_pack(path: Path | str) -> Pack:
     pack_dir = Path(path)
     manifest_path = pack_dir / "benchpack.toml"
+    budget = _PackInputBudget()
     try:
-        with manifest_path.open("rb") as fh:
-            data = tomllib.load(fh)
+        # The manifest was always parsed from bytes; TOML handles its own newlines.
+        text = budget.read(manifest_path, MAX_MANIFEST_BYTES, "manifest", PackError, universal_newlines=False)
+        data = tomllib.loads(text)
         resolved_pack_dir = pack_dir.resolve(strict=True)
     except UnicodeError as exc:
         raise PackError(f"could not decode manifest {manifest_path}: invalid UTF-8") from exc
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         raise PackError(f"could not parse manifest {manifest_path}: invalid TOML") from exc
     except OSError as exc:
         raise PackError(f"could not read manifest {manifest_path}") from exc
@@ -693,6 +761,7 @@ def load_pack(path: Path | str) -> Pack:
             entry,
             case_id=case_id,
             resolved_pack_dir=resolved_pack_dir,
+            budget=budget,
         )
         fixture_refs = _fixture_refs_from_case_entry(
             entry,
@@ -705,6 +774,7 @@ def load_pack(path: Path | str) -> Pack:
                 fixture_refs=fixture_refs,
                 fixtures_by_id=fixtures_by_id,
                 case_id=case_id,
+                budget=budget,
             )
         harness = _harness_from_case_entry(
             entry,
@@ -719,6 +789,7 @@ def load_pack(path: Path | str) -> Pack:
                 scoring=_scoring_from_dict(
                     entry.get("scoring"),
                     resolved_pack_dir=resolved_pack_dir,
+                    budget=budget,
                 ),
                 raw=dict(entry),
                 harness=harness,
@@ -737,6 +808,7 @@ def load_pack(path: Path | str) -> Pack:
         scoring=_scoring_from_dict(
             data.get("scoring"),
             resolved_pack_dir=resolved_pack_dir,
+            budget=budget,
         ),
         path=pack_dir,
         fixtures=fixtures,

@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Iterator
 
 from .packs import Case, Fixture, Pack
+from .safe_files import open_contained_regular
+
+
+MAX_FIXTURE_COPY_ENTRIES = 20_000
+MAX_FIXTURE_COPY_BYTES = 512 * 1024 * 1024
 
 
 class WorkspaceError(ValueError):
@@ -102,51 +110,108 @@ def workspace_record(prepared: PreparedWorkspace, output_dir: Path) -> dict[str,
     }
 
 
+@dataclass
+class _CopyBudget:
+    entries: int = 0
+    bytes: int = 0
+
+    def entry(self) -> None:
+        self.entries += 1
+        if self.entries > MAX_FIXTURE_COPY_ENTRIES:
+            raise WorkspaceError("fixture copy entry limit exceeded")
+
+    def check_bytes(self, count: int) -> None:
+        if self.bytes + count > MAX_FIXTURE_COPY_BYTES:
+            raise WorkspaceError("fixture copy byte limit exceeded")
+
+
+def _fixture_entries(root: Path) -> Iterator[tuple[Path, os.stat_result]]:
+    """Iterate without following links or materializing a whole directory."""
+    pending = [root]
+    yield root, root.lstat()
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as children:
+            for child in children:
+                candidate = Path(child.path)
+                info = child.stat(follow_symlinks=False)
+                yield candidate, info
+                if stat.S_ISDIR(info.st_mode):
+                    pending.append(candidate)
+
+
+def _fixture_link(candidate: Path, root: Path) -> Path:
+    target = candidate.readlink()
+    if target.is_absolute():
+        raise WorkspaceError(f"repo fixture contains absolute symlink {candidate.relative_to(root)}")
+    try:
+        resolved = (candidate.parent / target).resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise WorkspaceError("repo fixture symlink could not be resolved") from exc
+    if not resolved.is_relative_to(root.resolve(strict=True)):
+        raise WorkspaceError(f"repo fixture contains symlink {candidate.relative_to(root)} escaping the repo fixture")
+    return target
+
+
 def _reject_escaping_symlinks(source_root: Path, case: Case, fixture: Fixture) -> None:
-    """Reject symlinks that would let future workspace writes escape isolation."""
+    """Preflight both generations before allocating output or launching work."""
+    budget = _CopyBudget()
+    try:
+        for candidate, info in _fixture_entries(source_root):
+            budget.entry()
+            budget.entry()  # workspace plus baseline, including directories/links
+            if stat.S_ISLNK(info.st_mode):
+                _fixture_link(candidate, source_root)
+            elif stat.S_ISREG(info.st_mode):
+                budget.check_bytes(info.st_size * 2)
+                budget.bytes += info.st_size * 2
+            elif not stat.S_ISDIR(info.st_mode):
+                raise WorkspaceError("repo fixture must contain regular files, directories or symlinks")
+    except WorkspaceError as exc:
+        # Pack validation runs this for every case: name the refused case and fixture.
+        raise WorkspaceError(f"repo-task case {case.id!r} fixture {fixture.id!r}: {exc}") from exc
+    except OSError as exc:
+        raise WorkspaceError(f"could not inspect repo-task case {case.id!r} fixture {fixture.id!r}") from exc
 
-    resolved_source_root = source_root.resolve(strict=True)
 
-    def walk(directory: Path) -> None:
-        try:
-            children = list(directory.iterdir())
-        except OSError as exc:
-            raise WorkspaceError(
-                f"could not inspect directory {directory} in repo-task case "
-                f"{case.id!r} fixture {fixture.id!r}"
-            ) from exc
-
-        for candidate in children:
-            if candidate.is_symlink():
-                _validate_symlink(candidate)
-                continue
-            if candidate.is_dir():
-                walk(candidate)
-
-    def _validate_symlink(candidate: Path) -> None:
-        try:
-            target = candidate.readlink()
-        except OSError as exc:
-            raise WorkspaceError(
-                f"could not inspect symlink {candidate} in repo-task case "
-                f"{case.id!r} fixture {fixture.id!r}"
-            ) from exc
-
-        if target.is_absolute():
-            raise WorkspaceError(
-                f"repo-task case {case.id!r} fixture {fixture.id!r} contains "
-                f"absolute symlink {candidate.relative_to(source_root)}"
-            )
-
-        resolved_target = (candidate.parent / target).resolve(strict=False)
-        if not resolved_target.is_relative_to(resolved_source_root):
-            raise WorkspaceError(
-                f"repo-task case {case.id!r} fixture {fixture.id!r} contains "
-                f"symlink {candidate.relative_to(source_root)} escaping the "
-                "repo fixture"
-            )
-
-    walk(source_root)
+def _copy_fixture_tree(source: Path, destination: Path, *, budget: _CopyBudget,
+                       dirs_exist_ok: bool = False) -> None:
+    """Copy with shared entry/actual-byte ceilings, retaining owned partials."""
+    directories = []
+    for candidate, info in _fixture_entries(source):
+        budget.entry()
+        relative = candidate.relative_to(source)
+        target = destination / relative
+        if stat.S_ISDIR(info.st_mode):
+            target.mkdir(exist_ok=dirs_exist_ok and candidate == source)
+            directories.append((target, info))
+        elif stat.S_ISLNK(info.st_mode):
+            target.symlink_to(_fixture_link(candidate, source))
+        elif stat.S_ISREG(info.st_mode):
+            fd = open_contained_regular(source, relative.as_posix())
+            if fd is None:
+                raise WorkspaceError("fixture copy source is no longer a regular contained file")
+            try:
+                opened_info = os.fstat(fd)
+                budget.check_bytes(opened_info.st_size)
+                with target.open("xb") as out:
+                    while True:
+                        remaining = MAX_FIXTURE_COPY_BYTES - budget.bytes
+                        chunk = os.read(fd, min(65536, remaining + 1))
+                        if not chunk:
+                            break
+                        budget.check_bytes(len(chunk))
+                        out.write(chunk)
+                        budget.bytes += len(chunk)
+                    os.fchmod(out.fileno(), stat.S_IMODE(opened_info.st_mode))
+                os.utime(target, ns=(opened_info.st_atime_ns, opened_info.st_mtime_ns))
+            finally:
+                os.close(fd)
+        else:
+            raise WorkspaceError("fixture copy source must be regular file, directory or symlink")
+    for target, info in reversed(directories):
+        target.chmod(stat.S_IMODE(info.st_mode))
+        os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns))
 
 
 def prepare_repo_task_workspace(
@@ -171,13 +236,14 @@ def prepare_repo_task_workspace(
     if baseline.exists() or baseline.is_symlink():
         raise WorkspaceError(f"workspace baseline already exists: {baseline}")
 
+    budget = _CopyBudget()
     staging: Path | None = None
     step = "allocate staging"
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
         step = "copy fixture"
-        shutil.copytree(source_fixture.path, staging, symlinks=True, dirs_exist_ok=True)
+        _copy_fixture_tree(source_fixture.path, staging, budget=budget, dirs_exist_ok=True)
         # Exclusive reservation prevents replacing even an empty foreign directory.
         # POSIX publication requires other writers not to rename output directories.
         step = "reserve destination"
@@ -190,8 +256,8 @@ def prepare_repo_task_workspace(
         # baseline; harnesses may mutate the workspace alone.
         step = "copy prepared baseline"
         baseline.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(destination, baseline, symlinks=True)
-    except (OSError, shutil.Error) as exc:
+        _copy_fixture_tree(destination, baseline, budget=budget)
+    except (OSError, shutil.Error, WorkspaceError) as exc:
         retained = f"; staging retained at {staging}" if staging is not None else ""
         raise WorkspaceError(
             f"could not prepare workspace for repo-task case {case.id!r} "
