@@ -147,11 +147,28 @@ def test_cleanup_uses_owned_group_after_leader_exit(monkeypatch):
             assert timeout == tasks._EXTERNAL_PROCESS_TIMEOUT_GRACE_S
             return 0
     def send(pgid, number, case, **kwargs):
-        signals.append((pgid, number))
+        signals.append((pgid, number, kwargs.get('exiting_ok')))
     monkeypatch.setattr(tasks, '_signal_external_process_group', send)
     monkeypatch.setattr(tasks, 'sleep', lambda _: None)
     tasks._reap_external_process_group(ExitedLeader(), 'synthetic')
-    assert signals == [(12345, signal.SIGTERM), (12345, signal.SIGKILL)]
+    # The unreaped leader may be the group's only (zombie) member: both group
+    # signals must tolerate macOS EPERM.
+    assert signals == [(12345, signal.SIGTERM, True), (12345, signal.SIGKILL, True)]
+
+
+def test_reap_completes_when_the_group_only_holds_a_zombie_leader(monkeypatch):
+    waited = []
+    class ExitedLeader:
+        pid = 12345
+        def wait(self, *, timeout):
+            waited.append(timeout)
+            return 0
+    def eperm(pgid, number):
+        raise PermissionError(1, 'Operation not permitted')
+    monkeypatch.setattr(tasks.os, 'killpg', eperm)
+    monkeypatch.setattr(tasks, 'sleep', lambda _: None)
+    tasks._reap_external_process_group(ExitedLeader(), 'synthetic')
+    assert waited == [tasks._EXTERNAL_PROCESS_TIMEOUT_GRACE_S]
 
 
 def test_cleanup_errors_do_not_replace_interrupt_and_close_both_streams(tmp_path, monkeypatch):
