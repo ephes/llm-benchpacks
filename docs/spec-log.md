@@ -27,6 +27,19 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-14 (round 95 scoring, probes and comparison)
+
+### Changed
+- B11: reject duplicate model-output JSON members; bound and escape schema
+  diagnostics to 1024 UTF-8 bytes with explicit truncation.
+- B12: bound probe output to 64 KiB and share one collector deadline; retire
+  owned process groups and reap leaders, including on selector setup failure.
+- B13: refuse mixed runtime/pack-version identities; use completed rows for
+  medians and cache parity, with explicit failure counts and `no-success`.
+  Registry report/site exports also refuse mixed runs; import keeps row identity.
+- B14: enforce nonnegative metric domains and exact token counts; share
+  cumulative descriptor-based input admission between compare and report.
+
 ## 2026-11-14 (round 90 verifier and pack boundaries)
 
 ### Changed

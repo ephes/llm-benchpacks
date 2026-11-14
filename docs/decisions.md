@@ -112,7 +112,7 @@ larger cache object before there are multiple normalized cache fields.
 `tokens.cached_prompt` and warns when prompt-token medians differ for a case
 only when every compared row in that case has a numeric `tokens.prompt` value.
 It also reports a deterministic case-level `prefill parity` status with the
-priority `missing-case`, `prompt-missing`, `prompt-diff`, `cache-missing`,
+priority `missing-case`, `no-success`, `prompt-missing`, `prompt-diff`, `cache-missing`,
 `cache-diff`, then `comparable`. Cached-token parity is interpreted only
 relative to comparable prompt token counts. The compare table may display
 `prefill_tps med`, but only for cases whose `prefill parity` status is
@@ -945,3 +945,15 @@ preserves the last successful summary. Compensate failed appends on the opened
 descriptor. If compensation fails, preserve the useful primary error and mark
 the stream uncertain instead of continuing with misleading in-memory evidence.
 Same-user subprocesses remain trusted for arbitrary filesystem access.
+
+## D-043: Scoring And Comparison Require Bounded Unambiguous Evidence
+
+Compare/report require one adapter/model identity per input run and one version
+per pack. Split mixed sources into separate directories. Only completed rows
+(`ok: true`) supply speed and token medians or cache-parity evidence; correctness
+scoring remains separate. Explicit failure counts preserve visibility of refused
+or partial requests. Nonnegative metric domains and descriptor-based cumulative
+admission apply to both CLIs. Scoring diagnostics and hardware probes have fixed
+resource ceilings; neither may promote ambiguous or partial evidence.
+
+Implemented 2026-11-14 (round 95).

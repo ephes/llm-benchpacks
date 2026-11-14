@@ -10,31 +10,101 @@ macOS uses ``sysctl`` and ``system_profiler``.  Linux uses ``lscpu``,
 from __future__ import annotations
 
 import math
+import os
 import platform
+import selectors
+import signal
 import socket
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
 
-def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
+MAX_PROBE_BYTES = 64 * 1024
+COLLECTOR_TIMEOUT_S = 10.0
+
+
+def _retire_probe(process: subprocess.Popen) -> None:
+    # The leader may already have exited while descendants still own the pipes.
     try:
-        completed = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        elif process.poll() is None:
+            process.kill()
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # macOS can report EPERM for an already exiting process group.
+        if process.poll() is None:
+            raise
+
+
+def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
+    if timeout <= 0:
+        return None
+    deadline = time.monotonic() + timeout
+    try:
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL, bufsize=0,
+            start_new_session=os.name == "posix",
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError, UnicodeError):
+    except OSError:
         return None
-    if completed.returncode != 0:
+    selector = None
+    output = bytearray()
+    errors = bytearray()
+    total = 0
+    retired = False
+    try:
+        selector = selectors.DefaultSelector()
+        for stream in (process.stdout, process.stderr):
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ)
+        while selector.get_map() or process.poll() is None:
+            if process.poll() is not None and not retired:
+                _retire_probe(process)
+                retired = True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            for key, _ in selector.select(min(remaining, 0.02)):
+                chunk = os.read(key.fd, min(8192, MAX_PROBE_BYTES - total + 1))
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                total += len(chunk)
+                if total > MAX_PROBE_BYTES:
+                    return None
+                if key.fileobj is process.stdout:
+                    output.extend(chunk)
+                else:
+                    errors.extend(chunk)
+        if process.returncode != 0:
+            return None
+        errors.decode("utf-8")
+        return output.decode("utf-8")
+    except (OSError, UnicodeError):
         return None
-    return completed.stdout
+    finally:
+        try:
+            _retire_probe(process)
+        finally:
+            if selector is not None:
+                selector.close()
+            process.stdout.close()
+            process.stderr.close()
+            process.wait(timeout=0.25)
 
 
-def _sysctl(key: str) -> str | None:
-    out = _run(["sysctl", "-n", key])
+def _probe(cmd: list[str], deadline: float | None, timeout: float = 5.0) -> str | None:
+    remaining = timeout if deadline is None else min(timeout, deadline - time.monotonic())
+    return _run(cmd, timeout=remaining) if remaining > 0 else None
+
+
+def _sysctl(key: str, deadline: float | None = None) -> str | None:
+    out = _probe(["sysctl", "-n", key], deadline)
     return out.strip() if out else None
 
 
@@ -120,17 +190,17 @@ def _apple_cpu_model_is_unhelpful(value: str | None) -> bool:
     return normalized in {"apple processor", "apple"}
 
 
-def _collect_macos() -> dict[str, Any]:
-    cpu_model = _sysctl("machdep.cpu.brand_string")
-    cpu_count_raw = _sysctl("hw.ncpu")
-    ram_raw = _sysctl("hw.memsize")
-    hardware_model = _sysctl("hw.model")
+def _collect_macos(deadline: float | None = None) -> dict[str, Any]:
+    cpu_model = _sysctl("machdep.cpu.brand_string", deadline)
+    cpu_count_raw = _sysctl("hw.ncpu", deadline)
+    ram_raw = _sysctl("hw.memsize", deadline)
+    hardware_model = _sysctl("hw.model", deadline)
     chip_raw = cpu_model  # usually includes the Apple chip name
     cpu_count = _parse_nonnegative_int(cpu_count_raw)
     ram_bytes = _parse_nonnegative_int(ram_raw)
     ram_mb = ram_bytes // (1024 * 1024) if ram_bytes is not None else None
 
-    sp_hardware = _run(["system_profiler", "SPHardwareDataType"], timeout=10.0)
+    sp_hardware = _probe(["system_profiler", "SPHardwareDataType"], deadline, timeout=10.0)
     sp_fields = _parse_system_profiler_hardware(sp_hardware) if sp_hardware else {}
     sp_chip = sp_fields.get("chip")
     if _apple_cpu_model_is_unhelpful(cpu_model) and sp_chip:
@@ -143,7 +213,7 @@ def _collect_macos() -> dict[str, Any]:
         ram_mb = sp_fields.get("ram_mb")
 
     gpus: list[dict[str, Any]] = []
-    sp = _run(["system_profiler", "SPDisplaysDataType"], timeout=10.0)
+    sp = _probe(["system_profiler", "SPDisplaysDataType"], deadline, timeout=10.0)
     if sp:
         # Best-effort line scrape; just record GPU model name(s).
         current: dict[str, Any] | None = None
@@ -179,10 +249,10 @@ def _collect_macos() -> dict[str, Any]:
     }
 
 
-def _collect_linux() -> dict[str, Any]:
+def _collect_linux(deadline: float | None = None) -> dict[str, Any]:
     cpu_model: str | None = None
     cpu_count: int | None = None
-    lscpu = _run(["lscpu"])
+    lscpu = _probe(["lscpu"], deadline)
     if lscpu:
         for line in lscpu.splitlines():
             if ":" not in line:
@@ -196,7 +266,7 @@ def _collect_linux() -> dict[str, Any]:
                 cpu_count = _parse_nonnegative_int(value)
 
     ram_mb: int | None = None
-    free = _run(["free", "-m"])
+    free = _probe(["free", "-m"], deadline)
     if free:
         for line in free.splitlines():
             if line.lower().startswith("mem:"):
@@ -209,12 +279,12 @@ def _collect_linux() -> dict[str, Any]:
     distro = _parse_os_release(os_release).get("PRETTY_NAME") if os_release else None
 
     gpus: list[dict[str, Any]] = []
-    smi = _run(
+    smi = _probe(
         [
             "nvidia-smi",
             "--query-gpu=name,memory.total,driver_version",
             "--format=csv,noheader,nounits",
-        ]
+        ], deadline
     )
     if smi:
         for line in smi.strip().splitlines():
@@ -244,6 +314,7 @@ def collect_hardware() -> dict[str, Any]:
 
     Best-effort: every shell call is allowed to fail; missing fields are ``None``.
     """
+    deadline = time.monotonic() + COLLECTOR_TIMEOUT_S
     system = platform.system().lower()
     base: dict[str, Any] = {
         "hostname": socket.gethostname(),
@@ -262,9 +333,9 @@ def collect_hardware() -> dict[str, Any]:
 
     try:
         if base["platform"] == "darwin":
-            base.update(_collect_macos())
+            base.update(_collect_macos(deadline))
         elif base["platform"] == "linux":
-            base.update(_collect_linux())
+            base.update(_collect_linux(deadline))
     except Exception as exc:  # pragma: no cover - defensive: never block a run
         base["collector_error"] = repr(exc)
 
@@ -279,14 +350,15 @@ def sample_resources() -> dict[str, Any]:
     when available; everything else degrades to ``None`` per the
     architecture's "best-effort" rule.
     """
+    deadline = time.monotonic() + 5.0
     sample: dict[str, Any] = {"memory_mb": None, "gpu_memory_mb": None}
 
-    smi = _run(
+    smi = _probe(
         [
             "nvidia-smi",
             "--query-gpu=memory.used",
             "--format=csv,noheader,nounits",
-        ]
+        ], deadline
     )
     if smi:
         try:

@@ -1470,7 +1470,9 @@ def test_registry_keeps_distinct_model_identities_in_multi_model_run(
     db_path = tmp_path / "registry.sqlite"
 
     import_result_dirs([result_dir], db_path)
-    export_registry_static_site(db_path, tmp_path / "site")
+    with pytest.raises(RegistryError, match="mixed runtime identity: model"):
+        export_registry_static_site(db_path, tmp_path / "site")
+    assert not (tmp_path / "site").exists()
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute(
@@ -1479,6 +1481,19 @@ def test_registry_keeps_distinct_model_identities_in_multi_model_run(
         assert conn.execute(
             "SELECT model_identity FROM result_rows ORDER BY row_index"
         ).fetchall() == [("qwen3.6-27b",), ("gemma-4-e2b",)]
+
+
+def test_registry_exports_distinct_model_identities_from_separate_runs(tmp_path):
+    first = _record("first")
+    first["model"] = "Qwen3.6-27B-Q4_K_M"
+    second = _record("first")
+    second["model"] = "gemma4-e2b-q4km"
+    paths = [tmp_path / "qwen", tmp_path / "gemma"]
+    for path, record in zip(paths, [first, second], strict=True):
+        _write_result_dir(path, [record])
+    db_path = tmp_path / "registry.sqlite"
+    import_result_dirs(paths, db_path)
+    export_registry_static_site(db_path, tmp_path / "site")
     snapshot = json.loads(
         (tmp_path / "site" / "snapshot.json").read_text(encoding="utf-8")
     )

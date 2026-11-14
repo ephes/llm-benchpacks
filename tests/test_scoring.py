@@ -220,3 +220,41 @@ def test_nonfinite_json_output_fails(number, template):
     assert result["passed"] is False
     assert len(result["error"]) < 200
     assert evaluate(scoring, '{"n":1.5}')["passed"] is True
+
+
+@pytest.mark.parametrize('output', [
+    '{"answer":"wrong","answer":"good"}',
+    '{"answer":"good","answer":"wrong"}',
+    '{"nested":{"answer":1,"answer":1}}',
+    '[{"answer":1,"answer":2}]',
+])
+def test_duplicate_model_json_members_fail(output):
+    result = evaluate(Scoring(mode='json-schema', schema_data={}), output)
+    assert result['passed'] is False
+    assert 'duplicate' in result['error']
+    assert evaluate(Scoring(mode='json-schema', schema_data={}),
+                    '{"nested":{"answer":1}}')['passed'] is True
+
+
+@pytest.mark.parametrize('schema, value', [
+    ({'const': 'x' * 1_000_000}, '"wrong"'),
+    ({'enum': ['x' * 1_000_000] * 10}, '"wrong"'),
+    ({'additionalProperties': False}, '{"' + 'x' * 1_000_000 + '":1}'),
+    ({'required': ['x' * 1_000_000]}, '{}'),
+    ({'properties': {'x' * 1_000_000: {'const': 1}}},
+     '{"' + 'x' * 1_000_000 + '":2}'),
+], ids=['const', 'enum', 'extra', 'required', 'path'])
+def test_schema_diagnostics_have_fixed_byte_envelope(schema, value):
+    result = evaluate(Scoring(mode='json-schema', schema_data=schema), value)
+    assert result['passed'] is False
+    assert len(result['error'].encode('utf-8')) <= 1024
+    assert '[truncated]' in result['error']
+
+
+def test_mismatch_paths_escape_controls_and_bound_unicode():
+    for key in ('line\n\x1b[31m', '😀' * 1000):
+        result = evaluate(Scoring(mode='json-schema', schema_data={'required': [key]}), '{}')
+        error = result['error']
+        assert '\n' not in error and '\x1b' not in error
+        assert len(error.encode('utf-8')) <= 1024
+    assert '[truncated]' in error

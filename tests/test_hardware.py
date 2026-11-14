@@ -35,7 +35,7 @@ def test_collect_hardware_never_raises_when_tools_missing(monkeypatch) -> None:
     def boom(*args, **kwargs):
         raise FileNotFoundError("tool unavailable")
 
-    monkeypatch.setattr(subprocess, "run", boom)
+    monkeypatch.setattr(subprocess, "Popen", boom)
     hw = collect_hardware()
     # All shell-derived values should degrade to None / empty rather than raise
     assert hw["hostname"]  # still works via socket.gethostname
@@ -141,8 +141,8 @@ def test_decoding_failures_are_unavailable(monkeypatch, tmp_path) -> None:
     def invalid_encoding(*args, **kwargs):
         raise UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid')
 
-    monkeypatch.setattr(hardware.subprocess, 'run', invalid_encoding)
-    assert hardware._run(['fake']) is None
+    import sys
+    assert hardware._run([sys.executable, '-c', "import os; os.write(1, b'\\xff')"]) is None
     evidence = tmp_path / 'os-release'
     evidence.write_bytes(b'\xff')
     monkeypatch.setattr(type(evidence), 'read_text', invalid_encoding)
@@ -151,7 +151,7 @@ def test_decoding_failures_are_unavailable(monkeypatch, tmp_path) -> None:
 
 def test_collection_preserves_identity_with_malformed_evidence(monkeypatch) -> None:
     monkeypatch.setattr(hardware.platform, 'system', lambda: 'Darwin')
-    monkeypatch.setattr(hardware, '_sysctl', lambda key: None)
+    monkeypatch.setattr(hardware, '_sysctl', lambda key, deadline=None: None)
 
     def fake_run(cmd, timeout=5.0):
         if cmd[-1] == 'SPHardwareDataType':
@@ -187,3 +187,100 @@ def test_malformed_integer_evidence_preserves_linux_metadata(monkeypatch):
         assert 'collector_error' not in hw
     assert hardware._parse_nonnegative_int('16') == 16
     assert hardware._parse_memory_mb('1 TB') == 1048576
+
+
+def test_probe_output_budget_and_recovery():
+    import sys
+    # Both streams count, including discarded stderr. Partial stdout is refused.
+    for stream in ('stdout', 'stderr'):
+        source = f"import sys; sys.{stream}.write('x' * (64 * 1024 + 1))"
+        assert hardware._run([sys.executable, '-c', source]) is None
+    assert hardware._run([sys.executable, '-c', "print('ready')"]) == 'ready\n'
+
+
+def test_collector_uses_one_deadline(monkeypatch):
+    import time
+    monkeypatch.setattr(hardware, 'COLLECTOR_TIMEOUT_S', 0.05, raising=False)
+    monkeypatch.setattr(hardware.platform, 'system', lambda: 'Darwin')
+    calls = []
+
+    def stalled(cmd, timeout=5.0):
+        calls.append(timeout)
+        time.sleep(0.06)
+        return None
+
+    monkeypatch.setattr(hardware, '_run', stalled)
+    started = time.monotonic()
+    result = collect_hardware()
+    assert time.monotonic() - started < 0.2
+    assert len(calls) == 1
+    assert 0 < calls[0] <= 0.05
+    assert result['cpu_model'] is None
+
+
+def test_probe_retires_pipe_holding_descendants(tmp_path):
+    import sys
+    import time
+    import pytest
+    import os
+    if os.name != 'posix':
+        pytest.skip('POSIX process-group ownership')
+    for leader_exits in (True, False):
+        marker = tmp_path / str(leader_exits)
+        child = f'import time; from pathlib import Path; time.sleep(0.6); Path({str(marker)!r}).touch()'
+        source = (
+            'import subprocess, sys, time; '
+            f'subprocess.Popen([sys.executable, "-c", {child!r}]); '
+            + ('print("complete", flush=True)' if leader_exits else 'time.sleep(2)')
+        )
+        started = time.monotonic()
+        result = hardware._run([sys.executable, '-c', source], timeout=0.15)
+        assert time.monotonic() - started < 0.5
+        assert result == ('complete\n' if leader_exits else None)
+        time.sleep(0.7)
+        assert not marker.exists(), 'owned descendant survived collection'
+
+
+def test_probe_combined_budget_boundary():
+    import sys
+    source = "import os; os.write(1, b'x' * 32768); os.write(2, b'y' * 32768)"
+    assert hardware._run([sys.executable, '-c', source]) == 'x' * 32768
+    assert hardware._run([sys.executable, '-c', source + "; os.write(2, b'z')"]) is None
+
+
+def test_probe_timeout_after_pipes_close():
+    import sys
+    import time
+    started = time.monotonic()
+    assert hardware._run([sys.executable, '-c',
+                          'import os,time; os.close(1); os.close(2); time.sleep(5)'],
+                         timeout=0.1) is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_probe_selector_failure_retires_process(monkeypatch):
+    import sys
+    import subprocess
+    processes = []
+    popen = subprocess.Popen
+
+    def launch(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def unavailable():
+        raise OSError('synthetic selector failure')
+
+    monkeypatch.setattr(hardware.subprocess, 'Popen', launch)
+    monkeypatch.setattr(hardware.selectors, 'DefaultSelector', unavailable)
+    try:
+        assert hardware._run([sys.executable, '-c', 'import time; time.sleep(5)']) is None
+        assert processes[0].poll() is not None
+        assert processes[0].stdout.closed and processes[0].stderr.closed
+    finally:
+        for process in processes:
+            process.kill()
+            process.wait(timeout=1)
+            process.stdout.close()
+            process.stderr.close()

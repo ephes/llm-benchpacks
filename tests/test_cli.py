@@ -4220,7 +4220,7 @@ def test_cli_setup_with_malformed_hardware(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_smoke_pack(tmp_path)
     monkeypatch.setattr(hardware.platform, 'system', lambda: 'Darwin')
-    monkeypatch.setattr(hardware, '_sysctl', lambda key: None)
+    monkeypatch.setattr(hardware, '_sysctl', lambda key, deadline=None: None)
     monkeypatch.setattr(
         hardware, '_run',
         lambda cmd, timeout=5.0: 'Chip: Apple M4\nTotal Number of Cores: \nMemory: nan GB'

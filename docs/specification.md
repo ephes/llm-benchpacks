@@ -1006,7 +1006,8 @@ The initial summary is intentionally small and deterministic:
   brackets; input bullets and per-case warnings use code spans with a long
   enough fence, and pack-version warnings use the table-cell escaping. The same
   rules apply to `benchpack report` and to the tables in run `summary.md` files.
-- `rows` counts measured records and `ok` counts rows with `ok = true`.
+- `rows` counts measured records, `ok` counts rows with `ok = true`, and
+  `failed` counts all other rows. Only successful rows supply metric samples.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
   summarized with overflow-safe finite medians.
 - `timing.prefill_tps` is summarized with overflow-safe finite medians but displayed as
@@ -1016,19 +1017,20 @@ The initial summary is intentionally small and deterministic:
   are present so cache interpretation is visible beside generated-token counts.
 - `tokens.cached_prompt` is summarized with overflow-safe finite medians when numeric
   samples are present, and `cache rows` displays numeric cached-token rows over
-  total rows for the case/run group.
+  successful rows for the case/run group.
 - `prefill parity` displays a deterministic case-level prompt/cache
   comparability status repeated on each run row for that case.
-- Null, boolean, non-numeric, non-finite, and integers too large to convert to
-  finite floats are ignored; a metric with no valid numeric samples is displayed
+- Null, boolean, non-numeric, non-finite, negative timings/rates,
+  fractional/negative token counts and token integers that cannot convert
+  exactly to finite floats are ignored; a metric with no valid numeric samples is displayed
   as `—`. Other rows still contribute, and input artifacts remain unchanged.
   Inputs exceeding Python's JSON integer digit limit are rejected with a
   file/line parse error before metric aggregation.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
-  case/run group has measured rows without numeric `tokens.cached_prompt`.
-- When all compared runs for a case have measured rows and every row in those
+  case/run group has successful rows without numeric `tokens.cached_prompt`.
+- When all compared runs for a case have successful rows and every successful row in those
   case/run groups has a numeric `tokens.prompt` value, but the resulting
   `tokens.prompt` medians differ, compare warns that cache parity is not
   comparable across different prompts.
@@ -1043,20 +1045,20 @@ The initial summary is intentionally small and deterministic:
 The `prefill parity` status uses the following priority order:
 
 1. `missing-case`: at least one compared run has zero rows for the case.
-2. `prompt-missing`: a non-empty case/run group has rows without numeric
-   `tokens.prompt`.
-3. `prompt-mixed`: prompt counts vary within a run/case.
-4. `prompt-diff`: complete homogeneous prompt counts differ across runs.
-5. `cache-missing`: prompt parity holds, but cache metadata is incomplete.
-6. `cache-mixed`: cached prompt counts vary within a run/case.
-7. `cache-diff`: complete homogeneous cache counts differ across runs.
-8. `comparable`: all runs have rows and complete homogeneous prompt/cache
+2. `no-success`: at least one present case/run group has no successful rows.
+3. `prompt-missing`: successful rows lack valid `tokens.prompt` evidence.
+4. `prompt-mixed`: prompt counts vary within successful rows of a run/case.
+5. `prompt-diff`: complete homogeneous prompt counts differ across runs.
+6. `cache-missing`: prompt parity holds, but successful cache evidence is incomplete.
+7. `cache-mixed`: cached prompt counts vary within successful rows of a run/case.
+8. `cache-diff`: complete homogeneous cache counts differ across runs.
+9. `comparable`: all runs have successful rows and complete homogeneous prompt/cache
    counts which match across runs.
 
 `prefill_tps med` is a gated speed column, not independent parity evidence. It
 uses only normalized `run.jsonl` `timing.prefill_tps` values that pass the
 shared numeric metric filter, and it remains `—` when parity is
-`missing-case`, `prompt-missing`, `prompt-mixed`, `prompt-diff`,
+`missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`,
 `cache-missing`, `cache-mixed`, or `cache-diff`, even if timing values exist. New
 normalized rows can include
 `tokens.prompt` and `tokens.cached_prompt`, but older rows may lack one or both
@@ -1880,7 +1882,7 @@ samples. A nonrepresentable aggregate is unavailable. This applies to compare,
 report and registry summaries. Prefill parity requires complete homogeneous
 prompt and cache counts within every run/case and equal counts across runs.
 Mixed repetitions yield `prompt-mixed` or `cache-mixed`, even when medians match;
-reordering repetitions cannot establish parity. Status priority is missing-case,
+reordering repetitions cannot establish parity. Status priority is missing-case, no-success,
 prompt-missing, prompt-mixed, prompt-diff, cache-missing, cache-mixed, cache-diff,
 comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
 
@@ -1927,3 +1929,48 @@ failed compensation adds bounded recovery context and marks the reporter stream
 uncertain. No memory record is added, and subsequent appends and summary writes
 refuse. Preserve/inspect the possibly partial `run.jsonl` and start a fresh
 output directory; do not treat an uncertain stream as complete evidence.
+
+## Unambiguous scoring and bounded diagnostics
+
+Model-output JSON rejects duplicate members recursively, including equal duplicates.
+NaN, infinities and overflowing floats remain invalid. JSON-schema failures retain the
+original outcome and raw evidence, but render bounded value/key/container previews and
+an explicit `[truncated]` marker. Each error is at most 1024 UTF-8 bytes; ordinary
+first-mismatch locations remain readable.
+
+## Hardware probe resource ownership
+
+Hardware probes drain stdout and stderr under a combined 64 KiB byte ceiling. Excess
+output, invalid UTF-8, nonzero exit or deadline expiry makes the probe unavailable;
+partial output never establishes identity. On POSIX each probe owns a new process
+group. Cleanup kills the group (including pipe-holding descendants) and reaps its
+leader on success, timeout and collection failure. Cleanup allows up to 0.25 seconds
+beyond the command deadline. All metadata commands share a 10-second monotonic
+collector deadline; resource sampling has a 5-second deadline. A probe is never
+started after the collector budget expires. Escaped sessions are outside process-group
+ownership.
+
+## Comparable successful metric populations
+
+Compare/report refuse differing adapter or model identities within one run, and
+differing versions of the same pack, before aggregation. A missing identity is
+distinct from a present one; homogeneous legacy runs remain readable. Separate
+runtimes or pack versions into separate result directories. Registry import
+continues to retain mixed sources and their row identities, but registry reports
+and static site export (which includes a report) refuse them before publication.
+Performance/token medians and prompt/cache coverage use only rows with `ok: true`;
+total, successful and failed
+row counts remain visible. Scoring correctness is independent of transport completion.
+All-failed groups have unavailable performance and cannot establish prefill parity
+(`no-success`).
+
+## Comparison metric and input admission
+
+Compare/report metrics require finite nonnegative timing/rate values and exact
+nonnegative token counts (integral floats accepted, booleans refused). Invalid
+supplied values are unavailable and generate one bounded aggregate warning in both
+renderers; valid zero remains evidence. Both CLIs share cumulative admission: 100
+distinct opened run files, 64 MiB actual JSONL bytes and 100,000 records, with the
+existing per-line limit. File identity deduplicates directory aliases and hardlinked files from the
+descriptor actually read. Limits apply before admitting excess records or another run.
+Compare requires at least two distinct runs after deduplication.

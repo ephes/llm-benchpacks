@@ -427,9 +427,9 @@ total TPS, output tokens, prompt tokens, backend-reported cached prompt tokens,
 and prefill TPS gated on prefill parity. The `prefill_tps med` column renders a
 numeric median only when that case's `prefill parity` status is `comparable`;
 otherwise it renders `—`. Compare also prints cache metadata coverage as
-numeric cached-token rows over total rows for each case/run group and a
+numeric cached-token rows over successful rows for each case/run group and a
 case-level `prefill parity` status repeated on each run row. The status is one
-of `missing-case`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
+of `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
 `cache-mixed`, `cache-diff`, or `comparable`, in that priority order. Compare
 requires complete homogeneous prompt/cache samples within each run
 and equal counts across runs. Mixed regimes suppress prefill speed even when
@@ -729,3 +729,21 @@ if rollback fails, the append error stays primary with a recovery note, and that
 reporter refuses further appends or summaries. Inspect the retained artifact and
 start a new output directory. These checks protect parent artifact writes;
 same-user harness execution is not filesystem isolation.
+
+## Evidence limits
+
+Model-output JSON must have unique object members. Schema errors use bounded,
+escaped previews (1024 UTF-8 bytes). Hardware commands share a 10-second collector
+deadline and a 64 KiB output ceiling per probe; unavailable probes do not supply
+identity. Resource sampling has a 5-second deadline.
+
+Compare/report require homogeneous adapter/model identities and one version per
+pack in each run. This also applies to registry reports and site export; split
+mixed imported sources into separate result directories. Only `ok: true` rows supply metric medians and cache coverage;
+`rows`, `ok` and `failed` keep all attempts visible. Timing/rates must be finite
+and nonnegative; tokens must be exact nonnegative counts. Invalid supplied
+metrics produce one bounded warning. Both CLIs admit at most 100 distinct run
+files, 64 MiB JSONL bytes and 100,000 records across all inputs. Directory aliases
+and hardlinked files count once; compare requires two distinct files after deduplication.
+See the [specification](docs/specification.md#comparison-metric-and-input-admission)
+for the complete contracts.

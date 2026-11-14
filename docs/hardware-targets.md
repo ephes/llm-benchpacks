@@ -98,3 +98,15 @@ Every run should write a `hardware.json` file with:
 
 Profiles should be data, not assumptions. The pack decides what matters, but the
 runner records what the host actually reports.
+
+## Probe limits
+
+Hardware probes drain stdout and stderr under a combined 64 KiB byte ceiling. Excess
+output, invalid UTF-8, nonzero exit or deadline expiry makes the probe unavailable;
+partial output never establishes identity. On POSIX each probe owns a new process
+group. Cleanup kills the group (including pipe-holding descendants) and reaps its
+leader on success, timeout and collection failure. Cleanup allows up to 0.25 seconds
+beyond the command deadline. All metadata commands share a 10-second monotonic
+collector deadline; resource sampling has a 5-second deadline. A probe is never
+started after the collector budget expires. Escaped sessions are outside process-group
+ownership.
