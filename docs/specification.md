@@ -247,8 +247,9 @@ size even if a file grows after its size check. Exceeding any ceiling raises
 `PatchError` before publishing a patch/result row; no partial patch is accepted
 as evidence. Workspace and baseline remain available at reported paths. The limits
 admit the largest shipped fixture and ordinary edits to its 3,028-line module;
-large unchanged CSVs do not need text diffing. These are capture limits, not
-disk quotas for workspace preparation or model output.
+large unchanged CSVs do not need text diffing. Fixture preparation has a
+separate shared copy allowance described below; these are not OS disk quotas
+for arbitrary model/harness writes.
 
 `desktop-django-wrap` remains a prompt-only `chat` pack. Its `kind = "repo"`
 directory fixture is validated as metadata but is not copied, executed,
@@ -668,7 +669,7 @@ means fail with a null verifier exit code, and the verifier receives the
 prepared workspace plus declared case/run metadata as command-line inputs. The
 runner always writes the deterministic verifier JSON/stdout/stderr artifact
 paths for a measured verifier attempt. On timeout, stdout/stderr logs are still
-created, all bytes written to those files are preserved, and the
+created, bytes within the log ceilings are preserved, and the
 structured verifier JSON is created or corrected with `exit_code: null`,
 `passed: false`, `timed_out: true`, and the actual configured `timeout_s`
 value. If `scoring.timeout_s` is absent from the effective `verify-script`
@@ -686,10 +687,13 @@ prompt-output scoring.
 
 ### Verifier timeout cleanup
 
-Verifier stdout/stderr go directly to the existing owned log files, preserving
-all emitted bytes without capturing the streams in memory. Internal diagnostics
-retain at most the final 64 KiB per stream, decoded as UTF-8 with replacement
-for incomplete or invalid sequences. This does not impose a disk quota.
+Verifier stdout/stderr are drained through bounded pipe chunks into owned log
+files. Each stream is limited to 8 MiB and the pair to 12 MiB; only bytes within
+both allowances are written. Overflow stops the process group and records
+`output_limit: true`, `passed: false`, and `exit_code: null`, even if the leader
+exits zero. Queue and reader buffers retain only a fixed number of 64 KiB chunks.
+Internal diagnostics retain at most the final 64 KiB per stream, decoded as UTF-8 with replacement
+for incomplete or invalid sequences.
 On POSIX, each verifier starts in a new session/process group. The runner waits
 for the leader and any remaining group members within the same timeout budget,
 including descendants that outlive their parent. Budget expiry sends SIGTERM to
@@ -697,7 +701,7 @@ that original group, waits at most 0.5 seconds, then sends SIGKILL even if the
 leader has exited. The immediate process is reaped with a bounded wait.
 Interrupts and other wait exceptions also stop and reap the isolated verifier
 before propagating. Timeout scoring remains failed with a null exit code and
-timeout artifacts; full logs are retained on timeout and nonzero exit.
+timeout artifacts; admitted log bytes are retained on timeout and nonzero exit.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.
@@ -1779,6 +1783,42 @@ Bundle validation/import admits 100 runs, 100,000 records and 64 MiB total
 streaming reads before SQLite mutation. Per-run limits remain in force. Each
 listed bundle file is size-checked before hashing or scanning (64 MiB per file,
 256 MiB of listed files per invocation, 16 MiB manifest).
+
+### Verifier JSON admission and publication
+
+Optional verifier JSON is read from one no-follow regular descriptor within
+1 MiB, including growth during reads. Missing output is allowed. Refused files
+(including FIFOs and symlinks) yield `supplemental_error: read_error`; malformed,
+non-object, nonfinite, invalid UTF-8 or excessively nested/numeric JSON yields
+`invalid_json`. Supplemental refusal does not change the exit-code verdict.
+The runner serializes authoritative fields first, writes and fsyncs an exclusive
+sibling, then atomically replaces the JSON path. Failure before replacement
+preserves previous evidence and removes only the owned temporary file.
+
+### Fixture preparation work allowance
+
+Before allocating output, repo-task fixture inspection admits at most 20,000
+entries (including root directories and preserved links) and 512 MiB of regular
+file bytes across workspace and baseline together. An iterative tree scan refuses
+special files and escaping/absolute symlinks. Copying enforces the same shared
+allowance against actual bytes and entries, including source growth; links are
+preserved rather than expanded. Baselines copy the published workspace.
+Refusal prevents model/harness launch, preserves source/foreign destinations,
+and names retained owned staging, workspace and partial baseline paths. Remove
+reported partials manually before retrying a reserved destination.
+
+### Pack input admission
+
+Pack loading reads regular files through bounded descriptors before decoding:
+1 MiB per manifest/schema and 4 MiB per prompt/text fixture. A shared 16 MiB
+allowance counts the manifest, every schema/prompt/fixture read (including each
+repeated use), inline prompt copies and fixture delimiter bytes. Growth during
+a read cannot exceed the allowance; known oversized files fail before reading
+payload bytes. Special files fail without waiting for writers. Pack input
+refusal uses the role's existing PackError family before output creation or
+adapter/verifier execution. Admitted prompt contents/delimiters stay unchanged.
+Schema JSON rejects duplicate members at every object level, with a fixed
+diagnostic that does not echo schema data; model-output scoring is unchanged.
 
 ### Harness workspace admission limits
 

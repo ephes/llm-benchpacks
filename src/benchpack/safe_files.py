@@ -101,6 +101,8 @@ def read_contained_regular(
         return None
     try:
         size = os.fstat(fd).st_size
+        if size > limit:
+            return FileSnapshot(size=size, data=None)
         chunks: list[bytes] = []
         total = 0
         while total <= limit:

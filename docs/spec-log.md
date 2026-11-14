@@ -16,6 +16,16 @@ working history and open questions.
 - ...
 ```
 
+## 2026-11-14 (round 90 verifier and pack boundaries)
+
+### Changed
+- Enforce verifier log disk ceilings and total fixture copy work ceilings,
+  preserving bounded logs and reported partial paths on refusal.
+- Bound per-role pack text reads and cumulative assembly work before execution;
+  reject duplicate JSON schema members at every object level.
+- Bound optional verifier JSON reads and normalize supplemental refusal without
+  changing the exit-code verdict; publish authoritative JSON atomically.
+
 ## 2026-11-13 (agent dataset and registry boundaries)
 
 ### Changed

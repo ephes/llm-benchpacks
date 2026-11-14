@@ -3,20 +3,36 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import queue
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
 from .packs import Case, Pack, Scoring
+from .safe_files import read_contained_regular
 from .workspaces import PreparedWorkspace
 
 
 DEFAULT_VERIFY_TIMEOUT_S = 300.0
+MAX_VERIFY_JSON_BYTES = 1024 * 1024
+MAX_VERIFY_LOG_STREAM_BYTES = 8 * 1024 * 1024
+MAX_VERIFY_LOG_TOTAL_BYTES = 12 * 1024 * 1024
+_LOG_CHUNK_BYTES = 65536
+
+
+class VerifierOutputLimit(Exception):
+    """The verifier exceeded its log disk allowance."""
+
+    stdout: str = ""
+    stderr: str = ""
 
 
 class VerifierError(ValueError):
@@ -160,7 +176,7 @@ def run_repo_task_verifier(
         "--patch",
         str(Path(patch_path).resolve()),
         "--output",
-        str(paths.json.resolve()),
+        str(paths.json.absolute()),
     ]
 
     run_kwargs: dict[str, Any] = {}
@@ -176,12 +192,14 @@ def run_repo_task_verifier(
                 timeout=timeout_s,
                 **run_kwargs,
             )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, VerifierOutputLimit) as exc:
+        extra = ({"output_limit": True} if isinstance(exc, VerifierOutputLimit)
+                 else {"timed_out": True, "timeout_s": timeout_s})
         _write_authoritative_json(
             paths.json,
             exit_code=None,
             passed=False,
-            extra_fields={"timed_out": True, "timeout_s": timeout_s},
+            extra_fields=extra,
         )
         return VerifierResult(
             exit_code=None,
@@ -212,7 +230,7 @@ _DIAGNOSTIC_TAIL_BYTES = 65536
 
 
 def _log_tail(stream: BinaryIO) -> str:
-    """Read only a bounded UTF-8 diagnostic tail; logs retain the full bytes."""
+    """Read only a bounded UTF-8 diagnostic tail of the admitted log bytes."""
 
     # A separate open file description leaves inherited writer offsets alone.
     with open(stream.name, "rb") as reader:
@@ -243,23 +261,101 @@ def _run_verifier_command(
     command: list[str], *, timeout: float, stdout: BinaryIO, stderr: BinaryIO,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess[str]:
-    """Write output directly to owned logs with bounded process-group cleanup."""
+    """Drain bounded pipe chunks into owned logs, stopping on disk overflow."""
 
     process = subprocess.Popen(
-        command, stdout=stdout, stderr=stderr,
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
         start_new_session=os.name == "posix", **kwargs,
     )
+    events: queue.Queue[tuple[int, bytes | OSError]] = queue.Queue(maxsize=4)
+    stopping = threading.Event()
+
+    def reader(index: int, pipe: BinaryIO) -> None:
+        while not stopping.is_set():
+            try:
+                chunk = pipe.read(_LOG_CHUNK_BYTES)
+            except OSError as exc:
+                chunk = exc
+            while not stopping.is_set():
+                try:
+                    events.put((index, chunk), timeout=0.05)
+                    break
+                except queue.Full:
+                    continue
+            if not chunk or isinstance(chunk, OSError):
+                return
+
+    assert process.stdout is not None and process.stderr is not None
+    pipes = (process.stdout, process.stderr)
+    readers = [threading.Thread(target=reader, args=(i, pipe), daemon=True)
+               for i, pipe in enumerate(pipes)]
+    logs = (stdout, stderr)
+    counts = [0, 0]
+    closed: set[int] = set()
+    deadline = time.monotonic() + timeout
     try:
-        _wait_for_verifier(process, timeout)
+        for thread in readers:
+            thread.start()
+        while True:
+            # Keep wait/interrupt handling under this process owner's cleanup.
+            try:
+                process.wait(timeout=0)
+            except subprocess.TimeoutExpired:
+                pass
+            group_alive = process.returncode is None
+            if os.name == "posix" and not group_alive:
+                try:
+                    os.killpg(process.pid, 0)
+                    group_alive = True
+                except ProcessLookupError:
+                    group_alive = False
+            if len(closed) == 2 and not group_alive and process.returncode is not None:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                index, chunk = events.get(timeout=min(0.01, remaining))
+            except queue.Empty:
+                continue
+            if isinstance(chunk, OSError):
+                raise chunk
+            if not chunk:
+                closed.add(index)
+                continue
+            allowed = min(MAX_VERIFY_LOG_STREAM_BYTES - counts[index],
+                          MAX_VERIFY_LOG_TOTAL_BYTES - sum(counts))
+            written = min(len(chunk), allowed)
+            logs[index].write(chunk[:written])
+            counts[index] += written
+            if written < len(chunk):
+                raise VerifierOutputLimit("verifier log output limit exceeded")
     except subprocess.TimeoutExpired as exc:
         _stop_verifier(process)
+        stdout.flush()
+        stderr.flush()
         raise subprocess.TimeoutExpired(
             command, timeout, output=_log_tail(stdout), stderr=_log_tail(stderr)
         ) from exc
+    except VerifierOutputLimit as exc:
+        _stop_verifier(process)
+        stdout.flush()
+        stderr.flush()
+        exc.stdout = _log_tail(stdout)
+        exc.stderr = _log_tail(stderr)
+        raise
     except BaseException:
-        # A terminal interrupt no longer reaches the isolated group.
         _stop_verifier(process)
         raise
+    finally:
+        stopping.set()
+        for thread in readers:
+            if thread.ident is not None:
+                thread.join(timeout=_TIMEOUT_GRACE_S)
+        for pipe in pipes:
+            pipe.close()
+        stdout.flush()
+        stderr.flush()
     return subprocess.CompletedProcess(
         command, process.returncode, _log_tail(stdout), _log_tail(stderr)
     )
@@ -298,21 +394,55 @@ def _write_authoritative_json(
 ) -> None:
     """Create or correct structured verifier JSON after process exit."""
 
-    payload: dict[str, Any]
-    if path.exists():
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            loaded = None
-        payload = loaded if isinstance(loaded, dict) else {}
+    payload: dict[str, Any] = {}
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        pass  # Supplemental output is optional.
+    except OSError:
+        payload["supplemental_error"] = "read_error"
     else:
-        payload = {}
+        snapshot = read_contained_regular(path.parent, path.name, MAX_VERIFY_JSON_BYTES)
+        if snapshot is None or snapshot.data is None:
+            payload["supplemental_error"] = "read_error"
+        else:
+            try:
+                loaded = json.loads(
+                    snapshot.data.decode("utf-8"),
+                    parse_constant=_refuse_json_constant,
+                    parse_float=_finite_json_float,
+                )
+                if not isinstance(loaded, dict):
+                    raise ValueError("expected object")
+                # Serialization can hit a resource limit as well as decoding.
+                json.dumps(loaded, allow_nan=False)
+                payload = loaded
+            except (ValueError, RecursionError, OverflowError, MemoryError):
+                payload["supplemental_error"] = "invalid_json"
 
     if extra_fields is not None:
         payload.update(extra_fields)
     payload["exit_code"] = exit_code
     payload["passed"] = passed
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    serialized = json.dumps(payload, sort_keys=True, allow_nan=False) + "\n"
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(serialized)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _refuse_json_constant(value: str) -> Any:
+    raise ValueError("nonfinite JSON number")
+
+
+def _finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("nonfinite JSON number")
+    return parsed

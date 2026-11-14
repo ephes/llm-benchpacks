@@ -981,10 +981,12 @@ normal commits.
 
 ### Verifier timeout cleanup
 
-Verifier stdout/stderr go directly to the existing owned log files, preserving
-all emitted bytes without capturing the streams in memory. Internal diagnostics
+Verifier stdout/stderr are drained through fixed-size pipe chunks and a bounded
+queue into owned logs, with 8 MiB per-stream and 12 MiB combined disk ceilings.
+Overflow stops the owned process group and records `output_limit: true`, a null
+exit code and failed scoring. Internal diagnostics
 retain at most the final 64 KiB per stream, decoded as UTF-8 with replacement
-for incomplete or invalid sequences. This does not impose a disk quota.
+for incomplete or invalid sequences.
 On POSIX, each verifier starts in a new session/process group. The runner waits
 for the leader and any remaining group members within the same timeout budget,
 including descendants that outlive their parent. Budget expiry sends SIGTERM to
@@ -992,7 +994,7 @@ that original group, waits at most 0.5 seconds, then sends SIGKILL even if the
 leader has exited. The immediate process is reaped with a bounded wait.
 Interrupts and other wait exceptions also stop and reap the isolated verifier
 before propagating. Timeout scoring remains failed with a null exit code and
-timeout artifacts; full logs are retained on timeout and nonzero exit.
+timeout artifacts; admitted log bytes are retained on timeout and nonzero exit.
 On non-POSIX platforms, the same bounded terminate/kill policy applies only to
 the immediate verifier; descendant cleanup is not supported. Descendants that
 explicitly escape a POSIX process group are outside this cleanup guarantee.
@@ -1085,6 +1087,23 @@ complete hardware artifact (or leaves the final path absent) and leaves complete
 `run.jsonl` records unchanged. Only a temporary file created by this call is
 removed on failure. Existing file permissions are retained; new files honor the
 process umask. Atomic visibility does not guarantee durability after power loss.
+
+### Verifier JSON ownership
+
+The verifier owns supplemental JSON until it exits. The runner then reads at
+most 1 MiB through the safe-files descriptor boundary, normalizes refused input
+to a supplemental error category, and owns atomic publication of the final
+`exit_code` and `passed` fields. A failed publication preserves the old document.
+
+The verifier owner drains bounded pipe chunks to log files and owns process-group
+termination on timeout or output overflow. Workspace preparation uses one shared
+entry/byte allowance for its two generations; preflight precedes output creation
+and descriptor-bound copying enforces actual work through publication/baseline.
+
+Pack loading carries one byte allowance through manifest, scoring schema, prompt
+and text-fixture assembly. Each read uses the safe-files regular-descriptor
+boundary before UTF-8/TOML/JSON materialization. Schema object-pair admission
+rejects duplicate members before schema scoring is constructed.
 
 ### Opened task boundaries and report admission
 

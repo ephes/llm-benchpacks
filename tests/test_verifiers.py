@@ -259,6 +259,7 @@ with open(args.output, "w", encoding="utf-8") as fh:
     )
 
     assert json.loads((tmp_path / "run" / result.verify["path"]).read_text()) == {
+        "supplemental_error": "invalid_json",
         "exit_code": 0,
         "passed": True,
     }
@@ -479,6 +480,7 @@ def test_run_verifier_timeout_replaces_invalid_script_json(
     )
 
     assert json.loads((tmp_path / "run" / result.verify["path"]).read_text()) == {
+        "supplemental_error": "invalid_json",
         "exit_code": None,
         "passed": False,
         "timed_out": True,
@@ -564,7 +566,7 @@ def test_verifier_interrupt_reaps_isolated_process(tmp_path: Path, monkeypatch: 
             prepared_workspace=prepared, patch_path=tmp_path / 'patch.diff', output_dir=tmp_path / 'run',
             repetition=1, timeout_s=2)
     assert seen[0].returncode is not None
-    assert seen[0].stdout is None and seen[0].stderr is None
+    assert seen[0].stdout.closed and seen[0].stderr.closed
     with pytest.raises(ProcessLookupError):
         os.kill(seen[0].pid, 0)
 
@@ -584,8 +586,8 @@ def test_noisy_verifier_uses_file_logs_and_bounded_tails(tmp_path, monkeypatch, 
     popen = subprocess.Popen
     observed = []
     def spawn(*args, **kwargs):
-        assert hasattr(kwargs["stdout"], "fileno")
-        assert hasattr(kwargs["stderr"], "fileno")
+        assert kwargs["stdout"] == subprocess.PIPE
+        assert kwargs["stderr"] == subprocess.PIPE
         observed.append(True)
         return popen(*args, **kwargs)
     real_run = verifiers._run_verifier_command
@@ -628,3 +630,188 @@ def test_verifier_tail_preserves_writer_offset_and_decodes_bounded_bytes(tmp_pat
     assert tail.endswith("\ufffdend\r\n")
     assert len(tail) == 65536
     assert path.read_bytes() == data
+
+
+@pytest.mark.parametrize('data', [b'\xff', b'[' * 1500 + b']' * 1500,
+    b'{"n":' + b'9' * 5000 + b'}', b'{"n":NaN}', b'{"n":1e999}', b'x' * (1024 * 1024 + 1)])
+@pytest.mark.parametrize('exit_code', [0, 2])
+def test_supplemental_json_refusal_keeps_exit_authority(tmp_path, data, exit_code):
+    from benchpack.verifiers import _write_authoritative_json
+    path = tmp_path / 'verify.json'
+    path.write_bytes(data)
+    _write_authoritative_json(path, exit_code=exit_code, passed=exit_code == 0)
+    payload = json.loads(path.read_text())
+    assert payload['supplemental_error'] in {'read_error', 'invalid_json'}
+    assert payload['exit_code'] == exit_code
+    assert payload['passed'] is (exit_code == 0)
+
+
+def test_supplemental_symlink_is_replaced_without_touching_target(tmp_path):
+    from benchpack.verifiers import _write_authoritative_json
+    target = tmp_path / 'outside'
+    target.write_text('{"secret":true}')
+    path = tmp_path / 'verify.json'
+    path.symlink_to(target)
+    _write_authoritative_json(path, exit_code=0, passed=True)
+    assert target.read_text() == '{"secret":true}'
+    assert not path.is_symlink()
+    assert json.loads(path.read_text()) == {
+        'exit_code': 0, 'passed': True, 'supplemental_error': 'read_error'}
+
+
+@pytest.mark.skipif(__import__('os').name != 'posix', reason='FIFO')
+def test_supplemental_fifo_does_not_block(tmp_path):
+    import os
+    import sys
+    path = tmp_path / 'verify.json'
+    os.mkfifo(path)
+    subprocess.run([sys.executable, '-c',
+        'from pathlib import Path; from benchpack.verifiers import _write_authoritative_json; '
+        f'_write_authoritative_json(Path({str(path)!r}), exit_code=0, passed=True)'],
+        check=True, timeout=3)
+    assert json.loads(path.read_text())['supplemental_error'] == 'read_error'
+
+
+@pytest.mark.parametrize('failure', ['write', 'partial_write', 'replace', 'interrupt'])
+def test_json_publication_failure_preserves_old_bytes(tmp_path, monkeypatch, failure):
+    import benchpack.verifiers as verifiers
+    path = tmp_path / 'verify.json'
+    old = b'{"evidence":"old"}\n'
+    path.write_bytes(old)
+    def fail(*args, **kwargs):
+        if failure == 'interrupt':
+            raise KeyboardInterrupt
+        raise OSError('injected publication failure')
+    if failure == 'partial_write':
+        from contextlib import contextmanager
+        fdopen = verifiers.os.fdopen
+        @contextmanager
+        def partial_writer(fd, *args, **kwargs):
+            with fdopen(fd, *args, **kwargs) as stream:
+                class Writer:
+                    def write(self, data):
+                        stream.write(data[:5])
+                        raise OSError('injected partial write')
+                yield Writer()
+        monkeypatch.setattr(verifiers.os, 'fdopen', partial_writer)
+    elif failure == 'write':
+        monkeypatch.setattr(verifiers.os, 'fsync', fail)
+    else:
+        monkeypatch.setattr(verifiers.os, 'replace', fail)
+    with pytest.raises(KeyboardInterrupt if failure == 'interrupt' else OSError):
+        verifiers._write_authoritative_json(path, exit_code=0, passed=True)
+    assert path.read_bytes() == old
+    assert list(tmp_path.iterdir()) == [path]
+    monkeypatch.undo()
+    verifiers._write_authoritative_json(path, exit_code=0, passed=True)
+    assert json.loads(path.read_text()) == {'evidence': 'old', 'exit_code': 0, 'passed': True}
+
+
+@pytest.mark.parametrize('sizes,stream_cap,total_cap', [((9000, 0), 8192, 16384),
+    ((6000, 6000), 8192, 10000), ((8192, 1808), 8192, 10000)])
+def test_verifier_log_limits_are_exact_and_fail_overflow(tmp_path, monkeypatch, sizes, stream_cap, total_cap):
+    import benchpack.verifiers as verifiers
+    monkeypatch.setattr(verifiers, 'MAX_VERIFY_LOG_STREAM_BYTES', stream_cap, raising=False)
+    monkeypatch.setattr(verifiers, 'MAX_VERIFY_LOG_TOTAL_BYTES', total_cap, raising=False)
+    run = verifiers._run_verifier_command
+    captured = []
+    def observe(*args, **kwargs):
+        try:
+            return run(*args, **kwargs)
+        except verifiers.VerifierOutputLimit as exc:
+            captured.append((exc.stdout, exc.stderr))
+            raise
+    monkeypatch.setattr(verifiers, '_run_verifier_command', observe)
+    pack_dir = tmp_path / 'pack'
+    write_script(pack_dir, f'import os\nos.write(1, b"o" * {sizes[0]})\nos.write(2, b"e" * {sizes[1]})\n')
+    pack = make_pack(pack_dir)
+    result = run_repo_task_verifier(pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
+        prepared_workspace=make_prepared(tmp_path), patch_path=tmp_path / 'patch',
+        output_dir=tmp_path / 'run', repetition=1, timeout_s=2)
+    logs = [(tmp_path / 'run' / result.verify[key]).read_bytes() for key in ['stdout_path', 'stderr_path']]
+    overflow = max(sizes) > stream_cap or sum(sizes) > total_cap
+    assert result.scoring['passed'] is (not overflow)
+    assert all(len(log) <= stream_cap for log in logs)
+    assert sum(map(len, logs)) <= total_cap
+    payload = json.loads((tmp_path / 'run' / result.verify['path']).read_text())
+    if overflow:
+        assert captured and all(len(tail) <= 65536 for tail in captured[0])
+        assert any(captured[0])
+        assert payload['output_limit'] is True
+        assert payload['exit_code'] is None
+    else:
+        assert logs == [b'o' * sizes[0], b'e' * sizes[1]]
+
+
+@pytest.mark.skipif(__import__('os').name != 'posix', reason='POSIX process groups')
+def test_log_overflow_stops_noisy_descendant(tmp_path, monkeypatch):
+    import os
+    import signal
+    import time
+    import benchpack.verifiers as verifiers
+    monkeypatch.setattr(verifiers, 'MAX_VERIFY_LOG_STREAM_BYTES', 8192, raising=False)
+    ready = tmp_path / 'child.pid'
+    marker = tmp_path / 'survived'
+    child = ('import os,time,signal; from pathlib import Path; '
+        'signal.signal(signal.SIGTERM, signal.SIG_IGN); '
+        f'Path({str(ready)!r}).write_text(str(os.getpid())); '
+        'os.write(1,b"x"*1000000); time.sleep(2); '
+        f'Path({str(marker)!r}).write_text("bad")')
+    pack_dir = tmp_path / 'pack'
+    write_script(pack_dir, f'import subprocess,sys,time\nsubprocess.Popen([sys.executable,"-c",{child!r}])\ntime.sleep(30)\n')
+    pack = make_pack(pack_dir)
+    try:
+        started = time.monotonic()
+        result = run_repo_task_verifier(pack=pack, case=pack.cases[0], scoring=pack.cases[0].scoring,
+            prepared_workspace=make_prepared(tmp_path), patch_path=tmp_path / 'patch',
+            output_dir=tmp_path / 'run', repetition=1, timeout_s=5)
+        assert time.monotonic() - started < 3
+        assert ready.exists()
+        assert result.scoring['passed'] is False
+        assert json.loads((tmp_path / 'run' / result.verify['path']).read_text())['output_limit'] is True
+        assert (tmp_path / 'run' / result.verify['stdout_path']).stat().st_size <= 8192
+        time.sleep(2.1)
+        assert not marker.exists()
+        pid = int(ready.read_text())
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            assert Path(f'/proc/{pid}/stat').read_text().split()[2] == 'Z'
+    finally:
+        if ready.exists():
+            try:
+                os.kill(int(ready.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="POSIX process groups")
+def test_pipe_eof_and_retired_group_still_require_reaping_leader(tmp_path, monkeypatch):
+    """Group disappearance can race the preceding nonblocking leader wait."""
+    import io
+    import benchpack.verifiers as verifiers
+    class Process:
+        pid = 12345
+        returncode = None
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+        waits = 0
+        def wait(self, timeout):
+            self.waits += 1
+            if self.waits < 4:
+                raise subprocess.TimeoutExpired(['synthetic'], timeout)
+            self.returncode = 0
+            return 0
+    process = Process()
+    monkeypatch.setattr(verifiers.subprocess, 'Popen', lambda *a, **kw: process)
+    def group_gone(*args):
+        assert process.returncode is not None, "probe the group only after reaping its leader"
+        raise ProcessLookupError
+    monkeypatch.setattr(verifiers.os, 'killpg', group_gone)
+    with (tmp_path / 'stdout').open('wb') as stdout, (tmp_path / 'stderr').open('wb') as stderr:
+        result = verifiers._run_verifier_command(['synthetic'], timeout=1, stdout=stdout, stderr=stderr)
+    assert result.returncode == 0
+    assert process.waits >= 4
+    assert process.stdout.closed and process.stderr.closed
