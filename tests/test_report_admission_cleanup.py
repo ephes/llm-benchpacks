@@ -1,5 +1,6 @@
 """Report-wide admission and exceptional subprocess lifecycle regressions."""
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -87,6 +88,10 @@ time.sleep(60)
         assert process.stdout.closed and process.stderr.closed
         # Both descendants inherit stdout. EOF on a duplicate read descriptor
         # proves no owned process still holds a writer, without host ps access.
+        # SIGKILL delivery is synchronous but the descendant's exit is not, so
+        # allow a short bounded wait for the last writer to disappear.
+        readable, _, _ = select.select([pipe_readers[0]], [], [], 2)
+        assert readable, 'a descendant still holds the harness pipe'
         assert os.read(pipe_readers[0], 1) == b''
     finally:
         for fd in pipe_readers:
@@ -95,7 +100,8 @@ time.sleep(60)
         for process in process_holder:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
+                # macOS answers EPERM for a group that only holds exiting members.
                 pass
             process.wait(timeout=2)
             for stream in (process.stdout, process.stderr):
