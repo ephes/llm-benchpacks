@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 import stat
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -154,3 +156,97 @@ def copy_contained_regular(
     finally:
         os.close(fd)
     return total
+
+
+# Mutations use the same no-follow directory walk as reads. Keep every ancestor
+# open so an exchanged directory can be detected before returning to the caller.
+def trusted_root(path: Path) -> Path:
+    """Absolute ``path`` with its ancestors resolved but ``path`` itself kept.
+
+    Ancestors such as macOS ``/tmp`` -> ``/private/tmp`` or a symlinked home are
+    trusted; the final component stays literal so a symlinked root is still
+    refused by a no-follow walk from its parent.
+    """
+    absolute = Path(os.path.abspath(path))
+    if absolute == Path(absolute.anchor):
+        return absolute
+    return Path(os.path.realpath(absolute.parent)) / absolute.name
+
+
+@contextmanager
+def admitted_directory(path: Path, *, base: Path | None = None, create: bool = False):
+    """Yield a directory fd; reject links below ``base`` and detect exchanges.
+
+    ``base`` (default: the parent of ``path``) is trusted and opened normally,
+    so links among its ancestors are followed. Every component of ``path``
+    below it is opened with ``O_NOFOLLOW`` (and created when ``create``).
+    """
+    absolute = Path(os.path.abspath(path))
+    trusted = Path(os.path.abspath(base)) if base is not None else absolute.parent
+    try:
+        relative = absolute.relative_to(trusted)
+    except ValueError:
+        raise OSError('admitted directory escapes its trusted base') from None
+    if any(part in {'', '.', '..'} for part in relative.parts):
+        raise OSError('admitted directory escapes its trusted base')
+    if create:
+        os.makedirs(trusted, exist_ok=True)
+    fds = [os.open(trusted, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))]
+    edges = []
+    try:
+        for part in relative.parts:
+            parent = fds[-1]
+            if create:
+                try:
+                    os.mkdir(part, dir_fd=parent)
+                except FileExistsError:
+                    pass
+            child = os.open(part, _DIR_FLAGS, dir_fd=parent)
+            fds.append(child)
+            edges.append((parent, part, child))
+        yield fds[-1]
+        for parent, part, child in edges:
+            current = os.stat(part, dir_fd=parent, follow_symlinks=False)
+            opened = os.fstat(child)
+            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                raise OSError('admitted directory was exchanged')
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+
+
+def atomic_write_at(directory: int, name: str, data: bytes) -> None:
+    """Publish a complete regular file relative to an admitted directory fd.
+
+    Existing regular-file permissions survive replacement; new files follow the
+    process umask. Links and special
+    destinations are refused; the owned temporary is removed on every failure.
+    """
+    if contained_parts(name) != (name,):
+        raise ValueError('expected one filename')
+    try:
+        previous = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        previous = None
+    if previous is not None and not stat.S_ISREG(previous.st_mode):
+        raise OSError('destination must be a regular file')
+    temporary = f'.benchpack-{uuid.uuid4().hex}.tmp'
+    # 0o666 lets the kernel apply the process umask, as a plain open() would.
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                 0o666, dir_fd=directory)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            if stream.write(data) != len(data):
+                raise OSError('short file write')
+            stream.flush()
+            if previous is not None:
+                os.fchmod(stream.fileno(), stat.S_IMODE(previous.st_mode))
+
+            os.fsync(stream.fileno())
+        os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+    except BaseException:
+        try:
+            os.unlink(temporary, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        raise

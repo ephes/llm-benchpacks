@@ -1904,7 +1904,8 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert record["repo_task"] == {"status": "passed", "verify_exit_code": 0}
     assert record["scoring"] == {"mode": "verify-script", "passed": True}
     assert "artifacts" not in record
-    assert timeouts == [0.1]
+    assert len(timeouts) == 1
+    assert 0 < timeouts[0] <= 0.1
     assert (out / record["patch"]["path"]).read_text(encoding="utf-8") == ""
     assert (out / record["task"]["stdout_path"]).read_text(encoding="utf-8") == ""
     assert (out / record["task"]["stderr_path"]).read_text(encoding="utf-8") == (

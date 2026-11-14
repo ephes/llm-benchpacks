@@ -1779,3 +1779,48 @@ Bundle validation/import admits 100 runs, 100,000 records and 64 MiB total
 streaming reads before SQLite mutation. Per-run limits remain in force. Each
 listed bundle file is size-checked before hashing or scanning (64 MiB per file,
 256 MiB of listed files per invocation, 16 MiB manifest).
+
+### Harness workspace admission limits
+
+Workspace helper operations walk opened directories without following replacement
+links. Existing internal symlinks to files remain readable and writable; deletion
+removes the link entry. Directory inventories do not traverse directory symlinks.
+Text reads admit only regular files and at most 16 MiB of actual bytes, including
+growth after open. Each inventory visits at most 100,000 entries of any kind and
+raises `TaskError` on overflow; no partial tuple is returned. Output ordering
+remains deterministic. Directories below the workspace root must be real
+directories and symlink roots are refused; links among the root's own ancestors
+(for example macOS `/tmp` -> `/private/tmp` or a linked home) are trusted and
+resolved once. Runner-owned task logs apply the same no-follow walk below the
+run output directory; an external-agent context file's own parent directory
+must not be a link.
+
+Full-file replacements encode UTF-8 before opening output, stage bytes in an
+exclusive sibling file, flush, preserve existing regular-file permissions and
+atomically replace the destination. Failures before publication preserve source
+bytes; an admission failure after publication is a runner error and never claims
+an unchanged workspace. The two `git apply` checks and final apply share one
+monotonic task timeout. Expiry before apply leaves the workspace unchanged; an
+apply timeout retains the existing potentially-partial-edit runner failure.
+
+Task stdout/stderr destinations must be regular files or absent. Both are
+admitted before mutation and published atomically relative to an opened task
+output directory; parent/final symlinks fail as runner errors. The pair is not a
+transaction: if the second stream fails, the error names already-published logs
+and no success record is returned. External-agent context JSON is serialized
+before filesystem effects and published from an owned sibling temporary. Readers
+see a complete old or new generation; failed writes preserve the previous file.
+
+Reports deduplicate `run.jsonl` inputs by canonical file identity (including
+symlink and hard-link aliases), retaining the first input's label and path.
+A report admits at most 100 unique runs, 64 MiB of actual JSONL bytes and 100,000
+records in total; per-run limits still apply. Remaining byte/record allowances
+are passed into the bounded reader, so over-budget inputs are rejected during
+loading rather than retained first. Split larger reports into separate groups.
+
+Exceptional external-harness exits, including `KeyboardInterrupt`, decoding and
+collection errors, terminate the owned process group, escalate to kill and reap
+the leader with bounded waits, then close captured streams. Cleanup preserves
+the original exception and attaches cleanup errors as notes. Descendants are
+signalled using the session's original process-group id even if its leader has
+already exited. The OS reaps orphaned descendants; the runner reaps its own child.

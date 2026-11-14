@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .packs import Case, Pack
+from .safe_files import admitted_directory, atomic_write_at
 from .tasks import TaskArtifactPaths
 from .workspaces import PreparedWorkspace
 
@@ -143,12 +144,10 @@ def write_external_agent_context(
 
     output_path = Path(path)
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(context, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-    except (OSError, TypeError, ValueError) as exc:
+        data = (json.dumps(context, indent=2, sort_keys=True) + "\n").encode('utf-8')
+        with admitted_directory(output_path.parent, create=True) as directory:
+            atomic_write_at(directory, output_path.name, data)
+    except (OSError, TypeError, ValueError, RecursionError) as exc:
         raise ExternalAgentContextError(
             f"could not write external-agent context file {output_path}"
         ) from exc

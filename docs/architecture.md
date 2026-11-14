@@ -1085,3 +1085,18 @@ complete hardware artifact (or leaves the final path absent) and leaves complete
 `run.jsonl` records unchanged. Only a temporary file created by this call is
 removed on failure. Existing file permissions are retained; new files honor the
 process umask. Atomic visibility does not guarantee durability after power loss.
+
+### Opened task boundaries and report admission
+
+Harness helpers and runner-owned task/context publication share the no-follow
+opened-directory primitives in `safe_files.py`. Each walk starts at a trusted
+base (the workspace root's parent, the run output directory, or the directory
+above the context file's parent) that is opened normally, so symlinked system ancestors keep
+working; only components below the base refuse links. Workspace text reads keep one
+regular-file descriptor through byte admission and decoding; writes stage an
+exclusive sibling before replacement. Task logs fail explicitly if only one
+stream publishes. External context serialization precedes filesystem effects.
+The external executor owns process-group cleanup and stream closure on every
+exceptional exit, including interrupts. `report.load_report_runs` deduplicates
+input file identities and supplies remaining report-wide byte/record allowances
+to the existing bounded comparison reader.

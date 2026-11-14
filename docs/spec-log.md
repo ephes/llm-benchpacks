@@ -5353,3 +5353,25 @@ ranges, medians and spread sorting now distinguish finite zero from missing
 values and reject nonfinite/partial/non-decimal numeric strings. Generated-script tests
 execute hostile synthetic CSV fields and price/filter/sort cases in Node's VM
 with a fake DOM, without browser/network/platform dependencies.
+
+## 2026-11-14 — bounded, opened harness workspace operations
+
+B21 binds workspace helper effects to directory descriptors and adds actual-byte
+and total-entry admission. Internal file-symlink semantics and sorted discovery
+remain unchanged; root/directory exchanges and special-file reads fail closed.
+
+## 2026-11-14 — atomic replacements and patch deadlines
+
+B22 preserves source bytes/mode across replacement failures and charges both
+patch preflights and application to a single monotonic execution allowance.
+
+## 2026-11-14 — runner artifact ownership
+
+B23 rejects task-output link substitution, reports partial log publication, and
+atomically publishes serialized external-agent context generations.
+
+## 2026-11-14 — report admission and interrupt cleanup
+
+B24 extends per-run decoding limits with deduplicated report-wide totals and
+owns external-process cleanup across exceptional exits, preserving the primary
+interrupt/error and existing timeout task outcomes.

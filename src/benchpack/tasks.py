@@ -5,18 +5,24 @@ from __future__ import annotations
 import os
 import re
 import signal
+import stat
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
+from time import monotonic, sleep
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
+from .safe_files import admitted_directory, atomic_write_at, trusted_root
 
 
 # Keep timeout cleanup bounded while still giving cooperative harnesses a moment
 # to flush output and exit before SIGKILL escalation.
 _EXTERNAL_PROCESS_TIMEOUT_GRACE_S = 0.5
+MAX_WORKSPACE_READ_BYTES = 16 * 1024 * 1024
+MAX_WORKSPACE_ENTRIES = 100_000
 
 
 class TaskError(ValueError):
@@ -57,115 +63,142 @@ class AgentSessionHarnessRequest:
     def workspace_path(self, relative_path: str) -> Path:
         """Resolve a harness workspace-relative path, rejecting escapes."""
 
-        workspace_root = self.workspace.resolve(strict=False)
+        workspace_root = trusted_root(self.workspace)
         try:
             return _resolve_workspace_relative_path(relative_path, workspace_root)
         except _PatchContractError as exc:
             raise TaskError(f"unsafe harness workspace path: {exc}") from exc
 
-    def read_workspace_text(self, relative_path: str) -> str:
-        """Read UTF-8 text from a file below the prepared workspace only."""
+    def _admission_base(self) -> Path:
+        # The workspace root itself is walked without following links.
+        return trusted_root(self.workspace).parent
 
+    def read_workspace_text(self, relative_path: str) -> str:
+        """Read bounded UTF-8 text through an admitted regular-file fd."""
         path = self.workspace_path(relative_path)
         try:
-            return path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise TaskError(
-                f"could not read harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            with admitted_directory(path.parent, base=self._admission_base()) as directory:
+                # Open relative to the admitted parent;
+                # no path component can be followed again after admission.
+                fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=directory)
+                try:
+                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                        raise OSError('workspace input must be regular')
+                    chunks = []
+                    total = 0
+                    while total <= MAX_WORKSPACE_READ_BYTES:
+                        chunk = os.read(fd, min(1024 * 1024, MAX_WORKSPACE_READ_BYTES + 1 - total))
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        chunks.append(chunk)
+                    if total > MAX_WORKSPACE_READ_BYTES:
+                        raise OSError('workspace read byte limit exceeded')
+                    text = b''.join(chunks).decode('utf-8')
+                finally:
+                    os.close(fd)
+            return text
+        except (OSError, UnicodeError) as exc:
+            raise TaskError(f"could not read harness workspace file {relative_path!r}") from exc
+
+    def _inventory(self, *, directories: bool) -> tuple[str, ...]:
+        paths = []
+        count = 0
+        root = trusted_root(self.workspace)
+
+        def walk(directory, prefix):
+            nonlocal count
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    count += 1
+                    if count > MAX_WORKSPACE_ENTRIES:
+                        raise OSError('workspace inventory entry limit exceeded')
+                    relative = f'{prefix}/{entry.name}' if prefix else entry.name
+                    if entry.is_dir(follow_symlinks=False):
+                        if directories:
+                            paths.append(relative)
+                        fd = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                     dir_fd=directory)
+                        try:
+                            walk(fd, relative)
+                            current = os.stat(entry.name, dir_fd=directory, follow_symlinks=False)
+                            opened = os.fstat(fd)
+                            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                                raise OSError('inventory directory was exchanged')
+                        finally:
+                            os.close(fd)
+                    elif not directories:
+                        # Escaping/dangling links are excluded from discovery.
+                        candidate = (root / relative).resolve(strict=False)
+                        if candidate.is_relative_to(root) and self.workspace_file_exists(relative):
+                            paths.append(relative)
+
+        try:
+            with admitted_directory(root, base=root.parent) as directory:
+                walk(directory, '')
+        except (OSError, RecursionError) as exc:
+            kind = 'directories' if directories else 'files'
+            raise TaskError(f'could not list harness workspace {kind}') from exc
+        return tuple(sorted(paths))
 
     def list_workspace_paths(self) -> tuple[str, ...]:
-        """Return sorted POSIX file paths below the prepared workspace."""
-
-        workspace_root = self.workspace.resolve(strict=False)
-        try:
-            if not workspace_root.is_dir():
-                raise OSError(f"workspace is not a directory: {workspace_root}")
-            paths = [
-                child.relative_to(workspace_root).as_posix()
-                for child in workspace_root.rglob("*")
-                if child.is_file()
-                and child.resolve(strict=False).is_relative_to(workspace_root)
-            ]
-        except OSError as exc:
-            raise TaskError(
-                f"could not list harness workspace files for repo-task case "
-                f"{self.case.id!r}"
-            ) from exc
-        return tuple(sorted(paths))
+        """Return sorted paths, refusing incomplete discovery above the cap."""
+        return self._inventory(directories=False)
 
     def list_workspace_dirs(self) -> tuple[str, ...]:
-        """Return sorted POSIX directory paths below the prepared workspace."""
-
-        workspace_root = self.workspace.resolve(strict=False)
-        try:
-            if not workspace_root.is_dir():
-                raise OSError(f"workspace is not a directory: {workspace_root}")
-            paths = [
-                child.relative_to(workspace_root).as_posix()
-                for child in workspace_root.rglob("*")
-                if not child.is_symlink()
-                and child.is_dir()
-                and child.resolve(strict=False).is_relative_to(workspace_root)
-            ]
-        except OSError as exc:
-            raise TaskError(
-                f"could not list harness workspace directories for repo-task case "
-                f"{self.case.id!r}"
-            ) from exc
-        return tuple(sorted(paths))
+        """Return sorted non-symlink directories within the inventory cap."""
+        return self._inventory(directories=True)
 
     def workspace_file_exists(self, relative_path: str) -> bool:
-        """Return whether a regular file exists below the prepared workspace."""
-
         path = self.workspace_path(relative_path)
         try:
-            return path.is_file()
+            with admitted_directory(path.parent, base=self._admission_base()) as directory:
+                mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode
+                if stat.S_ISLNK(mode):
+                    raise OSError('workspace entry was exchanged')
+                return stat.S_ISREG(mode)
+        except FileNotFoundError:
+            return False
         except OSError as exc:
-            raise TaskError(
-                f"could not inspect harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            raise TaskError(f'could not inspect harness workspace file {relative_path!r}') from exc
 
     def delete_workspace_file(self, relative_path: str) -> bool:
-        """Delete a regular file entry below the prepared workspace if present."""
-
-        workspace_root = self.workspace.resolve(strict=False)
+        root = trusted_root(self.workspace)
         try:
-            path = _resolve_workspace_relative_path(relative_path, workspace_root)
-            raw_path = _raw_workspace_relative_path(relative_path, workspace_root)
+            _resolve_workspace_relative_path(relative_path, root)
+            raw = _raw_workspace_relative_path(relative_path, root)
         except _PatchContractError as exc:
-            raise TaskError(f"unsafe harness workspace path: {exc}") from exc
-
+            raise TaskError(f'unsafe harness workspace path: {exc}') from exc
         try:
-            if raw_path.is_symlink():
-                if not path.is_file():
+            # Resolve only the parent: deleting an internal link removes the
+            # link entry, while reads and replacements operate on its target.
+            parent = raw.parent.resolve(strict=False)
+            if not parent.is_relative_to(root):
+                raise OSError('workspace parent escaped')
+            with admitted_directory(parent, base=root.parent) as directory:
+                info = os.stat(raw.name, dir_fd=directory, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    if not self.workspace_file_exists(relative_path):
+                        return False
+                elif not stat.S_ISREG(info.st_mode):
                     return False
-                raw_path.unlink()
-                return True
-            if not path.exists() or not path.is_file():
-                return False
-            path.unlink()
+                os.unlink(raw.name, dir_fd=directory)
+            return True
+        except FileNotFoundError:
+            return False
         except OSError as exc:
-            raise TaskError(
-                f"could not delete harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
-        return True
+            raise TaskError(f'could not delete harness workspace file {relative_path!r}') from exc
 
     def write_workspace_text(self, relative_path: str, content: str) -> None:
-        """Write UTF-8 text below the prepared workspace only."""
-
         path = self.workspace_path(relative_path)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
-        except OSError as exc:
-            raise TaskError(
-                f"could not write harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            data = content.encode('utf-8')
+            with admitted_directory(path.parent, base=self._admission_base(),
+                                    create=True) as directory:
+                atomic_write_at(directory, path.name, data)
+        except (OSError, UnicodeError) as exc:
+            raise TaskError(f'could not write harness workspace file {relative_path!r}') from exc
 
 
 AgentSessionHarness = Callable[[AgentSessionHarnessRequest], AgentSessionHarnessResult]
@@ -243,16 +276,10 @@ def task_record(paths: TaskArtifactPaths, output_dir: Path) -> dict[str, str]:
 def write_noop_task_logs(output_dir: Path, case: Case, repetition: int) -> dict[str, str]:
     """Write empty task logs for callers that need placeholder artifacts."""
 
-    paths = task_artifact_paths(output_dir, case, repetition)
-    try:
-        paths.stdout.parent.mkdir(parents=True, exist_ok=True)
-        paths.stdout.write_text("", encoding="utf-8")
-        paths.stderr.write_text("", encoding="utf-8")
-    except OSError as exc:
-        raise TaskError(
-            f"could not write task logs for repo-task case {case.id!r}"
-        ) from exc
-    return task_record(paths, output_dir)
+    return _write_task_logs(
+        TaskExecutionRequest(output_dir, case, repetition, Path(output_dir), ""),
+        stdout="", stderr="",
+    )
 
 
 def run_model_patch_task(
@@ -441,16 +468,60 @@ def _run_external_process_command(
         text=True,
         start_new_session=True,
     )
+    finished = False
     try:
-        stdout, stderr = process.communicate(timeout=timeout_s)
-        return (
-            _process_stream_to_text(stdout),
-            _process_stream_to_text(stderr),
-            False,
-        )
-    except subprocess.TimeoutExpired:
-        stdout, stderr = _stop_external_process_group(process, case_id)
-        return stdout, stderr, True
+        try:
+            stdout, stderr = process.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = _stop_external_process_group(process, case_id)
+            finished = True
+            return stdout, stderr, True
+        result = _process_stream_to_text(stdout), _process_stream_to_text(stderr), False
+        finished = True
+        return result
+    finally:
+        primary = None if finished else sys.exception()
+        try:
+            if not finished:
+                # communicate itself may be broken/interrupted. Reap without
+                # relying on it again, preserving the original exception.
+                try:
+                    _reap_external_process_group(process, case_id)
+                except BaseException as cleanup:
+                    if primary is None:
+                        raise
+                    primary.add_note(f'external harness cleanup failed: {cleanup}')
+        finally:
+            close_error = None
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except BaseException as cleanup:
+                        if primary is not None:
+                            primary.add_note(f'external harness stream close failed: {cleanup}')
+                        elif close_error is None:
+                            close_error = cleanup
+            if close_error is not None:
+                raise close_error
+
+
+def _reap_external_process_group(process, case_id):
+    """Bounded cleanup even when collection fails or the leader has exited."""
+    # The leader stays unreaped here, so macOS may answer EPERM for a group
+    # whose only member is that zombie: the goal state, not a cleanup failure.
+    try:
+        _signal_external_process_group(process.pid, signal.SIGTERM, case_id, exiting_ok=True)
+        # Keep the leader unreaped during grace so ownership remains attached
+        # until the final group signal, even if it exits before descendants.
+        sleep(_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
+    finally:
+        # start_new_session makes pid the owned pgid. Do not look it up via
+        # a leader that may already have exited while descendants survive.
+        try:
+            _signal_external_process_group(process.pid, signal.SIGKILL, case_id, exiting_ok=True)
+        finally:
+            process.wait(timeout=_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
 
 
 def _stop_external_process_group(
@@ -459,34 +530,43 @@ def _stop_external_process_group(
 ) -> tuple[str, str]:
     """Terminate a timed-out external harness process group and drain output."""
 
+    pgid = process.pid
+    primary = None
     try:
-        pgid = os.getpgid(process.pid)
-    except ProcessLookupError:
-        return _communicate_after_external_timeout(process, case_id)
-    except OSError as exc:
-        raise TaskError(
-            f"could not inspect external subprocess harness process group for "
-            f"repo-task case {case_id!r}"
-        ) from exc
-
-    _signal_external_process_group(pgid, signal.SIGTERM, case_id)
-    try:
-        return _communicate_after_external_timeout(process, case_id)
-    except subprocess.TimeoutExpired:
-        _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+        _signal_external_process_group(pgid, signal.SIGTERM, case_id)
         try:
             return _communicate_after_external_timeout(process, case_id)
-        except subprocess.TimeoutExpired as exc:
-            raise TaskError(
-                f"could not stop external subprocess harness process group for "
-                f"repo-task case {case_id!r}"
-            ) from exc
+        except subprocess.TimeoutExpired:
+            _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+            try:
+                return _communicate_after_external_timeout(process, case_id)
+            except subprocess.TimeoutExpired as exc:
+                raise TaskError(
+                    f"could not stop external subprocess harness process group for "
+                    f"repo-task case {case_id!r}"
+                ) from exc
+    except BaseException as exc:
+        primary = exc
+        raise
+    finally:
+        # A descendant can close its inherited pipes yet ignore termination.
+        # communicate() has usually reaped the leader by now: macOS answers
+        # EPERM for a group whose remaining members are already exiting, which
+        # is the goal state here, not a runner error.
+        try:
+            _signal_external_process_group(pgid, signal.SIGKILL, case_id, exiting_ok=True)
+        except BaseException as cleanup:
+            if primary is None:
+                raise
+            primary.add_note(f'external harness kill failed: {cleanup}')
 
 
 def _signal_external_process_group(
     pgid: int,
     signal_number: signal.Signals,
     case_id: str,
+    *,
+    exiting_ok: bool = False,
 ) -> None:
     """Send one signal to a harness process group, tolerating already-dead groups."""
 
@@ -494,6 +574,13 @@ def _signal_external_process_group(
         os.killpg(pgid, signal_number)
     except ProcessLookupError:
         return
+    except PermissionError as exc:
+        if exiting_ok:
+            return
+        raise TaskError(
+            f"could not stop external subprocess harness process group for "
+            f"repo-task case {case_id!r}"
+        ) from exc
     except OSError as exc:
         raise TaskError(
             f"could not stop external subprocess harness process group for "
@@ -598,13 +685,29 @@ def _write_task_logs(
     """Write deterministic task stdout/stderr logs for one execution."""
 
     paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
+    task_record(paths, request.output_dir)  # Admit containment before any mutation.
+    published = []
     try:
-        paths.stdout.parent.mkdir(parents=True, exist_ok=True)
-        paths.stdout.write_text(stdout, encoding="utf-8")
-        paths.stderr.write_text(stderr, encoding="utf-8")
-    except OSError as exc:
+        # Encode both streams before touching either destination.
+        streams = [(paths.stdout, stdout.encode('utf-8')),
+                   (paths.stderr, stderr.encode('utf-8'))]
+        with admitted_directory(paths.stdout.parent, base=request.output_dir,
+                                create=True) as directory:
+            # Reject either unsafe final destination before publishing stdout.
+            for path, _ in streams:
+                try:
+                    mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISREG(mode):
+                    raise OSError('task log destination must be regular')
+            for path, data in streams:
+                atomic_write_at(directory, path.name, data)
+                published.append(path.name)
+    except (OSError, UnicodeError) as exc:
         raise TaskError(
-            f"could not write task logs for repo-task case {request.case.id!r}"
+            f"could not write task logs for repo-task case {request.case.id!r}; "
+            f"published logs: {', '.join(published) or 'none'}"
         ) from exc
     return task_record(paths, request.output_dir)
 
@@ -643,6 +746,8 @@ def apply_unified_diff_to_workspace(
     be partially changed.
     """
 
+    deadline = None if timeout_s is None else monotonic() + timeout_s
+
     if not diff.strip():
         return (
             False,
@@ -654,6 +759,14 @@ def apply_unified_diff_to_workspace(
         _validate_patch_paths(diff, workspace)
     except _PatchContractError as exc:
         return False, "", f"Patch rejected: {exc}; workspace left unchanged.\n"
+
+    def remaining():
+        if deadline is None:
+            return None
+        budget = deadline - monotonic()
+        if budget <= 0:
+            raise subprocess.TimeoutExpired('git apply --check', timeout_s)
+        return budget
 
     workspace_path = Path(workspace)
     apply_command: list[str] | None = None
@@ -677,7 +790,7 @@ def apply_unified_diff_to_workspace(
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=timeout_s,
+                timeout=remaining(),
             )
             if check.returncode == 0:
                 apply_command = candidate_apply_command
@@ -710,6 +823,11 @@ def apply_unified_diff_to_workspace(
             "workspace left unchanged.\n",
         )
 
+    # Expiry before application starts is a safe rejection, not a partial edit.
+    try:
+        apply_budget = remaining()
+    except subprocess.TimeoutExpired:
+        return False, "", "Patch rejected: deadline exhausted; workspace left unchanged.\n"
     try:
         applied = subprocess.run(
             apply_command,
@@ -718,7 +836,7 @@ def apply_unified_diff_to_workspace(
             capture_output=True,
             text=True,
             check=False,
-            timeout=timeout_s,
+            timeout=apply_budget,
         )
     except subprocess.TimeoutExpired as exc:
         raise TaskError(
@@ -813,29 +931,23 @@ def _apply_replacement_file_to_workspace(
             "unchanged.\n",
         )
 
-    workspace_root = Path(workspace).resolve(strict=False)
+    workspace_root = trusted_root(Path(workspace))
     try:
         destination = _resolve_workspace_relative_path(path, workspace_root)
     except _PatchContractError as exc:
-        return (
-            False,
-            "",
-            f"Replacement file rejected: {exc}; workspace left unchanged.\n",
-        )
+        return False, "", f"Replacement file rejected: {exc}; workspace left unchanged.\n"
+    published = False
     try:
-        if destination.exists() and destination.is_dir():
-            return (
-                False,
-                "",
-                "Replacement file rejected: target path is a directory; "
-                "workspace left unchanged.\n",
-            )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(content, encoding="utf-8")
-    except OSError:
+        data = content.encode('utf-8')
+        with admitted_directory(destination.parent, base=workspace_root.parent,
+                                create=True) as directory:
+            atomic_write_at(directory, destination.name, data)
+            published = True
+    except (OSError, UnicodeError) as exc:
+        if published:
+            raise TaskError("replacement published but workspace admission changed") from exc
         return (
-            False,
-            "",
+            False, "",
             "Replacement file rejected: workspace file could not be written; "
             "workspace left unchanged.\n",
         )
@@ -899,7 +1011,10 @@ def _validate_workspace_relative_path(path: str, workspace_root: Path) -> None:
 
 def _resolve_workspace_relative_path(path: str, workspace_root: Path) -> Path:
     parts = _workspace_relative_parts(path)
-    candidate = (workspace_root / Path(*parts)).resolve(strict=False)
+    try:
+        candidate = (workspace_root / Path(*parts)).resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise _PatchContractError(f'could not resolve workspace path: {path}') from exc
     if not candidate.is_relative_to(workspace_root):
         raise _PatchContractError(f"path escapes workspace: {path}")
     return candidate
