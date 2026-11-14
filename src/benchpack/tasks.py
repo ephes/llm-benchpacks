@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
+from time import monotonic
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
 from .safe_files import admitted_directory, atomic_write_at
@@ -677,6 +678,16 @@ def apply_unified_diff_to_workspace(
     except _PatchContractError as exc:
         return False, "", f"Patch rejected: {exc}; workspace left unchanged.\n"
 
+    deadline = None if timeout_s is None else monotonic() + timeout_s
+
+    def remaining():
+        if deadline is None:
+            return None
+        budget = deadline - monotonic()
+        if budget <= 0:
+            raise subprocess.TimeoutExpired('git apply --check', timeout_s)
+        return budget
+
     workspace_path = Path(workspace)
     apply_command: list[str] | None = None
     try:
@@ -699,7 +710,7 @@ def apply_unified_diff_to_workspace(
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=timeout_s,
+                timeout=remaining(),
             )
             if check.returncode == 0:
                 apply_command = candidate_apply_command
@@ -732,6 +743,11 @@ def apply_unified_diff_to_workspace(
             "workspace left unchanged.\n",
         )
 
+    # Expiry before application starts is a safe rejection, not a partial edit.
+    try:
+        apply_budget = remaining()
+    except subprocess.TimeoutExpired:
+        return False, "", "Patch rejected: deadline exhausted; workspace left unchanged.\n"
     try:
         applied = subprocess.run(
             apply_command,
@@ -740,7 +756,7 @@ def apply_unified_diff_to_workspace(
             capture_output=True,
             text=True,
             check=False,
-            timeout=timeout_s,
+            timeout=apply_budget,
         )
     except subprocess.TimeoutExpired as exc:
         raise TaskError(
@@ -835,29 +851,22 @@ def _apply_replacement_file_to_workspace(
             "unchanged.\n",
         )
 
-    workspace_root = Path(workspace).resolve(strict=False)
+    workspace_root = Path(os.path.abspath(workspace))
     try:
         destination = _resolve_workspace_relative_path(path, workspace_root)
     except _PatchContractError as exc:
-        return (
-            False,
-            "",
-            f"Replacement file rejected: {exc}; workspace left unchanged.\n",
-        )
+        return False, "", f"Replacement file rejected: {exc}; workspace left unchanged.\n"
+    published = False
     try:
-        if destination.exists() and destination.is_dir():
-            return (
-                False,
-                "",
-                "Replacement file rejected: target path is a directory; "
-                "workspace left unchanged.\n",
-            )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(content, encoding="utf-8")
-    except OSError:
+        data = content.encode('utf-8')
+        with admitted_directory(destination.parent, create=True) as directory:
+            atomic_write_at(directory, destination.name, data)
+            published = True
+    except (OSError, UnicodeError) as exc:
+        if published:
+            raise TaskError("replacement published but workspace admission changed") from exc
         return (
-            False,
-            "",
+            False, "",
             "Replacement file rejected: workspace file could not be written; "
             "workspace left unchanged.\n",
         )

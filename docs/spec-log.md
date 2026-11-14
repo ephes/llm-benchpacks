@@ -5359,3 +5359,8 @@ with a fake DOM, without browser/network/platform dependencies.
 B21 binds workspace helper effects to directory descriptors and adds actual-byte
 and total-entry admission. Internal file-symlink semantics and sorted discovery
 remain unchanged; root/directory exchanges and special-file reads fail closed.
+
+## 2026-11-14 — atomic replacements and patch deadlines
+
+B22 preserves source bytes/mode across replacement failures and charges both
+patch preflights and application to a single monotonic execution allowance.

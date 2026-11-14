@@ -1790,3 +1790,11 @@ growth after open. Each inventory visits at most 100,000 entries of any kind and
 raises `TaskError` on overflow; no partial tuple is returned. Output ordering
 remains deterministic. Workspace roots and their directory ancestors must be real
 directories; symlink roots are refused.
+
+Full-file replacements encode UTF-8 before opening output, stage bytes in an
+exclusive sibling file, flush, preserve existing regular-file permissions and
+atomically replace the destination. Failures before publication preserve source
+bytes; an admission failure after publication is a runner error and never claims
+an unchanged workspace. The two `git apply` checks and final apply share one
+monotonic task timeout. Expiry before apply leaves the workspace unchanged; an
+apply timeout retains the existing potentially-partial-edit runner failure.

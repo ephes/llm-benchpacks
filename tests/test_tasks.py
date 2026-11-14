@@ -660,7 +660,8 @@ def test_run_repo_task_executor_explicit_timeout_keeps_fenced_patch_success(
         "stdout_path": "task/edit-repo/rep-001.stdout.log",
         "stderr_path": "task/edit-repo/rep-001.stderr.log",
     }
-    assert timeouts == [2.5, 2.5]
+    assert len(timeouts) == 2
+    assert 0 < timeouts[1] <= timeouts[0] <= 2.5
     assert (workspace / "README.md").read_text(encoding="utf-8") == "new\n"
     assert (out / record["stdout_path"]).read_text(encoding="utf-8") == (
         "Applied fenced model patch to workspace.\n"
@@ -685,7 +686,7 @@ def test_run_repo_task_executor_preflight_timeout_logs_task_outcome(
             "--whitespace=nowarn",
             "--recount",
         ]
-        assert kwargs["timeout"] == 0.25
+        assert 0 < kwargs["timeout"] <= 0.25
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
     monkeypatch.setattr("benchpack.tasks.subprocess.run", timeout_check)
@@ -729,7 +730,7 @@ def test_run_repo_task_executor_application_timeout_is_runner_failure(
 
     def timeout_apply(command, *args, **kwargs):
         calls.append(command)
-        assert kwargs["timeout"] == 0.25
+        assert 0 < kwargs["timeout"] <= 0.25
         if "--check" in command:
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
