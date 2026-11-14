@@ -1945,7 +1945,9 @@ output, invalid UTF-8, nonzero exit or deadline expiry makes the probe unavailab
 partial output never establishes identity. On POSIX each probe owns a new process
 group. Cleanup kills the group (including pipe-holding descendants) and reaps its
 leader on success, timeout and collection failure. Cleanup allows up to 0.25 seconds
-beyond the command deadline. All metadata commands share a 10-second monotonic
+beyond the command deadline and never raises: a leader that cannot be killed or
+reaped in that window only makes the probe unavailable; it does not abort hardware
+collection or per-request resource sampling. All metadata commands share a 10-second monotonic
 collector deadline; resource sampling has a 5-second deadline. A probe is never
 started after the collector budget expires. Escaped sessions are outside process-group
 ownership.

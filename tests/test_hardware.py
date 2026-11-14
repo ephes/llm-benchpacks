@@ -233,12 +233,53 @@ def test_probe_retires_pipe_holding_descendants(tmp_path):
             f'subprocess.Popen([sys.executable, "-c", {child!r}]); '
             + ('print("complete", flush=True)' if leader_exits else 'time.sleep(2)')
         )
+        # The success case only needs the leader to start, spawn and print
+        # before its descendant's 0.6 s sleep ends; give slow runners headroom.
+        timeout = 1.0 if leader_exits else 0.15
         started = time.monotonic()
-        result = hardware._run([sys.executable, '-c', source], timeout=0.15)
-        assert time.monotonic() - started < 0.5
+        result = hardware._run([sys.executable, '-c', source], timeout=timeout)
+        assert time.monotonic() - started < timeout + 0.35
         assert result == ('complete\n' if leader_exits else None)
         time.sleep(0.7)
         assert not marker.exists(), 'owned descendant survived collection'
+
+
+def test_probe_unkillable_leader_stays_unavailable(monkeypatch, tmp_path):
+    import os
+    import signal
+    import sys
+    import time
+    import pytest
+
+    if os.name != 'posix':
+        pytest.skip('POSIX signal cleanup')
+    pid_file = tmp_path / 'pid'
+    source = (
+        'import os, time; from pathlib import Path; '
+        f'Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(3)'
+    )
+    for failure in (None, PermissionError):
+        def stuck(process, failure=failure):
+            # Simulate a leader that ignores SIGKILL (e.g. uninterruptible sleep).
+            if failure is not None:
+                raise failure('synthetic EPERM')
+
+        monkeypatch.setattr(hardware, '_retire_probe', stuck)
+        started = time.monotonic()
+        try:
+            assert hardware._run([sys.executable, '-c', source], timeout=0.3) is None
+            assert time.monotonic() - started < 1.0
+        finally:
+            for _ in range(50):
+                if pid_file.exists() and pid_file.read_text():
+                    break
+                time.sleep(0.02)
+            if pid_file.exists() and pid_file.read_text():
+                try:
+                    os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            pid_file.unlink(missing_ok=True)
 
 
 def test_probe_combined_budget_boundary():

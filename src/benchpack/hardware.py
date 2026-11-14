@@ -88,14 +88,20 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
     except (OSError, UnicodeError):
         return None
     finally:
+        # Cleanup is best-effort and must never replace the probe result: an
+        # unkillable or unreaped leader only makes this probe unavailable.
         try:
             _retire_probe(process)
-        finally:
-            if selector is not None:
-                selector.close()
-            process.stdout.close()
-            process.stderr.close()
+        except OSError:
+            pass
+        if selector is not None:
+            selector.close()
+        process.stdout.close()
+        process.stderr.close()
+        try:
             process.wait(timeout=0.25)
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def _probe(cmd: list[str], deadline: float | None, timeout: float = 5.0) -> str | None:

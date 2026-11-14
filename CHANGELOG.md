@@ -23,6 +23,8 @@
   diagnostics at 1024 UTF-8 bytes with explicit truncation.
 - Bound hardware probe output to 64 KiB, share collector deadlines, and retire
   owned process groups on success, timeout, excess output or collection failure.
+  Probe cleanup never raises, so an unkillable or unreaped leader leaves the
+  probe unavailable instead of aborting a benchmark run.
 - Refuse mixed runtime/pack-version identities in comparisons. Use successful
   rows for metrics/cache parity and show failure counts; all-failed groups have
   unavailable metrics. Registry report/site export also refuses mixed runs;
