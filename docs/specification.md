@@ -1779,3 +1779,14 @@ Bundle validation/import admits 100 runs, 100,000 records and 64 MiB total
 streaming reads before SQLite mutation. Per-run limits remain in force. Each
 listed bundle file is size-checked before hashing or scanning (64 MiB per file,
 256 MiB of listed files per invocation, 16 MiB manifest).
+
+### Harness workspace admission limits
+
+Workspace helper operations walk opened directories without following replacement
+links. Existing internal symlinks to files remain readable and writable; deletion
+removes the link entry. Directory inventories do not traverse directory symlinks.
+Text reads admit only regular files and at most 16 MiB of actual bytes, including
+growth after open. Each inventory visits at most 100,000 entries of any kind and
+raises `TaskError` on overflow; no partial tuple is returned. Output ordering
+remains deterministic. Workspace roots and their directory ancestors must be real
+directories; symlink roots are refused.

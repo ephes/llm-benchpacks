@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 import stat
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -154,3 +156,65 @@ def copy_contained_regular(
     finally:
         os.close(fd)
     return total
+
+
+# Mutations use the same no-follow directory walk as reads. Keep every ancestor
+# open so an exchanged directory can be detected before returning to the caller.
+@contextmanager
+def admitted_directory(path: Path, *, create: bool = False):
+    """Yield a directory fd; reject links and detect exchanged ancestors."""
+    absolute = Path(os.path.abspath(path))
+    fds = [os.open(absolute.anchor, _DIR_FLAGS)]
+    edges = []
+    try:
+        for part in absolute.parts[1:]:
+            parent = fds[-1]
+            if create:
+                try:
+                    os.mkdir(part, dir_fd=parent)
+                except FileExistsError:
+                    pass
+            child = os.open(part, _DIR_FLAGS, dir_fd=parent)
+            fds.append(child)
+            edges.append((parent, part, child))
+        yield fds[-1]
+        for parent, part, child in edges:
+            current = os.stat(part, dir_fd=parent, follow_symlinks=False)
+            opened = os.fstat(child)
+            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                raise OSError('admitted directory was exchanged')
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+
+
+def atomic_write_at(directory: int, name: str, data: bytes) -> None:
+    """Publish a complete regular file relative to an admitted directory fd.
+
+    Existing regular-file permissions survive replacement. Links and special
+    destinations are refused; the owned temporary is removed on every failure.
+    """
+    if contained_parts(name) != (name,):
+        raise ValueError('expected one filename')
+    try:
+        previous = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        previous = None
+    if previous is not None and not stat.S_ISREG(previous.st_mode):
+        raise OSError('destination must be a regular file')
+    temporary = f'.benchpack-{uuid.uuid4().hex}.tmp'
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                 0o600, dir_fd=directory)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+            stream.flush()
+            if previous is not None:
+                os.fchmod(stream.fileno(), stat.S_IMODE(previous.st_mode))
+            os.fsync(stream.fileno())
+        os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory)
+        except FileNotFoundError:
+            pass

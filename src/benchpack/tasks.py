@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import signal
+import stat
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -12,11 +13,14 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
+from .safe_files import admitted_directory, atomic_write_at
 
 
 # Keep timeout cleanup bounded while still giving cooperative harnesses a moment
 # to flush output and exit before SIGKILL escalation.
 _EXTERNAL_PROCESS_TIMEOUT_GRACE_S = 0.5
+MAX_WORKSPACE_READ_BYTES = 16 * 1024 * 1024
+MAX_WORKSPACE_ENTRIES = 100_000
 
 
 class TaskError(ValueError):
@@ -57,115 +61,133 @@ class AgentSessionHarnessRequest:
     def workspace_path(self, relative_path: str) -> Path:
         """Resolve a harness workspace-relative path, rejecting escapes."""
 
-        workspace_root = self.workspace.resolve(strict=False)
+        workspace_root = Path(os.path.abspath(self.workspace))
         try:
             return _resolve_workspace_relative_path(relative_path, workspace_root)
         except _PatchContractError as exc:
             raise TaskError(f"unsafe harness workspace path: {exc}") from exc
 
     def read_workspace_text(self, relative_path: str) -> str:
-        """Read UTF-8 text from a file below the prepared workspace only."""
-
+        """Read bounded UTF-8 text through an admitted regular-file fd."""
         path = self.workspace_path(relative_path)
         try:
-            return path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise TaskError(
-                f"could not read harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            with admitted_directory(path.parent) as directory:
+                # The proc-free reader opens relative to the admitted parent;
+                # no path component can be followed again after admission.
+                fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=directory)
+                try:
+                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                        raise OSError('workspace input must be regular')
+                    chunks = []
+                    total = 0
+                    while total <= MAX_WORKSPACE_READ_BYTES:
+                        chunk = os.read(fd, min(1024 * 1024, MAX_WORKSPACE_READ_BYTES + 1 - total))
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        chunks.append(chunk)
+                    if total > MAX_WORKSPACE_READ_BYTES:
+                        raise OSError('workspace read byte limit exceeded')
+                    text = b''.join(chunks).decode('utf-8')
+                finally:
+                    os.close(fd)
+            return text
+        except (OSError, UnicodeError) as exc:
+            raise TaskError(f"could not read harness workspace file {relative_path!r}") from exc
+
+    def _inventory(self, *, directories: bool) -> tuple[str, ...]:
+        paths = []
+        count = 0
+        root = Path(os.path.abspath(self.workspace))
+
+        def walk(directory, prefix):
+            nonlocal count
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    count += 1
+                    if count > MAX_WORKSPACE_ENTRIES:
+                        raise OSError('workspace inventory entry limit exceeded')
+                    relative = f'{prefix}/{entry.name}' if prefix else entry.name
+                    if entry.is_dir(follow_symlinks=False):
+                        if directories:
+                            paths.append(relative)
+                        fd = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                     dir_fd=directory)
+                        try:
+                            walk(fd, relative)
+                        finally:
+                            os.close(fd)
+                    elif not directories:
+                        # Escaping/dangling links are excluded from discovery.
+                        candidate = (root / relative).resolve(strict=False)
+                        if candidate.is_relative_to(root) and self.workspace_file_exists(relative):
+                            paths.append(relative)
+
+        try:
+            with admitted_directory(root) as directory:
+                walk(directory, '')
+        except (OSError, RecursionError) as exc:
+            kind = 'directories' if directories else 'files'
+            raise TaskError(f'could not list harness workspace {kind}') from exc
+        return tuple(sorted(paths))
 
     def list_workspace_paths(self) -> tuple[str, ...]:
-        """Return sorted POSIX file paths below the prepared workspace."""
-
-        workspace_root = self.workspace.resolve(strict=False)
-        try:
-            if not workspace_root.is_dir():
-                raise OSError(f"workspace is not a directory: {workspace_root}")
-            paths = [
-                child.relative_to(workspace_root).as_posix()
-                for child in workspace_root.rglob("*")
-                if child.is_file()
-                and child.resolve(strict=False).is_relative_to(workspace_root)
-            ]
-        except OSError as exc:
-            raise TaskError(
-                f"could not list harness workspace files for repo-task case "
-                f"{self.case.id!r}"
-            ) from exc
-        return tuple(sorted(paths))
+        """Return sorted paths, refusing incomplete discovery above the cap."""
+        return self._inventory(directories=False)
 
     def list_workspace_dirs(self) -> tuple[str, ...]:
-        """Return sorted POSIX directory paths below the prepared workspace."""
-
-        workspace_root = self.workspace.resolve(strict=False)
-        try:
-            if not workspace_root.is_dir():
-                raise OSError(f"workspace is not a directory: {workspace_root}")
-            paths = [
-                child.relative_to(workspace_root).as_posix()
-                for child in workspace_root.rglob("*")
-                if not child.is_symlink()
-                and child.is_dir()
-                and child.resolve(strict=False).is_relative_to(workspace_root)
-            ]
-        except OSError as exc:
-            raise TaskError(
-                f"could not list harness workspace directories for repo-task case "
-                f"{self.case.id!r}"
-            ) from exc
-        return tuple(sorted(paths))
+        """Return sorted non-symlink directories within the inventory cap."""
+        return self._inventory(directories=True)
 
     def workspace_file_exists(self, relative_path: str) -> bool:
-        """Return whether a regular file exists below the prepared workspace."""
-
         path = self.workspace_path(relative_path)
         try:
-            return path.is_file()
+            with admitted_directory(path.parent) as directory:
+                mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode
+                if stat.S_ISLNK(mode):
+                    raise OSError('workspace entry was exchanged')
+                return stat.S_ISREG(mode)
+        except FileNotFoundError:
+            return False
         except OSError as exc:
-            raise TaskError(
-                f"could not inspect harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            raise TaskError(f'could not inspect harness workspace file {relative_path!r}') from exc
 
     def delete_workspace_file(self, relative_path: str) -> bool:
-        """Delete a regular file entry below the prepared workspace if present."""
-
-        workspace_root = self.workspace.resolve(strict=False)
+        root = Path(os.path.abspath(self.workspace))
         try:
-            path = _resolve_workspace_relative_path(relative_path, workspace_root)
-            raw_path = _raw_workspace_relative_path(relative_path, workspace_root)
+            path = _resolve_workspace_relative_path(relative_path, root)
+            raw = _raw_workspace_relative_path(relative_path, root)
         except _PatchContractError as exc:
-            raise TaskError(f"unsafe harness workspace path: {exc}") from exc
-
+            raise TaskError(f'unsafe harness workspace path: {exc}') from exc
         try:
-            if raw_path.is_symlink():
-                if not path.is_file():
+            # Resolve only the parent: deleting an internal link removes the
+            # link entry, while reads and replacements operate on its target.
+            parent = raw.parent.resolve(strict=False)
+            if not parent.is_relative_to(root):
+                raise OSError('workspace parent escaped')
+            with admitted_directory(parent) as directory:
+                info = os.stat(raw.name, dir_fd=directory, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    if not self.workspace_file_exists(relative_path):
+                        return False
+                elif not stat.S_ISREG(info.st_mode):
                     return False
-                raw_path.unlink()
-                return True
-            if not path.exists() or not path.is_file():
-                return False
-            path.unlink()
+                os.unlink(raw.name, dir_fd=directory)
+            return True
+        except FileNotFoundError:
+            return False
         except OSError as exc:
-            raise TaskError(
-                f"could not delete harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
-        return True
+            raise TaskError(f'could not delete harness workspace file {relative_path!r}') from exc
 
     def write_workspace_text(self, relative_path: str, content: str) -> None:
-        """Write UTF-8 text below the prepared workspace only."""
-
         path = self.workspace_path(relative_path)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
-        except OSError as exc:
-            raise TaskError(
-                f"could not write harness workspace file {relative_path!r} "
-                f"for repo-task case {self.case.id!r}"
-            ) from exc
+            data = content.encode('utf-8')
+            with admitted_directory(path.parent, create=True) as directory:
+                atomic_write_at(directory, path.name, data)
+        except (OSError, UnicodeError) as exc:
+            raise TaskError(f'could not write harness workspace file {relative_path!r}') from exc
 
 
 AgentSessionHarness = Callable[[AgentSessionHarnessRequest], AgentSessionHarnessResult]

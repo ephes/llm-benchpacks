@@ -5353,3 +5353,9 @@ ranges, medians and spread sorting now distinguish finite zero from missing
 values and reject nonfinite/partial/non-decimal numeric strings. Generated-script tests
 execute hostile synthetic CSV fields and price/filter/sort cases in Node's VM
 with a fake DOM, without browser/network/platform dependencies.
+
+## 2026-11-14 — bounded, opened harness workspace operations
+
+B21 binds workspace helper effects to directory descriptors and adds actual-byte
+and total-entry admission. Internal file-symlink semantics and sorted discovery
+remain unchanged; root/directory exchanges and special-file reads fail closed.
