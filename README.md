@@ -103,7 +103,10 @@ arguments plus `--context <path>` to a runner-owned JSON context file under
 `task/<case-id>/rep-NNN.context.json`, runs without a shell, and writes through
 the existing task logs. When `harness.timeout_s` is set, timeout cleanup stops
 the external subprocess process group with a bounded terminate-then-kill policy
-before the runner writes timeout task logs. The context file includes pack/case
+before the runner writes timeout task logs. Interrupts and collection errors
+also trigger bounded process-group cleanup and stream closure while preserving
+the original exception. Task logs reject symlink destinations; context JSON and
+individual logs publish atomically. The context file includes pack/case
 metadata, the loaded prompt, fixture metadata, prepared workspace path, task
 log paths, run metadata path when supplied, an optional harness-owned
 model-call JSONL path at
@@ -699,3 +702,7 @@ The generated pilot-viewer tests also require Node.js on PATH; they execute the
 emitted JavaScript with a fake DOM, without a browser or network. See the
 [tooling contracts](docs/benchmarks/product-offer-matching/index.md#archived-pricerunner-fixture-tooling)
 for fixture admission, recovery and methodology boundaries.
+
+`benchpack report` deduplicates input file identities and admits at most 100 runs,
+64 MiB of total `run.jsonl` bytes and 100,000 records. Split larger reports into
+smaller groups; existing per-run limits also apply.

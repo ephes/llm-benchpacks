@@ -7,11 +7,12 @@ import re
 import signal
 import stat
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from time import monotonic
+from time import monotonic, sleep
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
 from .safe_files import admitted_directory, atomic_write_at
@@ -73,7 +74,7 @@ class AgentSessionHarnessRequest:
         path = self.workspace_path(relative_path)
         try:
             with admitted_directory(path.parent) as directory:
-                # The proc-free reader opens relative to the admitted parent;
+                # Open relative to the admitted parent;
                 # no path component can be followed again after admission.
                 fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                              dir_fd=directory)
@@ -117,6 +118,10 @@ class AgentSessionHarnessRequest:
                                      dir_fd=directory)
                         try:
                             walk(fd, relative)
+                            current = os.stat(entry.name, dir_fd=directory, follow_symlinks=False)
+                            opened = os.fstat(fd)
+                            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                                raise OSError('inventory directory was exchanged')
                         finally:
                             os.close(fd)
                     elif not directories:
@@ -157,7 +162,7 @@ class AgentSessionHarnessRequest:
     def delete_workspace_file(self, relative_path: str) -> bool:
         root = Path(os.path.abspath(self.workspace))
         try:
-            path = _resolve_workspace_relative_path(relative_path, root)
+            _resolve_workspace_relative_path(relative_path, root)
             raw = _raw_workspace_relative_path(relative_path, root)
         except _PatchContractError as exc:
             raise TaskError(f'unsafe harness workspace path: {exc}') from exc
@@ -458,16 +463,58 @@ def _run_external_process_command(
         text=True,
         start_new_session=True,
     )
+    finished = False
     try:
-        stdout, stderr = process.communicate(timeout=timeout_s)
-        return (
-            _process_stream_to_text(stdout),
-            _process_stream_to_text(stderr),
-            False,
-        )
-    except subprocess.TimeoutExpired:
-        stdout, stderr = _stop_external_process_group(process, case_id)
-        return stdout, stderr, True
+        try:
+            stdout, stderr = process.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = _stop_external_process_group(process, case_id)
+            finished = True
+            return stdout, stderr, True
+        result = _process_stream_to_text(stdout), _process_stream_to_text(stderr), False
+        finished = True
+        return result
+    finally:
+        primary = None if finished else sys.exception()
+        try:
+            if not finished:
+                # communicate itself may be broken/interrupted. Reap without
+                # relying on it again, preserving the original exception.
+                try:
+                    _reap_external_process_group(process, case_id)
+                except BaseException as cleanup:
+                    if primary is None:
+                        raise
+                    primary.add_note(f'external harness cleanup failed: {cleanup}')
+        finally:
+            close_error = None
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except BaseException as cleanup:
+                        if primary is not None:
+                            primary.add_note(f'external harness stream close failed: {cleanup}')
+                        elif close_error is None:
+                            close_error = cleanup
+            if close_error is not None:
+                raise close_error
+
+
+def _reap_external_process_group(process, case_id):
+    """Bounded cleanup even when collection fails or the leader has exited."""
+    try:
+        _signal_external_process_group(process.pid, signal.SIGTERM, case_id)
+        # Keep the leader unreaped during grace so ownership remains attached
+        # until the final group signal, even if it exits before descendants.
+        sleep(_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
+    finally:
+        # start_new_session makes pid the owned pgid. Do not look it up via
+        # a leader that may already have exited while descendants survive.
+        try:
+            _signal_external_process_group(process.pid, signal.SIGKILL, case_id)
+        finally:
+            process.wait(timeout=_EXTERNAL_PROCESS_TIMEOUT_GRACE_S)
 
 
 def _stop_external_process_group(
@@ -476,28 +523,32 @@ def _stop_external_process_group(
 ) -> tuple[str, str]:
     """Terminate a timed-out external harness process group and drain output."""
 
+    pgid = process.pid
+    primary = None
     try:
-        pgid = os.getpgid(process.pid)
-    except ProcessLookupError:
-        return _communicate_after_external_timeout(process, case_id)
-    except OSError as exc:
-        raise TaskError(
-            f"could not inspect external subprocess harness process group for "
-            f"repo-task case {case_id!r}"
-        ) from exc
-
-    _signal_external_process_group(pgid, signal.SIGTERM, case_id)
-    try:
-        return _communicate_after_external_timeout(process, case_id)
-    except subprocess.TimeoutExpired:
-        _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+        _signal_external_process_group(pgid, signal.SIGTERM, case_id)
         try:
             return _communicate_after_external_timeout(process, case_id)
-        except subprocess.TimeoutExpired as exc:
-            raise TaskError(
-                f"could not stop external subprocess harness process group for "
-                f"repo-task case {case_id!r}"
-            ) from exc
+        except subprocess.TimeoutExpired:
+            _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+            try:
+                return _communicate_after_external_timeout(process, case_id)
+            except subprocess.TimeoutExpired as exc:
+                raise TaskError(
+                    f"could not stop external subprocess harness process group for "
+                    f"repo-task case {case_id!r}"
+                ) from exc
+    except BaseException as exc:
+        primary = exc
+        raise
+    finally:
+        # A descendant can close its inherited pipes yet ignore termination.
+        try:
+            _signal_external_process_group(pgid, signal.SIGKILL, case_id)
+        except BaseException as cleanup:
+            if primary is None:
+                raise
+            primary.add_note(f'external harness kill failed: {cleanup}')
 
 
 def _signal_external_process_group(
@@ -615,6 +666,7 @@ def _write_task_logs(
     """Write deterministic task stdout/stderr logs for one execution."""
 
     paths = task_artifact_paths(request.output_dir, request.case, request.repetition)
+    task_record(paths, request.output_dir)  # Admit containment before any mutation.
     published = []
     try:
         # Encode both streams before touching either destination.
@@ -674,6 +726,8 @@ def apply_unified_diff_to_workspace(
     be partially changed.
     """
 
+    deadline = None if timeout_s is None else monotonic() + timeout_s
+
     if not diff.strip():
         return (
             False,
@@ -685,8 +739,6 @@ def apply_unified_diff_to_workspace(
         _validate_patch_paths(diff, workspace)
     except _PatchContractError as exc:
         return False, "", f"Patch rejected: {exc}; workspace left unchanged.\n"
-
-    deadline = None if timeout_s is None else monotonic() + timeout_s
 
     def remaining():
         if deadline is None:
@@ -938,7 +990,10 @@ def _validate_workspace_relative_path(path: str, workspace_root: Path) -> None:
 
 def _resolve_workspace_relative_path(path: str, workspace_root: Path) -> Path:
     parts = _workspace_relative_parts(path)
-    candidate = (workspace_root / Path(*parts)).resolve(strict=False)
+    try:
+        candidate = (workspace_root / Path(*parts)).resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise _PatchContractError(f'could not resolve workspace path: {path}') from exc
     if not candidate.is_relative_to(workspace_root):
         raise _PatchContractError(f"path escapes workspace: {path}")
     return candidate

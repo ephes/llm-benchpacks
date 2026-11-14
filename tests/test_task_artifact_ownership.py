@@ -102,3 +102,18 @@ def test_context_reader_observes_complete_generations(tmp_path, monkeypatch):
     monkeypatch.setattr(os, 'replace', observe)
     write_external_agent_context(path, {'generation': 'new'})
     assert observations == [{'generation': 'old'}, {'generation': 'new'}]
+
+
+def test_task_artifact_escape_is_rejected_before_mutation(tmp_path):
+    from dataclasses import replace
+    out = tmp_path / 'output'
+    out.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    sentinel = outside / 'rep-001.stdout.log'
+    sentinel.write_text('keep')
+    case = replace(make_case(), id='../../outside')
+    with pytest.raises(tasks.TaskError):
+        tasks.write_noop_task_logs(out, case, 1)
+    assert sentinel.read_text() == 'keep'
+    assert not (outside / 'rep-001.stderr.log').exists()

@@ -11,6 +11,8 @@ from typing import Any
 
 from .compare import (
     MISSING,
+    MAX_RESULT_RUN_BYTES,
+    MAX_RESULT_RECORDS,
     ResultRun,
     cache_warnings,
     case_labels,
@@ -39,6 +41,9 @@ from .run_metadata import RunMetadataError, load_optional_run_metadata
 
 
 MAX_REPORT_SET_BYTES = 1024 * 1024
+MAX_REPORT_RUNS = 100
+MAX_REPORT_BYTES = MAX_RESULT_RUN_BYTES
+MAX_REPORT_RECORDS = MAX_RESULT_RECORDS
 
 
 class ReportError(ValueError):
@@ -155,10 +160,34 @@ def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
 
     if not result_dirs:
         raise ReportError("benchpack report requires at least one result directory")
+    runs = []
+    seen = set()
+    total_bytes = total_records = 0
     try:
-        return [load_result_run(path) for path in result_dirs]
-    except ValueError as exc:
-        raise ReportError(str(exc)) from exc
+        for path in result_dirs:
+            if not Path(path).is_dir():
+                raise ReportError(f'result input must be a directory: {path}')
+            if not (Path(path) / 'run.jsonl').is_file():
+                raise ReportError(f'missing run.jsonl in result directory: {path}')
+            canonical = (Path(path) / 'run.jsonl').resolve(strict=True)
+            info = canonical.stat()
+            identity = (info.st_dev, info.st_ino)
+            if identity in seen:
+                continue
+            if (len(runs) >= MAX_REPORT_RUNS or total_bytes >= MAX_REPORT_BYTES
+                    or total_records >= MAX_REPORT_RECORDS):
+                raise ReportError('report total run/byte/record limit exceeded')
+            run = load_result_run(
+                path, byte_limit=MAX_REPORT_BYTES - total_bytes,
+                record_limit=MAX_REPORT_RECORDS - total_records,
+            )
+            seen.add(identity)
+            total_bytes += run.source_bytes
+            total_records += len(run.records)
+            runs.append(run)
+        return runs
+    except (ValueError, OSError, RuntimeError) as exc:
+        raise ReportError(f'could not admit report inputs: {exc}') from exc
 
 
 def render_report(runs: list[ResultRun]) -> str:

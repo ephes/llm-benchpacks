@@ -13,3 +13,7 @@
   directories, reporting any streams already published when another fails.
 - Serialize external-agent context before effects and atomically publish each
   complete JSON generation, preserving the prior file on failure.
+- Deduplicate report inputs by canonical file identity and enforce report-wide
+  limits of 100 runs, 64 MiB of run bytes and 100,000 records.
+- Stop external harness process groups, reap leaders and close streams on every
+  exceptional exit while preserving interrupts and collection errors.

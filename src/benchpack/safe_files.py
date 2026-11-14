@@ -207,14 +207,16 @@ def atomic_write_at(directory: int, name: str, data: bytes) -> None:
                  0o600, dir_fd=directory)
     try:
         with os.fdopen(fd, 'wb') as stream:
-            stream.write(data)
+            if stream.write(data) != len(data):
+                raise OSError('short file write')
             stream.flush()
             if previous is not None:
                 os.fchmod(stream.fileno(), stat.S_IMODE(previous.st_mode))
             os.fsync(stream.fileno())
         os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
-    finally:
+    except BaseException:
         try:
             os.unlink(temporary, dir_fd=directory)
         except FileNotFoundError:
             pass
+        raise

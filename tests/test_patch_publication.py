@@ -8,7 +8,7 @@ import pytest
 from benchpack import tasks
 
 
-@pytest.mark.parametrize('failure', ['encoding', 'flush', 'replace'])
+@pytest.mark.parametrize('failure', ['encoding', 'write', 'flush', 'fsync', 'replace'])
 def test_replacement_failure_preserves_bytes_and_mode(tmp_path, monkeypatch, failure):
     path = tmp_path / 'source.py'
     path.write_bytes(b'old\n')
@@ -16,10 +16,27 @@ def test_replacement_failure_preserves_bytes_and_mode(tmp_path, monkeypatch, fai
     content = 'new\n'
     if failure == 'encoding':
         content = '\ud800'
+    elif failure in {'write', 'flush'}:
+        fdopen = os.fdopen
+        class FailingStream:
+            def __init__(self, *args):
+                self.stream = fdopen(*args)
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                self.stream.close()
+            def write(self, data):
+                if failure == 'write':
+                    self.stream.write(data[:2])
+                    raise OSError('partial write')
+                return self.stream.write(data)
+            def flush(self):
+                raise OSError('flush failed')
+        monkeypatch.setattr(os, 'fdopen', FailingStream)
     else:
         def fail(*args, **kwargs):
             raise OSError('synthetic publication failure')
-        monkeypatch.setattr(os, 'fsync' if failure == 'flush' else 'replace', fail)
+        monkeypatch.setattr(os, failure, fail)
     block = f'*** Begin File: source.py\n{content}\n*** End File\n'
     ok, _, error = tasks.apply_fenced_edit_to_workspace(block, tmp_path)
     assert not ok
@@ -60,3 +77,16 @@ def test_replacement_success_preserves_executable_mode(tmp_path):
     )[0]
     assert path.read_bytes() == b'new\n'
     assert stat.S_IMODE(path.stat().st_mode) == 0o751
+
+
+def test_successful_replacement_does_not_report_cleanup_failure(tmp_path, monkeypatch):
+    path = tmp_path / 'source'
+    path.write_text('old')
+    def fail(*args, **kwargs):
+        raise OSError('unlink unavailable')
+    monkeypatch.setattr(os, 'unlink', fail)
+    ok, _, _ = tasks.apply_fenced_edit_to_workspace(
+        '*** Begin File: source\nnew\n*** End File', tmp_path,
+    )
+    assert ok
+    assert path.read_text() == 'new\n'

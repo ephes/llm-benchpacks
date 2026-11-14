@@ -1806,3 +1806,17 @@ transaction: if the second stream fails, the error names already-published logs
 and no success record is returned. External-agent context JSON is serialized
 before filesystem effects and published from an owned sibling temporary. Readers
 see a complete old or new generation; failed writes preserve the previous file.
+
+Reports deduplicate `run.jsonl` inputs by canonical file identity (including
+symlink and hard-link aliases), retaining the first input's label and path.
+A report admits at most 100 unique runs, 64 MiB of actual JSONL bytes and 100,000
+records in total; per-run limits still apply. Remaining byte/record allowances
+are passed into the bounded reader, so over-budget inputs are rejected during
+loading rather than retained first. Split larger reports into separate groups.
+
+Exceptional external-harness exits, including `KeyboardInterrupt`, decoding and
+collection errors, terminate the owned process group, escalate to kill and reap
+the leader with bounded waits, then close captured streams. Cleanup preserves
+the original exception and attaches cleanup errors as notes. Descendants are
+signalled using the session's original process-group id even if its leader has
+already exited. The OS reaps orphaned descendants; the runner reaps its own child.

@@ -5369,3 +5369,9 @@ patch preflights and application to a single monotonic execution allowance.
 
 B23 rejects task-output link substitution, reports partial log publication, and
 atomically publishes serialized external-agent context generations.
+
+## 2026-11-14 — report admission and interrupt cleanup
+
+B24 extends per-run decoding limits with deduplicated report-wide totals and
+owns external-process cleanup across exceptional exits, preserving the primary
+interrupt/error and existing timeout task outcomes.
