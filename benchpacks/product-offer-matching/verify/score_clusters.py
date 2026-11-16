@@ -39,10 +39,18 @@ DRAIN_READS_PER_SAMPLE = 16
 CLEANUP_GRACE_S = 0.5
 
 
+_stop_signal: int | None = None
+_owned_runs = 0
+
+
 def _terminate(signum: int, _frame: object) -> None:
-    # Unwind through _run_command's cleanup: the candidate runs in its own
-    # session, so a group signal to the scorer does not reach it.
-    raise SystemExit(128 + signum)
+    # The candidate runs in its own session, so a group signal to the scorer
+    # does not reach it. During an owned run only record the request: the run
+    # loop stops and retires the candidate before _run_command exits.
+    global _stop_signal
+    _stop_signal = signum
+    if not _owned_runs:
+        raise SystemExit(128 + signum)
 
 
 def _rss_mb(pgid: int) -> float | None:
@@ -89,7 +97,27 @@ def _run_command(
     cwd: Path,
     timeout_s: float,
 ) -> dict[str, Any]:
+    global _owned_runs
+    _owned_runs += 1
+    try:
+        result = _run_owned(command, cwd=cwd, timeout_s=timeout_s)
+    finally:
+        _owned_runs -= 1
+    if _stop_signal is not None:
+        raise SystemExit(128 + _stop_signal)
+    return result
+
+
+def _run_owned(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_s: float,
+) -> dict[str, Any]:
     started = time.monotonic()
+    if _stop_signal is not None:
+        return {"ok": False, "phase": "spawn", "command": command,
+                "error": "scorer stopping", "duration_s": 0.0}
     try:
         process = subprocess.Popen(
             command, cwd=cwd, stdin=subprocess.DEVNULL,
@@ -114,6 +142,8 @@ def _run_command(
             selector.register(stream, selectors.EVENT_READ, index)
         deadline = started + timeout_s
         while process.poll() is None:
+            if _stop_signal is not None:
+                break
             if time.monotonic() >= deadline:
                 timed_out = True
                 break

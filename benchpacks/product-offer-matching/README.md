@@ -154,7 +154,9 @@ The cluster scorer drains stdout/stderr while the candidate runs and retains at
 most 64 KiB per stream. Each candidate runs in a new POSIX process group; the
 scorer kills remaining group members and reaps the leader on completion, timeout
 or interruption, with a bounded cleanup wait. SIGTERM or SIGHUP to the scorer
-(for example from the outer verifier timeout) unwinds through the same cleanup.
+(for example from the outer verifier timeout) records a stop request: a running
+candidate is retired through the same cleanup, then the scorer exits with
+status 128 + signal number.
 Each sample drains up to 1 MiB per output stream. This is lifecycle ownership, not
 a security sandbox; candidates must not detach from the owned group.
 

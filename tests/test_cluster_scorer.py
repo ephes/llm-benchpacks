@@ -131,6 +131,42 @@ s.main()
         proc.wait()
 
 
+@pytest.mark.parametrize('window', ['after_spawn', 'before_retire'])
+def test_signal_in_cleanup_windows_still_retires_candidate(scorer, tmp_path, monkeypatch, window):
+    leaders = []
+    real_spawn = scorer.subprocess.Popen
+    real_retire = scorer._retire
+    def spawn(*args, **kwargs):
+        process = real_spawn(*args, **kwargs)
+        leaders.append(process)
+        if window == 'after_spawn':
+            scorer._terminate(signal.SIGTERM, None)
+        return process
+    def retire(process):
+        if window == 'before_retire':
+            scorer._terminate(signal.SIGTERM, None)
+        real_retire(process)
+    monkeypatch.setattr(scorer.subprocess, 'Popen', spawn)
+    monkeypatch.setattr(scorer, '_retire', retire)
+    try:
+        with pytest.raises(SystemExit) as stopped:
+            scorer._run_command([sys.executable, '-c', 'import time; time.sleep(30)'],
+                                cwd=tmp_path, timeout_s=0.2 if window == 'before_retire' else 30)
+        assert stopped.value.code == 128 + signal.SIGTERM
+        assert leaders[0].poll() is not None
+    finally:
+        for leader in leaders:
+            if leader.poll() is None:
+                leader.kill()
+                leader.wait()
+
+
+def test_signal_outside_owned_run_exits_immediately(scorer):
+    with pytest.raises(SystemExit) as stopped:
+        scorer._terminate(signal.SIGHUP, None)
+    assert stopped.value.code == 128 + signal.SIGHUP
+
+
 def test_memory_includes_owned_worker(scorer, tmp_path):
     try:
         psutil.pids()
