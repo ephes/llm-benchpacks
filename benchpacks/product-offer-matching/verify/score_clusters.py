@@ -3,13 +3,23 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import io
 import math
+import os
+import selectors
+import signal
+import stat
 import subprocess
 import sys
 import time
+import tempfile
+import uuid
 from collections import Counter, defaultdict
 from pathlib import Path
+from itertools import groupby
 from typing import Any
+
+import psutil
 
 
 BCUBED_F1_MIN = 0.70
@@ -22,26 +32,63 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _rss_mb(pid: int) -> float | None:
+OUTPUT_TAIL_BYTES = 65536
+# Drain up to 1 MiB per stream between RSS samples, so a full process scan does
+# not throttle verbose candidates while deadline checks still run regularly.
+DRAIN_READS_PER_SAMPLE = 16
+CLEANUP_GRACE_S = 0.5
+
+
+_stop_signal: int | None = None
+_owned_runs = 0
+
+
+def _terminate(signum: int, _frame: object) -> None:
+    # The candidate runs in its own session, so a group signal to the scorer
+    # does not reach it. During an owned run only record the request: the run
+    # loop stops and retires the candidate before _run_command exits.
+    global _stop_signal
+    _stop_signal = signum
+    if not _owned_runs:
+        raise SystemExit(128 + signum)
+
+
+def _rss_mb(pgid: int) -> float | None:
+    """Sample the sum of resident bytes in the owned POSIX process group."""
+    total = 0
+    observed = False
     try:
-        completed = subprocess.run(
-            ["ps", "-o", "rss=", "-p", str(pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=1.0,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        for process in psutil.process_iter():
+            try:
+                if os.getpgid(process.pid) != pgid:
+                    continue
+            except ProcessLookupError:
+                continue
+            # A member exiting mid-sample is a normal exit, not missing accounting
+            # (ZombieProcess is a NoSuchProcess); AccessDenied still fails the sample.
+            try:
+                if process.status() == psutil.STATUS_ZOMBIE:
+                    continue
+                total += process.memory_info().rss
+                observed = True
+            except psutil.NoSuchProcess:
+                continue
+    except (OSError, psutil.Error):
         return None
-    if completed.returncode != 0:
-        return None
-    text = completed.stdout.strip()
-    if not text:
-        return None
+    return total / (1024 * 1024) if observed else None
+
+
+def _retire(process: subprocess.Popen) -> None:
+    # Kill the group even after the leader exits: descendants may own pipes or
+    # have redirected them. Never wait for descendant EOF during cleanup.
     try:
-        return int(text.splitlines()[-1].strip()) / 1024.0
-    except ValueError:
-        return None
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        if process.poll() is None:
+            raise
+    process.wait(timeout=CLEANUP_GRACE_S)
 
 
 def _run_command(
@@ -50,59 +97,110 @@ def _run_command(
     cwd: Path,
     timeout_s: float,
 ) -> dict[str, Any]:
+    global _owned_runs
+    _owned_runs += 1
+    try:
+        result = _run_owned(command, cwd=cwd, timeout_s=timeout_s)
+    finally:
+        _owned_runs -= 1
+    if _stop_signal is not None:
+        raise SystemExit(128 + _stop_signal)
+    return result
+
+
+def _run_owned(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_s: float,
+) -> dict[str, Any]:
     started = time.monotonic()
+    if _stop_signal is not None:
+        return {"ok": False, "phase": "spawn", "command": command,
+                "error": "scorer stopping", "duration_s": 0.0}
     try:
         process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            command, cwd=cwd, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True, bufsize=0,
         )
     except OSError as exc:
-        return {
-            "ok": False,
-            "phase": "spawn",
-            "command": command,
-            "error": str(exc),
-            "duration_s": time.monotonic() - started,
-        }
+        return {"ok": False, "phase": "spawn", "command": command,
+                "error": str(exc), "duration_s": time.monotonic() - started}
 
-    peak_rss_mb = 0.0
+    tails = [bytearray(), bytearray()]
+    peak = None
+    samples = 0
+    memory_complete = True
     timed_out = False
-    while process.poll() is None:
-        rss = _rss_mb(process.pid)
-        if rss is not None:
-            peak_rss_mb = max(peak_rss_mb, rss)
-        if time.monotonic() - started > timeout_s:
-            timed_out = True
-            process.kill()
-            break
-        time.sleep(0.02)
+    cleanup_error = None
+    selector = None
+    try:
+        selector = selectors.DefaultSelector()
+        for index, stream in enumerate((process.stdout, process.stderr)):
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, index)
+        deadline = started + timeout_s
+        while process.poll() is None:
+            if _stop_signal is not None:
+                break
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+            rss = _rss_mb(process.pid)
+            if rss is None:
+                # The leader exiting inside the sampling window ends the run; only
+                # an unobservable group that is still running is missing evidence.
+                if process.poll() is not None:
+                    break
+                memory_complete = False
+            else:
+                samples += 1
+                peak = max(peak or 0.0, rss)
+            for key, _ in selector.select(max(0, min(0.02, deadline - time.monotonic()))):
+                for _ in range(DRAIN_READS_PER_SAMPLE):
+                    try:
+                        chunk = os.read(key.fd, OUTPUT_TAIL_BYTES)
+                    except BlockingIOError:
+                        break
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        break
+                    tails[key.data].extend(chunk)
+                    del tails[key.data][:-OUTPUT_TAIL_BYTES]
+    finally:
+        # Cleanup must preserve KeyboardInterrupt/read errors and has a fixed
+        # wait budget; success still retires any remaining group members.
+        try:
+            _retire(process)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            cleanup_error = type(exc).__name__
+        if selector is not None:
+            # Read at most one retained tail after retirement; an escaped pipe
+            # holder cannot force an unbounded EOF wait here.
+            for key in list(selector.get_map().values()):
+                try:
+                    chunk = os.read(key.fd, OUTPUT_TAIL_BYTES)
+                    tails[key.data].extend(chunk)
+                    del tails[key.data][:-OUTPUT_TAIL_BYTES]
+                except OSError:
+                    pass
+            selector.close()
+        process.stdout.close()
+        process.stderr.close()
 
-    stdout, stderr = process.communicate()
-    duration_s = time.monotonic() - started
-    if timed_out:
-        return {
-            "ok": False,
-            "phase": "run",
-            "command": command,
-            "timed_out": True,
-            "timeout_s": timeout_s,
-            "stdout": stdout,
-            "stderr": stderr,
-            "duration_s": duration_s,
-            "peak_rss_mb": round(peak_rss_mb, 3),
-        }
+    complete = memory_complete and samples > 0 and peak is not None and peak > 0
     return {
-        "ok": process.returncode == 0,
-        "phase": "run",
-        "command": command,
-        "exit_code": process.returncode,
-        "stdout": stdout,
-        "stderr": stderr,
-        "duration_s": duration_s,
-        "peak_rss_mb": round(peak_rss_mb, 3),
+        "ok": process.returncode == 0 and not timed_out and cleanup_error is None,
+        "phase": "run", "command": command, "exit_code": process.returncode,
+        "timed_out": timed_out, "timeout_s": timeout_s,
+        "stdout": tails[0].decode("utf-8", errors="replace"),
+        "stderr": tails[1].decode("utf-8", errors="replace"),
+        "duration_s": time.monotonic() - started,
+        "peak_rss_mb": round(peak, 3) if complete else None,
+        "memory_scope": "owned_process_group_sampled_rss",
+        "memory_complete": complete, "memory_samples": samples,
+        "cleanup_error": cleanup_error,
     }
 
 
@@ -165,75 +263,142 @@ def _run_program(workspace: Path, case_id: str, output_root: Path) -> dict[str, 
     return result
 
 
-def _load_clusters(path: Path) -> tuple[dict[str, str], list[str]]:
-    errors: list[str] = []
-    if not path.is_file():
-        return {}, ["clusters.csv was not created"]
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames != ["offer_id", "cluster_id"]:
-            errors.append("clusters.csv header must be exactly offer_id,cluster_id")
-        clusters: dict[str, str] = {}
-        for index, row in enumerate(reader, start=2):
-            offer_id = (row.get("offer_id") or "").strip()
-            cluster_id = (row.get("cluster_id") or "").strip()
-            if not offer_id:
-                errors.append(f"row {index} has blank offer_id")
-                continue
-            if offer_id in clusters:
-                errors.append(f"duplicate prediction for offer_id {offer_id}")
-                continue
-            if not cluster_id:
-                errors.append(f"row {index} has blank cluster_id")
-                continue
-            clusters[offer_id] = cluster_id
+PREDICTION_FILE_BYTES = 16 * 1024 * 1024
+METRICS_FILE_BYTES = 64 * 1024
+EVIDENCE_TOTAL_BYTES = 32 * 1024 * 1024
+PREDICTION_ROWS = 100_000
+EVIDENCE_TOTAL_ROWS = 200_000
+MAX_ERRORS = 20
+
+
+class _EvidenceBudget:
+    def __init__(self):
+        self.bytes = 0
+        self.rows = 0
+
+
+def _read_evidence(path: Path, budget: _EvidenceBudget, limit: int) -> str:
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("expected regular file")
+        available = min(limit, EVIDENCE_TOTAL_BYTES - budget.bytes)
+        if before.st_size > available:
+            raise ValueError("evidence byte budget exceeded")
+        data = bytearray()
+        while len(data) <= available:
+            chunk = os.read(fd, min(65536, available + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+        budget.bytes += len(data)
+        after = os.fstat(fd)
+        identity = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+        if len(data) > available or len(data) != before.st_size or identity(before) != identity(after):
+            raise ValueError("evidence changed or exceeded budget")
+        return data.decode("utf-8")
+    finally:
+        os.close(fd)
+
+
+def _prediction_csv(path: Path, fields: list[str], budget: _EvidenceBudget):
+    reader = csv.DictReader(io.StringIO(_read_evidence(path, budget, PREDICTION_FILE_BYTES), newline=""))
+    if reader.fieldnames != fields:
+        raise ValueError("unexpected CSV header")
+    for index, row in enumerate(reader, start=1):
+        budget.rows += 1
+        if index > PREDICTION_ROWS or budget.rows > EVIDENCE_TOTAL_ROWS:
+            raise ValueError("evidence row budget exceeded")
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError("unexpected CSV row width")
+        yield row
+
+
+def _load_clusters(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, str], list[str]]:
+    clusters = {}
+    errors = []
+    try:
+        for index, row in enumerate(_prediction_csv(path, ["offer_id", "cluster_id"], budget or _EvidenceBudget()), 2):
+            offer_id, cluster_id = row["offer_id"].strip(), row["cluster_id"].strip()
+            if not offer_id or not cluster_id:
+                errors.append(f"clusters row {index} has blank id")
+            elif offer_id in clusters:
+                errors.append(f"clusters row {index} duplicates offer_id")
+            else:
+                clusters[offer_id] = cluster_id
+            if len(errors) >= MAX_ERRORS:
+                break
+    except (OSError, ValueError, csv.Error) as exc:
+        return {}, [f"clusters.csv evidence refused ({type(exc).__name__})"]
     return clusters, errors
 
 
-def _load_pair_scores(path: Path) -> tuple[dict[str, float], list[str]]:
-    errors: list[str] = []
-    if not path.is_file():
-        return {}, ["pair_scores.csv was not created"]
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames != ["pair_id", "score"]:
-            errors.append("pair_scores.csv header must be exactly pair_id,score")
-        scores: dict[str, float] = {}
-        for index, row in enumerate(reader, start=2):
-            pair_id = (row.get("pair_id") or "").strip()
-            raw_score = (row.get("score") or "").strip()
-            if not pair_id:
-                errors.append(f"scores row {index} has blank pair_id")
-                continue
-            if pair_id in scores:
-                errors.append(f"duplicate score for pair_id {pair_id}")
-                continue
+def _load_pair_scores(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, float], list[str]]:
+    scores = {}
+    errors = []
+    try:
+        for index, row in enumerate(_prediction_csv(path, ["pair_id", "score"], budget or _EvidenceBudget()), 2):
+            pair_id = row["pair_id"].strip()
             try:
-                score = float(raw_score)
+                score = float(row["score"])
+                valid = math.isfinite(score)
             except ValueError:
-                errors.append(f"scores row {index} has invalid score {raw_score!r}")
-                continue
-            if not math.isfinite(score):
-                errors.append(f"scores row {index} has non-finite score {raw_score!r}")
-                continue
-            scores[pair_id] = score
+                valid = False
+            if not pair_id or not valid:
+                errors.append(f"scores row {index} has invalid id/score")
+            elif pair_id in scores:
+                errors.append(f"scores row {index} duplicates pair_id")
+            else:
+                scores[pair_id] = score
+            if len(errors) >= MAX_ERRORS:
+                break
+    except (OSError, ValueError, csv.Error) as exc:
+        return {}, [f"pair_scores.csv evidence refused ({type(exc).__name__})"]
     return scores, errors
 
 
-def _load_program_metrics(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
-    if not path.is_file():
-        return None, []
+def _unique_members(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate metrics member")
+        result[key] = value
+    return result
+
+
+def _finite_float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("nonfinite metrics number")
+    return value
+
+
+def _invalid_constant(text):
+    raise ValueError("nonfinite metrics constant")
+
+
+def _load_program_metrics(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, Any] | None, list[str]]:
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, [f"metrics.json could not be parsed: {exc}"]
-    if not isinstance(loaded, dict):
-        return None, ["metrics.json must contain an object"]
-    allowed: dict[str, Any] = {}
-    for key, value in loaded.items():
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            allowed[str(key)] = value
-    return allowed, []
+        raw = _read_evidence(path, budget or _EvidenceBudget(), METRICS_FILE_BYTES)
+        loaded = json.loads(raw, object_pairs_hook=_unique_members,
+                            parse_float=_finite_float, parse_constant=_invalid_constant)
+        if not isinstance(loaded, dict) or len(loaded) > 128:
+            raise ValueError("expected bounded metrics object")
+        allowed = {}
+        for key, value in loaded.items():
+            if len(key.encode("utf-8")) > 128:
+                raise ValueError("metrics key too long")
+            if isinstance(value, str) and len(value.encode("utf-8")) > 4096:
+                raise ValueError("metrics string too long")
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                allowed[key] = value
+        json.dumps(allowed, allow_nan=False)
+        return allowed, []
+    except FileNotFoundError:
+        return None, []
+    except (OSError, ValueError, RecursionError, OverflowError, MemoryError) as exc:
+        return None, [f"metrics.json evidence refused ({type(exc).__name__})"]
 
 
 def _validate_expected_ids(
@@ -334,8 +499,10 @@ def _eval_cluster_operating_point(
 ) -> dict[str, Any]:
     predictions = {
         row["pair_id"]: int(
-            predicted_clusters.get(row["offer_id_left"])
-            == predicted_clusters.get(row["offer_id_right"])
+            row["offer_id_left"] in predicted_clusters
+            and row["offer_id_right"] in predicted_clusters
+            and predicted_clusters[row["offer_id_left"]]
+            == predicted_clusters[row["offer_id_right"]]
         )
         for row in eval_pairs
     }
@@ -396,34 +563,35 @@ def _precision_recall_curve(
     if not scored_ids:
         return [], {"average_precision": 0.0, "points": 0}, errors
 
-    thresholds = sorted({scores[pair_id] for pair_id in scored_ids}, reverse=True)
-    curve: list[dict[str, Any]] = []
-    for threshold in thresholds:
-        predictions = {
-            pair_id: 1 if scores[pair_id] >= threshold else 0
-            for pair_id in scored_ids
-        }
-        curve.append(
-            {
-                "threshold": threshold,
-                **_binary_metrics(
-                    expected_ids=scored_ids,
-                    labels=labels,
-                    predictions=predictions,
-                ),
-            }
-        )
-
+    ordered = sorted(scored_ids, key=scores.__getitem__, reverse=True)
     total_pos = sum(labels[pair_id] for pair_id in scored_ids)
-    tp = 0
-    seen = 0
-    precision_sum = 0.0
-    for pair_id in sorted(scored_ids, key=lambda item: scores[item], reverse=True):
-        seen += 1
-        if labels[pair_id] == 1:
-            tp += 1
-            precision_sum += tp / seen
-    average_precision = precision_sum / total_pos if total_pos else 0.0
+    total_neg = len(scored_ids) - total_pos
+    tp = fp = 0
+    average_precision = 0.0
+    curve: list[dict[str, Any]] = []
+    for threshold, group in groupby(ordered, key=scores.__getitem__):
+        previous_tp = tp
+        for pair_id in group:
+            if labels[pair_id] == 1:
+                tp += 1
+            else:
+                fp += 1
+        fn = total_pos - tp
+        tn = total_neg - fp
+        precision = tp / (tp + fp)
+        recall = tp / total_pos if total_pos else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        curve.append({
+            "threshold": threshold, "precision": round(precision, 6),
+            "recall": round(recall, 6), "f1": round(f1, 6),
+            "accuracy": round((tp + tn) / len(scored_ids), 6),
+            "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+            "positive_prevalence": round(total_pos / len(scored_ids), 6),
+        })
+        # Noninterpolated AP: each entire tie group contributes its recall
+        # increment times precision at the end of that threshold group.
+        if total_pos:
+            average_precision += (tp - previous_tp) / total_pos * precision
     best_f1 = max((row["f1"] for row in curve), default=0.0)
     best_rows = [row for row in curve if row["f1"] == best_f1]
     best_row = best_rows[0] if best_rows else {}
@@ -467,6 +635,35 @@ def _write_pr_curve(path: Path, curve: list[dict[str, Any]]) -> None:
             )
 
 
+def _publish_result(output_path: Path, payload: dict[str, Any], curve) -> None:
+    """Publish one immutable curve generation, then its atomic JSON reference.
+
+    Prior curves remain valid for readers holding an older result. Concurrent
+    publishers use unique curve names; the final JSON replacement is the commit.
+    """
+    generation = output_path.with_name(f"{output_path.stem}.{uuid.uuid4().hex}.pr-curve.csv")
+    if curve is not None:
+        payload["pr_curve"]["path"] = str(generation)
+    # Finish strict serialization before touching any published artifact.
+    serialized = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    with tempfile.TemporaryDirectory(prefix=".cluster-result-", dir=output_path.parent) as directory:
+        stage = Path(directory)
+        if curve is not None:
+            _write_pr_curve(stage / "curve.csv", curve)
+        (stage / "result.json").write_text(serialized, encoding="utf-8")
+        if curve is not None:
+            os.replace(stage / "curve.csv", generation)
+        try:
+            os.replace(stage / "result.json", output_path)
+        except BaseException:
+            if curve is not None:
+                try:
+                    generation.unlink()
+                except OSError:
+                    pass  # An unreferenced complete curve is safe to retain.
+            raise
+
+
 def _combined_score(
     *,
     bcubed: dict[str, Any],
@@ -478,7 +675,9 @@ def _combined_score(
     pairwise_f1 = float(pairwise.get("f1") or 0.0)
     average_precision = float(pr_curve.get("average_precision") or 0.0)
     offers_per_second = float(system_metrics.get("offers_per_second") or 0.0)
-    peak_rss_mb = float(system_metrics.get("peak_rss_mb") or 0.0)
+    if not system_metrics.get("memory_complete") or system_metrics.get("peak_rss_mb") is None:
+        return {"value": None, "unavailable_reason": "incomplete owned-process memory evidence"}
+    peak_rss_mb = float(system_metrics["peak_rss_mb"])
     throughput_norm = min(1.0, max(0.0, offers_per_second / 10_000.0))
     memory_norm = min(1.0, 1024.0 / peak_rss_mb) if peak_rss_mb > 0 else 0.0
     value = 100.0 * (
@@ -506,6 +705,8 @@ def _combined_score(
 
 
 def main() -> int:
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, _terminate)
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--case", required=True)
@@ -540,6 +741,7 @@ def main() -> int:
         "checks": [],
     }
 
+    curve = None
     try:
         test_rows = _read_csv(test_path)
         eval_pairs = _read_csv(eval_pairs_path)
@@ -557,16 +759,41 @@ def main() -> int:
             for key, value in run_result.items()
             if key not in {"stdout", "stderr"}
         }
+        system_metrics = {
+            "test_offers": len(expected_offer_ids),
+            "eval_pairs": len(expected_pair_ids),
+            "program_duration_s": round(
+                float(run_result.get("duration_s", 0.0)), 6
+            ),
+            "offers_per_second": round(
+                len(expected_offer_ids) / float(run_result.get("duration_s", 1.0)),
+                6,
+            )
+            if float(run_result.get("duration_s", 0.0)) > 0
+            else None,
+            "eval_pairs_per_second": round(
+                len(expected_pair_ids) / float(run_result.get("duration_s", 1.0)),
+                6,
+            )
+            if float(run_result.get("duration_s", 0.0)) > 0
+            else None,
+            "peak_rss_mb": run_result.get("peak_rss_mb"),
+            "memory_scope": run_result.get("memory_scope"),
+            "memory_complete": run_result.get("memory_complete", False),
+            "memory_samples": run_result.get("memory_samples", 0),
+        }
+        payload["system_metrics"] = system_metrics
         if not run_result.get("ok"):
             payload["error"] = "program failed"
             payload["program_stdout"] = run_result.get("stdout", "")[-2000:]
             payload["program_stderr"] = run_result.get("stderr", "")[-2000:]
             payload["passed"] = False
         else:
-            predicted_clusters, cluster_errors = _load_clusters(workspace / "clusters.csv")
-            pair_scores, score_errors = _load_pair_scores(workspace / "pair_scores.csv")
+            budget = _EvidenceBudget()
+            predicted_clusters, cluster_errors = _load_clusters(workspace / "clusters.csv", budget)
+            pair_scores, score_errors = _load_pair_scores(workspace / "pair_scores.csv", budget)
             program_metrics, metric_errors = _load_program_metrics(
-                workspace / "metrics.json"
+                workspace / "metrics.json", budget
             )
             errors = (
                 cluster_errors
@@ -578,6 +805,16 @@ def main() -> int:
                     output_name="clusters.csv",
                 )
             )
+            errors += _validate_expected_ids(
+                expected_ids=expected_pair_ids, actual_ids=set(pair_scores),
+                output_name="pair_scores.csv",
+            )
+            payload["prediction_errors"] = errors
+            if errors:
+                payload["metrics"] = None
+                payload["pr_curve"] = None
+                payload["combined_score"] = {"value": None, "unavailable_reason": "invalid prediction evidence"}
+                raise ValueError("invalid prediction evidence")
             bcubed = _bcubed_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
@@ -598,29 +835,7 @@ def main() -> int:
                 labels=pair_labels,
                 scores=pair_scores,
             )
-            pr_curve_path = output_path.with_suffix(".pr-curve.csv")
-            _write_pr_curve(pr_curve_path, curve)
             errors += curve_errors
-            system_metrics = {
-                "test_offers": len(expected_offer_ids),
-                "eval_pairs": len(expected_pair_ids),
-                "program_duration_s": round(
-                    float(run_result.get("duration_s", 0.0)), 6
-                ),
-                "offers_per_second": round(
-                    len(expected_offer_ids) / float(run_result.get("duration_s", 1.0)),
-                    6,
-                )
-                if float(run_result.get("duration_s", 0.0)) > 0
-                else None,
-                "eval_pairs_per_second": round(
-                    len(expected_pair_ids) / float(run_result.get("duration_s", 1.0)),
-                    6,
-                )
-                if float(run_result.get("duration_s", 0.0)) > 0
-                else None,
-                "peak_rss_mb": run_result.get("peak_rss_mb"),
-            }
             payload["metrics"] = {
                 "bcubed": bcubed,
                 "pairwise_cluster": pairwise,
@@ -631,7 +846,6 @@ def main() -> int:
                 payload["program_metrics"] = program_metrics
             payload["pr_curve"] = {
                 **curve_summary,
-                "path": str(pr_curve_path),
                 "score_file": "pair_scores.csv",
             }
             payload["combined_score"] = _combined_score(
@@ -652,10 +866,7 @@ def main() -> int:
         payload["error"] = str(exc)
         payload["passed"] = False
 
-    output_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _publish_result(output_path, payload, curve)
     return 0 if payload["passed"] else 1
 
 

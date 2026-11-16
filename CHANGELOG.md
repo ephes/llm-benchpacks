@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Sample Billiger positive pairs without quadratic pools; stage and validate all
+  fixture outputs, serialize writers, and preserve recovery data on rollback failure.
+
+- Withhold quality scores for invalid cluster evidence and publish each result
+  atomically with its own complete immutable PR-curve generation.
+
+- Build cluster PR curves in one sorted sweep and compute average precision
+  over whole tied-score groups, independent of CSV order.
+
+- Bound cluster prediction/metrics reads through no-follow regular descriptors;
+  refuse duplicate/nonfinite metrics JSON and oversized scalar extensions.
+
+- Drain clusterer output with bounded tails, retire owned process groups on every
+  exit, and measure sampled group RSS with explicit unavailable memory evidence;
+  members or the leader exiting during a sample do not count as failed evidence.
+  SIGTERM/SIGHUP to the scorer retires the candidate session before exiting.
+
 - Reject ambiguous/nonfinite runtime metadata before execution, including nested
   extension values and oversized integer decoder failures.
 - Refuse redirected reporter artifacts and exchanged output directories after

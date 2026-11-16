@@ -12,6 +12,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
+import os
+import fcntl
+import stat
+import shutil
+import tempfile
+from bisect import bisect_right
+from contextlib import ExitStack
 import json
 import random
 import re
@@ -154,13 +162,32 @@ def sample_eval_pairs(
         by_bc[(r["brand"], r["category_label"])].append(r)
         by_cat[r["category_label"]].append(r)
 
-    pos_pool: list[tuple[dict, dict]] = []
+    # Sample uniformly without replacement over compact cluster pair counts.
+    # Unrank each selected index in the lexicographic upper triangle.
+    groups = []
+    ends = []
+    total = 0
     for members in by_cluster.values():
-        for i in range(len(members)):
-            for j in range(i + 1, len(members)):
-                pos_pool.append((members[i], members[j]))
-    rng.shuffle(pos_pool)
-    positives = pos_pool[:n_pos]
+        count = len(members) * (len(members) - 1) // 2
+        if count:
+            groups.append(members)
+            total += count
+            ends.append(total)
+    positives = []
+    for rank in rng.sample(range(total), min(max(n_pos, 0), total)):
+        group = bisect_right(ends, rank)
+        local = rank - (ends[group - 1] if group else 0)
+        members = groups[group]
+        n = len(members)
+        lo, hi = 0, n - 1
+        while lo + 1 < hi:
+            mid = (lo + hi) // 2
+            if mid * (2 * n - mid - 1) // 2 <= local:
+                lo = mid
+            else:
+                hi = mid
+        offset = local - lo * (2 * n - lo - 1) // 2
+        positives.append((members[lo], members[lo + 1 + offset]))
 
     seen: set[tuple[str, str]] = set()
 
@@ -219,6 +246,78 @@ def write_fixture_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> No
         writer.writerows(rows)
 
 
+def _publish_fixture(files: list[tuple[Path, bytes]]) -> None:
+    """Serialize writers, stage all bytes, and compensate a failed publication.
+
+    Locks stay named after exit. Stages live on each destination filesystem;
+    rollback failures retain all backups and a manifest for manual recovery.
+    Readers should consume a finished build, not read while it is publishing.
+    """
+    files = [(target.parent.resolve() / target.name, data) for target, data in files]
+    if len({target for target, _ in files}) != len(files):
+        raise ValueError("duplicate fixture destination")
+    parents = sorted({target.parent for target, _ in files})
+    stages = {}
+    published = []
+    keep_recovery = False
+    with ExitStack() as locks:
+        for parent in parents:
+            parent.mkdir(parents=True, exist_ok=True)
+            lock_path = parent / ".billiger-publication.lock"
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            locks.callback(os.close, fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ValueError("invalid fixture publication lock")
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            named = lock_path.lstat()
+            if (info.st_dev, info.st_ino) != (named.st_dev, named.st_ino):
+                raise ValueError("fixture publication lock changed")
+        try:
+            for parent in parents:
+                stages[parent] = Path(tempfile.mkdtemp(prefix=".billiger-stage-", dir=parent))
+            manifest = []
+            for index, (target, data) in enumerate(files):
+                stage = stages[target.parent]
+                new, old = stage / f"new-{index}", stage / f"old-{index}"
+                new.write_bytes(data)
+                if new.read_bytes() != data:
+                    raise ValueError("staged fixture bytes changed")
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise ValueError("fixture target must be regular")
+                existed = target.exists()
+                if existed:
+                    shutil.copy2(target, old)
+                manifest.append({"target": str(target), "existed": existed,
+                                 "backup": str(old), "staged": str(new)})
+            for stage in stages.values():
+                (stage / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            try:
+                for index, (target, _) in enumerate(files):
+                    os.replace(stages[target.parent] / f"new-{index}", target)
+                    published.append((index, target))
+            except BaseException:
+                failed = False
+                for index, target in reversed(published):
+                    try:
+                        old = stages[target.parent] / f"old-{index}"
+                        if old.exists():
+                            os.replace(old, target)
+                        else:
+                            target.unlink()
+                    except OSError:
+                        failed = True
+                if failed:
+                    keep_recovery = True
+                    locations = ", ".join(str(stage) for stage in stages.values())
+                    raise RuntimeError(f"fixture rollback failed; recovery retained at {locations}")
+                raise
+        finally:
+            if not keep_recovery:
+                for stage in stages.values():
+                    shutil.rmtree(stage)
+
+
 def build(in_path: Path, data_dir: Path, verify_dir: Path, train_fraction: float,
           n_pos: int, n_hard_neg: int, n_easy_neg: int, seed: int = SEED) -> dict:
     rng = random.Random(seed)
@@ -237,16 +336,6 @@ def build(in_path: Path, data_dir: Path, verify_dir: Path, train_fraction: float
 
     pair_rows, label_rows = sample_eval_pairs(test, n_pos, n_hard_neg, n_easy_neg, rng)
 
-    write_fixture_csv(data_dir / "train_offers.csv", train, TRAIN_FIELDS)
-    write_fixture_csv(data_dir / "test_offers.csv", test, TEST_FIELDS)
-    write_fixture_csv(data_dir / "eval_pairs.csv", pair_rows,
-                      ["pair_id", "offer_id_left", "offer_id_right"])
-    write_fixture_csv(verify_dir / "hidden_test_clusters.csv",
-                      [{"offer_id": r["offer_id"], "cluster_id": r["cluster_id"]} for r in test],
-                      ["offer_id", "cluster_id"])
-    write_fixture_csv(verify_dir / "hidden_eval_pair_labels.csv", label_rows,
-                      ["pair_id", "label"])
-
     report.update({
         "train_offers": len(train), "test_offers": len(test),
         "train_clusters": len(train_clusters), "test_clusters": len(test_clusters),
@@ -255,9 +344,27 @@ def build(in_path: Path, data_dir: Path, verify_dir: Path, train_fraction: float
         "eval_neg": sum(1 for r in label_rows if r["label"] == "0"),
         "seed": seed, "train_fraction": train_fraction,
     })
-    data_dir.parent.mkdir(parents=True, exist_ok=True)
-    (data_dir.parent / "build-report.json").write_text(json.dumps(report, indent=2) + "\n",
-                                                       encoding="utf-8")
+    specs = [
+        (data_dir / "train_offers.csv", train, TRAIN_FIELDS),
+        (data_dir / "test_offers.csv", test, TEST_FIELDS),
+        (data_dir / "eval_pairs.csv", pair_rows, ["pair_id", "offer_id_left", "offer_id_right"]),
+        (verify_dir / "hidden_test_clusters.csv", test, ["offer_id", "cluster_id"]),
+        (verify_dir / "hidden_eval_pair_labels.csv", label_rows, ["pair_id", "label"]),
+    ]
+    files = []
+    for target, rows, fields in specs:
+        text = io.StringIO(newline="")
+        writer = csv.DictWriter(text, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        encoded = text.getvalue().encode("utf-8")
+        projected = [{key: row[key] for key in fields} for row in rows]
+        if list(csv.DictReader(io.StringIO(encoded.decode("utf-8")))) != projected:
+            raise ValueError("fixture serialization validation failed")
+        files.append((target, encoded))
+    files.append((data_dir.parent / "build-report.json",
+                  (json.dumps(report, indent=2, allow_nan=False) + "\n").encode("utf-8")))
+    _publish_fixture(files)
     return report
 
 

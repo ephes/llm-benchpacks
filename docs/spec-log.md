@@ -5409,3 +5409,30 @@ atomically publishes serialized external-agent context generations.
 B24 extends per-run decoding limits with deduplicated report-wide totals and
 owns external-process cleanup across exceptional exits, preserving the primary
 interrupt/error and existing timeout task outcomes.
+
+## 2026-11-16 — Product-offer execution evidence (B07)
+
+Drain candidate pipes with bounded retained output, retire owned process groups
+on every exit, and identify sampled group RSS explicitly. Incomplete memory
+evidence leaves the combined score unavailable. No fixture/version changes.
+
+## 2026-11-16 — Candidate evidence admission (B08)
+
+Admit CSV and optional metrics through bounded regular descriptors. Share byte
+and row budgets across the run and reject ambiguous/nonfinite metrics JSON.
+
+## 2026-11-16 — PR work and tied-score AP (B09)
+
+Replace repeated full sweeps with one sorted threshold sweep. Define AP over
+whole tied-score groups, independent of expected-ID order; history unchanged.
+
+## 2026-11-16 — Quality admission and coherent results (B10)
+
+Reject invalid predictions before quality work, retain measured execution data,
+and atomically publish JSON referencing an immutable staged curve generation.
+
+## 2026-11-16 — Bounded Billiger sampling and fixture publication (B11)
+
+Sample positive-pair indices from compact counts, preserving uniform eligibility
+and new-algorithm seed reproducibility. Existing fixtures remain unchanged. Stage
+and validate all six outputs under cooperating writer locks; compensate failures.

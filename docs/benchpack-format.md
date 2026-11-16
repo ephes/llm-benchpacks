@@ -893,3 +893,19 @@ Result artifacts are runner-owned: an external harness must not replace
 directory with links or another directory generation. These parent write checks
 do not sandbox a same-user harness. See the specification for failure/recovery
 and opened-descriptor admission rules.
+
+Product-offer matching reports sampled owned-process-group RSS with explicit
+`memory_scope`, `memory_samples` and `memory_complete` evidence. Incomplete
+memory evidence makes the combined score unavailable; see the pack README.
+
+Product-offer candidate CSV/metrics admission has shared byte/row limits and
+strict finite unique-member metrics JSON; see the pack README for ceilings.
+
+Product-offer AP uses whole tied-score threshold groups: recall increment times
+precision at each group end, summed without interpolation (zero with no positives).
+
+Product-offer invalid evidence has no numeric quality/combined score. Its PR
+reference points to an immutable generation-specific CSV; use `pr_curve.path`.
+
+Billiger fixture publication stages/validates five CSVs plus the report and
+serializes writers, with rollback and retained recovery data on compensation failure.

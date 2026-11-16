@@ -1976,3 +1976,91 @@ distinct opened run files, 64 MiB actual JSONL bytes and 100,000 records, with t
 existing per-line limit. File identity deduplicates directory aliases and hardlinked files from the
 descriptor actually read. Limits apply before admitting excess records or another run.
 Compare requires at least two distinct runs after deduplication.
+
+### Candidate execution and memory evidence
+
+The cluster scorer drains stdout/stderr while the candidate runs and retains at
+most 64 KiB per stream. Each candidate runs in a new POSIX process group; the
+scorer kills remaining group members and reaps the leader on completion, timeout
+or interruption, with a bounded cleanup wait. SIGTERM or SIGHUP to the scorer
+(for example from the outer verifier timeout) records a stop request: a running
+candidate is retired through the same cleanup, then the scorer exits with
+status 128 + signal number.
+Each sample drains up to 1 MiB per output stream. This is lifecycle ownership, not
+a security sandbox; candidates must not detach from the owned group.
+
+`system_metrics.memory_scope = "owned_process_group_sampled_rss"` identifies the
+sum of RSS sampled across the owned group via psutil. Shared resident pages may
+be counted for each process. `memory_samples` records successful observations;
+`memory_complete` requires nonzero evidence and no failed observations. Missing
+accounting permissions, all-missed/zero observations or sampling failures yield
+null `peak_rss_mb` and an unavailable combined score (`value: null`), never zero
+memory evidence. Normal exits are not failed observations: a group member that
+exits during a sample is skipped, and a sample that finds no member because the
+leader just exited ends the run. Sampling may miss brief allocation peaks. Historical scores
+using only the leader PID have a different scope and must not be compared as
+though the memory methodology were unchanged. Candidate `program_metrics`
+remain self-reported and separate from independently observed system metrics.
+
+### Candidate file admission
+
+Predictions and optional metrics are opened once with no-follow, nonblocking
+regular-file admission. Reads reject changes to the opened file's size or
+metadata. Each CSV is limited to 16 MiB and 100,000 rows; metrics.json to 64 KiB.
+One run shares 32 MiB and 200,000 CSV rows across all candidate evidence.
+Exact-limit files are admitted. Headers and row widths must match the schema;
+errors retain only bounded row diagnostics, never candidate file contents.
+
+Optional metrics require unique JSON members at every depth and finite numbers
+(including exponent overflow rejection). At most 128 top-level fields are
+accepted, with keys up to 128 UTF-8 bytes and scalar strings up to 4096 bytes;
+invalid Unicode scalar strings are refused. Only scalar extensions are retained.
+Missing metrics are optional; present but malformed metrics invalidate evidence.
+
+### Precision/recall methodology
+
+The scorer sorts pair scores once, then accumulates confusion counts in a single
+sweep over equal-score threshold groups (O(n log n) time, O(n) retained rows).
+Threshold rows retain the `score >= threshold` convention. Average precision is
+noninterpolated: sum each group's recall increment times precision after the
+whole group is admitted. A positive and a negative tied at the same score have
+AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
+the highest threshold on ties. Published historical artifacts are unchanged;
+older per-item AP can differ for tied scores and must be identified accordingly.
+
+### Valid quality evidence and result publication
+
+All prediction schema, coverage and optional-metrics errors are collected before
+quality calculation. Invalid evidence fails with bounded `prediction_errors`,
+null `metrics`/`pr_curve` and an unavailable combined score. Measured program and
+system execution data remain available. Complete but wrong predictions receive
+normal numeric quality scores, including genuine low scores.
+
+The scorer stages a complete generation-specific PR CSV and strictly serialized
+JSON before publication. It installs the immutable curve first, then atomically
+replaces the JSON with a reference to that exact generation. Serialization,
+write or replacement failure preserves the previous JSON and its referenced
+curve bytes. Old referenced curves remain intact; consumers must read
+`pr_curve.path`, not infer a fixed `.pr-curve.csv` filename. A process crash may
+leave an unreferenced complete curve. This is atomic visibility, not a promise
+of crash durability across power loss. Outer verifier normalization preserves
+the generation reference.
+
+### Billiger fixture rebuilding
+
+Positive pairs are sampled uniformly without replacement from the range of
+within-cluster pair indices. Compact cluster counts plus binary-search unranking
+avoid a quadratic tuple pool, even for zero or one requested pair. Seeds remain
+reproducible with this algorithm; the RNG sequence intentionally changes versus
+the old shuffled pool, so future deliberate fixture regeneration can change
+sampled rows for the same seed. No committed dataset is regenerated by this
+change. Negative-pair sampling and label/ID contracts are unchanged.
+
+The builder serializes cooperating writers with stable POSIX locks in every
+output directory. It serializes and validates all five CSVs plus the report,
+stages bytes and backups beside their destinations, then replaces them. Any
+catchable publication failure restores the previous generation (or removes newly
+created files). Failed compensation retains stages and a recovery manifest with
+target and backup paths. Do not remove the retained lock files. Readers must
+consume a finished build; multi-file replacement does not provide snapshot reads
+during publication or automatic recovery after an uncatchable process/power loss.

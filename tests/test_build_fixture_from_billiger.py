@@ -233,3 +233,184 @@ def test_build_is_deterministic(tmp_path):
            (tmp_path / "b" / "data" / "train_offers.csv").read_text()
     assert (tmp_path / "a" / "data" / "eval_pairs.csv").read_text() == \
            (tmp_path / "b" / "data" / "eval_pairs.csv").read_text()
+
+
+def test_positive_sampling_never_materializes_quadratic_pool():
+    class TrackedRandom(random.Random):
+        largest_shuffle = 0
+        def shuffle(self, values):
+            self.largest_shuffle = max(self.largest_shuffle, len(values))
+            return super().shuffle(values)
+    mod = load_builder()
+    for n in (250, 500, 1000):
+        rows = [_offer(str(i), 'synthetic item', 'c', 'synthetic') for i in range(n)]
+        for count in (0, 1):
+            rng = TrackedRandom(1)
+            pairs, _ = mod.sample_eval_pairs(rows, count, 0, 0, rng)
+            assert len(pairs) == count
+            assert rng.largest_shuffle <= max(count, 1)
+
+
+def test_positive_pair_index_mapping_exhaustive_and_seeded():
+    import itertools
+    mod = load_builder()
+    rows = [_offer(f'{c}-{i}', 'synthetic item', c, c)
+            for c, n in [('a', 4), ('b', 3), ('c', 1)] for i in range(n)]
+    expected = {tuple(sorted([a['offer_id'], b['offer_id']]))
+                for a, b in itertools.combinations(rows, 2) if a['cluster_id'] == b['cluster_id']}
+    pairs, labels = mod.sample_eval_pairs(rows, 99, 0, 0, random.Random(7))
+    assert {tuple(sorted([p['offer_id_left'], p['offer_id_right']])) for p in pairs} == expected
+    assert len(pairs) == len(expected)
+    assert all(row['label'] == '1' for row in labels)
+    assert mod.sample_eval_pairs(rows, 3, 0, 0, random.Random(7)) == mod.sample_eval_pairs(rows, 3, 0, 0, random.Random(7))
+
+
+def fixture_targets(data, verify):
+    return [data / name for name in ['train_offers.csv', 'test_offers.csv', 'eval_pairs.csv']] + [
+        verify / 'hidden_test_clusters.csv', verify / 'hidden_eval_pair_labels.csv',
+        data.parent / 'build-report.json']
+
+
+import pytest
+
+
+@pytest.mark.parametrize('step', range(1, 7))
+def test_fixture_publication_rolls_back_every_step(tmp_path, monkeypatch, step):
+    mod = load_builder()
+    raw = tmp_path / 'raw.csv'
+    rows = _synthetic_raw(10, 3)
+    write_csv(raw, rows, list(rows[0]))
+    data, verify = tmp_path / 'fixture/data', tmp_path / 'verify'
+    mod.build(raw, data, verify, .3, 3, 3, 3, seed=1)
+    targets = fixture_targets(data, verify)
+    before = {p: p.read_bytes() for p in targets}
+    old_open = Path.open
+    count = 0
+    def fail_old_writer(self, mode='r', *args, **kwargs):
+        nonlocal count
+        if self in targets and 'w' in mode:
+            count += 1
+            if count == step:
+                raise OSError('injected old direct write failure')
+        return old_open(self, mode, *args, **kwargs)
+    monkeypatch.setattr(Path, 'open', fail_old_writer)
+    if hasattr(mod, 'os'):
+        replace = mod.os.replace
+        def fail_replace(src, dst):
+            nonlocal count
+            if Path(dst) in targets:
+                count += 1
+                if count == step:
+                    raise OSError('injected publication failure')
+            return replace(src, dst)
+        monkeypatch.setattr(mod.os, 'replace', fail_replace)
+    with pytest.raises(OSError):
+        mod.build(raw, data, verify, .3, 3, 3, 3, seed=2)
+    assert {p: p.read_bytes() for p in targets} == before
+
+
+def test_rollback_failure_retains_backups_and_manifest(tmp_path, monkeypatch):
+    mod = load_builder()
+    raw = tmp_path / 'raw.csv'
+    rows = _synthetic_raw(10, 3)
+    write_csv(raw, rows, list(rows[0]))
+    data, verify = tmp_path / 'fixture/data', tmp_path / 'verify'
+    mod.build(raw, data, verify, .3, 3, 3, 3, seed=1)
+    before = {p: p.read_bytes() for p in fixture_targets(data, verify)}
+    replace = mod.os.replace
+    count = 0
+    def fail(src, dst):
+        nonlocal count
+        count += 1
+        if count >= 2:
+            raise OSError('publication and compensation failure')
+        return replace(src, dst)
+    monkeypatch.setattr(mod.os, 'replace', fail)
+    with pytest.raises(RuntimeError, match='recovery retained at'):
+        mod.build(raw, data, verify, .3, 3, 3, 3, seed=2)
+    manifests = list(tmp_path.rglob('.billiger-stage-*/manifest.json'))
+    assert manifests
+    manifest = json.loads(manifests[0].read_text())
+    assert all(Path(row['backup']).read_bytes() == before[Path(row['target'])]
+               for row in manifest if row['existed'])
+
+
+def test_concurrent_builders_publish_serial_generations(tmp_path):
+    import subprocess
+    import sys
+    import time
+    mod = load_builder()
+    raw = tmp_path / 'raw.csv'
+    rows = _synthetic_raw(10, 3)
+    write_csv(raw, rows, list(rows[0]))
+    data, verify = tmp_path / 'fixture/data', tmp_path / 'verify'
+    code = '''import importlib.util, pathlib, sys, time
+spec=importlib.util.spec_from_file_location('b', sys.argv[1])
+b=importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
+root=pathlib.Path(sys.argv[2]); seed=int(sys.argv[3])
+replace=b.os.replace
+def observe(src,dst):
+    with (root/'events').open('a') as f: f.write(str(seed)+'\\n')
+    time.sleep(.02)
+    return replace(src,dst)
+b.os.replace=observe
+(root/('ready'+str(seed))).touch()
+while not (root/'go').exists(): time.sleep(.01)
+b.build(root/'raw.csv',root/'fixture/data',root/'verify',.3,3,3,3,seed=seed)
+'''
+    processes = [subprocess.Popen([sys.executable, '-c', code, str(BUILDER_PATH.resolve()),
+                                  str(tmp_path), str(seed)]) for seed in (1, 2)]
+    try:
+        deadline = time.monotonic() + 5
+        while not all((tmp_path / f'ready{seed}').exists() for seed in (1, 2)):
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        (tmp_path / 'go').touch()
+        for process in processes:
+            assert process.wait(timeout=5) == 0
+        events = (tmp_path / 'events').read_text().splitlines()
+        assert events in [['1'] * 6 + ['2'] * 6, ['2'] * 6 + ['1'] * 6]
+        last_seed = int(events[-1])
+        expected_data, expected_verify = tmp_path / 'expected/data', tmp_path / 'expected-verify'
+        mod.build(raw, expected_data, expected_verify, .3, 3, 3, 3, seed=last_seed)
+        assert [p.read_bytes() for p in fixture_targets(data, verify)] == [
+            p.read_bytes() for p in fixture_targets(expected_data, expected_verify)]
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+
+def test_staging_failure_preserves_all_fixture_bytes(tmp_path, monkeypatch):
+    mod = load_builder()
+    raw = tmp_path / 'raw.csv'
+    rows = _synthetic_raw(10, 3)
+    write_csv(raw, rows, list(rows[0]))
+    data, verify = tmp_path / 'fixture/data', tmp_path / 'verify'
+    mod.build(raw, data, verify, .3, 3, 3, 3, seed=1)
+    before = {p: p.read_bytes() for p in fixture_targets(data, verify)}
+    write_bytes = Path.write_bytes
+    def fail(self, content):
+        if self.name == 'new-3':
+            raise OSError('staging failed')
+        return write_bytes(self, content)
+    monkeypatch.setattr(Path, 'write_bytes', fail)
+    with pytest.raises(OSError, match='staging failed'):
+        mod.build(raw, data, verify, .3, 3, 3, 3, seed=2)
+    assert {p: p.read_bytes() for p in before} == before
+
+
+def test_failed_first_publication_removes_new_generation(tmp_path, monkeypatch):
+    mod = load_builder()
+    data, verify = tmp_path / 'fixture/data', tmp_path / 'verify'
+    targets = fixture_targets(data, verify)
+    replace = mod.os.replace
+    def fail(src, dst):
+        if Path(dst) == targets[-1]:
+            raise OSError('report replacement failed')
+        return replace(src, dst)
+    monkeypatch.setattr(mod.os, 'replace', fail)
+    with pytest.raises(OSError):
+        mod._publish_fixture([(p, b'synthetic') for p in targets])
+    assert not any(p.exists() for p in targets)
