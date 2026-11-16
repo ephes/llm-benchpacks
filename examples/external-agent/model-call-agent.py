@@ -9,7 +9,6 @@ import ipaddress
 import json
 import sys
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -17,7 +16,13 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import read_context_text, TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
+from benchpack.example_io import (
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    replace_workspace_files,
+    control_json,
+)
 from benchpack.example_http import response_bytes
 
 

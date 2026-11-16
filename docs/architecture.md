@@ -1213,3 +1213,7 @@ stage and atomic replacement. Default diagnostics contain no raw remote bodies.
 Example context and Pi workspace readers reuse opened regular-file admission
 and generation fences. Pi previews stream data separately from retained context,
 with aggregate data/editable budgets enforced before external execution.
+
+The Codex and Pi examples share a bounded selector-based POSIX transport. It owns
+stdin delivery, output acquisition, non-reaping exit observation and process-group
+retirement; Pi prompt staging belongs to the enclosing resource scope.

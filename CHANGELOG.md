@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Send Codex example prompts through bounded stdin; bound CLI output and retire
+  owned process groups on every exit. Always remove staged Pi prompts.
+
 - Admit bounded stable regular example contexts; stream contained Pi data previews
   and cap aggregate data reads and editable-file context before agent execution.
 
@@ -15,7 +18,8 @@
   and keep credentials bound to the configured endpoint.
 
 - Pre-encode and stage example workspace replacements; bind writes to held
-  no-follow parents, refuse hardlinks/generation changes and report rollback failure.
+  no-follow parents, refuse hardlinks/generation changes and report rollback failure
+  with original backups retained; never roll back over a newer concurrent leaf.
 
 - Sync artifact directories after atomic reporter/context publication; report
   visible-but-uncertain durability on sync failure and retain complete evidence.

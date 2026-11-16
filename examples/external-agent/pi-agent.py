@@ -18,9 +18,16 @@ from typing import Any
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from benchpack.safe_files import require_stable_file
-from benchpack.example_io import workspace_input, workspace_text, read_context_text, TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
-
-
+from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES
+from benchpack.example_io import (
+    workspace_input,
+    workspace_text,
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    replace_workspace_files,
+    control_json,
+)
 
 _ALLOWED_PATH_HEADING_RE = re.compile(r"^Allowed repo-root paths? to edit:\s*$")
 _ALLOWED_PATH_RE = re.compile(r"^- `([^`]+)`\s*$")
@@ -411,41 +418,27 @@ def _main(argv, resources) -> int:
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
-    prompt_temp = tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        prefix="benchpack-pi-agent-",
-        suffix=".md",
-        delete=False,
-    )
+    # Keep the private prompt in the owning resource scope even if writing or
+    # command construction fails. The outer main scope retires it on signals too.
     try:
-        prompt_temp.write(pi_prompt)
+        prompt_bytes = pi_prompt.encode("utf-8")
+        if len(prompt_bytes) > MAX_PROMPT_BYTES:
+            raise ValueError("pi prompt exceeds byte limit")
+        prompt_temp = resources.enter_context(tempfile.NamedTemporaryFile(
+            "wb", prefix="benchpack-pi-agent-", suffix=".md", delete=False))
+        resources.callback(Path(prompt_temp.name).unlink, missing_ok=True)
+        if prompt_temp.write(prompt_bytes) != len(prompt_bytes):
+            raise OSError("short prompt write")
         prompt_temp.close()
-        command = [
-            args.pi_bin,
-            "-p",
-            "--no-session",
-            "--no-context-files",
-            "--model",
-            args.model,
-            "--thinking",
-            args.thinking,
-            "--no-tools",
-            f"@{prompt_temp.name}",
-        ]
-    except OSError as exc:
-        return _fail(f"could not write pi prompt temp file: {exc}")
+        command = [args.pi_bin, "-p", "--no-session", "--no-context-files",
+                   "--model", args.model, "--thinking", args.thinking,
+                   "--no-tools", f"@{prompt_temp.name}"]
+    except (OSError, ValueError):
+        return _fail("could not stage pi prompt")
     started = time.monotonic()
     completed: subprocess.CompletedProcess[str] | None = None
     try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=args.timeout_s,
-        )
+        completed = run_agent(command, cwd=workspace, timeout_s=args.timeout_s)
         if completed.returncode != 0:
             print("pi-agent: child failed", file=sys.stderr)
             ok = False
@@ -456,7 +449,7 @@ def _main(argv, resources) -> int:
             print(f"pi-agent applied {changed} file replacement(s)")
             ok = True
             return_code = 0
-    except subprocess.TimeoutExpired as exc:
+    except AgentTimeout:
         print(f"pi timed out after {args.timeout_s}s", file=sys.stderr)
         ok = False
         return_code = 124
@@ -465,11 +458,6 @@ def _main(argv, resources) -> int:
     except ValueError as exc:
         ok = False
         return_code = _fail(str(exc))
-    finally:
-        try:
-            Path(prompt_temp.name).unlink()
-        except OSError:
-            pass
     duration_s = time.monotonic() - started
 
     try:

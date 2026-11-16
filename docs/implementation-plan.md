@@ -1,5 +1,19 @@
 # Implementation Plan
 
+## Completed external-agent example boundaries (2026-11-16, round 113)
+
+- B07: pre-encode/stage workspace replacements, hold no-follow parents and source
+  generations, and retain original backups when owned rollback cannot complete.
+- B08: cap actual HTTP bytes and elapsed response time; refuse all redirects.
+- B09: reject duplicate control members and require complete OpenAI stop outcomes.
+- B10: keep raw remote failures private and atomically publish owned 0600 sidecars.
+- B11: admit bounded stable regular contexts and stream contained Pi previews
+  under aggregate editable/data budgets.
+- B12: deliver Codex prompts on stdin and bound/retire owned CLI process groups,
+  including ordinary wrapper exit, signals and prompt staging failure.
+- Offline synthetic regressions cover each boundary; production agent integration
+  and live campaigns remain separate work.
+
 ## Completed coherent result evidence (2026-11-16)
 
 - B29: fence contained reads/copies and JSONL admission against in-place changes.

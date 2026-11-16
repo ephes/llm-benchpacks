@@ -973,3 +973,21 @@ bytes with uncertain durability; retain the latter instead of compensating by
 removing evidence. Report unsupported directory sync as uncertain too. This
 policy covers the shared reporter/context/workspace writer and does not promise
 multi-file transactions or crash durability of newly created ancestors.
+
+## 2026-11-16: external-agent examples own their executable boundaries
+
+Shipped examples enforce their own input, HTTP, workspace publication, child
+lifetime and telemetry limits instead of assuming the parent runner makes those
+boundaries safe. They reuse the core regular-file reader/generation fence and
+small example-specific publication/transport helpers built from public POSIX and
+HTTP APIs. They require one control JSON interpretation and a completed OpenAI
+stop outcome before edit publication, never follow HTTP redirects, and omit raw
+remote failure text from default diagnostics. Codex task text travels only on
+bounded stdin; process-group retirement happens before releasing the leader pid.
+
+Serialize workspace and sidecar writers. Held directory/source generations detect
+substitution but do not isolate hostile same-user code. If rollback cannot safely
+restore an original, retain its private sibling backup rather than overwriting a
+newer concurrent generation. Atomic telemetry publication syncs complete private
+bytes and the parent directory; sync failure after replacement means uncertain
+durability of visible evidence, not permission to erase that evidence.

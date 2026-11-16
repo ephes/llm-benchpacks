@@ -5484,3 +5484,15 @@ external call, with failure, substitution and privacy sentinel regressions.
 Context reads now admit stable regular UTF-8 files under a byte ceiling. Pi
 streams bounded contained CSV previews and caps aggregate editable context.
 FIFO, symlink, rewrite, aggregate and counting-reader regressions are synthetic.
+
+## 2026-11-16 — Owned example agent transport (B12)
+
+Codex prompts now travel only on bounded stdin; Pi and Codex share finite output
+capture and group retirement with the leader held until final signaling. Fake
+executables cover large prompts, short writes, output overflow, pipe descendants,
+timeout, signals and prompt staging cleanup. No real agent/model was invoked.
+
+Publication follow-up: retain the staged inode descriptor through replacement,
+refuse rollback over a newer concurrent leaf, and preserve original backup stages
+when rollback cannot safely restore them. A deterministic substitution test
+reproduced the prior misidentification before the fix.

@@ -143,7 +143,10 @@ repository on the server for this wrapper.
 The direct-edit and Pi wrappers encode all replacements before mutation, stage
 complete bytes, and publish relative to held no-follow parent descriptors. They
 refuse symlinks, hardlinked targets and changed source generations. Publication
-failure rolls back owned replacements; rollback failure is reported explicitly.
+failure rolls back owned replacements; rollback failure is reported explicitly,
+with original `.benchpack-example-*.tmp` backups retained in the affected parent.
+Inspect and recover those originals before retrying; a newer concurrent leaf
+is never overwritten by rollback.
 Executable permissions survive. The local model-call example uses the same
 workspace publication boundary (its fixed output file may be new). Serialize
 writers: generation checks are not isolation from hostile same-user processes.
@@ -180,3 +183,16 @@ retain at most 64 KiB per file and 0–1000 requested data rows plus the header,
 while streaming the row count in chunks of at most 64 KiB. Individual physical
 lines above 64 KiB are refused; row counts describe physical lines, not quoted
 multiline CSV records. Unsupported envelopes fail before spawning Pi.
+
+Codex receives its UTF-8 task prompt through `codex exec ... -` stdin, never in
+argv. Both CLI examples use a POSIX owned-process transport with a 32 MiB prompt
+ceiling, a combined 16 MiB stdout/stderr ceiling, strict UTF-8 and a finite
+`--timeout-s` (default 900 seconds). Partial stdin writes are retried; early
+closure before complete delivery fails. Child bodies stay out of diagnostics.
+On success, failure, timeout, interrupt, SIGTERM or SIGHUP, the owned process group
+is terminated then killed before the unreaped leader identity is released.
+Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
+Descendants that deliberately create another session are outside group ownership;
+retained pipes still cannot extend the drain deadline. Pi's private prompt
+file is removed on every exit, including staging failure. These CLI examples
+require POSIX `waitid`/`WNOWAIT`; unsupported platforms fail before spawn.

@@ -450,5 +450,173 @@ def test_pi_refuses_input_before_spawning(tmp_path, monkeypatch):
     (workspace / 'data').mkdir()
     os.mkfifo(workspace / 'data/train.csv')
     mod = agent('pi-agent')
-    monkeypatch.setattr(mod.subprocess, 'run', lambda *a, **kw: pytest.fail('agent spawned'))
+    monkeypatch.setattr(mod, 'run_agent', lambda *a, **kw: pytest.fail('agent spawned'))
     assert mod.main(['--model','test',*argv]) != 0
+
+
+def test_codex_prompt_is_delivered_only_on_stdin(tmp_path):
+    import json
+    workspace, log, argv = make_context(tmp_path)
+    context = Path(argv[-1])
+    payload = json.loads(context.read_text())
+    secret = 'SYNTHETIC_PRIVATE_' + 'x' * 300000
+    payload['case']['prompt'] = secret
+    context.write_text(json.dumps(payload))
+    exe = tmp_path / 'fake-codex'
+    record = tmp_path / 'record'
+    exe.write_text('#!'+__import__('sys').executable+'\nimport sys,json\nfrom pathlib import Path\nPath('+repr(str(record))+').write_text(json.dumps({"argv":sys.argv,"stdin":sys.stdin.read()}))\n')
+    exe.chmod(0o755)
+    assert agent('codex-oss-agent').main(['--codex-bin',str(exe),'--codex-model','test',*argv]) == 0
+    captured = json.loads(record.read_text())
+    assert secret in captured['stdin']
+    assert all('SYNTHETIC_PRIVATE' not in arg for arg in captured['argv'])
+    assert captured['argv'][-1] == '-'
+
+
+def test_pi_overlimit_valid_output_cannot_publish(tmp_path):
+    import sys
+    workspace, log, argv = make_context(tmp_path)
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!'+sys.executable+'\nimport json\nprint(json.dumps({"files":[{"path":"a","content":"new"}], "summary":"x"*(17*1024*1024)}))\n')
+    exe.chmod(0o755)
+    assert agent('pi-agent').main(['--pi-bin',str(exe),'--model','test',*argv]) != 0
+    assert (workspace / 'a').read_bytes() == b'old'
+
+
+def test_pi_retires_pipe_holding_descendant_on_wrapper_exit(tmp_path):
+    import os
+    import signal
+    import sys
+    import time
+    import psutil
+    workspace, log, argv = make_context(tmp_path)
+    pidfile = tmp_path / 'child'
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!'+sys.executable+'\nimport os,time\nfrom pathlib import Path\npid=os.fork()\nif pid==0:\n time.sleep(5)\n os._exit(0)\nPath('+repr(str(pidfile))+').write_text(str(pid))\nprint(\'{"files":[]}\',flush=True)\n')
+    exe.chmod(0o755)
+    try:
+        result = agent('pi-agent').main(['--pi-bin',str(exe),'--model','test','--timeout-s','1',*argv])
+        pid = int(pidfile.read_text())
+        for _ in range(20):
+            try:
+                process = psutil.Process(pid)
+                alive = process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+            except psutil.NoSuchProcess:
+                alive = False
+            if not alive: break
+            time.sleep(.01)
+        assert not alive, 'owned descendant survived wrapper exit'
+        assert result == 0
+    finally:
+        if pidfile.exists():
+            try: os.kill(int(pidfile.read_text()), signal.SIGKILL)
+            except ProcessLookupError: pass
+
+
+def test_owned_transport_rejects_incomplete_stdin(tmp_path):
+    import sys
+    from benchpack.example_process import run_agent
+    exe = tmp_path / 'early.py'
+    exe.write_text('import os\nos.close(0)\n')
+    with pytest.raises(ValueError, match='prompt'):
+        run_agent([sys.executable, str(exe)], cwd=tmp_path, timeout_s=1, prompt=b'x' * 300000)
+
+
+def test_owned_transport_delivers_short_stdin_writes(tmp_path, monkeypatch):
+    import os
+    import sys
+    from benchpack.example_process import run_agent
+    exe = tmp_path / 'read.py'
+    exe.write_text('import sys\nprint(len(sys.stdin.buffer.read()))\n')
+    write = os.write
+    monkeypatch.setattr(os, 'write', lambda fd, data: write(fd, data[:17]))
+    result = run_agent([sys.executable, str(exe)], cwd=tmp_path, timeout_s=3, prompt=b'x' * 300000)
+    assert result.returncode == 0 and result.stdout.strip() == '300000'
+
+
+def test_pi_timeout_retires_child_and_prompt(tmp_path, monkeypatch):
+    import sys
+    import psutil
+    workspace, log, argv = make_context(tmp_path)
+    pidfile = tmp_path / 'pid'
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!'+sys.executable+'\nimport os,time\nfrom pathlib import Path\nPath('+repr(str(pidfile))+').write_text(str(os.getpid()))\ntime.sleep(10)\n')
+    exe.chmod(0o755)
+    mod = agent('pi-agent')
+    monkeypatch.setattr(mod.tempfile, 'tempdir', str(tmp_path))
+    assert mod.main(['--pi-bin',str(exe),'--model','test','--timeout-s','.2',*argv]) == 124
+    assert not psutil.pid_exists(int(pidfile.read_text()))
+    assert not list(tmp_path.glob('benchpack-pi-agent-*'))
+
+
+def test_pi_prompt_removed_after_staging_failure(tmp_path, monkeypatch):
+    mod = agent('pi-agent')
+    _, _, argv = make_context(tmp_path)
+    monkeypatch.setattr(mod.tempfile, 'tempdir', str(tmp_path))
+    create = mod.tempfile.NamedTemporaryFile
+    class Broken:
+        def __init__(self, *a, **kw):
+            self.file = create(*a, **kw)
+            self.name = self.file.name
+        def __enter__(self): return self
+        def __exit__(self, *args): self.file.close()
+        def write(self, data):
+            self.file.write(data[:2])
+            raise OSError('injected')
+    monkeypatch.setattr(mod.tempfile, 'NamedTemporaryFile', Broken)
+    assert mod.main(['--model','test',*argv]) != 0
+    assert not list(tmp_path.glob('benchpack-pi-agent-*'))
+
+
+def test_pi_signal_retires_child_and_prompt(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+    import psutil
+    _, _, argv = make_context(tmp_path)
+    pidfile = tmp_path / 'pid'
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!'+sys.executable+'\nimport os,time\nfrom pathlib import Path\nPath('+repr(str(pidfile))+').write_text(str(os.getpid()))\ntime.sleep(10)\n')
+    exe.chmod(0o755)
+    wrapper = ROOT / 'examples/external-agent/pi-agent.py'
+    env = {**os.environ, 'TMPDIR':str(tmp_path)}
+    process = subprocess.Popen([sys.executable,str(wrapper),'--pi-bin',str(exe),'--model','test',*argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    try:
+        until = time.monotonic() + 3
+        while not pidfile.exists() and time.monotonic() < until:
+            time.sleep(.01)
+        assert pidfile.exists()
+        process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=3)
+        assert process.returncode == 143
+        assert not psutil.pid_exists(int(pidfile.read_text()))
+        assert not list(tmp_path.glob('benchpack-pi-agent-*'))
+    finally:
+        if process.poll() is None:
+            process.kill(); process.communicate(timeout=1)
+        if pidfile.exists():
+            try: os.kill(int(pidfile.read_text()), signal.SIGKILL)
+            except ProcessLookupError: pass
+
+
+def test_workspace_rollback_does_not_overwrite_newer_leaf(tmp_path, monkeypatch):
+    import os
+    from benchpack.example_io import replace_workspace_files
+    for p in ('a','b'): (tmp_path / p).write_bytes(p.encode())
+    replace = os.replace
+    def concurrent(src, dst, **kwargs):
+        if dst == 'b':
+            raise OSError('second publication failed')
+        result = replace(src, dst, **kwargs)
+        if dst == 'a':
+            (tmp_path / 'a').unlink()
+            (tmp_path / 'a').write_bytes(b'newer concurrent generation')
+        return result
+    monkeypatch.setattr(os, 'replace', concurrent)
+    with pytest.raises(ValueError, match='rollback failed'):
+        replace_workspace_files(tmp_path, [('a',b'new'),('b',b'new')])
+    assert (tmp_path / 'a').read_bytes() == b'newer concurrent generation'
+    backups = list(tmp_path.glob('.benchpack-example-*.tmp'))
+    assert any(p.read_bytes() == b'a' for p in backups)

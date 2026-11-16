@@ -6,13 +6,14 @@ boundary against a malicious process with the same user identity.
 """
 from __future__ import annotations
 
+import json
 import os
 import stat
 import uuid
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
-from benchpack.safe_files import contained_parts, read_opened_regular
+from benchpack.safe_files import admitted_directory, contained_parts, read_opened_regular
 
 EXAMPLE_FILE_BYTES = 16 * 1024 * 1024
 _DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -48,12 +49,14 @@ class _Target:
             stack.callback(os.close, source)
             self.info = os.fstat(source)
             if not stat.S_ISREG(self.info.st_mode) or self.info.st_nlink != 1:
-                raise OSError('edit target must be an unlinked regular file (one link)')
+                raise OSError('example target must be a regular file with one link')
             snapshot = read_opened_regular(source, EXAMPLE_FILE_BYTES)
             if snapshot.data is None:
                 raise ValueError('example file exceeds byte limit')
             self.original = snapshot.data
         self.published = None
+        self.staged_fds = {}
+        self.retained = set()
 
     def check(self, expected):
         for parent, name, child in self.edges:
@@ -74,6 +77,8 @@ class _Target:
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=self.parent)
         def discard():
+            if name in self.retained:
+                return
             try:
                 os.unlink(name, dir_fd=self.parent)
             except FileNotFoundError:
@@ -86,6 +91,9 @@ class _Target:
             if self.info is not None and not private:
                 os.fchmod(stream.fileno(), stat.S_IMODE(self.info.st_mode))
             os.fsync(stream.fileno())
+            held = os.dup(stream.fileno())
+            self.staged_fds[name] = held
+            stack.callback(os.close, held)
         return name
 
 
@@ -101,9 +109,10 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
         try:
             for target, stage, _ in entries:
                 target.check(target.info)
-                # Remember the stage identity before rename (ctime changes on rename).
+                # Keep the actual staged inode, even if a concurrent writer
+                # substitutes the destination immediately after replacement.
                 os.replace(stage, target.name, src_dir_fd=target.parent, dst_dir_fd=target.parent)
-                target.published = os.stat(target.name, dir_fd=target.parent, follow_symlinks=False)
+                target.published = os.fstat(target.staged_fds[stage])
             for target, _, _ in entries:
                 target.check(target.published)
         except BaseException as exc:
@@ -119,14 +128,15 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
                         os.replace(backup, target.name, src_dir_fd=target.parent, dst_dir_fd=target.parent)
                 except OSError:
                     failed = True
+                    if backup is not None:
+                        target.retained.add(backup)
             if failed:
-                raise ValueError('edit publication failed; rollback failed; inspect workspace') from exc
+                raise ValueError('edit publication failed; rollback failed; original .benchpack-example-*.tmp backups retained') from exc
             raise ValueError('could not apply assistant edit payload') from exc
 
 
 def control_json(text):
     """Decode example control JSON with one interpretation and bounded errors."""
-    import json
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -154,7 +164,8 @@ class TelemetryDestination:
         stage = target.stage(data, self.resources, private=True)
         target.check(target.info)
         os.replace(stage, target.name, src_dir_fd=target.parent, dst_dir_fd=target.parent)
-        target.info = os.stat(target.name, dir_fd=target.parent, follow_symlinks=False)
+        target.info = os.fstat(target.staged_fds[stage])
+        target.check(target.info)
         # Complete bytes are already published if directory sync fails.
         try:
             os.fsync(target.parent)
@@ -190,10 +201,6 @@ def read_context_text(path: Path) -> str:
         raise ValueError('could not read stable UTF-8 context') from exc
     finally:
         os.close(fd)
-
-
-from contextlib import contextmanager
-from benchpack.safe_files import admitted_directory
 
 
 @contextmanager

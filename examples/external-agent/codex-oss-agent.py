@@ -12,16 +12,19 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import read_context_text, TelemetryDestination, publish_telemetry, control_json
-
-
+from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES
+from benchpack.example_io import (
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    control_json,
+)
 
 def _fail(message: str) -> int:
     print(f"codex-oss-agent: {message}", file=sys.stderr)
@@ -139,6 +142,7 @@ def _write_telemetry(
 def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--codex-bin", default="codex")
+    parser.add_argument("--timeout-s", type=float, default=900.0)
     parser.add_argument("--codex-model", required=True)
     parser.add_argument("--local-provider", default="ollama")
     parser.add_argument("--workspace", required=True)
@@ -169,13 +173,21 @@ def _main(argv, resources) -> int:
         "--sandbox",
         "workspace-write",
         "--ephemeral",
-        codex_prompt,
+        "-",
     ]
+    try:
+        prompt_bytes = codex_prompt.encode("utf-8")
+        if len(prompt_bytes) > MAX_PROMPT_BYTES:
+            raise ValueError("codex prompt exceeds byte limit")
+    except (ValueError, UnicodeError):
+        return _fail("codex prompt exceeds supported UTF-8 envelope")
     started = time.monotonic()
     try:
-        completed = subprocess.run(command, check=False, cwd=workspace, text=True)
-    except OSError as exc:
-        return _fail(f"could not run codex: {exc}")
+        completed = run_agent(command, cwd=workspace, prompt=prompt_bytes, timeout_s=args.timeout_s)
+    except AgentTimeout:
+        return _fail("codex deadline exceeded")
+    except (OSError, ValueError):
+        return _fail("codex transport failed")
     duration_s = time.monotonic() - started
 
     try:
