@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,7 +17,8 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
+from benchpack.safe_files import require_stable_file
+from benchpack.example_io import workspace_input, workspace_text, read_context_text, TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
 
 
 
@@ -43,7 +45,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(control_json(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -137,26 +139,69 @@ def _workspace_path(workspace: Path, relative_path: str) -> Path:
     return target
 
 
+MAX_EDITABLE_BYTES = 16 * 1024 * 1024
+MAX_DATA_BYTES = 64 * 1024 * 1024
+MAX_PREVIEW_BYTES = 64 * 1024
+MAX_PREVIEW_ROWS = 1000
+
+
 def _read_workspace_file(workspace: Path, relative_path: str) -> str:
-    target = _workspace_path(workspace, relative_path)
-    if not target.is_file():
-        raise ValueError(f"workspace file is missing: {relative_path}")
-    return target.read_text(encoding="utf-8")
+    return workspace_text(workspace, relative_path, MAX_EDITABLE_BYTES)
+
+
+def _preview_opened(fd, *, max_rows, limit):
+    if not 0 <= max_rows <= MAX_PREVIEW_ROWS:
+        raise ValueError("data preview rows exceeds supported range")
+    initial = os.fstat(fd)
+    if initial.st_size > limit:
+        raise ValueError("data context exceeds byte limit")
+    total = 0
+    pending = b""
+    preview = []
+    retained = 0
+    lines = 0
+    def line(value):
+        nonlocal lines, retained
+        if len(value) > MAX_PREVIEW_BYTES:
+            raise ValueError("data context line exceeds byte limit")
+        try:
+            text = value.rstrip(b"\r").decode("utf-8")
+        except UnicodeError as exc:
+            raise ValueError("data context must be UTF-8") from exc
+        lines += 1
+        if lines <= max_rows + 1:
+            retained += len(value) + 1
+            if retained > MAX_PREVIEW_BYTES:
+                raise ValueError("data preview exceeds byte limit")
+            preview.append(text)
+    while True:
+        chunk = os.read(fd, min(65536, limit + 1 - total))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise ValueError("data context exceeds byte limit")
+        parts = (pending + chunk).split(b"\n")
+        pending = parts.pop()
+        for value in parts:
+            line(value)
+        if len(pending) > MAX_PREVIEW_BYTES:
+            raise ValueError("data context line exceeds byte limit")
+    if pending:
+        line(pending)
+    require_stable_file(fd, initial)
+    return "\n".join(preview), max(0, lines - 1), lines > max_rows + 1, total
 
 
 def _preview_text(path: Path, *, max_rows: int) -> tuple[str, int, bool]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        return "", 0, False
-    keep = max(1, max_rows + 1)
-    preview = "\n".join(lines[:keep])
-    data_rows = max(0, len(lines) - 1)
-    truncated = len(lines) > keep
-    return preview, data_rows, truncated
+    with workspace_input(path.parent, path.name) as fd:
+        text, rows, truncated, _ = _preview_opened(fd, max_rows=max_rows, limit=MAX_DATA_BYTES)
+        return text, rows, truncated
 
 
 def _data_context(workspace: Path, *, preview_rows: int) -> str:
     chunks: list[str] = []
+    total = 0
     for relative_path in [
         "data/train.csv",
         "data/test_pairs.csv",
@@ -164,10 +209,12 @@ def _data_context(workspace: Path, *, preview_rows: int) -> str:
         "data/test_offers.csv",
         "data/eval_pairs.csv",
     ]:
-        target = workspace / relative_path
-        if not target.is_file():
-            continue
-        text, data_rows, truncated = _preview_text(target, max_rows=preview_rows)
+        with workspace_input(workspace, relative_path, optional=True) as fd:
+            if fd is None:
+                continue
+            text, data_rows, truncated, used = _preview_opened(
+                fd, max_rows=preview_rows, limit=MAX_DATA_BYTES - total)
+            total += used
         suffix = (
             f"\n--- PREVIEW ONLY: {relative_path} has {data_rows} data rows; "
             "the generated program must read the full workspace file at runtime. ---"
@@ -184,8 +231,10 @@ def _data_context(workspace: Path, *, preview_rows: int) -> str:
 
 def _allowed_file_context(workspace: Path, allowed_paths: tuple[str, ...]) -> str:
     chunks: list[str] = []
+    total = 0
     for relative_path in allowed_paths:
-        text = _read_workspace_file(workspace, relative_path)
+        text = workspace_text(workspace, relative_path, MAX_EDITABLE_BYTES - total)
+        total += len(text.encode("utf-8"))
         chunks.append(
             f"--- BEGIN EDITABLE WORKSPACE FILE {relative_path} ---\n"
             f"{text}\n"

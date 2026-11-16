@@ -17,7 +17,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
+from benchpack.example_io import read_context_text, TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
 from benchpack.example_http import response_bytes
 
 
@@ -54,7 +54,7 @@ def _optional_int(value: Any, name: str) -> int | None:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(control_json(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:

@@ -344,3 +344,111 @@ def test_pi_primary_failure_survives_telemetry_failure(tmp_path, monkeypatch):
     mod = agent('pi-agent')
     monkeypatch.setattr(mod, '_write_telemetry', lambda *a, **kw: (_ for _ in ()).throw(OSError('injected')))
     assert mod.main(['--pi-bin',str(exe),'--model','test',*argv]) == 7
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent','model-call-agent','codex-oss-agent','pi-agent'])
+def test_context_opened_regular_byte_limit(name, tmp_path):
+    path = tmp_path / 'context'
+    with path.open('wb') as f:
+        f.write(b'{}')
+        f.write(b' ' * (16 * 1024 * 1024))
+    with pytest.raises(ValueError):
+        agent(name)._load_context(path)
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent','model-call-agent','codex-oss-agent','pi-agent'])
+def test_context_fifo_refused_without_blocking(name, tmp_path):
+    import os
+    import subprocess
+    import sys
+    fifo = tmp_path / 'context'
+    os.mkfifo(fifo)
+    script = f'''import importlib.util
+from pathlib import Path
+s=importlib.util.spec_from_file_location('example',{str(ROOT / 'examples/external-agent' / (name+'.py'))!r})
+m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+try: m._load_context(Path({str(fifo)!r}))
+except (OSError,ValueError): raise SystemExit(2)
+'''
+    try:
+        result = subprocess.run([sys.executable, '-c', script], capture_output=True, timeout=1)
+    except subprocess.TimeoutExpired:
+        pytest.fail('context FIFO blocked before admission')
+    assert result.returncode == 2
+
+
+def test_context_in_place_change_is_refused(tmp_path, monkeypatch):
+    import os
+    path = tmp_path / 'context'
+    path.write_bytes(b'{}')
+    read = os.read
+    changed = [False]
+    def rewrite(fd, size):
+        data = read(fd, size)
+        if not changed[0]:
+            changed[0] = True
+            path.write_bytes(b'[]')
+        return data
+    monkeypatch.setattr(os, 'read', rewrite)
+    with pytest.raises(ValueError):
+        agent('openai-direct-edit-agent')._load_context(path)
+
+
+@pytest.mark.parametrize('kind', ['symlink', 'fifo'])
+def test_pi_data_inputs_refuse_nonregular_or_outside_paths(tmp_path, kind):
+    import os
+    mod = agent('pi-agent')
+    (tmp_path / 'data').mkdir()
+    target = tmp_path / 'data/train.csv'
+    if kind == 'fifo': os.mkfifo(target)
+    else:
+        outside = tmp_path / 'outside'
+        outside.write_text('private\nsynthetic\n')
+        target.symlink_to(outside)
+    with pytest.raises((ValueError, OSError)):
+        mod._data_context(tmp_path, preview_rows=1)
+
+
+def test_pi_context_aggregate_editable_limit(tmp_path, monkeypatch):
+    mod = agent('pi-agent')
+    monkeypatch.setattr(mod, 'MAX_EDITABLE_BYTES', 10, raising=False)
+    for p in ('a','b'): (tmp_path / p).write_bytes(b'abcdef')
+    with pytest.raises(ValueError):
+        mod._allowed_file_context(tmp_path, ('a','b'))
+
+
+def test_pi_csv_total_read_limit(tmp_path, monkeypatch):
+    mod = agent('pi-agent')
+    monkeypatch.setattr(mod, 'MAX_DATA_BYTES', 10, raising=False)
+    (tmp_path / 'data').mkdir()
+    for p in ('train.csv','test_pairs.csv'): (tmp_path / 'data' / p).write_bytes(b'h\na\nb\n')
+    with pytest.raises(ValueError):
+        mod._data_context(tmp_path, preview_rows=1)
+
+
+def test_pi_preview_counts_full_file_with_bounded_reads(tmp_path, monkeypatch):
+    import os
+    mod = agent('pi-agent')
+    path = tmp_path / 'data.csv'
+    path.write_bytes(b'h\n' + b'a,b,c\n' * 100000)
+    reads = []
+    original = os.read
+    def counting(fd, size):
+        reads.append(size)
+        return original(fd, size)
+    monkeypatch.setattr(os, 'read', counting)
+    monkeypatch.setattr(Path, 'read_text', lambda *a, **kw: pytest.fail('whole-file text read'))
+    text, rows, truncated = mod._preview_text(path, max_rows=2)
+    assert text == 'h\na,b,c\na,b,c'
+    assert rows == 100000 and truncated
+    assert max(reads) <= 65536
+
+
+def test_pi_refuses_input_before_spawning(tmp_path, monkeypatch):
+    import os
+    workspace, _, argv = make_context(tmp_path)
+    (workspace / 'data').mkdir()
+    os.mkfifo(workspace / 'data/train.csv')
+    mod = agent('pi-agent')
+    monkeypatch.setattr(mod.subprocess, 'run', lambda *a, **kw: pytest.fail('agent spawned'))
+    assert mod.main(['--model','test',*argv]) != 0

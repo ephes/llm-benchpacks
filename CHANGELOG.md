@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Admit bounded stable regular example contexts; stream contained Pi data previews
+  and cap aggregate data reads and editable-file context before agent execution.
+
 - Keep remote/agent failure bodies out of example diagnostics and sidecars; publish
   complete private telemetry atomically through destinations owned across calls.
 

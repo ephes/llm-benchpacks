@@ -5478,3 +5478,9 @@ Duplicate, depth and completion regressions run entirely offline.
 Removed raw remote/agent failure text from example diagnostics and restricted
 finish-reason labels. Owned, atomic 0600 telemetry publication now spans the
 external call, with failure, substitution and privacy sentinel regressions.
+
+## 2026-11-16 — Bounded example acquisition (B11)
+
+Context reads now admit stable regular UTF-8 files under a byte ceiling. Pi
+streams bounded contained CSV previews and caps aggregate editable context.
+FIFO, symlink, rewrite, aggregate and counting-reader regressions are synthetic.

@@ -1209,3 +1209,7 @@ APIs own one connection, bounded reads and deadline retirement; no redirects.
 Example telemetry destinations retain directory descriptors and the admitted
 leaf generation for the whole external call; publication uses a private sibling
 stage and atomic replacement. Default diagnostics contain no raw remote bodies.
+
+Example context and Pi workspace readers reuse opened regular-file admission
+and generation fences. Pi previews stream data separately from retained context,
+with aggregate data/editable budgets enforced before external execution.

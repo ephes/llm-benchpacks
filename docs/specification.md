@@ -2129,3 +2129,13 @@ or replace failure preserves prior evidence. A post-publication directory-sync
 failure reports uncertain durability of the complete visible file. Telemetry
 failure preserves an existing child failure status. Use a new task attempt after
 concurrent sidecar changes; do not share a sidecar between writers.
+
+The four model/CLI examples read contexts through no-follow nonblocking regular
+file descriptors, with a 16 MiB ceiling, strict UTF-8 and opened-file generation
+checks before JSON admission. FIFOs, oversized or changing inputs fail before
+external execution. Pi reads only contained regular workspace inputs: editable
+context is capped at 16 MiB in aggregate; data scans share 64 MiB. CSV previews
+retain at most 64 KiB per file and 0–1000 requested data rows plus the header,
+while streaming the row count in chunks of at most 64 KiB. Individual physical
+lines above 64 KiB are refused; row counts describe physical lines, not quoted
+multiline CSV records. Unsupported envelopes fail before spawning Pi.

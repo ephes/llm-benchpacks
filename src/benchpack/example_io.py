@@ -171,3 +171,58 @@ def publish_telemetry(destination, text: str):
         # before executing the external agent/HTTP call.
         with ExitStack() as resources:
             TelemetryDestination(resources, destination.parent, destination).write(data)
+
+
+MAX_CONTEXT_BYTES = 16 * 1024 * 1024
+
+
+def read_context_text(path: Path) -> str:
+    """Admit an opened regular UTF-8 context before decoding control JSON."""
+    fd = os.open(path, _READ)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError('context must be a regular file')
+        snapshot = read_opened_regular(fd, MAX_CONTEXT_BYTES)
+        if snapshot.data is None:
+            raise ValueError('context exceeds byte limit')
+        return snapshot.data.decode('utf-8')
+    except (OSError, UnicodeError) as exc:
+        raise ValueError('could not read stable UTF-8 context') from exc
+    finally:
+        os.close(fd)
+
+
+from contextlib import contextmanager
+from benchpack.safe_files import admitted_directory
+
+
+@contextmanager
+def workspace_input(root: Path, relative: str, *, optional=False):
+    """Open contained regular inputs nonblocking, refusing links at every step."""
+    if contained_parts(relative) is None:
+        raise ValueError('unsafe workspace input path')
+    path = root / relative
+    with ExitStack() as resources:
+        try:
+            parent = resources.enter_context(admitted_directory(path.parent, base=root.parent))
+            fd = os.open(path.name, _READ, dir_fd=parent)
+        except FileNotFoundError:
+            if optional:
+                yield None
+                return
+            raise ValueError('workspace input missing') from None
+        resources.callback(os.close, fd)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError('workspace input must be regular')
+        yield fd
+
+
+def workspace_text(root: Path, relative: str, limit: int) -> str:
+    with workspace_input(root, relative) as fd:
+        snapshot = read_opened_regular(fd, limit)
+        if snapshot.data is None:
+            raise ValueError('workspace context exceeds byte limit')
+        try:
+            return snapshot.data.decode('utf-8')
+        except UnicodeError as exc:
+            raise ValueError('workspace context must be UTF-8') from exc
