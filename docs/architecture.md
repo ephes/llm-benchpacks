@@ -1231,3 +1231,12 @@ output telemetry roots: admit held no-follow parents and regular single-link
 targets, stage both encoded artifacts, then replace with owned rollback. New
 leaves are 0600 and existing modes survive. Rollback failure retains original
 backups and is reported explicitly; this is not a crash-atomic multi-file commit.
+
+Example edit publication syncs every staged file before replacement and each
+distinct held parent directory after all replacements. Compensation syncs the
+parents of published targets as well. A directory-sync failure after complete
+publication reports `edits published; directory durability uncertain` and retains
+the complete visible new files. A rollback directory-sync failure reports
+`rollback directory durability uncertain`, retaining the original publication
+failure as the cause. Inspect visible files and retained backups before any
+manual retry; never automatically reapply or undo an uncertain publication.

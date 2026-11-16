@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sync distinct held parent directories after example edit publication and
+  compensation. Report uncertain publication/rollback durability explicitly;
+  retain complete visible edits after a publication acknowledgement failure.
+
 - Admit reference-agent contexts with bounded stable regular reads, duplicate-free
   JSON and exact integer version/repetition checks before artifact writes.
 - Stage reference marker/log bytes together through held no-follow parents;

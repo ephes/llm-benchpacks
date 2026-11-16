@@ -102,11 +102,31 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
     replace_example_files([(root, relative, data) for relative, data in replacements], missing=missing)
 
 
+def _sync_parents(targets):
+    """Acknowledge each held directory once, attempting all after an I/O error."""
+    seen = set()
+    failure = None
+    for target in targets:
+        info = os.fstat(target.parent)
+        identity = (info.st_dev, info.st_ino)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        try:
+            os.fsync(target.parent)
+        except OSError as exc:
+            if failure is None:
+                failure = exc
+    return failure
+
+
 def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missing=False):
     """Publish an admitted set across example roots with owned rollback.
 
     Existing targets must be single-link regular files; missing leaves are
     opt-in. New files use mode 0600 and existing permissions are preserved.
+    Sync distinct held parents after publication and compensation. A publication
+    sync failure retains complete visible edits with explicitly uncertain durability.
     This is compensation for reported errors, not a crash-atomic transaction.
     """
     with ExitStack() as stack:
@@ -145,15 +165,25 @@ def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missin
                     failed = True
                     if backup is not None:
                         target.retained.add(backup)
-            rollback = 'edit publication failed; rollback failed; original .benchpack-example-*.tmp backups retained'
+            sync_failure = _sync_parents(target for target, _, _ in entries if target.published is not None)
+            rollback = 'edit publication failed'
+            if failed:
+                rollback += '; rollback failed; original .benchpack-example-*.tmp backups retained'
+            if sync_failure is not None:
+                rollback += '; rollback directory durability uncertain; inspect visible files before retrying'
             if not isinstance(exc, Exception):
                 # Keep interrupts and exits (for example signal SystemExit) intact.
-                if failed:
+                if failed or sync_failure is not None:
                     exc.add_note(rollback)
                 raise
-            if failed:
+            if failed or sync_failure is not None:
                 raise ValueError(rollback) from exc
             raise ValueError('could not apply assistant edit payload') from exc
+        # All complete new bytes are visible. A failed acknowledgement cannot
+        # safely turn that outcome into rollback or an automatic retry.
+        failure = _sync_parents(target for target, _, _ in entries)
+        if failure is not None:
+            raise ValueError('edits published; directory durability uncertain; inspect visible files before retrying') from failure
 
 
 def control_json(text):

@@ -4,6 +4,15 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (example edit directory durability)
+
+- Acknowledge staged example replacements across all distinct held parent
+  directories, including marker/log roots; sync compensating namespace changes.
+- Keep complete visible edits after a publication directory-sync failure and
+  report uncertain durability separately from a pre-publication refusal.
+- Offline fault fixtures cover two-root acknowledgement and rollback sync,
+  including restoration and removal of newly created targets.
+
 ## 2026-11-16 (reference agent storage boundary)
 
 - Reuse bounded opened regular context snapshots and duplicate-member admission;

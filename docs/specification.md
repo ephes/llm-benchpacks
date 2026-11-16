@@ -481,6 +481,16 @@ never overwrite a newer concurrent leaf during rollback. This is compensation
 for filesystem errors, not a crash-atomic pair or isolation from hostile
 same-user writers. Serialize attempts and recover retained originals before retrying.
 
+Example edit publication syncs every staged file before replacement and each
+distinct held parent directory after all replacements. Compensation syncs the
+parents of published targets as well. A directory-sync failure after complete
+publication reports `edits published; directory durability uncertain` and retains
+the complete visible new files. A rollback directory-sync failure reports
+`rollback directory durability uncertain`, retaining the original publication
+failure as the cause. Inspect visible files and retained backups before any
+manual retry; never automatically reapply or undo an uncertain publication.
+
+
 A second deterministic example is available at
 `examples/external-agent/model-call-agent.py`. It uses the same public argv and
 context handoff, performs one tiny HTTP JSON request to an example-owned local
