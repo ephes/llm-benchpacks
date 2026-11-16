@@ -118,6 +118,57 @@ def test_owned_group_accounting_uses_public_api(scorer, monkeypatch):
     assert scorer._rss_mb(1) == 83
 
 
+def test_member_exiting_during_sample_is_skipped(scorer, monkeypatch):
+    from types import SimpleNamespace
+    def gone():
+        raise psutil.NoSuchProcess(2)
+    def zombie():
+        raise psutil.ZombieProcess(3)
+    members = [SimpleNamespace(pid=1, status=lambda: 'running',
+                               memory_info=lambda: SimpleNamespace(rss=5*1024*1024)),
+               SimpleNamespace(pid=2, status=gone, memory_info=gone),
+               SimpleNamespace(pid=3, status=zombie, memory_info=zombie)]
+    monkeypatch.setattr(scorer.psutil, 'process_iter', lambda: iter(members))
+    monkeypatch.setattr(scorer.os, 'getpgid', lambda pid: 1)
+    assert scorer._rss_mb(1) == 5
+
+
+def test_denied_member_accounting_fails_the_sample(scorer, monkeypatch):
+    from types import SimpleNamespace
+    def denied():
+        raise psutil.AccessDenied(1)
+    members = [SimpleNamespace(pid=1, status=denied, memory_info=denied)]
+    monkeypatch.setattr(scorer.psutil, 'process_iter', lambda: iter(members))
+    monkeypatch.setattr(scorer.os, 'getpgid', lambda pid: 1)
+    assert scorer._rss_mb(1) is None
+
+
+def test_leader_exit_inside_sample_keeps_memory_complete(scorer, tmp_path, monkeypatch):
+    calls = []
+    def sample(pid):
+        calls.append(pid)
+        if len(calls) == 1:
+            return 7.0
+        # Model the leader exiting inside the sampling window: it is an
+        # unreaped zombie, so no group member is observable.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                if psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                    break
+            except psutil.Error:
+                break
+            time.sleep(0.01)
+        return None
+    monkeypatch.setattr(scorer, '_rss_mb', sample)
+    result = scorer._run_command([sys.executable, '-c', 'import time; time.sleep(.3)'],
+                                 cwd=tmp_path, timeout_s=10)
+    assert result['ok']
+    assert len(calls) == 2
+    assert result['memory_complete'] is True
+    assert result['peak_rss_mb'] == 7.0
+
+
 def test_interrupt_reaps_leader_and_preserves_error(scorer, tmp_path, monkeypatch):
     real_spawn = scorer.subprocess.Popen
     leaders = []

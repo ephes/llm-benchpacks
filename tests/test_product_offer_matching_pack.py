@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import psutil
+
 from benchpack.packs import load_pack
 
 
@@ -80,6 +82,13 @@ def test_product_offer_python_reference_verifier_writes_cluster_metrics(
     assert payload["metrics"]["eval_pair_operating_point_from_clusters"][
         "positive_prevalence"
     ] == 0.25
+    try:
+        psutil.pids()
+        accounting = True
+    except (OSError, psutil.Error):
+        accounting = False
+    # Only blocked process accounting may leave a real run without memory evidence.
+    assert payload["system_metrics"]["memory_complete"] or not accounting
     if payload["system_metrics"]["memory_complete"]:
         assert payload["combined_score"]["formula"].startswith("100 *")
         assert payload["combined_score"]["components"]["average_precision"] > 0.9020

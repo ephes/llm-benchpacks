@@ -47,9 +47,11 @@ def _rss_mb(pgid: int) -> float | None:
                     continue
             except ProcessLookupError:
                 continue
-            if process.status() == psutil.STATUS_ZOMBIE:
-                continue
+            # A member exiting mid-sample is a normal exit, not missing accounting
+            # (ZombieProcess is a NoSuchProcess); AccessDenied still fails the sample.
             try:
+                if process.status() == psutil.STATUS_ZOMBIE:
+                    continue
                 total += process.memory_info().rss
                 observed = True
             except psutil.NoSuchProcess:
@@ -108,6 +110,10 @@ def _run_command(
                 break
             rss = _rss_mb(process.pid)
             if rss is None:
+                # The leader exiting inside the sampling window ends the run; only
+                # an unobservable group that is still running is missing evidence.
+                if process.poll() is not None:
+                    break
                 memory_complete = False
             else:
                 samples += 1

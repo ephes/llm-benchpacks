@@ -1991,7 +1991,9 @@ be counted for each process. `memory_samples` records successful observations;
 `memory_complete` requires nonzero evidence and no failed observations. Missing
 accounting permissions, all-missed/zero observations or sampling failures yield
 null `peak_rss_mb` and an unavailable combined score (`value: null`), never zero
-memory evidence. Sampling may miss brief allocation peaks. Historical scores
+memory evidence. Normal exits are not failed observations: a group member that
+exits during a sample is skipped, and a sample that finds no member because the
+leader just exited ends the run. Sampling may miss brief allocation peaks. Historical scores
 using only the leader PID have a different scope and must not be compared as
 though the memory methodology were unchanged. Candidate `program_metrics`
 remain self-reported and separate from independently observed system metrics.
