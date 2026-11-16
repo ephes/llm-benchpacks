@@ -578,16 +578,33 @@ def _publish_static_site(
 def _publication_guard(output: Path, kind: str) -> Iterator[None]:
     """Serialize publishers of one output; see ``output_paths.publication_lock``."""
 
-    with ExitStack() as stack:
-        try:
-            stack.enter_context(publication_lock(output))
-        except PublicationBusyError as exc:
-            raise RegistryError(str(exc)) from exc
-        except OSError as exc:
-            raise RegistryError(
-                f"could not lock {kind} output {output} for publication: {exc}"
-            ) from exc
-        yield
+    body_completed = False
+    try:
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(publication_lock(output))
+            except (PublicationBusyError, OSError) as exc:
+                if isinstance(exc, PublicationBusyError):
+                    error = RegistryError(str(exc))
+                else:
+                    error = RegistryError(
+                        f"could not lock {kind} output {output} for publication: {exc}"
+                    )
+                for note in getattr(exc, "__notes__", ()):
+                    error.add_note(note)
+                raise error from exc
+            yield
+            body_completed = True
+    except OSError as exc:
+        # Body failures propagate unchanged (with release notes attached); only a
+        # release-only failure after a completed body is reported here.
+        if not body_completed:
+            raise
+        details = "; ".join([str(exc), *getattr(exc, "__notes__", ())])
+        raise RegistryError(
+            f"{kind} output {output} was completed, but releasing its publication "
+            f"lock failed: {details}"
+        ) from exc
 
 
 def import_result_dirs(

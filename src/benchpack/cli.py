@@ -622,6 +622,12 @@ def _cmd_registry_agent_wrap_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def _publication_error_message(exc: RegistryError) -> str:
+    """Include publication-lock release notes attached to a publication failure."""
+
+    return "; ".join([str(exc), *getattr(exc, "__notes__", ())])
+
+
 def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
     try:
         summary = create_result_bundle(
@@ -631,7 +637,7 @@ def _cmd_registry_bundle_create(args: argparse.Namespace) -> int:
             force=args.force,
         )
     except RegistryError as exc:
-        raise SystemExit(str(exc)) from exc
+        raise SystemExit(_publication_error_message(exc)) from exc
     run_word = "run" if summary.runs == 1 else "runs"
     file_word = "file" if summary.files == 1 else "files"
     artifact_word = "artifact" if summary.omitted_artifacts == 1 else "artifacts"
@@ -700,7 +706,7 @@ def _cmd_registry_site(args: argparse.Namespace) -> int:
             force=args.force,
         )
     except RegistryError as exc:
-        raise SystemExit(str(exc)) from exc
+        raise SystemExit(_publication_error_message(exc)) from exc
     run_word = "run" if summary.runs == 1 else "runs"
     file_word = "file" if summary.files == 1 else "files"
     print(

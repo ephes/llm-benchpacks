@@ -4,6 +4,22 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-16 (reference agent storage boundary)
+
+- Reuse bounded opened regular context snapshots and duplicate-member admission;
+  require exact integer version/repetition before any artifact write.
+- Reuse staged descriptor-relative replacements across marker and telemetry roots,
+  refusing links/exchanges and restoring owned originals after reported failure.
+- New reference artifacts use 0600; existing modes survive. Failed rollback retains
+  original backups and is explicit; concurrent writers must still be serialized.
+
+## 2026-11-16 (publication lock ownership)
+
+- Bind bundle/site lock admission to a single-link regular opened inode and its
+  current stable name after flock; refuse unsafe locks before staging.
+- Preserve body failures and interrupts during unlock/close, attaching fixed
+  secondary failure categories; attempt both release stages on every exit.
+
 ## 2026-11-14: round 94 result contracts
 
 - Validated the entire runtime metadata JSON domain before execution.

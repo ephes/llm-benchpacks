@@ -29,6 +29,25 @@ arguments, writes `external-agent-example.txt` inside the prepared workspace,
 and writes one optional model-call telemetry line to the context-provided
 `run.model_call_log_path`.
 
+The reference example admits context through the shared no-follow nonblocking
+regular-file reader (16 MiB, strict UTF-8 and opened-file generation checks).
+Duplicate JSON members at any depth and non-integer version/repetition values
+(including booleans and floats) are refused before artifact writes. An atomic
+context replacement can leave a complete old opened snapshot; all authority
+checks use that one snapshot, never a mixture of generations.
+
+Marker and telemetry UTF-8 bytes are both encoded, admitted and staged before
+publication through held no-follow workspace/output parent descriptors. Existing
+targets must be single-link regular files; they are explicitly replaceable and
+retain their permissions. Missing leaves are created with mode 0600. Symlinks,
+hardlinks, path traversal and changed directories/leaves are refused. A reported
+publication error restores owned replacements, including the marker if log
+publication fails. If rollback fails, diagnostics say so and retain original
+`.benchpack-example-*.tmp` backups in the affected parent for manual recovery;
+never overwrite a newer concurrent leaf during rollback. This is compensation
+for filesystem errors, not a crash-atomic pair or isolation from hostile
+same-user writers. Serialize attempts and recover retained originals before retrying.
+
 The model-call log line follows the recommended minimal shape:
 
 ```json

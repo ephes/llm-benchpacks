@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Admit reference-agent contexts with bounded stable regular reads, duplicate-free
+  JSON and exact integer version/repetition checks before artifact writes.
+- Stage reference marker/log bytes together through held no-follow parents;
+  refuse linked/exchanged targets and restore owned artifacts on failure, retaining
+  originals on failed rollback. New artifacts are private 0600; existing modes survive.
+
+- Preserve publication/rollback failures through lock release errors, attempt
+  descriptor close after failed unlock, and fail on release-only errors. Bundle and
+  site CLI errors show the fixed release notes; release-only failures are registry
+  errors instead of tracebacks.
+
+- Admit publication locks nonblocking without following links; refuse multiply
+  linked or exchanged lock inodes before bundle/site output mutation.
+
 - Send Codex example prompts through bounded stdin; bound CLI output and retire
   owned process groups on every exit. Always remove staged Pi prompts.
 

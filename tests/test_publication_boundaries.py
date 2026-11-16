@@ -306,3 +306,244 @@ def test_bundle_copy_refuses_run_jsonl_symlink(tmp_path) -> None:
     with pytest.raises(RegistryError):
         create_result_bundle([source], tmp_path / "bundle")
     assert not (tmp_path / "bundle").exists()
+
+
+@pytest.mark.parametrize('exporter', ['bundle', 'site'])
+@pytest.mark.parametrize('unsafe', ['fifo', 'hardlink', 'exchanged'])
+def test_publication_lock_admits_only_current_single_link_inode(tmp_path, monkeypatch, exporter, unsafe):
+    from benchpack import output_paths
+    source = tmp_path / 'source'
+    _write_run(source)
+    out = tmp_path / exporter
+    db = tmp_path / 'registry.sqlite'
+    if exporter == 'bundle':
+        publish = lambda: create_result_bundle([source], out, force=True)
+    else:
+        import_result_dirs([source], db)
+        publish = lambda: export_registry_static_site(db, out, force=True)
+    publish()
+    before = _tree(out)
+    lock = publication_lock_path(out)
+    if unsafe == 'fifo':
+        lock.unlink()
+        os.mkfifo(lock)
+    elif unsafe == 'hardlink':
+        os.link(lock, tmp_path / 'alias')
+    else:
+        flock = output_paths.fcntl.flock
+        holders = []
+        def exchange(fd, operation):
+            flock(fd, operation)
+            if operation == output_paths.fcntl.LOCK_EX | output_paths.fcntl.LOCK_NB:
+                lock.rename(tmp_path / 'retired-lock')
+                holders.append(_hold_lock(out))
+        monkeypatch.setattr(output_paths.fcntl, 'flock', exchange)
+    try:
+        with pytest.raises(RegistryError):
+            publish()
+        assert _tree(out) == before
+        assert not list(tmp_path.glob(f'.{exporter}-stage-*'))
+        assert not list(tmp_path.glob(f'.{exporter}-backup-*'))
+    finally:
+        if unsafe == 'exchanged':
+            for holder in holders:
+                holder.kill()
+                holder.communicate(timeout=5)
+
+
+def test_publication_lock_open_is_nonblocking(tmp_path, monkeypatch):
+    from benchpack import output_paths
+    opened = output_paths.os.open
+    def require_nonblocking(path, flags, *args, **kwargs):
+        if str(path).endswith('.benchpack-publish.lock'):
+            assert flags & os.O_NONBLOCK
+            assert flags & os.O_NOFOLLOW
+        return opened(path, flags, *args, **kwargs)
+    monkeypatch.setattr(output_paths.os, 'open', require_nonblocking)
+    with output_paths.publication_lock(tmp_path / 'bundle'):
+        pass
+
+
+@pytest.mark.parametrize('body_error_type', [None, RuntimeError, SystemExit])
+@pytest.mark.parametrize('faults', [('unlock',), ('close',), ('unlock', 'close')])
+def test_publication_lock_release_keeps_primary_and_attempts_close(tmp_path, monkeypatch, body_error_type, faults):
+    body_error = body_error_type('publication failed') if body_error_type else None
+    from benchpack import output_paths
+    flock, close = output_paths.fcntl.flock, output_paths.os.close
+    attempts = []
+    def fail_unlock(fd, operation):
+        if operation == output_paths.fcntl.LOCK_UN:
+            attempts.append('unlock')
+            if 'unlock' in faults:
+                raise OSError('private unlock detail')
+        return flock(fd, operation)
+    def fail_close(fd):
+        attempts.append('close')
+        close(fd)
+        if 'close' in faults:
+            raise OSError('private close detail')
+    monkeypatch.setattr(output_paths.fcntl, 'flock', fail_unlock)
+    monkeypatch.setattr(output_paths.os, 'close', fail_close)
+    with pytest.raises(BaseException) as caught:
+        with output_paths.publication_lock(tmp_path / 'bundle'):
+            if body_error is not None:
+                raise body_error
+    assert attempts == ['unlock', 'close']
+    if body_error is not None:
+        assert caught.value is body_error
+        assert caught.value.__notes__ == [f'publication lock {fault} failed' for fault in faults]
+    else:
+        assert str(caught.value) == f'publication lock {faults[0]} failed'
+
+
+def test_bundle_rollback_error_survives_failed_lock_release(tmp_path, monkeypatch):
+    from benchpack import output_paths
+    source, out = tmp_path / 'source', tmp_path / 'bundle'
+    _write_run(source)
+    create_result_bundle([source], out)
+    before = _tree(out)
+    rename, flock = Path.rename, output_paths.fcntl.flock
+    failed = []
+    def fail_publish(path, target):
+        if Path(target) == out and path != out and '-backup-' not in path.name and not failed:
+            failed.append(True)
+            raise OSError('injected publication failure')
+        return rename(path, target)
+    def fail_unlock(fd, operation):
+        if operation == output_paths.fcntl.LOCK_UN:
+            raise OSError('injected unlock failure')
+        return flock(fd, operation)
+    monkeypatch.setattr(Path, 'rename', fail_publish)
+    monkeypatch.setattr(output_paths.fcntl, 'flock', fail_unlock)
+    with pytest.raises(RegistryError, match='injected publication failure') as caught:
+        create_result_bundle([source], out, force=True)
+    assert caught.value.__notes__ == ['publication lock unlock failed']
+    assert _tree(out) == before
+
+
+@pytest.mark.parametrize('with_primary', [False, True])
+def test_lock_release_interrupt_still_closes(tmp_path, monkeypatch, with_primary):
+    from benchpack import output_paths
+    flock, close = output_paths.fcntl.flock, output_paths.os.close
+    primary, interrupt = RuntimeError('publication failed'), SystemExit(143)
+    closed = []
+    def interrupt_unlock(fd, operation):
+        if operation == output_paths.fcntl.LOCK_UN:
+            raise interrupt
+        return flock(fd, operation)
+    def record_close(fd):
+        close(fd)
+        closed.append(fd)
+    monkeypatch.setattr(output_paths.fcntl, 'flock', interrupt_unlock)
+    monkeypatch.setattr(output_paths.os, 'close', record_close)
+    with pytest.raises(BaseException) as caught:
+        with output_paths.publication_lock(tmp_path / 'bundle'):
+            if with_primary:
+                raise primary
+    assert len(closed) == 1
+    assert caught.value is (primary if with_primary else interrupt)
+    assert caught.value.__notes__ == ['publication lock unlock failed']
+
+
+def _fail_lock_release(monkeypatch, faults):
+    from benchpack import output_paths
+    opened, flock, close = output_paths.os.open, output_paths.fcntl.flock, output_paths.os.close
+    lock_fds = set()
+    def record_lock_open(path, flags, *args, **kwargs):
+        fd = opened(path, flags, *args, **kwargs)
+        if str(path).endswith('.benchpack-publish.lock'):
+            lock_fds.add(fd)
+        return fd
+    def fail_unlock(fd, operation):
+        if fd in lock_fds and operation == output_paths.fcntl.LOCK_UN and 'unlock' in faults:
+            raise OSError('secret unlock detail')
+        return flock(fd, operation)
+    def fail_close(fd):
+        close(fd)
+        if fd in lock_fds:
+            lock_fds.discard(fd)
+            if 'close' in faults:
+                raise OSError('secret close detail')
+    monkeypatch.setattr(output_paths.os, 'open', record_lock_open)
+    monkeypatch.setattr(output_paths.fcntl, 'flock', fail_unlock)
+    monkeypatch.setattr(output_paths.os, 'close', fail_close)
+
+
+@pytest.mark.parametrize('exporter', ['bundle', 'site'])
+@pytest.mark.parametrize('faults', [('unlock',), ('close',), ('unlock', 'close')])
+def test_release_only_lock_failure_is_a_registry_error(tmp_path, monkeypatch, exporter, faults):
+    source = tmp_path / 'source'
+    _write_run(source)
+    out = tmp_path / exporter
+    db = tmp_path / 'registry.sqlite'
+    if exporter == 'bundle':
+        publish = lambda: create_result_bundle([source], out)
+    else:
+        import_result_dirs([source], db)
+        publish = lambda: export_registry_static_site(db, out)
+    _fail_lock_release(monkeypatch, faults)
+    with pytest.raises(RegistryError) as caught:
+        publish()
+    message = str(caught.value)
+    assert 'was completed, but releasing its publication lock failed' in message
+    for fault in faults:
+        assert f'publication lock {fault} failed' in message
+    assert 'secret' not in message
+    assert out.is_dir()
+
+
+@pytest.mark.parametrize('exporter', ['bundle', 'site'])
+def test_cli_reports_release_only_lock_failure(tmp_path, monkeypatch, exporter):
+    source = tmp_path / 'source'
+    _write_run(source)
+    out = tmp_path / exporter
+    if exporter == 'bundle':
+        argv = ['registry', 'bundle', 'create', '--out', str(out), str(source)]
+    else:
+        db = tmp_path / 'registry.sqlite'
+        import_result_dirs([source], db)
+        argv = ['registry', 'site', '--db', str(db), '--out', str(out)]
+    _fail_lock_release(monkeypatch, ('unlock', 'close'))
+    with pytest.raises(SystemExit) as caught:
+        main(argv)
+    message = str(caught.value.code)
+    assert 'publication lock unlock failed' in message
+    assert 'publication lock close failed' in message
+
+
+def test_cli_shows_release_notes_of_publication_failure(tmp_path, monkeypatch):
+    from benchpack import output_paths
+    source, out = tmp_path / 'source', tmp_path / 'bundle'
+    _write_run(source)
+    create_result_bundle([source], out)
+    rename = Path.rename
+    def fail_publish(path, target):
+        if Path(target) == out and path != out and '-backup-' not in path.name:
+            raise OSError('injected publication failure')
+        return rename(path, target)
+    monkeypatch.setattr(Path, 'rename', fail_publish)
+    _fail_lock_release(monkeypatch, ('unlock',))
+    with pytest.raises(SystemExit) as caught:
+        main(['registry', 'bundle', 'create', '--force', '--out', str(out), str(source)])
+    message = str(caught.value.code)
+    assert 'injected publication failure' in message
+    assert message.endswith('; publication lock unlock failed')
+
+
+def test_cli_shows_close_note_of_refused_lock_admission(tmp_path, monkeypatch):
+    source, out = tmp_path / 'source', tmp_path / 'bundle'
+    _write_run(source)
+    os.link(_touch(publication_lock_path(out)), tmp_path / 'alias')
+    _fail_lock_release(monkeypatch, ('close',))
+    with pytest.raises(SystemExit) as caught:
+        main(['registry', 'bundle', 'create', '--out', str(out), str(source)])
+    message = str(caught.value.code)
+    assert 'single-link regular file' in message
+    assert message.endswith('; publication lock close failed')
+    assert not out.exists()
+
+
+def _touch(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    return path
