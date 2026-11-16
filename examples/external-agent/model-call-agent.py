@@ -17,6 +17,7 @@ from typing import Any
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from benchpack.example_io import replace_workspace_files
+from benchpack.example_http import response_bytes
 
 
 
@@ -160,11 +161,7 @@ def _call_local_model(
         method="POST",
     )
     started = time.monotonic()
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            payload = response.read()
-    except urllib.error.URLError as exc:
-        raise ValueError(f"local model call failed: {exc}") from exc
+    payload = response_bytes(request, 5.0)
     duration_s = time.monotonic() - started
     try:
         return _object(json.loads(payload.decode("utf-8")), "model response"), duration_s

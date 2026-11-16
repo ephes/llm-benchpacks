@@ -102,3 +102,86 @@ def test_generation_change_after_staging_is_refused(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         example_io.replace_workspace_files(tmp_path, [('a', b'new')])
     assert (tmp_path / 'outside').read_bytes() == b'sentinel'
+
+
+def call_http(mod):
+    if hasattr(mod, '_call_local_model'):
+        return mod._call_local_model(url='http://127.0.0.1:8000/model', case_id='case', repetition=1, model='test')
+    return mod._call_chat_completion(endpoint='http://127.0.0.1:8000/v1', api_key='synthetic', model='test', prompt='task', allowed_paths=('a',), timeout_s=1, temperature=0, max_tokens=10, token_budget_field='max_tokens', response_format='default')
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'model-call-agent'])
+def test_http_success_body_has_actual_byte_limit(name, monkeypatch):
+    import io
+    mod = agent(name)
+    class Counting(io.BytesIO):
+        def read1(self, n=-1):
+            assert 0 < n <= 65536, 'unbounded HTTP response read'
+            return super().read(n)
+    monkeypatch.setattr('benchpack.example_http.open_response', lambda *a, **k: Counting(b'x' * (17 * 1024 * 1024)))
+    with pytest.raises(ValueError):
+        call_http(mod)
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'model-call-agent'])
+def test_http_redirect_never_reaches_second_origin(name):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    seen = []
+    class Destination(BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen.append(dict(self.headers))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{}')
+        do_GET = do_POST
+        def log_message(self, *args): pass
+    destination = ThreadingHTTPServer(('127.0.0.1', 0), Destination)
+    class Redirect(Destination):
+        def do_POST(self):
+            self.send_response(302)
+            self.send_header('Location', f'http://127.0.0.1:{destination.server_port}/stolen')
+            self.end_headers()
+    source = ThreadingHTTPServer(('127.0.0.1', 0), Redirect)
+    threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (source, destination)]
+    for t in threads: t.start()
+    mod = agent(name)
+    try:
+        if name == 'model-call-agent':
+            mod._call_local_model(url=f'http://127.0.0.1:{source.server_port}/model', case_id='case', repetition=1, model='test')
+        else:
+            mod._call_chat_completion(endpoint=f'http://127.0.0.1:{source.server_port}/v1', api_key='synthetic', model='test', prompt='task', allowed_paths=('a',), timeout_s=1, temperature=0, max_tokens=10, token_budget_field='max_tokens', response_format='default')
+    except ValueError:
+        pass
+    finally:
+        for s in (source, destination): s.shutdown(); s.server_close()
+        for t in threads: t.join()
+    assert seen == []
+
+
+def test_http_slow_drip_uses_shared_deadline(monkeypatch):
+    from benchpack import example_http
+    import io
+    import urllib.request
+    now = [0.0]
+    class Slow(io.BytesIO):
+        def read1(self, size):
+            now[0] += .4
+            return super().read(1)
+    monkeypatch.setattr(example_http.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(example_http, 'open_response', lambda *a: Slow(b'{}'))
+    with pytest.raises(ValueError, match='deadline'):
+        example_http.response_bytes(urllib.request.Request('http://127.0.0.1/'), .5)
+
+
+def test_http_error_body_is_not_read(monkeypatch):
+    from benchpack import example_http
+    import io
+    import urllib.request
+    class Error(io.BytesIO):
+        status = 500
+        def read1(self, size):
+            pytest.fail('error body must not be acquired')
+    monkeypatch.setattr(example_http, 'open_response', lambda *a: Error(b'private'))
+    with pytest.raises(ValueError, match='status 500'):
+        example_http.response_bytes(urllib.request.Request('http://127.0.0.1/'), 1)

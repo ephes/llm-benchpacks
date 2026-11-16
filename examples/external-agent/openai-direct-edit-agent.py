@@ -19,6 +19,7 @@ from typing import Any
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from benchpack.example_io import replace_workspace_files
+from benchpack.example_http import response_bytes
 
 
 
@@ -271,14 +272,7 @@ def _call_chat_completion(
         method="POST",
     )
     started = time.monotonic()
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            payload = response.read()
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")[:300]
-        raise ValueError(f"chat completion failed with HTTP {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise ValueError(f"chat completion failed: {exc}") from exc
+    payload = response_bytes(request, timeout_s)
     duration_s = time.monotonic() - started
     try:
         return _object(json.loads(payload.decode("utf-8")), "chat response"), duration_s

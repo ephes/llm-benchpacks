@@ -253,7 +253,12 @@ def test_call_chat_completion_omits_response_format_by_default(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -262,7 +267,7 @@ def test_call_chat_completion_omits_response_format_by_default(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     response, _ = agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -300,7 +305,12 @@ def test_call_chat_completion_sends_json_object_response_format(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -309,7 +319,7 @@ def test_call_chat_completion_sends_json_object_response_format(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -342,7 +352,12 @@ def test_call_chat_completion_can_send_max_completion_tokens(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -351,7 +366,7 @@ def test_call_chat_completion_can_send_max_completion_tokens(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -403,7 +418,12 @@ def test_call_chat_completion_sends_json_schema_response_format(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {
                     "choices": [
@@ -420,7 +440,7 @@ def test_call_chat_completion_sends_json_schema_response_format(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",

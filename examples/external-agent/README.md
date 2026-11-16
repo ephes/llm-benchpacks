@@ -147,3 +147,9 @@ failure rolls back owned replacements; rollback failure is reported explicitly.
 Executable permissions survive. The local model-call example uses the same
 workspace publication boundary (its fixed output file may be new). Serialize
 writers: generation checks are not isolation from hostile same-user processes.
+
+Example HTTP calls admit at most 16 MiB of actual response bytes, reading in
+64 KiB chunks under one elapsed response deadline (including header/body I/O).
+Non-200 statuses, including every redirect, fail without reading their bodies.
+Requests and credentials therefore remain bound to the configured endpoint;
+no redirect hop is followed. Transport failures use fixed diagnostic categories.

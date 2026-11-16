@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bound example HTTP responses by actual bytes and elapsed time; refuse redirects
+  and keep credentials bound to the configured endpoint.
+
 - Pre-encode and stage example workspace replacements; bind writes to held
   no-follow parents, refuse hardlinks/generation changes and report rollback failure.
 

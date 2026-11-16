@@ -1202,3 +1202,6 @@ failure rolls back owned replacements; rollback failure is reported explicitly.
 Executable permissions survive. The local model-call example uses the same
 workspace publication boundary (its fixed output file may be new). Serialize
 writers: generation checks are not isolation from hostile same-user processes.
+
+The example HTTP clients share `example_http`: public HTTPConnection/socket
+APIs own one connection, bounded reads and deadline retirement; no redirects.

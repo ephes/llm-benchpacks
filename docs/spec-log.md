@@ -5461,3 +5461,8 @@ sync fault tests cover reporter artifacts, context and workspace replacements.
 Pre-encoded batch replacement and descriptor-bound publication now protect the
 OpenAI, Pi and local model-call examples. Offline surrogate, failure, mode,
 hardlink and substitution regressions cover the boundary. No live calls.
+
+## 2026-11-16 — Example HTTP envelope (B08)
+
+Bounded actual-byte reads and shared response deadlines replace unbounded reads.
+All redirects are refused. Offline counting, drip and two-origin tests cover it.
