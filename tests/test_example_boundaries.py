@@ -246,3 +246,101 @@ def test_remote_json_refuses_duplicate_model(name, monkeypatch):
 def test_deep_edit_json_is_controlled(name):
     with pytest.raises(ValueError):
         agent(name)._parse_edit_payload('[' * 2000 + ']' * 2000)
+
+
+def test_remote_refusal_and_finish_reason_do_not_leak(tmp_path):
+    import json
+    mod = agent('openai-direct-edit-agent')
+    secret = 'SYNTHETIC_PRIVATE\x1b[31m'
+    with pytest.raises(ValueError) as caught:
+        mod._assistant_content({'choices': [{'message': {'refusal': secret}}]})
+    assert 'SYNTHETIC_PRIVATE' not in str(caught.value)
+    path = tmp_path / 'telemetry'
+    mod._write_telemetry(path, model='test', endpoint='http://127.0.0.1', response_format='default', token_budget_field='max_tokens', duration_s=.1, ok=False, error=secret, response={'choices':[{'finish_reason': 'SYNTHETIC_PRIVATE'}]})
+    assert 'SYNTHETIC_PRIVATE' not in path.read_text()
+
+
+def make_context(tmp_path):
+    import json
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    (workspace / 'a').write_bytes(b'old')
+    output = tmp_path / 'output'
+    output.mkdir()
+    context = tmp_path / 'context.json'
+    log = output / 'calls.jsonl'
+    context.write_text(json.dumps({'version':1, 'case': {'id':'case', 'prompt':'Allowed repo-root paths to edit:\n- `a`'}, 'run': {'repetition':1, 'output_dir':str(output), 'model_call_log_path':str(log)}, 'workspace': {'path':str(workspace)}, 'adapter':{'model':'test'}}))
+    argv = ['--workspace',str(workspace),'--output-dir',str(output),'--case','case','--repetition','1','--context',str(context)]
+    return workspace, log, argv
+
+
+@pytest.mark.parametrize('exit_code', [0, 7])
+def test_pi_failed_output_is_private(tmp_path, capsys, exit_code):
+    import json
+    workspace, log, argv = make_context(tmp_path)
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!/bin/sh\nprintf "SYNTHETIC_PRIVATE\\033[31m"\nprintf "SYNTHETIC_PRIVATE\\033[31m" >&2\nexit '+str(exit_code)+'\n')
+    exe.chmod(0o755)
+    result = agent('pi-agent').main(['--pi-bin',str(exe),'--model','test',*argv])
+    assert result != 0
+    captured = capsys.readouterr()
+    assert 'SYNTHETIC_PRIVATE' not in captured.out + captured.err + log.read_text()
+    assert '\x1b' not in captured.out + captured.err
+    assert (workspace / 'a').read_bytes() == b'old'
+    assert json.loads(log.read_text())['ok'] is False
+
+
+def test_telemetry_leaf_exchange_during_call_is_refused(tmp_path, monkeypatch):
+    import json
+    workspace, log, argv = make_context(tmp_path)
+    sentinel = tmp_path / 'outside'
+    sentinel.write_bytes(b'outside')
+    mod = agent('openai-direct-edit-agent')
+    def call(**kwargs):
+        log.symlink_to(sentinel)
+        return {'choices':[{'finish_reason':'stop','message':{'content':'{"files":[]}'}}]}, .1
+    monkeypatch.setattr(mod, '_call_chat_completion', call)
+    monkeypatch.setenv('SYNTHETIC_KEY', 'synthetic')
+    assert mod.main(['--endpoint','http://127.0.0.1','--model','test','--api-key-env','SYNTHETIC_KEY',*argv]) != 0
+    assert sentinel.read_bytes() == b'outside'
+
+
+def test_telemetry_replace_failure_keeps_previous_file(tmp_path, monkeypatch):
+    import os
+    mod = agent('openai-direct-edit-agent')
+    path = tmp_path / 'telemetry'
+    path.write_bytes(b'{"ok":true}\n')
+    monkeypatch.setattr(os, 'replace', lambda *a, **kw: (_ for _ in ()).throw(OSError('injected')))
+    with pytest.raises(OSError):
+        mod._write_telemetry(path, model='test', endpoint='http://127.0.0.1', response_format='default', token_budget_field='max_tokens', duration_s=.1, ok=False)
+    assert path.read_bytes() == b'{"ok":true}\n'
+
+
+def test_telemetry_partial_stage_failure_is_atomic(tmp_path, monkeypatch):
+    import os
+    from benchpack.example_io import publish_telemetry
+    path = tmp_path / 'calls'
+    path.write_bytes(b'previous')
+    original = os.fdopen
+    class Partial:
+        def __init__(self, fd, mode): self.stream = original(fd, mode)
+        def __enter__(self): return self
+        def __exit__(self, *args): self.stream.close()
+        def write(self, data):
+            self.stream.write(data[:2])
+            return 2
+    monkeypatch.setattr(os, 'fdopen', Partial)
+    with pytest.raises(OSError, match='short'):
+        publish_telemetry(path, '{"ok":true}\n')
+    assert path.read_bytes() == b'previous'
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_pi_primary_failure_survives_telemetry_failure(tmp_path, monkeypatch):
+    _, _, argv = make_context(tmp_path)
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!/bin/sh\nexit 7\n')
+    exe.chmod(0o755)
+    mod = agent('pi-agent')
+    monkeypatch.setattr(mod, '_write_telemetry', lambda *a, **kw: (_ for _ in ()).throw(OSError('injected')))
+    assert mod.main(['--pi-bin',str(exe),'--model','test',*argv]) == 7

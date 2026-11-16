@@ -160,3 +160,13 @@ OpenAI direct-edit wrapper requires `finish_reason: "stop"` before parsing or
 applying edits; missing, length-limited, filtered and unsupported outcomes fail.
 Structured upstream errors and explicit response model mismatches also fail.
 An absent response model remains compatible with local endpoints.
+
+Failure diagnostics omit raw HTTP error/refusal bodies and failed Pi output.
+Only fixed error categories and allowlisted completion reasons enter telemetry;
+model summaries are not printed. Sidecars are admitted before the external call,
+written to complete private (0600) sibling stages, synced and atomically replaced
+through held no-follow parents. Changed directories/leaves are refused; staging
+or replace failure preserves prior evidence. A post-publication directory-sync
+failure reports uncertain durability of the complete visible file. Telemetry
+failure preserves an existing child failure status. Use a new task attempt after
+concurrent sidecar changes; do not share a sidecar between writers.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import ipaddress
 import json
 import sys
@@ -16,7 +17,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import replace_workspace_files, control_json
+from benchpack.example_io import TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
 from benchpack.example_http import response_bytes
 
 
@@ -121,7 +122,7 @@ def _load_and_validate_context(args: argparse.Namespace) -> tuple[Path, Path, Pa
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     model_call_relative = _relative_to(model_call_log_path, output_dir_arg)
     if model_call_relative is None:
         raise ValueError("context.run.model_call_log_path escapes output dir")
@@ -200,7 +201,7 @@ def _validate_response(response: dict[str, Any], model: str) -> dict[str, Any]:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-call-url", required=True)
     parser.add_argument("--workspace", required=True)
@@ -213,7 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         url = _validate_model_call_url(args.model_call_url)
         repetition = int(args.repetition)
-        workspace, _, model_call_log_path, model = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, model = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
         response, duration_s = _call_local_model(
             url=url,
             case_id=args.case,
@@ -241,15 +243,17 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         replace_workspace_files(workspace, [(ALLOWED_WORKSPACE_FILE, validated["content"].encode("utf-8"))], missing=True)
-        model_call_log_path.write_text(
-            json.dumps(telemetry, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        publish_telemetry(model_call_log_path, json.dumps(telemetry, sort_keys=True) + "\n")
     except (OSError, ValueError) as exc:
         return _fail(f"could not write model-call example artifacts: {exc}")
 
     print(f"model-call-agent wrote {ALLOWED_WORKSPACE_FILE} for {args.case}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

@@ -5472,3 +5472,9 @@ All redirects are refused. Offline counting, drip and two-origin tests cover it.
 Unique JSON members now gate example controls. OpenAI edit publication requires
 a completed stop outcome and a matching explicit model, without upstream errors.
 Duplicate, depth and completion regressions run entirely offline.
+
+## 2026-11-16 — Private durable example evidence (B10)
+
+Removed raw remote/agent failure text from example diagnostics and restricted
+finish-reason labels. Owned, atomic 0600 telemetry publication now spans the
+external call, with failure, substitution and privacy sentinel regressions.

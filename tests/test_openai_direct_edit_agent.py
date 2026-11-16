@@ -627,7 +627,7 @@ def test_write_telemetry_omits_unsafe_finish_reason(tmp_path: Path) -> None:
     assert payload["token_budget_field"] == "max_tokens"
     assert payload["prompt_tokens"] == 10
     assert payload["output_tokens"] == 20
-    assert payload["error"] == "failed after unsafe finish reason"
+    assert payload["error"] == "example_failed"
 
 
 def test_write_telemetry_truncates_long_finish_reason(tmp_path: Path) -> None:
@@ -650,7 +650,7 @@ def test_write_telemetry_truncates_long_finish_reason(tmp_path: Path) -> None:
     )
 
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["finish_reason"] == "x" * 64
+    assert "finish_reason" not in payload
 
 
 def test_load_context_rejects_model_call_log_under_raw(tmp_path: Path) -> None:

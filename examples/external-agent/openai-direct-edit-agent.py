@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 import re
@@ -18,7 +19,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import replace_workspace_files, control_json
+from benchpack.example_io import TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
 from benchpack.example_http import response_bytes
 
 
@@ -89,7 +90,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         relative_log_path = model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -303,7 +304,7 @@ def _assistant_content(response: dict[str, Any]) -> str:
         raise ValueError("chat response choice.message must be an object")
     refusal = message.get("refusal")
     if isinstance(refusal, str) and refusal:
-        raise ValueError(f"chat response message.refusal: {refusal[:180]}")
+        raise ValueError("chat response message.refusal")
     return _string(message.get("content"), "chat response message.content")
 
 
@@ -319,13 +320,8 @@ def _finish_reason(response: dict[str, Any]) -> str:
 
 
 def _safe_finish_reason(response: dict[str, Any]) -> str:
-    reason = _finish_reason(response)[:64]
-    for ch in reason:
-        if ch == " ":
-            continue
-        if unicodedata.category(ch)[0] in {"C", "Z"}:
-            return ""
-    return reason
+    reason = _finish_reason(response)
+    return reason if reason in {"stop", "length", "content_filter", "tool_calls", "function_call"} else ""
 
 
 def _parse_edit_payload(content: str, *, finish_reason: str = "") -> dict[str, Any]:
@@ -359,9 +355,9 @@ def _apply_edits(
             raise ValueError(f"assistant edit payload.files[{index}] must be an object")
         path = _string(item.get("path"), f"assistant edit payload.files[{index}].path")
         if path not in allowed:
-            raise ValueError(f"assistant attempted to edit disallowed path: {path}")
+            raise ValueError("assistant attempted to edit disallowed path")
         if path in seen_paths:
-            raise ValueError(f"assistant edit payload duplicates path: {path}")
+            raise ValueError("assistant edit payload duplicates path")
         seen_paths.add(path)
         content = item.get("content")
         if not isinstance(content, str):
@@ -423,11 +419,11 @@ def _write_telemetry(
         if output_tokens is not None:
             payload["output_tokens"] = output_tokens
     if error:
-        payload["error"] = error[:180]
-    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        payload["error"] = "example_failed"
+    publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--model", required=True)
@@ -467,7 +463,8 @@ def main(argv: list[str] | None = None) -> int:
     model_call_log_path: Path | None = None
     response: dict[str, Any] | None = None
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
         api_key = os.environ.get(args.api_key_env, "")
         if not api_key:
             raise ValueError(f"API key environment variable is not set: {args.api_key_env}")
@@ -520,9 +517,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"openai-direct-edit-agent wrote {changed} file(s) for {args.case}"
-        + (f": {summary}" if summary else "")
+
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

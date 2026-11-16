@@ -1205,3 +1205,7 @@ writers: generation checks are not isolation from hostile same-user processes.
 
 The example HTTP clients share `example_http`: public HTTPConnection/socket
 APIs own one connection, bounded reads and deadline retirement; no redirects.
+
+Example telemetry destinations retain directory descriptors and the admitted
+leaf generation for the whole external call; publication uses a private sibling
+stage and atomic replacement. Default diagnostics contain no raw remote bodies.

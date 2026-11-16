@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep remote/agent failure bodies out of example diagnostics and sidecars; publish
+  complete private telemetry atomically through destinations owned across calls.
+
 - Refuse duplicate example control JSON members and incomplete OpenAI edit replies,
   upstream errors and explicit model mismatches before workspace mutation.
 

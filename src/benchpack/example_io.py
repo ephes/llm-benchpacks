@@ -69,7 +69,7 @@ class _Target:
                 or current is not None and _generation(current) != _generation(expected)):
             raise OSError('workspace target changed')
 
-    def stage(self, data, stack):
+    def stage(self, data, stack, *, private=False):
         name = f'.benchpack-example-{uuid.uuid4().hex}.tmp'
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=self.parent)
@@ -83,7 +83,7 @@ class _Target:
             if stream.write(data) != len(data):
                 raise OSError('short example stage write')
             stream.flush()
-            if self.info is not None:
+            if self.info is not None and not private:
                 os.fchmod(stream.fileno(), stat.S_IMODE(self.info.st_mode))
             os.fsync(stream.fileno())
         return name
@@ -140,3 +140,34 @@ def control_json(text):
         raise json.JSONDecodeError('invalid control JSON', '', 0) from exc
     except (ValueError, RecursionError) as exc:
         raise ValueError('invalid or ambiguous control JSON') from exc
+
+
+class TelemetryDestination:
+    """Hold sidecar directory and expected leaf generation across an agent call."""
+    def __init__(self, resources, root: Path, path: Path):
+        relative = path.relative_to(root).as_posix()
+        self.target = _Target(resources, root, relative, missing=True)
+        self.resources = resources
+
+    def write(self, data: bytes):
+        target = self.target
+        stage = target.stage(data, self.resources, private=True)
+        target.check(target.info)
+        os.replace(stage, target.name, src_dir_fd=target.parent, dst_dir_fd=target.parent)
+        target.info = os.stat(target.name, dir_fd=target.parent, follow_symlinks=False)
+        # Complete bytes are already published if directory sync fails.
+        try:
+            os.fsync(target.parent)
+        except OSError as exc:
+            raise OSError('telemetry published; directory durability uncertain') from exc
+
+
+def publish_telemetry(destination, text: str):
+    data = text.encode('utf-8')
+    if isinstance(destination, TelemetryDestination):
+        destination.write(data)
+    else:
+        # Direct helper calls admit their destination here; CLI calls admit it
+        # before executing the external agent/HTTP call.
+        with ExitStack() as resources:
+            TelemetryDestination(resources, destination.parent, destination).write(data)

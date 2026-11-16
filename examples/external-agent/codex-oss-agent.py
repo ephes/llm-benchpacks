@@ -10,6 +10,7 @@ Ollama, not for cloud-backed or credentialed runs.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import control_json
+from benchpack.example_io import TelemetryDestination, publish_telemetry, control_json
 
 
 
@@ -84,7 +85,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -130,12 +131,12 @@ def _write_telemetry(
         "duration_s": round(duration_s, 6),
     }
     try:
-        path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
     except OSError as exc:
         raise ValueError(f"could not write model-call telemetry: {exc}") from exc
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--codex-bin", default="codex")
     parser.add_argument("--codex-model", required=True)
@@ -148,7 +149,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
@@ -185,9 +187,15 @@ def main(argv: list[str] | None = None) -> int:
             ok=completed.returncode == 0,
         )
     except ValueError as exc:
-        return _fail(str(exc))
+        _fail(str(exc))
+        return completed.returncode if completed.returncode else 2
 
     return completed.returncode
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

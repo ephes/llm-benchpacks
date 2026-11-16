@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import re
 import subprocess
@@ -15,7 +16,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import replace_workspace_files, control_json
+from benchpack.example_io import TelemetryDestination, publish_telemetry, replace_workspace_files, control_json
 
 
 
@@ -85,7 +86,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -242,7 +243,7 @@ def _write_telemetry(
         "finish_reason": f"thinking-{thinking}",
         "duration_s": round(duration_s, 6),
     }
-    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
 
 
 def _parse_edit_payload(content: str) -> dict[str, Any]:
@@ -311,9 +312,9 @@ def _apply_edits(
             raise ValueError(f"pi edit payload.files[{index}] must be an object")
         path = _string(item.get("path"), f"pi edit payload.files[{index}].path")
         if path not in allowed:
-            raise ValueError(f"pi attempted to edit disallowed path: {path}")
+            raise ValueError("pi attempted to edit disallowed path")
         if path in seen_paths:
-            raise ValueError(f"pi edit payload duplicates path: {path}")
+            raise ValueError("pi edit payload duplicates path")
         seen_paths.add(path)
         content = item.get("content")
         if not isinstance(content, str):
@@ -329,7 +330,7 @@ def _apply_edits(
     return len(replacements), summary if isinstance(summary, str) else ""
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pi-bin", default="pi")
     parser.add_argument("--model", required=True)
@@ -344,7 +345,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
@@ -396,14 +398,13 @@ def main(argv: list[str] | None = None) -> int:
             timeout=args.timeout_s,
         )
         if completed.returncode != 0:
-            print(completed.stdout, end="")
-            print(completed.stderr, end="", file=sys.stderr)
+            print("pi-agent: child failed", file=sys.stderr)
             ok = False
             return_code = completed.returncode
         else:
             payload = _parse_edit_payload(completed.stdout)
             changed, summary = _apply_edits(workspace, payload, allowed_paths)
-            print(f"pi-agent applied {changed} file replacement(s): {summary}")
+            print(f"pi-agent applied {changed} file replacement(s)")
             ok = True
             return_code = 0
     except subprocess.TimeoutExpired as exc:
@@ -413,9 +414,6 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         return _fail(f"could not run pi: {exc}")
     except ValueError as exc:
-        if completed is not None:
-            print(completed.stdout, end="")
-            print(completed.stderr, end="", file=sys.stderr)
         ok = False
         return_code = _fail(str(exc))
     finally:
@@ -433,10 +431,16 @@ def main(argv: list[str] | None = None) -> int:
             duration_s=duration_s,
             ok=ok,
         )
-    except OSError as exc:
-        return _fail(f"could not write model-call telemetry: {exc}")
+    except (OSError, ValueError) as exc:
+        _fail("could not write model-call telemetry")
+        return return_code if return_code else 2
 
     return return_code
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":
