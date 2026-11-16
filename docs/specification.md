@@ -2112,3 +2112,10 @@ Example HTTP calls admit at most 16 MiB of actual response bytes, reading in
 Non-200 statuses, including every redirect, fail without reading their bodies.
 Requests and credentials therefore remain bound to the configured endpoint;
 no redirect hop is followed. Transport failures use fixed diagnostic categories.
+
+Example contexts, HTTP response objects and edit payloads reject duplicate JSON
+members at every nesting level, with controlled decode/depth failures. The
+OpenAI direct-edit wrapper requires `finish_reason: "stop"` before parsing or
+applying edits; missing, length-limited, filtered and unsupported outcomes fail.
+Structured upstream errors and explicit response model mismatches also fail.
+An absent response model remains compatible with local endpoints.

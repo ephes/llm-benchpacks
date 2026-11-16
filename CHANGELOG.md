@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refuse duplicate example control JSON members and incomplete OpenAI edit replies,
+  upstream errors and explicit model mismatches before workspace mutation.
+
 - Bound example HTTP responses by actual bytes and elapsed time; refuse redirects
   and keep credentials bound to the configured endpoint.
 

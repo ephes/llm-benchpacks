@@ -17,6 +17,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_io import control_json
+
+
 
 def _fail(message: str) -> int:
     print(f"codex-oss-agent: {message}", file=sys.stderr)
@@ -37,7 +41,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(path.read_text(encoding="utf-8")), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:

@@ -18,7 +18,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import replace_workspace_files
+from benchpack.example_io import replace_workspace_files, control_json
 from benchpack.example_http import response_bytes
 
 
@@ -46,7 +46,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(path.read_text(encoding="utf-8")), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -275,11 +275,20 @@ def _call_chat_completion(
     payload = response_bytes(request, timeout_s)
     duration_s = time.monotonic() - started
     try:
-        return _object(json.loads(payload.decode("utf-8")), "chat response"), duration_s
+        return _object(control_json(payload.decode("utf-8")), "chat response"), duration_s
     except UnicodeDecodeError as exc:
         raise ValueError("chat response must be UTF-8 JSON") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"could not parse chat response JSON: {exc}") from exc
+
+
+def _require_complete_response(response: dict[str, Any], model: str) -> None:
+    if "error" in response:
+        raise ValueError("chat response contains upstream error")
+    if "model" in response and response["model"] != model:
+        raise ValueError("chat response model does not match requested model")
+    if _finish_reason(response) != "stop":
+        raise ValueError("chat response is not a complete stop outcome")
 
 
 def _assistant_content(response: dict[str, Any]) -> str:
@@ -326,7 +335,7 @@ def _parse_edit_payload(content: str, *, finish_reason: str = "") -> dict[str, A
         if len(lines) >= 3 and lines[0].startswith("```") and lines[-1] == "```":
             text = "\n".join(lines[1:-1]).strip()
     try:
-        return _object(json.loads(text), "assistant edit payload")
+        return _object(control_json(text), "assistant edit payload")
     except json.JSONDecodeError as exc:
         detail = f"could not parse assistant edit payload JSON: {exc}"
         if finish_reason:
@@ -475,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             token_budget_field=args.token_budget_field,
             response_format=args.response_format,
         )
+        _require_complete_response(response, args.model)
         payload = _parse_edit_payload(
             _assistant_content(response),
             finish_reason=_safe_finish_reason(response),

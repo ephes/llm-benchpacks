@@ -122,3 +122,21 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
             if failed:
                 raise ValueError('edit publication failed; rollback failed; inspect workspace') from exc
             raise ValueError('could not apply assistant edit payload') from exc
+
+
+def control_json(text):
+    """Decode example control JSON with one interpretation and bounded errors."""
+    import json
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('duplicate JSON member')
+            result[key] = value
+        return result
+    try:
+        return json.loads(text, object_pairs_hook=unique)
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError('invalid control JSON', '', 0) from exc
+    except (ValueError, RecursionError) as exc:
+        raise ValueError('invalid or ambiguous control JSON') from exc

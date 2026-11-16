@@ -185,3 +185,64 @@ def test_http_error_body_is_not_read(monkeypatch):
     monkeypatch.setattr(example_http, 'open_response', lambda *a: Error(b'private'))
     with pytest.raises(ValueError, match='status 500'):
         example_http.response_bytes(urllib.request.Request('http://127.0.0.1/'), 1)
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'pi-agent'])
+@pytest.mark.parametrize('text', [
+    '{"files":[],"files":[]}',
+    '{"files":[{"path":"a","path":"b","content":"x"}]}',
+    '{"files":[{"path":"a","content":"x","content":"y"}]}',
+])
+def test_edit_json_refuses_duplicate_members(name, text):
+    with pytest.raises(ValueError):
+        agent(name)._parse_edit_payload(text)
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'pi-agent', 'model-call-agent', 'codex-oss-agent'])
+def test_context_json_refuses_duplicate_members(name, tmp_path):
+    p = tmp_path / 'context.json'
+    p.write_text('{"workspace":{},"workspace":{"path":"other"}}')
+    with pytest.raises(ValueError):
+        agent(name)._load_context(p)
+
+
+@pytest.mark.parametrize('reason,model,error', [
+    ('length', 'test', False), ('content_filter', 'test', False),
+    (None, 'test', False), ('stop', 'other', False), ('stop', 'test', True),
+])
+def test_incomplete_or_wrong_completion_cannot_publish(reason, model, error, tmp_path, monkeypatch):
+    import json
+    mod = agent('openai-direct-edit-agent')
+    (tmp_path / 'a').write_bytes(b'old')
+    log = tmp_path / 'calls.jsonl'
+    monkeypatch.setattr(mod, '_load_and_validate_context', lambda args: (tmp_path, tmp_path, log, 'Allowed repo-root paths to edit:\n- `a`'))
+    response = {'model': model, 'choices': [{'finish_reason': reason, 'message': {'content': '{"files":[{"path":"a","content":"new"}]}'}}]}
+    if error:
+        response['error'] = {'message': 'synthetic'}
+    monkeypatch.setattr(mod, '_call_chat_completion', lambda **kw: (response, .1))
+    monkeypatch.setenv('SYNTHETIC_KEY', 'synthetic')
+    result = mod.main(['--endpoint','http://127.0.0.1/v1','--model','test','--api-key-env','SYNTHETIC_KEY', '--workspace',str(tmp_path),'--output-dir',str(tmp_path),'--case','case','--repetition','1','--context','unused'])
+    assert result != 0
+    assert (tmp_path / 'a').read_bytes() == b'old'
+    assert not json.loads(log.read_text())['ok']
+
+
+def test_complete_response_admits_stop_and_optional_model():
+    mod = agent('openai-direct-edit-agent')
+    for extra in ({}, {'model': 'test'}):
+        response = {'choices': [{'finish_reason': 'stop'}], **extra}
+        mod._require_complete_response(response, 'test')
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'model-call-agent'])
+def test_remote_json_refuses_duplicate_model(name, monkeypatch):
+    import io
+    monkeypatch.setattr('benchpack.example_http.open_response', lambda *a: io.BytesIO(b'{"model":"test","model":"other"}'))
+    with pytest.raises(ValueError):
+        call_http(agent(name))
+
+
+@pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'pi-agent'])
+def test_deep_edit_json_is_controlled(name):
+    with pytest.raises(ValueError):
+        agent(name)._parse_edit_payload('[' * 2000 + ']' * 2000)

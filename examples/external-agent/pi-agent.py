@@ -15,7 +15,7 @@ from typing import Any
 
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from benchpack.example_io import replace_workspace_files
+from benchpack.example_io import replace_workspace_files, control_json
 
 
 
@@ -42,7 +42,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(path.read_text(encoding="utf-8")), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -251,12 +251,12 @@ def _parse_edit_payload(content: str) -> dict[str, Any]:
     if fenced is not None:
         text = fenced
     try:
-        return _object(json.loads(text), "pi edit payload")
+        return _object(control_json(text), "pi edit payload")
     except json.JSONDecodeError as exc:
         repaired = _repair_truncated_json(text)
         if repaired is not None:
             try:
-                return _object(json.loads(repaired), "pi edit payload")
+                return _object(control_json(repaired), "pi edit payload")
             except json.JSONDecodeError:
                 pass
         raise ValueError(f"could not parse pi edit payload JSON: {exc}") from exc

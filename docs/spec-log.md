@@ -5466,3 +5466,9 @@ hardlink and substitution regressions cover the boundary. No live calls.
 
 Bounded actual-byte reads and shared response deadlines replace unbounded reads.
 All redirects are refused. Offline counting, drip and two-origin tests cover it.
+
+## 2026-11-16 — Unambiguous complete example replies (B09)
+
+Unique JSON members now gate example controls. OpenAI edit publication requires
+a completed stop outcome and a matching explicit model, without upstream errors.
+Duplicate, depth and completion regressions run entirely offline.
