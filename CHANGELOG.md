@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Build cluster PR curves in one sorted sweep and compute average precision
+  over whole tied-score groups, independent of CSV order.
+
 - Bound cluster prediction/metrics reads through no-follow regular descriptors;
   refuse duplicate/nonfinite metrics JSON and oversized scalar extensions.
 

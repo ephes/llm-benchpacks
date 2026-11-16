@@ -190,3 +190,63 @@ def test_metrics_scalar_extensions_round_trip(scorer, tmp_path):
     assert not errors
     assert json.loads(json.dumps(value, allow_nan=False)) == {
         'custom': 1.5, 'yes': True, 'label': 'μ', 'empty': None}
+
+
+def test_curve_matches_independent_threshold_oracle(scorer):
+    import random
+    rng = random.Random(10)
+    for n in range(1, 30):
+        ids = [str(i) for i in range(n)]
+        labels = {i: rng.randrange(2) for i in ids}
+        scores = {i: rng.randrange(5) / 4 for i in ids}
+        curve, summary, errors = scorer._precision_recall_curve(
+            expected_ids=ids, labels=labels, scores=scores)
+        assert not errors
+        previous_tp = 0
+        ap = 0
+        positives = sum(labels.values())
+        for row, threshold in zip(curve, sorted(set(scores.values()), reverse=True)):
+            tp = sum(labels[i] == 1 and scores[i] >= threshold for i in ids)
+            fp = sum(labels[i] == 0 and scores[i] >= threshold for i in ids)
+            fn = positives - tp
+            tn = n - tp - fp - fn
+            precision = tp / (tp+fp)
+            recall = tp / positives if positives else 0
+            f1 = 2*precision*recall/(precision+recall) if precision+recall else 0
+            assert row == dict(threshold=threshold, tp=tp, fp=fp, tn=tn, fn=fn,
+                precision=round(precision, 6), recall=round(recall, 6),
+                f1=round(f1, 6), accuracy=round((tp+tn)/n, 6),
+                positive_prevalence=round(positives/n, 6))
+            ap += (tp-previous_tp) * precision / positives if positives else 0
+            previous_tp = tp
+        assert summary['average_precision'] == round(ap, 6)
+
+
+def test_curve_classification_work_is_linear_after_sort(scorer):
+    class Counted(dict):
+        reads = 0
+        def __getitem__(self, key):
+            self.reads += 1
+            return super().__getitem__(key)
+        def values(self):
+            self.reads += len(self)
+            return super().values()
+    ids = [str(i) for i in range(1000)]
+    labels = Counted({i: int(i) % 2 for i in ids})
+    scores = Counted({i: float(i) for i in ids})
+    scorer._precision_recall_curve(expected_ids=ids, labels=labels, scores=scores)
+    assert labels.reads < 10 * len(ids)
+    assert scores.reads < 10 * len(ids)
+
+
+def test_average_precision_is_invariant_within_ties(scorer):
+    import itertools
+    labels = {'p': 1, 'n': 0, 'p2': 1}
+    scores = {'p': 1., 'n': 1., 'p2': 0.}
+    for ids in itertools.permutations(labels):
+        _, summary, _ = scorer._precision_recall_curve(
+            expected_ids=list(ids), labels=labels, scores=scores)
+        assert summary['average_precision'] == round((.5 + 2/3) / 2, 6)
+    _, summary, _ = scorer._precision_recall_curve(
+        expected_ids=['p', 'n'], labels={'p': 1, 'n': 0}, scores={'p': 1., 'n': 1.})
+    assert summary['average_precision'] == .5

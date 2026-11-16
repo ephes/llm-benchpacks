@@ -14,6 +14,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
+from itertools import groupby
 from typing import Any
 
 import psutil
@@ -509,34 +510,35 @@ def _precision_recall_curve(
     if not scored_ids:
         return [], {"average_precision": 0.0, "points": 0}, errors
 
-    thresholds = sorted({scores[pair_id] for pair_id in scored_ids}, reverse=True)
-    curve: list[dict[str, Any]] = []
-    for threshold in thresholds:
-        predictions = {
-            pair_id: 1 if scores[pair_id] >= threshold else 0
-            for pair_id in scored_ids
-        }
-        curve.append(
-            {
-                "threshold": threshold,
-                **_binary_metrics(
-                    expected_ids=scored_ids,
-                    labels=labels,
-                    predictions=predictions,
-                ),
-            }
-        )
-
+    ordered = sorted(scored_ids, key=scores.__getitem__, reverse=True)
     total_pos = sum(labels[pair_id] for pair_id in scored_ids)
-    tp = 0
-    seen = 0
-    precision_sum = 0.0
-    for pair_id in sorted(scored_ids, key=lambda item: scores[item], reverse=True):
-        seen += 1
-        if labels[pair_id] == 1:
-            tp += 1
-            precision_sum += tp / seen
-    average_precision = precision_sum / total_pos if total_pos else 0.0
+    total_neg = len(scored_ids) - total_pos
+    tp = fp = 0
+    average_precision = 0.0
+    curve: list[dict[str, Any]] = []
+    for threshold, group in groupby(ordered, key=scores.__getitem__):
+        previous_tp = tp
+        for pair_id in group:
+            if labels[pair_id] == 1:
+                tp += 1
+            else:
+                fp += 1
+        fn = total_pos - tp
+        tn = total_neg - fp
+        precision = tp / (tp + fp)
+        recall = tp / total_pos if total_pos else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        curve.append({
+            "threshold": threshold, "precision": round(precision, 6),
+            "recall": round(recall, 6), "f1": round(f1, 6),
+            "accuracy": round((tp + tn) / len(scored_ids), 6),
+            "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+            "positive_prevalence": round(total_pos / len(scored_ids), 6),
+        })
+        # Noninterpolated AP: each entire tie group contributes its recall
+        # increment times precision at the end of that threshold group.
+        if total_pos:
+            average_precision += (tp - previous_tp) / total_pos * precision
     best_f1 = max((row["f1"] for row in curve), default=0.0)
     best_rows = [row for row in curve if row["f1"] == best_f1]
     best_row = best_rows[0] if best_rows else {}

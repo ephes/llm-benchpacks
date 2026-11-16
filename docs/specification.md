@@ -2010,3 +2010,14 @@ Optional metrics require unique JSON members at every depth and finite numbers
 accepted, with keys up to 128 UTF-8 bytes and scalar strings up to 4096 bytes;
 invalid Unicode scalar strings are refused. Only scalar extensions are retained.
 Missing metrics are optional; present but malformed metrics invalidate evidence.
+
+### Precision/recall methodology
+
+The scorer sorts pair scores once, then accumulates confusion counts in a single
+sweep over equal-score threshold groups (O(n log n) time, O(n) retained rows).
+Threshold rows retain the `score >= threshold` convention. Average precision is
+noninterpolated: sum each group's recall increment times precision after the
+whole group is admitted. A positive and a negative tied at the same score have
+AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
+the highest threshold on ties. Published historical artifacts are unchanged;
+older per-item AP can differ for tied scores and must be identified accordingly.

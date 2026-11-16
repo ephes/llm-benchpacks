@@ -900,3 +900,6 @@ memory evidence makes the combined score unavailable; see the pack README.
 
 Product-offer candidate CSV/metrics admission has shared byte/row limits and
 strict finite unique-member metrics JSON; see the pack README for ceilings.
+
+Product-offer AP uses whole tied-score threshold groups: recall increment times
+precision at each group end, summed without interpolation (zero with no positives).

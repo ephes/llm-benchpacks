@@ -5420,3 +5420,8 @@ evidence leaves the combined score unavailable. No fixture/version changes.
 
 Admit CSV and optional metrics through bounded regular descriptors. Share byte
 and row budgets across the run and reject ambiguous/nonfinite metrics JSON.
+
+## 2026-11-16 — PR work and tied-score AP (B09)
+
+Replace repeated full sweeps with one sorted threshold sweep. Define AP over
+whole tied-score groups, independent of expected-ID order; history unchanged.
