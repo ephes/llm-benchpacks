@@ -101,11 +101,16 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
     """Stage every byte before publication; roll back only owned generations."""
     with ExitStack() as stack:
         entries = []
-        for relative, data in replacements:
-            target = _Target(stack, root, relative, missing=missing)
-            stage = target.stage(data, stack)
-            backup = target.stage(target.original, stack) if target.original is not None else None
-            entries.append((target, stage, backup))
+        try:
+            for relative, data in replacements:
+                target = _Target(stack, root, relative, missing=missing)
+                stage = target.stage(data, stack)
+                backup = target.stage(target.original, stack) if target.original is not None else None
+                entries.append((target, stage, backup))
+        except OSError as exc:
+            # Nothing is published yet; admission/staging failures are edit
+            # failures, not transport failures of the external agent.
+            raise ValueError('could not stage assistant edit payload') from exc
         try:
             for target, stage, _ in entries:
                 target.check(target.info)
@@ -130,8 +135,14 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
                     failed = True
                     if backup is not None:
                         target.retained.add(backup)
+            rollback = 'edit publication failed; rollback failed; original .benchpack-example-*.tmp backups retained'
+            if not isinstance(exc, Exception):
+                # Keep interrupts and exits (for example signal SystemExit) intact.
+                if failed:
+                    exc.add_note(rollback)
+                raise
             if failed:
-                raise ValueError('edit publication failed; rollback failed; original .benchpack-example-*.tmp backups retained') from exc
+                raise ValueError(rollback) from exc
             raise ValueError('could not apply assistant edit payload') from exc
 
 

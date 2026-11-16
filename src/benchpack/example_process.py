@@ -8,6 +8,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 
 MAX_AGENT_OUTPUT_BYTES = 16 * 1024 * 1024
 MAX_PROMPT_BYTES = 32 * 1024 * 1024
@@ -17,6 +18,24 @@ _REAP_S = 0.5
 
 class AgentTimeout(ValueError):
     pass
+
+
+@contextmanager
+def exit_on_termination_signals():
+    """Turn SIGTERM/SIGHUP into SystemExit so owned cleanup scopes still run."""
+    handlers = {}
+    if threading.current_thread() is threading.main_thread():
+        def interrupted(number, frame):
+            raise SystemExit(128 + number)
+        for number in (signal.SIGTERM, signal.SIGHUP):
+            # Respect signals the caller ignores (for example under nohup).
+            if signal.getsignal(number) is not signal.SIG_IGN:
+                handlers[number] = signal.signal(number, interrupted)
+    try:
+        yield
+    finally:
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
 
 
 def _signal_group(pid, number):
@@ -64,7 +83,8 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
             def interrupted(number, frame):
                 raise SystemExit(128 + number)
             for number in (signal.SIGTERM, signal.SIGHUP):
-                handlers[number] = signal.signal(number, interrupted)
+                if signal.getsignal(number) is not signal.SIG_IGN:
+                    handlers[number] = signal.signal(number, interrupted)
         with selectors.DefaultSelector() as selector:
             for name in output:
                 stream = getattr(process, name)

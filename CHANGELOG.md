@@ -12,7 +12,8 @@
   complete private telemetry atomically through destinations owned across calls.
 
 - Refuse duplicate example control JSON members and incomplete OpenAI edit replies,
-  upstream errors and explicit model mismatches before workspace mutation.
+  upstream errors and explicit model mismatches before workspace mutation; a dated
+  snapshot of the requested model id still matches.
 
 - Bound example HTTP responses by actual bytes and elapsed time; refuse redirects
   and keep credentials bound to the configured endpoint.
@@ -20,6 +21,8 @@
 - Pre-encode and stage example workspace replacements; bind writes to held
   no-follow parents, refuse hardlinks/generation changes and report rollback failure
   with original backups retained; never roll back over a newer concurrent leaf.
+  Admission/staging failures are edit failures with failure telemetry, not Pi
+  launch errors.
 
 - Sync artifact directories after atomic reporter/context publication; report
   visible-but-uncertain durability on sync failure and retain complete evidence.

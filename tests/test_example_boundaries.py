@@ -229,9 +229,16 @@ def test_incomplete_or_wrong_completion_cannot_publish(reason, model, error, tmp
 
 def test_complete_response_admits_stop_and_optional_model():
     mod = agent('openai-direct-edit-agent')
-    for extra in ({}, {'model': 'test'}):
+    for extra in ({}, {'model': 'test'}, {'model': 'test-2025-04-14'}):
         response = {'choices': [{'finish_reason': 'stop'}], **extra}
         mod._require_complete_response(response, 'test')
+
+
+@pytest.mark.parametrize('reported', ['other', 'test-mini', 'test-2025-04-14x', 'xtest', None, 7])
+def test_complete_response_refuses_other_models(reported):
+    mod = agent('openai-direct-edit-agent')
+    with pytest.raises(ValueError, match='model does not match'):
+        mod._require_complete_response({'model': reported, 'choices': [{'finish_reason': 'stop'}]}, 'test')
 
 
 @pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'model-call-agent'])
@@ -469,7 +476,7 @@ def test_codex_prompt_is_delivered_only_on_stdin(tmp_path):
     assert agent('codex-oss-agent').main(['--codex-bin',str(exe),'--codex-model','test',*argv]) == 0
     captured = json.loads(record.read_text())
     assert secret in captured['stdin']
-    assert all('SYNTHETIC_PRIVATE' not in arg for arg in captured['argv'])
+    assert all('SYNTHETIC_PRIVATE' not in arg and 'x' * 1000 not in arg for arg in captured['argv'])
     assert captured['argv'][-1] == '-'
 
 
@@ -620,3 +627,108 @@ def test_workspace_rollback_does_not_overwrite_newer_leaf(tmp_path, monkeypatch)
     assert (tmp_path / 'a').read_bytes() == b'newer concurrent generation'
     backups = list(tmp_path.glob('.benchpack-example-*.tmp'))
     assert any(p.read_bytes() == b'a' for p in backups)
+
+
+def test_replacement_admission_failure_is_value_error(tmp_path):
+    import os
+    from benchpack.example_io import replace_workspace_files
+    root = tmp_path / 'root'
+    root.mkdir()
+    (tmp_path / 'sentinel').write_bytes(b'outside')
+    os.link(tmp_path / 'sentinel', root / 'a')
+    with pytest.raises(ValueError, match='could not stage'):
+        replace_workspace_files(root, [('a', b'new')])
+    assert (tmp_path / 'sentinel').read_bytes() == b'outside'
+
+
+def test_replacement_publication_keeps_interrupts(tmp_path, monkeypatch):
+    import os
+    from benchpack.example_io import replace_workspace_files
+    (tmp_path / 'a').write_bytes(b'old')
+    def interrupted(*args, **kwargs):
+        raise SystemExit(143)
+    monkeypatch.setattr(os, 'replace', interrupted)
+    with pytest.raises(SystemExit):
+        replace_workspace_files(tmp_path, [('a', b'new')])
+    assert (tmp_path / 'a').read_bytes() == b'old'
+
+
+def test_pi_edit_admission_failure_writes_failure_telemetry(tmp_path, capsys):
+    import json
+    import os
+    import sys
+    workspace, log, argv = make_context(tmp_path)
+    (workspace / 'a').unlink()
+    (tmp_path / 'sentinel').write_bytes(b'outside')
+    os.link(tmp_path / 'sentinel', workspace / 'a')
+    exe = tmp_path / 'fake-pi'
+    exe.write_text('#!'+sys.executable+'\nimport json\nprint(json.dumps({"files":[{"path":"a","content":"new"}]}))\n')
+    exe.chmod(0o755)
+    assert agent('pi-agent').main(['--pi-bin',str(exe),'--model','test',*argv]) != 0
+    assert 'could not run pi' not in capsys.readouterr().err
+    assert json.loads(log.read_text())['ok'] is False
+    assert (tmp_path / 'sentinel').read_bytes() == b'outside'
+
+
+def test_direct_edit_failure_telemetry_admission_keeps_primary_failure(tmp_path, monkeypatch, capsys):
+    mod = agent('openai-direct-edit-agent')
+    workspace, log, argv = make_context(tmp_path)
+    log.write_bytes(b'x' * (16 * 1024 * 1024 + 1))
+    monkeypatch.setenv('SYNTHETIC_KEY', 'synthetic')
+    assert mod.main(['--endpoint','http://127.0.0.1','--model','test','--api-key-env','SYNTHETIC_KEY',*argv]) != 0
+    assert 'byte limit' in capsys.readouterr().err
+    assert (workspace / 'a').read_bytes() == b'old'
+
+
+def test_pi_signal_after_child_still_removes_private_prompt(tmp_path, monkeypatch):
+    import os
+    import signal
+    import tempfile
+    mod = agent('pi-agent')
+    workspace, log, argv = make_context(tmp_path)
+    prompts = tmp_path / 'tmp'
+    prompts.mkdir()
+    monkeypatch.setattr(tempfile, 'tempdir', str(prompts))
+    def finished(command, **kwargs):
+        import subprocess
+        os.kill(os.getpid(), signal.SIGTERM)
+        return subprocess.CompletedProcess(command, 0, '{"files":[]}', '')
+    monkeypatch.setattr(mod, 'run_agent', finished)
+    previous = signal.getsignal(signal.SIGTERM)
+    with pytest.raises(SystemExit):
+        mod.main(['--pi-bin','pi','--model','test',*argv])
+    assert signal.getsignal(signal.SIGTERM) == previous
+    assert not list(prompts.glob('benchpack-pi-agent-*'))
+
+
+def test_replacement_interrupt_with_failed_rollback_keeps_interrupt(tmp_path, monkeypatch):
+    import os
+    from benchpack.example_io import replace_workspace_files
+    for name in ('a', 'b'):
+        (tmp_path / name).write_bytes(name.encode())
+    replace = os.replace
+    def interrupted(src, dst, **kwargs):
+        if dst == 'b':
+            raise SystemExit(143)
+        result = replace(src, dst, **kwargs)
+        if dst == 'a':
+            (tmp_path / 'a').unlink()
+            (tmp_path / 'a').write_bytes(b'newer')
+        return result
+    monkeypatch.setattr(os, 'replace', interrupted)
+    with pytest.raises(SystemExit) as caught:
+        replace_workspace_files(tmp_path, [('a', b'new'), ('b', b'new')])
+    assert any('rollback failed' in note for note in getattr(caught.value, '__notes__', []))
+    assert (tmp_path / 'a').read_bytes() == b'newer'
+
+
+def test_termination_scope_respects_ignored_signals():
+    import signal
+    from benchpack.example_process import exit_on_termination_signals
+    previous = signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    try:
+        with exit_on_termination_signals():
+            assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+            assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
+    finally:
+        signal.signal(signal.SIGHUP, previous)

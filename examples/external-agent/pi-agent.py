@@ -18,7 +18,7 @@ from typing import Any
 # Support direct execution from a prepared workspace without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from benchpack.safe_files import require_stable_file
-from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES
+from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES, exit_on_termination_signals
 from benchpack.example_io import (
     workspace_input,
     workspace_text,
@@ -476,7 +476,9 @@ def _main(argv, resources) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    with ExitStack() as resources:
+    # Signals during prompt staging, edit publication or telemetry still unwind
+    # the resource scope that removes the private prompt file.
+    with exit_on_termination_signals(), ExitStack() as resources:
         return _main(argv, resources)
 
 

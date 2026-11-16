@@ -2121,7 +2121,9 @@ members at every nesting level, with controlled decode/depth failures. The
 OpenAI direct-edit wrapper requires `finish_reason: "stop"` before parsing or
 applying edits; missing, length-limited, filtered and unsupported outcomes fail.
 Structured upstream errors and explicit response model mismatches also fail.
-An absent response model remains compatible with local endpoints.
+An absent response model remains compatible with local endpoints, and a dated
+snapshot of the requested id (`<model>-YYYY-MM-DD`, as returned for OpenAI
+aliases) counts as the requested model.
 
 Failure diagnostics omit raw HTTP error/refusal bodies and failed Pi output.
 Only fixed error categories and allowlisted completion reasons enter telemetry;
@@ -2153,5 +2155,6 @@ is terminated then killed before the unreaped leader identity is released.
 Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
 Descendants that deliberately create another session are outside group ownership;
 retained pipes still cannot extend the drain deadline. Pi's private prompt
-file is removed on every exit, including staging failure. These CLI examples
+file is removed on every exit, including staging failure and SIGTERM/SIGHUP
+anywhere in the wrapper run (signals the caller ignores stay ignored). These CLI examples
 require POSIX `waitid`/`WNOWAIT`; unsupported platforms fail before spawn.

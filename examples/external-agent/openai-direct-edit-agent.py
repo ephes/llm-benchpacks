@@ -285,10 +285,24 @@ def _call_chat_completion(
         raise ValueError(f"could not parse chat response JSON: {exc}") from exc
 
 
+_DATED_SNAPSHOT = re.compile(r"-\d{4}-\d{2}-\d{2}")
+
+
+def _same_model(reported: Any, requested: str) -> bool:
+    """Accept the requested id or a dated snapshot of it (alias resolution)."""
+    if not isinstance(reported, str):
+        return False
+    if reported == requested:
+        return True
+    return reported.startswith(requested) and bool(
+        _DATED_SNAPSHOT.fullmatch(reported[len(requested):])
+    )
+
+
 def _require_complete_response(response: dict[str, Any], model: str) -> None:
     if "error" in response:
         raise ValueError("chat response contains upstream error")
-    if "model" in response and response["model"] != model:
+    if "model" in response and not _same_model(response["model"], model):
         raise ValueError("chat response model does not match requested model")
     if _finish_reason(response) != "stop":
         raise ValueError("chat response is not a complete stop outcome")
@@ -513,7 +527,9 @@ def _main(argv, resources) -> int:
                     response=response,
                     error=str(exc),
                 )
-        except OSError:
+        except (OSError, ValueError):
+            # Keep the primary task failure visible if failure telemetry
+            # cannot be admitted or published.
             pass
         return _fail(str(exc))
 
