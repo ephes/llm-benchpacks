@@ -391,7 +391,10 @@ def _render_repo_task_outcomes(runs: list[ResultRun]) -> list[str]:
     all_outcomes: list[RepoTaskOutcome] = []
     rows: list[str] = []
     for run in runs:
-        outcomes = summarize_repo_task_outcomes(run.records, run.artifact_root)
+        try:
+            outcomes = summarize_repo_task_outcomes(run.records, run.artifact_root)
+        except OSError as exc:
+            raise ReportError(f"could not read stable patch evidence for {run.label}") from exc
         if not outcomes:
             continue
         all_outcomes.extend(outcomes)

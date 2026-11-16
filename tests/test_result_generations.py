@@ -109,8 +109,122 @@ def test_jsonl_read_generation(tmp_path, monkeypatch, loader, mutation):
             action()
         assert not db.exists()
     else:
-        loaded = action()
+        try:
+            loaded = action()
+        except registry.RegistryError:
+            # Registry additionally fences directory entries across sidecar reads.
+            assert loader == "registry" and not db.exists()
+            return
         if loader != "registry":
             assert [row["case"] for row in loaded.records] == ["old", "old"]
             assert loaded.source_sha256 == hashlib.sha256(old).hexdigest()
     assert changed
+
+
+@pytest.mark.parametrize("boundary", ["jsonl", "validation"])
+def test_registry_directory_exchange_never_mixes_generations(tmp_path, monkeypatch, boundary):
+    import sqlite3
+
+    run, db = tmp_path / "run", tmp_path / "db.sqlite"
+    _write_result_dir(run, [_record("old")])
+    (run / "hardware.json").write_text('{"hostname":"old-host"}')
+    (run / "run-metadata.json").write_text('{"runtime":{"name":"old-runtime"}}')
+    registry.import_result_dirs([run], db)
+    before = db.read_bytes()
+    changed = False
+
+    def exchange():
+        nonlocal changed
+        if changed:
+            return
+        changed = True
+        run.rename(tmp_path / "retired")
+        _write_result_dir(run, [_record("new")])
+        (run / "hardware.json").write_text('{"hostname":"new-host"}')
+        (run / "run-metadata.json").write_text('{"runtime":{"name":"new-runtime"}}')
+
+    if boundary == "jsonl":
+        hook = compare.unique_json_object
+
+        def decode(pairs):
+            exchange()
+            return hook(pairs)
+
+        monkeypatch.setattr(compare, "unique_json_object", decode)
+    else:
+        hook = registry._load_and_validate_result_dir
+
+        def validate(path, **kwargs):
+            result = hook(path, **kwargs)
+            exchange()
+            return result
+
+        monkeypatch.setattr(registry, "_load_and_validate_result_dir", validate)
+    try:
+        registry.import_result_dirs([run], db)
+    except registry.RegistryError:
+        assert db.read_bytes() == before
+    else:
+        with sqlite3.connect(db) as conn:
+            host, runtime = conn.execute("SELECT host_hostname, runtime_name FROM runs").fetchone()
+            (row,) = conn.execute("SELECT raw_json FROM result_rows").fetchone()
+        assert (json.loads(row)["case"], host, runtime) == ("old", "old-host", "old-runtime")
+    assert changed
+
+
+@pytest.mark.parametrize("filename", ["hardware.json", "run-metadata.json"])
+def test_registry_uses_validated_sidecars_after_admission(tmp_path, monkeypatch, filename):
+    import sqlite3
+
+    run, db = tmp_path / "run", tmp_path / "db.sqlite"
+    _write_result_dir(run)
+    (run / "hardware.json").write_text('{"hostname":"old-host"}')
+    (run / "run-metadata.json").write_text('{"runtime":{"name":"old-runtime"}}')
+    hook = registry._ensure_schema
+
+    def schema(conn):
+        hook(conn)
+        (run / filename).write_text('invalid replacement')
+
+    monkeypatch.setattr(registry, "_ensure_schema", schema)
+    registry.import_result_dirs([run], db)
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT host_hostname, runtime_name FROM runs").fetchone() == ("old-host", "old-runtime")
+
+
+@pytest.mark.parametrize("mutation", ["rewrite", "replace", "create"])
+def test_registry_sidecars_fenced_across_jsonl_parse(tmp_path, monkeypatch, mutation):
+    run, db = tmp_path / "run", tmp_path / "db.sqlite"
+    _write_result_dir(run)
+    sidecar = run / "hardware.json"
+    if mutation != "create":
+        sidecar.write_text('{"hostname":"old"}')
+    registry.import_result_dirs([run], db)
+    before = db.read_bytes()
+    hook = compare.unique_json_object
+    changed = False
+
+    def decode(pairs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            if mutation == "replace":
+                other = run / "new.json"
+                other.write_text('{"hostname":"new"}')
+                other.replace(sidecar)
+            else:
+                sidecar.write_text('{"hostname":"new"}')
+        return hook(pairs)
+
+    monkeypatch.setattr(compare, "unique_json_object", decode)
+    with pytest.raises(registry.RegistryError):
+        registry.import_result_dirs([run], db)
+    assert changed and db.read_bytes() == before
+
+
+def test_registry_directory_alias_keeps_input_label(tmp_path):
+    run, alias = tmp_path / "run", tmp_path / "alias"
+    _write_result_dir(run)
+    alias.symlink_to(run, target_is_directory=True)
+    loaded = registry._load_and_validate_result_dir(alias)
+    assert loaded.label == "alias" and loaded.path == run.resolve()

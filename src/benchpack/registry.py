@@ -20,7 +20,7 @@ from typing import Any, Iterable
 
 from .compare import (
     MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun,
-    finite_median, load_result_run,
+    finite_median, _read_result_run, unique_json_object,
 )
 from .external_agent_model_calls import (
     MODEL_CALL_LOG_PATTERN,
@@ -29,8 +29,11 @@ from .external_agent_model_calls import (
 )
 from .output_paths import PublicationBusyError, paths_overlap, publication_lock
 from .report import ReportError, render_report
-from .run_metadata import RunMetadataError, load_optional_run_metadata
-from .safe_files import contained_parts, copy_contained_regular, open_contained_regular, require_stable_file
+from .run_metadata import RunMetadataError, validate_run_metadata
+from .safe_files import (
+    admitted_directory, contained_parts, copy_contained_regular,
+    open_contained_regular, read_opened_regular, require_stable_file, UnstableFileError,
+)
 
 
 REGISTRY_SCHEMA_VERSION = 4
@@ -2946,18 +2949,61 @@ def _site_float(value: object) -> str:
 
 
 def _load_and_validate_result_dir(path: Path | str, **limits: int) -> ResultRun:
+    # Resolve an ingestion alias once; every input is opened under this one
+    # directory before parsing. Keep descriptors until all snapshots are ready.
+    source = Path(path)
+    canonical = source.resolve()
     try:
-        run = load_result_run(path, **limits)
-    except CompareError as exc:
-        raise RegistryError(str(exc)) from exc
-    for row_index, record in enumerate(run.records, start=1):
-        _validate_record(record, run.path / "run.jsonl", row_index)
-    try:
-        _load_optional_json_object(run.path, "hardware.json")
-        load_optional_run_metadata(run.path)
-    except (RegistryError, RunMetadataError) as exc:
-        raise RegistryError(str(exc)) from exc
-    return run
+        with admitted_directory(canonical) as directory, ExitStack() as stack:
+            initial_directory = os.fstat(directory)
+            opened = {}
+            for name in ("run.jsonl", "hardware.json", "run-metadata.json"):
+                try:
+                    os.stat(name, dir_fd=directory, follow_symlinks=False)
+                except FileNotFoundError:
+                    if name != "run.jsonl":
+                        continue
+                fd = open_contained_regular(directory, name)
+                if fd is None:
+                    raise RegistryError(f"missing or refused non-regular file: {source / name}")
+                stack.callback(os.close, fd)
+                opened[name] = (fd, os.fstat(fd))
+            with os.fdopen(opened["run.jsonl"][0], "rb", closefd=False) as stream:
+                run = _read_result_run(
+                    source, stream,
+                    byte_limit=limits.get("byte_limit", MAX_RESULT_RUN_BYTES),
+                    record_limit=limits.get("record_limit", MAX_RESULT_RECORDS),
+                )
+            sidecars = {}
+            for name in ("hardware.json", "run-metadata.json"):
+                if name not in opened:
+                    sidecars[name] = None
+                    continue
+                snapshot = read_opened_regular(opened[name][0], MAX_BUNDLE_FILE_BYTES)
+                if snapshot.data is None:
+                    raise RegistryError(f"result sidecar byte limit exceeded: {source / name}")
+                try:
+                    value = json.loads(snapshot.data.decode("utf-8"),
+                                       object_pairs_hook=unique_json_object)
+                except (UnicodeError, ValueError, RecursionError) as exc:
+                    raise RegistryError(f"could not parse {source / name}: invalid JSON or UTF-8") from exc
+                if not isinstance(value, dict):
+                    raise RegistryError(f"expected JSON object in {source / name}")
+                sidecars[name] = value
+            metadata = sidecars["run-metadata.json"]
+            if metadata is not None:
+                metadata = validate_run_metadata(metadata, source=source / "run-metadata.json")
+            for row_index, record in enumerate(run.records, start=1):
+                _validate_record(record, source / "run.jsonl", row_index)
+            # Include time spent reading other inputs in each file's fence, and
+            # detect entry creation/removal/replacement (including absent sidecars).
+            for fd, initial in opened.values():
+                require_stable_file(fd, initial)
+            require_stable_file(directory, initial_directory)
+        return replace(run, path=canonical, hardware=sidecars["hardware.json"],
+                       run_metadata=metadata)
+    except (OSError, CompareError, RunMetadataError) as exc:
+        raise RegistryError(f"could not admit result directory {source}: {exc}") from exc
 
 
 def _copy_run_into_bundle(
@@ -3155,6 +3201,8 @@ def _copy_contained_source(root: Path, relative_path: str, destination: Path) ->
         return copy_contained_regular(
             root, relative_path, destination, MAX_BUNDLE_FILE_BYTES
         )
+    except UnstableFileError as exc:
+        raise RegistryError(f"unstable bundle source: {relative_path}") from exc
     except ValueError as exc:
         raise RegistryError(f"bundle file byte limit exceeded: {relative_path}") from exc
 
@@ -3665,13 +3713,8 @@ def _import_run(
     conn: sqlite3.Connection,
     run: ResultRun,
 ) -> RegistryImportSummary:
-    result_dir = str(run.path.resolve())
-    hardware = _load_optional_json_object(run.path, "hardware.json")
-    try:
-        run_metadata = load_optional_run_metadata(run.path)
-    except RunMetadataError as exc:
-        raise RegistryError(str(exc)) from exc
-    inserted = _run_row_values(run, result_dir, hardware, run_metadata)
+    result_dir = str(run.path)
+    inserted = _run_row_values(run, result_dir, run.hardware, run.run_metadata)
     conn.execute(
         """
         INSERT INTO runs(
@@ -4176,23 +4219,6 @@ def _validate_record(record: dict[str, Any], jsonl_path: Path, row_index: int) -
             raise RegistryError(
                 f"field 'repo_task.verify_exit_code' must be integer or null in {source}"
             )
-
-
-def _load_optional_json_object(
-    result_dir: Path, filename: str
-) -> dict[str, Any] | None:
-    path = result_dir / filename
-    if not path.exists():
-        return None
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (UnicodeError, ValueError, RecursionError) as exc:
-        raise RegistryError(f"could not parse {path}: invalid JSON or UTF-8") from exc
-    except OSError as exc:
-        raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
-    if not isinstance(value, dict):
-        raise RegistryError(f"expected JSON object in {path}")
-    return value
 
 
 def _json_object_or_none(

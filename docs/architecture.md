@@ -1182,3 +1182,10 @@ identity, size and nanosecond mtime/ctime are fenced after reading, before
 returning bytes or accepting a digest. JSONL uses the same fence. Unlink-only
 ctime changes permit complete old-generation reads during atomic replacement.
 Unstable copies remove their owned destination and abort bundle publication.
+
+Registry admission opens JSONL and both optional sidecars relative to one
+admitted directory descriptor before parsing. It keeps all descriptors until
+file/directory generation fences pass, then carries normalized hardware and
+runtime snapshots on `ResultRun`. `_import_run` consumes only those snapshots
+and the captured canonical source path. Source I/O is complete before SQLite
+mutation, including bundle-import runs; no schema migration is needed.

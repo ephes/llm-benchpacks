@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Admit registry JSONL and sidecars through one directory generation and reuse
+  validated snapshots during database writes instead of reopening source paths.
+
 - Refuse unstable in-place result reads before summary/hash admission or bundle
   publication; keep complete opened generations on atomic pathname replacement.
 

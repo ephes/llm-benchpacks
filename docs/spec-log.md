@@ -5442,3 +5442,9 @@ and validate all six outputs under cooperating writer locks; compensate failures
 Fence contained evidence and JSONL reads against in-place changes; retain opened
 old generations on atomic pathname replacement. Synthetic mutation regressions
 cover patch summaries, copies, bundle publication and registry admission.
+
+## 2026-11-16: Coherent registry source admission
+
+Read each import directory as one descriptor-bound generation; preserve validated
+sidecar snapshots through the DB write. Refuse concurrent directory/sidecar
+changes during admission, with fixture-only rollback and exchange regressions.

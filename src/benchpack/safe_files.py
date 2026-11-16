@@ -68,7 +68,7 @@ def contained_parts(relative_path: str) -> tuple[str, ...] | None:
     return parts
 
 
-def open_contained_regular(root: Path, relative_path: str) -> int | None:
+def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     """Open ``root/relative_path`` as a regular file without following links.
 
     Returns an open read-only descriptor, or ``None`` when the path is unsafe,
@@ -80,7 +80,8 @@ def open_contained_regular(root: Path, relative_path: str) -> int | None:
     if parts is None:
         return None
     try:
-        current = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        current = (os.dup(root) if isinstance(root, int) else
+                   os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)))
     except OSError:
         return None
     try:
@@ -119,27 +120,31 @@ def read_contained_regular(
     if fd is None:
         return None
     try:
-        initial = os.fstat(fd)
-        size = initial.st_size
-        if size > limit:
-            return FileSnapshot(size=size, data=None)
-        chunks: list[bytes] = []
-        total = 0
-        while total <= limit:
-            chunk = os.read(fd, min(_CHUNK_BYTES, limit + 1 - total))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-        require_stable_file(fd, initial)
+        return read_opened_regular(fd, limit)
     except UnstableFileError:
         raise
     except OSError:
         return None
     finally:
         os.close(fd)
+
+
+def read_opened_regular(fd: int, limit: int) -> FileSnapshot:
+    """Read an admitted regular descriptor, leaving its lifetime to the caller."""
+    initial = os.fstat(fd)
+    if initial.st_size > limit:
+        return FileSnapshot(size=initial.st_size, data=None)
+    chunks: list[bytes] = []
+    total = 0
+    while total <= limit:
+        chunk = os.read(fd, min(_CHUNK_BYTES, limit + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    require_stable_file(fd, initial)
     if total > limit:
-        return FileSnapshot(size=max(size, total), data=None)
+        return FileSnapshot(size=max(initial.st_size, total), data=None)
     return FileSnapshot(size=total, data=b"".join(chunks))
 
 

@@ -2074,3 +2074,15 @@ their partial destination. Unlink-only ctime/link-count changes from atomic
 pathname replacement are allowed when identity, size and mtime stay unchanged.
 This metadata fence handles concurrent writers, not adversarial same-user code
 that restores timestamps. Hashes and summaries describe the admitted bytes.
+
+### One source generation per registry import
+
+Resolve result-directory aliases once, open the real directory and all present
+import inputs before parsing. Read JSONL, hardware and runtime metadata through
+those descriptors. Fence every file across the entire admission and fence the
+directory entries/identity before database mutation, including optional sidecar
+creation/removal. Sidecars must be contained regular files, use unique JSON
+members and fit the existing 64 MiB file allowance; runtime metadata retains
+its finite JSON/schema checks. Any admission failure leaves the registry unchanged.
+Store the validated sidecars in the loaded run; the database phase never reopens
+source paths. Later source replacement cannot attach new sidecars to old rows.
