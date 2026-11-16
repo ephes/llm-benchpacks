@@ -4,18 +4,27 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 import re
 import sys
 import time
-import unicodedata
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+# Support direct execution from a prepared workspace without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_io import (
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    replace_workspace_files,
+    control_json,
+)
+from benchpack.example_http import response_bytes
 
 _ALLOWED_PATH_HEADING_RE = re.compile(r"^Allowed repo-root paths? to edit:\s*$")
 _ALLOWED_PATH_RE = re.compile(r"^- `([^`]+)`\s*$")
@@ -40,7 +49,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -83,7 +92,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         relative_log_path = model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -266,21 +275,37 @@ def _call_chat_completion(
         method="POST",
     )
     started = time.monotonic()
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            payload = response.read()
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")[:300]
-        raise ValueError(f"chat completion failed with HTTP {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise ValueError(f"chat completion failed: {exc}") from exc
+    payload = response_bytes(request, timeout_s)
     duration_s = time.monotonic() - started
     try:
-        return _object(json.loads(payload.decode("utf-8")), "chat response"), duration_s
+        return _object(control_json(payload.decode("utf-8")), "chat response"), duration_s
     except UnicodeDecodeError as exc:
         raise ValueError("chat response must be UTF-8 JSON") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"could not parse chat response JSON: {exc}") from exc
+
+
+_DATED_SNAPSHOT = re.compile(r"-\d{4}-\d{2}-\d{2}")
+
+
+def _same_model(reported: Any, requested: str) -> bool:
+    """Accept the requested id or a dated snapshot of it (alias resolution)."""
+    if not isinstance(reported, str):
+        return False
+    if reported == requested:
+        return True
+    return reported.startswith(requested) and bool(
+        _DATED_SNAPSHOT.fullmatch(reported[len(requested):])
+    )
+
+
+def _require_complete_response(response: dict[str, Any], model: str) -> None:
+    if "error" in response:
+        raise ValueError("chat response contains upstream error")
+    if "model" in response and not _same_model(response["model"], model):
+        raise ValueError("chat response model does not match requested model")
+    if _finish_reason(response) != "stop":
+        raise ValueError("chat response is not a complete stop outcome")
 
 
 def _assistant_content(response: dict[str, Any]) -> str:
@@ -295,7 +320,7 @@ def _assistant_content(response: dict[str, Any]) -> str:
         raise ValueError("chat response choice.message must be an object")
     refusal = message.get("refusal")
     if isinstance(refusal, str) and refusal:
-        raise ValueError(f"chat response message.refusal: {refusal[:180]}")
+        raise ValueError("chat response message.refusal")
     return _string(message.get("content"), "chat response message.content")
 
 
@@ -311,13 +336,8 @@ def _finish_reason(response: dict[str, Any]) -> str:
 
 
 def _safe_finish_reason(response: dict[str, Any]) -> str:
-    reason = _finish_reason(response)[:64]
-    for ch in reason:
-        if ch == " ":
-            continue
-        if unicodedata.category(ch)[0] in {"C", "Z"}:
-            return ""
-    return reason
+    reason = _finish_reason(response)
+    return reason if reason in {"stop", "length", "content_filter", "tool_calls", "function_call"} else ""
 
 
 def _parse_edit_payload(content: str, *, finish_reason: str = "") -> dict[str, Any]:
@@ -327,7 +347,7 @@ def _parse_edit_payload(content: str, *, finish_reason: str = "") -> dict[str, A
         if len(lines) >= 3 and lines[0].startswith("```") and lines[-1] == "```":
             text = "\n".join(lines[1:-1]).strip()
     try:
-        return _object(json.loads(text), "assistant edit payload")
+        return _object(control_json(text), "assistant edit payload")
     except json.JSONDecodeError as exc:
         detail = f"could not parse assistant edit payload JSON: {exc}"
         if finish_reason:
@@ -344,16 +364,16 @@ def _apply_edits(
     if not isinstance(files, list):
         raise ValueError("assistant edit payload.files must be an array")
     allowed = set(allowed_paths)
-    replacements: list[tuple[Path, str, str]] = []
+    replacements: list[tuple[Path, str, bytes]] = []
     seen_paths: set[str] = set()
     for index, item in enumerate(files, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"assistant edit payload.files[{index}] must be an object")
         path = _string(item.get("path"), f"assistant edit payload.files[{index}].path")
         if path not in allowed:
-            raise ValueError(f"assistant attempted to edit disallowed path: {path}")
+            raise ValueError("assistant attempted to edit disallowed path")
         if path in seen_paths:
-            raise ValueError(f"assistant edit payload duplicates path: {path}")
+            raise ValueError("assistant edit payload duplicates path")
         seen_paths.add(path)
         content = item.get("content")
         if not isinstance(content, str):
@@ -363,19 +383,9 @@ def _apply_edits(
         target = _workspace_path(workspace, path)
         if not target.is_file():
             raise ValueError(f"assistant edit target is not a file: {path}")
-        replacements.append((target, path, content))
+        replacements.append((target, path, content.encode("utf-8")))
 
-    originals = {target: target.read_bytes() for target, _, _ in replacements}
-    try:
-        for target, _, content in replacements:
-            target.write_text(content, encoding="utf-8")
-    except OSError as exc:
-        for target, original in originals.items():
-            try:
-                target.write_bytes(original)
-            except OSError:
-                pass
-        raise ValueError(f"could not apply assistant edit payload: {exc}") from exc
+    replace_workspace_files(workspace, [(path, content) for _, path, content in replacements])
 
     summary = payload.get("summary")
     return len(replacements), summary if isinstance(summary, str) and summary else ""
@@ -425,11 +435,11 @@ def _write_telemetry(
         if output_tokens is not None:
             payload["output_tokens"] = output_tokens
     if error:
-        payload["error"] = error[:180]
-    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        payload["error"] = "example_failed"
+    publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--model", required=True)
@@ -469,7 +479,8 @@ def main(argv: list[str] | None = None) -> int:
     model_call_log_path: Path | None = None
     response: dict[str, Any] | None = None
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
         api_key = os.environ.get(args.api_key_env, "")
         if not api_key:
             raise ValueError(f"API key environment variable is not set: {args.api_key_env}")
@@ -486,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
             token_budget_field=args.token_budget_field,
             response_format=args.response_format,
         )
+        _require_complete_response(response, args.model)
         payload = _parse_edit_payload(
             _assistant_content(response),
             finish_reason=_safe_finish_reason(response),
@@ -515,15 +527,22 @@ def main(argv: list[str] | None = None) -> int:
                     response=response,
                     error=str(exc),
                 )
-        except OSError:
+        except (OSError, ValueError):
+            # Keep the primary task failure visible if failure telemetry
+            # cannot be admitted or published.
             pass
         return _fail(str(exc))
 
     print(
         f"openai-direct-edit-agent wrote {changed} file(s) for {args.case}"
-        + (f": {summary}" if summary else "")
+
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

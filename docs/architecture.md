@@ -1194,3 +1194,26 @@ file/directory generation fences pass, then carries normalized hardware and
 runtime snapshots on `ResultRun`. `_import_run` consumes only those snapshots
 and the captured canonical source path. Source I/O is complete before SQLite
 mutation, including bundle-import runs; no schema migration is needed.
+
+The direct-edit and Pi wrappers encode all replacements before mutation, stage
+complete bytes, and publish relative to held no-follow parent descriptors. They
+refuse symlinks, hardlinked targets and changed source generations. Publication
+failure rolls back owned replacements; rollback failure is reported explicitly.
+Executable permissions survive. The local model-call example uses the same
+workspace publication boundary (its fixed output file may be new). Serialize
+writers: generation checks are not isolation from hostile same-user processes.
+
+The example HTTP clients share `example_http`: public HTTPConnection/socket
+APIs own one connection, bounded reads and deadline retirement; no redirects.
+
+Example telemetry destinations retain directory descriptors and the admitted
+leaf generation for the whole external call; publication uses a private sibling
+stage and atomic replacement. Default diagnostics contain no raw remote bodies.
+
+Example context and Pi workspace readers reuse opened regular-file admission
+and generation fences. Pi previews stream data separately from retained context,
+with aggregate data/editable budgets enforced before external execution.
+
+The Codex and Pi examples share a bounded selector-based POSIX transport. It owns
+stdin delivery, output acquisition, non-reaping exit observation and process-group
+retirement; Pi prompt staging belongs to the enclosing resource scope.

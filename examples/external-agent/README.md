@@ -139,3 +139,63 @@ the token value must stay in the local environment or secret store. For the
 Hetzner service path, the server is reached through the public TLS/Django
 Bearer-auth proxy. Do not install or expect Codex, Claude, Ollama, or this
 repository on the server for this wrapper.
+
+The direct-edit and Pi wrappers encode all replacements before mutation, stage
+complete bytes, and publish relative to held no-follow parent descriptors. They
+refuse symlinks, hardlinked targets and changed source generations. Publication
+failure rolls back owned replacements; rollback failure is reported explicitly,
+with original `.benchpack-example-*.tmp` backups retained in the affected parent.
+Inspect and recover those originals before retrying; a newer concurrent leaf
+is never overwritten by rollback.
+Executable permissions survive. The local model-call example uses the same
+workspace publication boundary (its fixed output file may be new). Serialize
+writers: generation checks are not isolation from hostile same-user processes.
+
+Example HTTP calls admit at most 16 MiB of actual response bytes, reading in
+64 KiB chunks under one elapsed response deadline (including header/body I/O).
+Non-200 statuses, including every redirect, fail without reading their bodies.
+Requests and credentials therefore remain bound to the configured endpoint;
+no redirect hop is followed. Transport failures use fixed diagnostic categories.
+
+Example contexts, HTTP response objects and edit payloads reject duplicate JSON
+members at every nesting level, with controlled decode/depth failures. The
+OpenAI direct-edit wrapper requires `finish_reason: "stop"` before parsing or
+applying edits; missing, length-limited, filtered and unsupported outcomes fail.
+Structured upstream errors and explicit response model mismatches also fail.
+An absent response model remains compatible with local endpoints, and a dated
+snapshot of the requested id (`<model>-YYYY-MM-DD`, as returned for OpenAI
+aliases) counts as the requested model.
+
+Failure diagnostics omit raw HTTP error/refusal bodies and failed Pi output.
+Only fixed error categories and allowlisted completion reasons enter telemetry;
+model summaries are not printed. Sidecars are admitted before the external call,
+written to complete private (0600) sibling stages, synced and atomically replaced
+through held no-follow parents. Changed directories/leaves are refused; staging
+or replace failure preserves prior evidence. A post-publication directory-sync
+failure reports uncertain durability of the complete visible file. Telemetry
+failure preserves an existing child failure status. Use a new task attempt after
+concurrent sidecar changes; do not share a sidecar between writers.
+
+The four model/CLI examples read contexts through no-follow nonblocking regular
+file descriptors, with a 16 MiB ceiling, strict UTF-8 and opened-file generation
+checks before JSON admission. FIFOs, oversized or changing inputs fail before
+external execution. Pi reads only contained regular workspace inputs: editable
+context is capped at 16 MiB in aggregate; data scans share 64 MiB. CSV previews
+retain at most 64 KiB per file and 0–1000 requested data rows plus the header,
+while streaming the row count in chunks of at most 64 KiB. Individual physical
+lines above 64 KiB are refused; row counts describe physical lines, not quoted
+multiline CSV records. Unsupported envelopes fail before spawning Pi.
+
+Codex receives its UTF-8 task prompt through `codex exec ... -` stdin, never in
+argv. Both CLI examples use a POSIX owned-process transport with a 32 MiB prompt
+ceiling, a combined 16 MiB stdout/stderr ceiling, strict UTF-8 and a finite
+`--timeout-s` (default 900 seconds). Partial stdin writes are retried; early
+closure before complete delivery fails. Child bodies stay out of diagnostics.
+On success, failure, timeout, interrupt, SIGTERM or SIGHUP, the owned process group
+is terminated then killed before the unreaped leader identity is released.
+Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
+Descendants that deliberately create another session are outside group ownership;
+retained pipes still cannot extend the drain deadline. Pi's private prompt
+file is removed on every exit, including staging failure and SIGTERM/SIGHUP
+anywhere in the wrapper run (signals the caller ignores stay ignored). These CLI examples
+require POSIX `waitid`/`WNOWAIT`; unsupported platforms fail before spawn.

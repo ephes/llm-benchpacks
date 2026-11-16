@@ -176,27 +176,13 @@ def test_apply_edits_restores_originals_after_write_failure(
     helper = workspace / "helper.py"
     greeter.write_text("old greeter\n", encoding="utf-8")
     helper.write_text("old helper\n", encoding="utf-8")
-    original_write_text = Path.write_text
-
-    def flaky_write_text(
-        self: Path,
-        data: str,
-        encoding: str | None = None,
-        errors: str | None = None,
-        newline: str | None = None,
-    ) -> int:
-        if self == helper:
-            self.write_bytes(b"partial helper\n")
-            raise OSError("simulated write failure")
-        return original_write_text(
-            self,
-            data,
-            encoding=encoding,
-            errors=errors,
-            newline=newline,
-        )
-
-    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+    import os
+    original_replace = os.replace
+    def flaky_replace(src, dst, **kwargs):
+        if dst == "helper.py" and "example" in str(src):
+            raise OSError("simulated publication failure")
+        return original_replace(src, dst, **kwargs)
+    monkeypatch.setattr(os, "replace", flaky_replace)
 
     with pytest.raises(ValueError, match="could not apply assistant edit payload"):
         agent._apply_edits(
@@ -267,7 +253,12 @@ def test_call_chat_completion_omits_response_format_by_default(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -276,7 +267,7 @@ def test_call_chat_completion_omits_response_format_by_default(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     response, _ = agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -314,7 +305,12 @@ def test_call_chat_completion_sends_json_object_response_format(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -323,7 +319,7 @@ def test_call_chat_completion_sends_json_object_response_format(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -356,7 +352,12 @@ def test_call_chat_completion_can_send_max_completion_tokens(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
@@ -365,7 +366,7 @@ def test_call_chat_completion_can_send_max_completion_tokens(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -417,7 +418,12 @@ def test_call_chat_completion_sends_json_schema_response_format(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self) -> bytes:
+        sent = False
+
+        def read1(self, size) -> bytes:
+            if self.sent:
+                return b""
+            self.sent = True
             return json.dumps(
                 {
                     "choices": [
@@ -434,7 +440,7 @@ def test_call_chat_completion_sends_json_schema_response_format(
         requests.append((request, timeout))
         return FakeResponse()
 
-    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("benchpack.example_http.open_response", fake_urlopen)
 
     agent._call_chat_completion(
         endpoint="https://llm.example.test/v1",
@@ -621,7 +627,7 @@ def test_write_telemetry_omits_unsafe_finish_reason(tmp_path: Path) -> None:
     assert payload["token_budget_field"] == "max_tokens"
     assert payload["prompt_tokens"] == 10
     assert payload["output_tokens"] == 20
-    assert payload["error"] == "failed after unsafe finish reason"
+    assert payload["error"] == "example_failed"
 
 
 def test_write_telemetry_truncates_long_finish_reason(tmp_path: Path) -> None:
@@ -644,7 +650,7 @@ def test_write_telemetry_truncates_long_finish_reason(tmp_path: Path) -> None:
     )
 
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["finish_reason"] == "x" * 64
+    assert "finish_reason" not in payload
 
 
 def test_load_context_rejects_model_call_log_under_raw(tmp_path: Path) -> None:

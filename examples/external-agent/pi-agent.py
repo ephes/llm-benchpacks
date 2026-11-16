@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
+import os
 import re
 import subprocess
 import sys
@@ -13,6 +15,19 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Support direct execution from a prepared workspace without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.safe_files import require_stable_file
+from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES, exit_on_termination_signals
+from benchpack.example_io import (
+    workspace_input,
+    workspace_text,
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    replace_workspace_files,
+    control_json,
+)
 
 _ALLOWED_PATH_HEADING_RE = re.compile(r"^Allowed repo-root paths? to edit:\s*$")
 _ALLOWED_PATH_RE = re.compile(r"^- `([^`]+)`\s*$")
@@ -37,7 +52,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -80,7 +95,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -131,26 +146,69 @@ def _workspace_path(workspace: Path, relative_path: str) -> Path:
     return target
 
 
+MAX_EDITABLE_BYTES = 16 * 1024 * 1024
+MAX_DATA_BYTES = 64 * 1024 * 1024
+MAX_PREVIEW_BYTES = 64 * 1024
+MAX_PREVIEW_ROWS = 1000
+
+
 def _read_workspace_file(workspace: Path, relative_path: str) -> str:
-    target = _workspace_path(workspace, relative_path)
-    if not target.is_file():
-        raise ValueError(f"workspace file is missing: {relative_path}")
-    return target.read_text(encoding="utf-8")
+    return workspace_text(workspace, relative_path, MAX_EDITABLE_BYTES)
+
+
+def _preview_opened(fd, *, max_rows, limit):
+    if not 0 <= max_rows <= MAX_PREVIEW_ROWS:
+        raise ValueError("data preview rows exceeds supported range")
+    initial = os.fstat(fd)
+    if initial.st_size > limit:
+        raise ValueError("data context exceeds byte limit")
+    total = 0
+    pending = b""
+    preview = []
+    retained = 0
+    lines = 0
+    def line(value):
+        nonlocal lines, retained
+        if len(value) > MAX_PREVIEW_BYTES:
+            raise ValueError("data context line exceeds byte limit")
+        try:
+            text = value.rstrip(b"\r").decode("utf-8")
+        except UnicodeError as exc:
+            raise ValueError("data context must be UTF-8") from exc
+        lines += 1
+        if lines <= max_rows + 1:
+            retained += len(value) + 1
+            if retained > MAX_PREVIEW_BYTES:
+                raise ValueError("data preview exceeds byte limit")
+            preview.append(text)
+    while True:
+        chunk = os.read(fd, min(65536, limit + 1 - total))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise ValueError("data context exceeds byte limit")
+        parts = (pending + chunk).split(b"\n")
+        pending = parts.pop()
+        for value in parts:
+            line(value)
+        if len(pending) > MAX_PREVIEW_BYTES:
+            raise ValueError("data context line exceeds byte limit")
+    if pending:
+        line(pending)
+    require_stable_file(fd, initial)
+    return "\n".join(preview), max(0, lines - 1), lines > max_rows + 1, total
 
 
 def _preview_text(path: Path, *, max_rows: int) -> tuple[str, int, bool]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        return "", 0, False
-    keep = max(1, max_rows + 1)
-    preview = "\n".join(lines[:keep])
-    data_rows = max(0, len(lines) - 1)
-    truncated = len(lines) > keep
-    return preview, data_rows, truncated
+    with workspace_input(path.parent, path.name) as fd:
+        text, rows, truncated, _ = _preview_opened(fd, max_rows=max_rows, limit=MAX_DATA_BYTES)
+        return text, rows, truncated
 
 
 def _data_context(workspace: Path, *, preview_rows: int) -> str:
     chunks: list[str] = []
+    total = 0
     for relative_path in [
         "data/train.csv",
         "data/test_pairs.csv",
@@ -158,10 +216,12 @@ def _data_context(workspace: Path, *, preview_rows: int) -> str:
         "data/test_offers.csv",
         "data/eval_pairs.csv",
     ]:
-        target = workspace / relative_path
-        if not target.is_file():
-            continue
-        text, data_rows, truncated = _preview_text(target, max_rows=preview_rows)
+        with workspace_input(workspace, relative_path, optional=True) as fd:
+            if fd is None:
+                continue
+            text, data_rows, truncated, used = _preview_opened(
+                fd, max_rows=preview_rows, limit=MAX_DATA_BYTES - total)
+            total += used
         suffix = (
             f"\n--- PREVIEW ONLY: {relative_path} has {data_rows} data rows; "
             "the generated program must read the full workspace file at runtime. ---"
@@ -178,8 +238,10 @@ def _data_context(workspace: Path, *, preview_rows: int) -> str:
 
 def _allowed_file_context(workspace: Path, allowed_paths: tuple[str, ...]) -> str:
     chunks: list[str] = []
+    total = 0
     for relative_path in allowed_paths:
-        text = _read_workspace_file(workspace, relative_path)
+        text = workspace_text(workspace, relative_path, MAX_EDITABLE_BYTES - total)
+        total += len(text.encode("utf-8"))
         chunks.append(
             f"--- BEGIN EDITABLE WORKSPACE FILE {relative_path} ---\n"
             f"{text}\n"
@@ -237,7 +299,7 @@ def _write_telemetry(
         "finish_reason": f"thinking-{thinking}",
         "duration_s": round(duration_s, 6),
     }
-    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
 
 
 def _parse_edit_payload(content: str) -> dict[str, Any]:
@@ -246,12 +308,12 @@ def _parse_edit_payload(content: str) -> dict[str, Any]:
     if fenced is not None:
         text = fenced
     try:
-        return _object(json.loads(text), "pi edit payload")
+        return _object(control_json(text), "pi edit payload")
     except json.JSONDecodeError as exc:
         repaired = _repair_truncated_json(text)
         if repaired is not None:
             try:
-                return _object(json.loads(repaired), "pi edit payload")
+                return _object(control_json(repaired), "pi edit payload")
             except json.JSONDecodeError:
                 pass
         raise ValueError(f"could not parse pi edit payload JSON: {exc}") from exc
@@ -299,16 +361,16 @@ def _apply_edits(
     if not isinstance(files, list):
         raise ValueError("pi edit payload.files must be an array")
     allowed = set(allowed_paths)
-    replacements: list[tuple[Path, str, str]] = []
+    replacements: list[tuple[Path, str, bytes]] = []
     seen_paths: set[str] = set()
     for index, item in enumerate(files, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"pi edit payload.files[{index}] must be an object")
         path = _string(item.get("path"), f"pi edit payload.files[{index}].path")
         if path not in allowed:
-            raise ValueError(f"pi attempted to edit disallowed path: {path}")
+            raise ValueError("pi attempted to edit disallowed path")
         if path in seen_paths:
-            raise ValueError(f"pi edit payload duplicates path: {path}")
+            raise ValueError("pi edit payload duplicates path")
         seen_paths.add(path)
         content = item.get("content")
         if not isinstance(content, str):
@@ -316,25 +378,15 @@ def _apply_edits(
         target = _workspace_path(workspace, path)
         if not target.is_file():
             raise ValueError(f"pi edit target is not a file: {path}")
-        replacements.append((target, path, content))
+        replacements.append((target, path, content.encode("utf-8")))
 
-    originals = {target: target.read_bytes() for target, _, _ in replacements}
-    try:
-        for target, _, content in replacements:
-            target.write_text(content, encoding="utf-8")
-    except OSError as exc:
-        for target, original in originals.items():
-            try:
-                target.write_bytes(original)
-            except OSError:
-                pass
-        raise ValueError(f"could not apply pi edit payload: {exc}") from exc
+    replace_workspace_files(workspace, [(path, content) for _, path, content in replacements])
 
     summary = payload.get("summary")
     return len(replacements), summary if isinstance(summary, str) else ""
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pi-bin", default="pi")
     parser.add_argument("--model", required=True)
@@ -349,7 +401,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
@@ -365,69 +418,46 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
-    prompt_temp = tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        prefix="benchpack-pi-agent-",
-        suffix=".md",
-        delete=False,
-    )
+    # Keep the private prompt in the owning resource scope even if writing or
+    # command construction fails. The outer main scope retires it on signals too.
     try:
-        prompt_temp.write(pi_prompt)
+        prompt_bytes = pi_prompt.encode("utf-8")
+        if len(prompt_bytes) > MAX_PROMPT_BYTES:
+            raise ValueError("pi prompt exceeds byte limit")
+        prompt_temp = resources.enter_context(tempfile.NamedTemporaryFile(
+            "wb", prefix="benchpack-pi-agent-", suffix=".md", delete=False))
+        resources.callback(Path(prompt_temp.name).unlink, missing_ok=True)
+        if prompt_temp.write(prompt_bytes) != len(prompt_bytes):
+            raise OSError("short prompt write")
         prompt_temp.close()
-        command = [
-            args.pi_bin,
-            "-p",
-            "--no-session",
-            "--no-context-files",
-            "--model",
-            args.model,
-            "--thinking",
-            args.thinking,
-            "--no-tools",
-            f"@{prompt_temp.name}",
-        ]
-    except OSError as exc:
-        return _fail(f"could not write pi prompt temp file: {exc}")
+        command = [args.pi_bin, "-p", "--no-session", "--no-context-files",
+                   "--model", args.model, "--thinking", args.thinking,
+                   "--no-tools", f"@{prompt_temp.name}"]
+    except (OSError, ValueError):
+        return _fail("could not stage pi prompt")
     started = time.monotonic()
     completed: subprocess.CompletedProcess[str] | None = None
     try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=args.timeout_s,
-        )
+        completed = run_agent(command, cwd=workspace, timeout_s=args.timeout_s)
         if completed.returncode != 0:
-            print(completed.stdout, end="")
-            print(completed.stderr, end="", file=sys.stderr)
+            print("pi-agent: child failed", file=sys.stderr)
             ok = False
             return_code = completed.returncode
         else:
             payload = _parse_edit_payload(completed.stdout)
             changed, summary = _apply_edits(workspace, payload, allowed_paths)
-            print(f"pi-agent applied {changed} file replacement(s): {summary}")
+            print(f"pi-agent applied {changed} file replacement(s)")
             ok = True
             return_code = 0
-    except subprocess.TimeoutExpired as exc:
+    except AgentTimeout:
         print(f"pi timed out after {args.timeout_s}s", file=sys.stderr)
         ok = False
         return_code = 124
     except OSError as exc:
         return _fail(f"could not run pi: {exc}")
     except ValueError as exc:
-        if completed is not None:
-            print(completed.stdout, end="")
-            print(completed.stderr, end="", file=sys.stderr)
         ok = False
         return_code = _fail(str(exc))
-    finally:
-        try:
-            Path(prompt_temp.name).unlink()
-        except OSError:
-            pass
     duration_s = time.monotonic() - started
 
     try:
@@ -438,10 +468,18 @@ def main(argv: list[str] | None = None) -> int:
             duration_s=duration_s,
             ok=ok,
         )
-    except OSError as exc:
-        return _fail(f"could not write model-call telemetry: {exc}")
+    except (OSError, ValueError) as exc:
+        _fail("could not write model-call telemetry")
+        return return_code if return_code else 2
 
     return return_code
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Signals during prompt staging, edit publication or telemetry still unwind
+    # the resource scope that removes the private prompt file.
+    with exit_on_termination_signals(), ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

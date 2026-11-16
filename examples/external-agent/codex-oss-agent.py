@@ -10,13 +10,21 @@ Ollama, not for cloud-backed or credentialed runs.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_process import run_agent, AgentTimeout, MAX_PROMPT_BYTES
+from benchpack.example_io import (
+    read_context_text,
+    TelemetryDestination,
+    publish_telemetry,
+    control_json,
+)
 
 def _fail(message: str) -> int:
     print(f"codex-oss-agent: {message}", file=sys.stderr)
@@ -37,7 +45,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -80,7 +88,7 @@ def _load_and_validate_context(
 
     model_call_log_path = Path(
         _string(run.get("model_call_log_path"), "context.run.model_call_log_path")
-    ).resolve(strict=False)
+    ).absolute()
     try:
         model_call_log_path.relative_to(output_dir_arg)
     except ValueError as exc:
@@ -126,14 +134,15 @@ def _write_telemetry(
         "duration_s": round(duration_s, 6),
     }
     try:
-        path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        publish_telemetry(path, json.dumps(payload, sort_keys=True) + "\n")
     except OSError as exc:
         raise ValueError(f"could not write model-call telemetry: {exc}") from exc
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv, resources) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--codex-bin", default="codex")
+    parser.add_argument("--timeout-s", type=float, default=900.0)
     parser.add_argument("--codex-model", required=True)
     parser.add_argument("--local-provider", default="ollama")
     parser.add_argument("--workspace", required=True)
@@ -144,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        workspace, _, model_call_log_path, prompt = _load_and_validate_context(args)
+        workspace, output_dir, model_call_log_path, prompt = _load_and_validate_context(args)
+        model_call_log_path = TelemetryDestination(resources, output_dir, model_call_log_path)
     except (OSError, ValueError) as exc:
         return _fail(str(exc))
 
@@ -163,13 +173,21 @@ def main(argv: list[str] | None = None) -> int:
         "--sandbox",
         "workspace-write",
         "--ephemeral",
-        codex_prompt,
+        "-",
     ]
+    try:
+        prompt_bytes = codex_prompt.encode("utf-8")
+        if len(prompt_bytes) > MAX_PROMPT_BYTES:
+            raise ValueError("codex prompt exceeds byte limit")
+    except (ValueError, UnicodeError):
+        return _fail("codex prompt exceeds supported UTF-8 envelope")
     started = time.monotonic()
     try:
-        completed = subprocess.run(command, check=False, cwd=workspace, text=True)
-    except OSError as exc:
-        return _fail(f"could not run codex: {exc}")
+        completed = run_agent(command, cwd=workspace, prompt=prompt_bytes, timeout_s=args.timeout_s)
+    except AgentTimeout:
+        return _fail("codex deadline exceeded")
+    except (OSError, ValueError):
+        return _fail("codex transport failed")
     duration_s = time.monotonic() - started
 
     try:
@@ -181,9 +199,15 @@ def main(argv: list[str] | None = None) -> int:
             ok=completed.returncode == 0,
         )
     except ValueError as exc:
-        return _fail(str(exc))
+        _fail(str(exc))
+        return completed.returncode if completed.returncode else 2
 
     return completed.returncode
+
+
+def main(argv: list[str] | None = None) -> int:
+    with ExitStack() as resources:
+        return _main(argv, resources)
 
 
 if __name__ == "__main__":

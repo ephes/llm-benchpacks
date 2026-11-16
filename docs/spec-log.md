@@ -5455,3 +5455,44 @@ Sync admitted publication directories after replacing reporter/context artifacts
 Expose visible-but-uncertain durability failures without rolling back evidence;
 shared workspace/log callers retain the same distinction. Synthetic file/directory
 sync fault tests cover reporter artifacts, context and workspace replacements.
+
+## 2026-11-16 — Example workspace publication (B07)
+
+Pre-encoded batch replacement and descriptor-bound publication now protect the
+OpenAI, Pi and local model-call examples. Offline surrogate, failure, mode,
+hardlink and substitution regressions cover the boundary. No live calls.
+
+## 2026-11-16 — Example HTTP envelope (B08)
+
+Bounded actual-byte reads and shared response deadlines replace unbounded reads.
+All redirects are refused. Offline counting, drip and two-origin tests cover it.
+
+## 2026-11-16 — Unambiguous complete example replies (B09)
+
+Unique JSON members now gate example controls. OpenAI edit publication requires
+a completed stop outcome and a matching explicit model, without upstream errors.
+Duplicate, depth and completion regressions run entirely offline.
+
+## 2026-11-16 — Private durable example evidence (B10)
+
+Removed raw remote/agent failure text from example diagnostics and restricted
+finish-reason labels. Owned, atomic 0600 telemetry publication now spans the
+external call, with failure, substitution and privacy sentinel regressions.
+
+## 2026-11-16 — Bounded example acquisition (B11)
+
+Context reads now admit stable regular UTF-8 files under a byte ceiling. Pi
+streams bounded contained CSV previews and caps aggregate editable context.
+FIFO, symlink, rewrite, aggregate and counting-reader regressions are synthetic.
+
+## 2026-11-16 — Owned example agent transport (B12)
+
+Codex prompts now travel only on bounded stdin; Pi and Codex share finite output
+capture and group retirement with the leader held until final signaling. Fake
+executables cover large prompts, short writes, output overflow, pipe descendants,
+timeout, signals and prompt staging cleanup. No real agent/model was invoked.
+
+Publication follow-up: retain the staged inode descriptor through replacement,
+refuse rollback over a newer concurrent leaf, and preserve original backup stages
+when rollback cannot safely restore them. A deterministic substitution test
+reproduced the prior misidentification before the fix.
