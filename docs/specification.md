@@ -1801,7 +1801,8 @@ listed bundle file is size-checked before hashing or scanning (64 MiB per file,
 
 Optional verifier JSON is read from one no-follow regular descriptor within
 1 MiB, including growth during reads. Missing output is allowed. Refused files
-(including FIFOs and symlinks) yield `supplemental_error: read_error`; malformed,
+(including FIFOs, symlinks and files mutated in place during the read) yield
+`supplemental_error: read_error`; malformed,
 non-object, nonfinite, invalid UTF-8 or excessively nested/numeric JSON yields
 `invalid_json`. Supplemental refusal does not change the exit-code verdict.
 The runner serializes authoritative fields first, writes and fsyncs an exclusive

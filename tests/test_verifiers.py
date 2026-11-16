@@ -659,6 +659,30 @@ def test_supplemental_symlink_is_replaced_without_touching_target(tmp_path):
         'exit_code': 0, 'passed': True, 'supplemental_error': 'read_error'}
 
 
+def test_supplemental_json_mutated_during_read_is_read_error(tmp_path, monkeypatch):
+    import os
+    from benchpack.verifiers import _write_authoritative_json
+    path = tmp_path / 'verify.json'
+    path.write_bytes(b'{"evidence":"' + b'a' * 64 + b'"}')
+    original = os.read
+    changed = False
+
+    def read(fd, count):
+        nonlocal changed
+        chunk = original(fd, min(count, 16))
+        if not changed and os.fstat(fd).st_ino == path.stat().st_ino:
+            changed = True
+            path.write_bytes(b'{"evidence":"' + b'b' * 80 + b'"}')
+        return chunk
+
+    monkeypatch.setattr(os, 'read', read)
+    _write_authoritative_json(path, exit_code=1, passed=False)
+    monkeypatch.setattr(os, 'read', original)
+    assert changed
+    assert json.loads(path.read_text()) == {
+        'exit_code': 1, 'passed': False, 'supplemental_error': 'read_error'}
+
+
 @pytest.mark.skipif(__import__('os').name != 'posix', reason='FIFO')
 def test_supplemental_fifo_does_not_block(tmp_path):
     import os
