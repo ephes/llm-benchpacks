@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Drain clusterer output with bounded tails, retire owned process groups on every
+  exit, and measure sampled group RSS with explicit unavailable memory evidence.
+
 - Reject ambiguous/nonfinite runtime metadata before execution, including nested
   extension values and oversized integer decoder failures.
 - Refuse redirected reporter artifacts and exchanged output directories after

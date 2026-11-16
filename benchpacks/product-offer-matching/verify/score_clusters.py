@@ -4,12 +4,17 @@ import argparse
 import csv
 import json
 import math
+import os
+import selectors
+import signal
 import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+import psutil
 
 
 BCUBED_F1_MIN = 0.70
@@ -22,26 +27,44 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _rss_mb(pid: int) -> float | None:
+OUTPUT_TAIL_BYTES = 65536
+CLEANUP_GRACE_S = 0.5
+
+
+def _rss_mb(pgid: int) -> float | None:
+    """Sample the sum of resident bytes in the owned POSIX process group."""
+    total = 0
+    observed = False
     try:
-        completed = subprocess.run(
-            ["ps", "-o", "rss=", "-p", str(pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=1.0,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        for process in psutil.process_iter():
+            try:
+                if os.getpgid(process.pid) != pgid:
+                    continue
+            except ProcessLookupError:
+                continue
+            if process.status() == psutil.STATUS_ZOMBIE:
+                continue
+            try:
+                total += process.memory_info().rss
+                observed = True
+            except psutil.NoSuchProcess:
+                continue
+    except (OSError, psutil.Error):
         return None
-    if completed.returncode != 0:
-        return None
-    text = completed.stdout.strip()
-    if not text:
-        return None
+    return total / (1024 * 1024) if observed else None
+
+
+def _retire(process: subprocess.Popen) -> None:
+    # Kill the group even after the leader exits: descendants may own pipes or
+    # have redirected them. Never wait for descendant EOF during cleanup.
     try:
-        return int(text.splitlines()[-1].strip()) / 1024.0
-    except ValueError:
-        return None
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        if process.poll() is None:
+            raise
+    process.wait(timeout=CLEANUP_GRACE_S)
 
 
 def _run_command(
@@ -53,56 +76,77 @@ def _run_command(
     started = time.monotonic()
     try:
         process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            command, cwd=cwd, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True, bufsize=0,
         )
     except OSError as exc:
-        return {
-            "ok": False,
-            "phase": "spawn",
-            "command": command,
-            "error": str(exc),
-            "duration_s": time.monotonic() - started,
-        }
+        return {"ok": False, "phase": "spawn", "command": command,
+                "error": str(exc), "duration_s": time.monotonic() - started}
 
-    peak_rss_mb = 0.0
+    tails = [bytearray(), bytearray()]
+    peak = None
+    samples = 0
+    memory_complete = True
     timed_out = False
-    while process.poll() is None:
-        rss = _rss_mb(process.pid)
-        if rss is not None:
-            peak_rss_mb = max(peak_rss_mb, rss)
-        if time.monotonic() - started > timeout_s:
-            timed_out = True
-            process.kill()
-            break
-        time.sleep(0.02)
+    cleanup_error = None
+    selector = None
+    try:
+        selector = selectors.DefaultSelector()
+        for index, stream in enumerate((process.stdout, process.stderr)):
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, index)
+        deadline = started + timeout_s
+        while process.poll() is None:
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+            rss = _rss_mb(process.pid)
+            if rss is None:
+                memory_complete = False
+            else:
+                samples += 1
+                peak = max(peak or 0.0, rss)
+            for key, _ in selector.select(max(0, min(0.02, deadline - time.monotonic()))):
+                chunk = os.read(key.fd, 8192)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                else:
+                    tails[key.data].extend(chunk)
+                    del tails[key.data][:-OUTPUT_TAIL_BYTES]
+    finally:
+        # Cleanup must preserve KeyboardInterrupt/read errors and has a fixed
+        # wait budget; success still retires any remaining group members.
+        try:
+            _retire(process)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            cleanup_error = type(exc).__name__
+        if selector is not None:
+            # Read at most one retained tail after retirement; an escaped pipe
+            # holder cannot force an unbounded EOF wait here.
+            for key in list(selector.get_map().values()):
+                try:
+                    chunk = os.read(key.fd, OUTPUT_TAIL_BYTES)
+                    tails[key.data].extend(chunk)
+                    del tails[key.data][:-OUTPUT_TAIL_BYTES]
+                except OSError:
+                    pass
+            selector.close()
+        process.stdout.close()
+        process.stderr.close()
 
-    stdout, stderr = process.communicate()
-    duration_s = time.monotonic() - started
-    if timed_out:
-        return {
-            "ok": False,
-            "phase": "run",
-            "command": command,
-            "timed_out": True,
-            "timeout_s": timeout_s,
-            "stdout": stdout,
-            "stderr": stderr,
-            "duration_s": duration_s,
-            "peak_rss_mb": round(peak_rss_mb, 3),
-        }
+    complete = memory_complete and samples > 0 and peak is not None and peak > 0
     return {
-        "ok": process.returncode == 0,
-        "phase": "run",
-        "command": command,
-        "exit_code": process.returncode,
-        "stdout": stdout,
-        "stderr": stderr,
-        "duration_s": duration_s,
-        "peak_rss_mb": round(peak_rss_mb, 3),
+        "ok": process.returncode == 0 and not timed_out and cleanup_error is None,
+        "phase": "run", "command": command, "exit_code": process.returncode,
+        "timed_out": timed_out, "timeout_s": timeout_s,
+        "stdout": tails[0].decode("utf-8", errors="replace"),
+        "stderr": tails[1].decode("utf-8", errors="replace"),
+        "duration_s": time.monotonic() - started,
+        "peak_rss_mb": round(peak, 3) if complete else None,
+        "memory_scope": "owned_process_group_sampled_rss",
+        "memory_complete": complete, "memory_samples": samples,
+        "cleanup_error": cleanup_error,
     }
 
 
@@ -478,7 +522,9 @@ def _combined_score(
     pairwise_f1 = float(pairwise.get("f1") or 0.0)
     average_precision = float(pr_curve.get("average_precision") or 0.0)
     offers_per_second = float(system_metrics.get("offers_per_second") or 0.0)
-    peak_rss_mb = float(system_metrics.get("peak_rss_mb") or 0.0)
+    if not system_metrics.get("memory_complete") or system_metrics.get("peak_rss_mb") is None:
+        return {"value": None, "unavailable_reason": "incomplete owned-process memory evidence"}
+    peak_rss_mb = float(system_metrics["peak_rss_mb"])
     throughput_norm = min(1.0, max(0.0, offers_per_second / 10_000.0))
     memory_norm = min(1.0, 1024.0 / peak_rss_mb) if peak_rss_mb > 0 else 0.0
     value = 100.0 * (
@@ -620,6 +666,9 @@ def main() -> int:
                 if float(run_result.get("duration_s", 0.0)) > 0
                 else None,
                 "peak_rss_mb": run_result.get("peak_rss_mb"),
+                "memory_scope": run_result.get("memory_scope"),
+                "memory_complete": run_result.get("memory_complete", False),
+                "memory_samples": run_result.get("memory_samples", 0),
             }
             payload["metrics"] = {
                 "bcubed": bcubed,

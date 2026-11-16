@@ -893,3 +893,7 @@ Result artifacts are runner-owned: an external harness must not replace
 directory with links or another directory generation. These parent write checks
 do not sandbox a same-user harness. See the specification for failure/recovery
 and opened-descriptor admission rules.
+
+Product-offer matching reports sampled owned-process-group RSS with explicit
+`memory_scope`, `memory_samples` and `memory_complete` evidence. Incomplete
+memory evidence makes the combined score unavailable; see the pack README.

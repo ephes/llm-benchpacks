@@ -5409,3 +5409,9 @@ atomically publishes serialized external-agent context generations.
 B24 extends per-run decoding limits with deduplicated report-wide totals and
 owns external-process cleanup across exceptional exits, preserving the primary
 interrupt/error and existing timeout task outcomes.
+
+## 2026-11-16 — Product-offer execution evidence (B07)
+
+Drain candidate pipes with bounded retained output, retire owned process groups
+on every exit, and identify sampled group RSS explicitly. Incomplete memory
+evidence leaves the combined score unavailable. No fixture/version changes.

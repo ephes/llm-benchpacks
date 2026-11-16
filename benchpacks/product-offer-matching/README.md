@@ -147,3 +147,22 @@ BENCHPACK_EXTERNAL_AGENT_ARGV='["/abs/path/to/examples/external-agent/pi-agent.p
 
 Generated result directories remain under `results/` and are ignored by
 default. Commit only curated summaries or documentation updates.
+
+### Candidate execution and memory evidence
+
+The cluster scorer drains stdout/stderr while the candidate runs and retains at
+most 64 KiB per stream. Each candidate runs in a new POSIX process group; the
+scorer kills remaining group members and reaps the leader on completion, timeout
+or interruption, with a bounded cleanup wait. This is lifecycle ownership, not
+a security sandbox; candidates must not detach from the owned group.
+
+`system_metrics.memory_scope = "owned_process_group_sampled_rss"` identifies the
+sum of RSS sampled across the owned group via psutil. Shared resident pages may
+be counted for each process. `memory_samples` records successful observations;
+`memory_complete` requires nonzero evidence and no failed observations. Missing
+accounting permissions, all-missed/zero observations or sampling failures yield
+null `peak_rss_mb` and an unavailable combined score (`value: null`), never zero
+memory evidence. Sampling may miss brief allocation peaks. Historical scores
+using only the leader PID have a different scope and must not be compared as
+though the memory methodology were unchanged. Candidate `program_metrics`
+remain self-reported and separate from independently observed system metrics.
