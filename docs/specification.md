@@ -1500,7 +1500,9 @@ never removed or restored automatically; recover them explicitly. Unlock and
 close are both attempted. Release failures preserve an existing publication or
 rollback exception, adding fixed `publication lock unlock failed` /
 `publication lock close failed` notes; a release-only failure still fails the
-operation and may follow a complete visible publication.
+operation as a registry error and may follow a complete visible publication.
+`benchpack registry bundle create` and `benchpack registry site` append these
+notes to their error message.
 
 ### `benchpack registry bundle`
 

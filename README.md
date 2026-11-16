@@ -89,8 +89,9 @@ failure, and report a retained backup if rollback fails. Serialize bundle export
 to the same output directory. Publication locks must remain single-link regular
 files at their stable names; unsafe or exchanged locks are refused before output
 mutation. Never remove or replace a live publication lock. Lock release errors preserve
-the publication/rollback error with fixed secondary notes; a release-only error
-still fails and can follow a complete publication.
+the publication/rollback error with fixed secondary notes, which the CLI appends to
+its error message; a release-only error still fails as a registry error and can
+follow a complete publication.
 
 Repo-task preparation retains the exact workspace generation under
 `baseline/<case-id>/rep-NNN/`; patch capture reads that copy, so later fixture

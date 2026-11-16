@@ -9,7 +9,9 @@
   originals on failed rollback. New artifacts are private 0600; existing modes survive.
 
 - Preserve publication/rollback failures through lock release errors, attempt
-  descriptor close after failed unlock, and fail on release-only errors.
+  descriptor close after failed unlock, and fail on release-only errors. Bundle and
+  site CLI errors show the fixed release notes; release-only failures are registry
+  errors instead of tracebacks.
 
 - Admit publication locks nonblocking without following links; refuse multiply
   linked or exchanged lock inodes before bundle/site output mutation.
