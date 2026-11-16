@@ -141,7 +141,12 @@ def test_interrupt_reaps_leader_and_preserves_error(scorer, tmp_path, monkeypatc
 def test_prediction_file_open_admission(scorer, tmp_path, loader, name, kind, monkeypatch):
     path = tmp_path / name
     sentinel = tmp_path / 'sentinel'
-    sentinel.write_text('private sentinel')
+    # A valid sentinel would be accepted if the loader followed the symlink.
+    sentinel.write_text({
+        '_load_clusters': 'offer_id,cluster_id\nprivate,sentinel\n',
+        '_load_pair_scores': 'pair_id,score\nprivate,1\n',
+        '_load_program_metrics': '{"private":"sentinel"}',
+    }[loader])
     if kind == 'symlink':
         path.symlink_to(sentinel)
     elif kind == 'fifo':
