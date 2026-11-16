@@ -22,6 +22,34 @@ _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLO
 _CHUNK_BYTES = 1024 * 1024
 
 
+class UnstableFileError(OSError):
+    """An opened evidence file changed while its bytes were being admitted."""
+
+
+class PublishedDurabilityError(OSError):
+    """Complete new bytes are visible, but directory sync did not confirm durability."""
+
+    def __init__(self, name: str) -> None:
+        self.published_name = name
+        super().__init__(f"artifact {name!r} published; directory durability uncertain; "
+                         "retain visible evidence and retry on the same directory")
+
+
+def require_stable_file(fd: int, initial: os.stat_result) -> None:
+    """Fence content reads, allowing an unlink-only atomic path replacement.
+
+    Unlinking the opened inode changes ctime/link count without changing its
+    contents. Size and mtime must still match in that case. This is a metadata
+    fence for accidental concurrent writers, not same-user filesystem isolation.
+    """
+    final = os.fstat(fd)
+    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    if (any(getattr(initial, key) != getattr(final, key) for key in fields)
+            or (initial.st_ctime_ns != final.st_ctime_ns
+                and final.st_nlink >= initial.st_nlink)):
+        raise UnstableFileError("opened result file changed during read")
+
+
 @dataclass(frozen=True)
 class FileSnapshot:
     """Bytes read from one verified regular-file descriptor.
@@ -49,19 +77,21 @@ def contained_parts(relative_path: str) -> tuple[str, ...] | None:
     return parts
 
 
-def open_contained_regular(root: Path, relative_path: str) -> int | None:
+def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     """Open ``root/relative_path`` as a regular file without following links.
 
     Returns an open read-only descriptor, or ``None`` when the path is unsafe,
     missing, traverses a symlink, or does not name a regular file. The root
     directory itself may be reached through a symlink; nothing below it may.
+    An integer root is an already admitted directory descriptor, duplicated here.
     """
 
     parts = contained_parts(relative_path)
     if parts is None:
         return None
     try:
-        current = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        current = (os.dup(root) if isinstance(root, int) else
+                   os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)))
     except OSError:
         return None
     try:
@@ -100,23 +130,31 @@ def read_contained_regular(
     if fd is None:
         return None
     try:
-        size = os.fstat(fd).st_size
-        if size > limit:
-            return FileSnapshot(size=size, data=None)
-        chunks: list[bytes] = []
-        total = 0
-        while total <= limit:
-            chunk = os.read(fd, min(_CHUNK_BYTES, limit + 1 - total))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
+        return read_opened_regular(fd, limit)
+    except UnstableFileError:
+        raise
     except OSError:
         return None
     finally:
         os.close(fd)
+
+
+def read_opened_regular(fd: int, limit: int) -> FileSnapshot:
+    """Read an admitted regular descriptor, leaving its lifetime to the caller."""
+    initial = os.fstat(fd)
+    if initial.st_size > limit:
+        return FileSnapshot(size=initial.st_size, data=None)
+    chunks: list[bytes] = []
+    total = 0
+    while total <= limit:
+        chunk = os.read(fd, min(_CHUNK_BYTES, limit + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
     if total > limit:
-        return FileSnapshot(size=max(size, total), data=None)
+        return FileSnapshot(size=max(initial.st_size, total), data=None)
+    require_stable_file(fd, initial)
     return FileSnapshot(size=total, data=b"".join(chunks))
 
 
@@ -139,6 +177,7 @@ def copy_contained_regular(
         return None
     total = 0
     try:
+        initial = os.fstat(fd)
         with open(destination, "xb") as out:
             try:
                 while True:
@@ -151,6 +190,7 @@ def copy_contained_regular(
                             f"source file exceeds {limit} bytes: {relative_path}"
                         )
                     out.write(chunk)
+                require_stable_file(fd, initial)
             except BaseException:
                 out.close()
                 destination.unlink(missing_ok=True)
@@ -222,7 +262,9 @@ def atomic_write_at(directory: int, name: str, data: bytes) -> None:
 
     Existing regular-file permissions survive replacement; new files follow the
     process umask. Links and special
-    destinations are refused; the owned temporary is removed on every failure.
+    destinations are refused. Pre-replace failures remove only the owned
+    temporary. Post-replace sync failure retains the complete visible file and
+    raises PublishedDurabilityError; it must never trigger rollback.
     """
     if contained_parts(name) != (name,):
         raise ValueError('expected one filename')
@@ -252,3 +294,8 @@ def atomic_write_at(directory: int, name: str, data: bytes) -> None:
         except FileNotFoundError:
             pass
         raise
+
+    try:
+        os.fsync(directory)
+    except OSError as exc:
+        raise PublishedDurabilityError(name) from exc

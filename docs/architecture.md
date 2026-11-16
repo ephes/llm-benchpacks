@@ -1142,7 +1142,12 @@ Reporter writes re-admit the original output-directory identity across harness
 execution. JSONL appends use single-link no-follow regular descriptors with
 rollback on the owned descriptor. Sidecar and summary publication reuse
 `safe_files.atomic_write_at` within the admitted directory, keeping prior bytes
-and modes on publication failure. An unsuccessful rollback preserves the primary
+and modes on pre-replacement failure. The helper fsyncs the file before replace
+and the directory after replace. `PublishedDurabilityError` identifies complete
+visible bytes whose directory durability is uncertain; callers retain evidence
+and output-directory ownership and never claim that the workspace is unchanged.
+Context/task wrappers preserve this distinction in their domain errors.
+An unsuccessful append rollback preserves the primary
 exception, attaches a bounded recovery note, and disables append/summary operations
 on that reporter. Metadata admission recursively validates unambiguous finite
 JSON and normalizes extension objects before filesystem effects.
@@ -1176,3 +1181,16 @@ bounded pipe capture, and uses psutil for group RSS evidence (see pack README).
 
 The pack-local product-offer scorer publishes an immutable curve generation
 before atomically committing its JSON reference; outer normalization retains it.
+
+Contained evidence reads and copies share `require_stable_file`: descriptor
+identity, size and nanosecond mtime/ctime are fenced after reading, before
+returning bytes or accepting a digest. JSONL uses the same fence. Unlink-only
+ctime changes permit complete old-generation reads during atomic replacement.
+Unstable copies remove their owned destination and abort bundle publication.
+
+Registry admission opens JSONL and both optional sidecars relative to one
+admitted directory descriptor before parsing. It keeps all descriptors until
+file/directory generation fences pass, then carries normalized hardware and
+runtime snapshots on `ResultRun`. `_import_run` consumes only those snapshots
+and the captured canonical source path. Source I/O is complete before SQLite
+mutation, including bundle-import runs; no schema migration is needed.

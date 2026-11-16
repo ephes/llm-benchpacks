@@ -747,3 +747,17 @@ files, 64 MiB JSONL bytes and 100,000 records across all inputs. Directory alias
 and hardlinked files count once; compare requires two distinct files after deduplication.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.
+
+Contained result reads reject in-place changes detected by descriptor size and
+nanosecond mtime/ctime checks. Atomic pathname replacement keeps the complete
+opened generation readable. Retry unstable inputs after their writer has stopped.
+
+Registry imports admit one result-directory generation: JSONL and optional
+hardware/runtime sidecars are opened together, fenced before database mutation,
+and carried as validated snapshots into SQLite. A source directory exchange or
+sidecar rewrite during admission fails without changing the registry.
+
+Reporter sidecars, summaries and external-agent contexts sync file data before
+replacement and their containing directory afterward. A directory-sync error
+means complete new bytes are published with uncertain durability: retain them
+and retry in the same directory. This does not make the whole run transactional.

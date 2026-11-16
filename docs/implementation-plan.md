@@ -1,5 +1,15 @@
 # Implementation Plan
 
+## Completed coherent result evidence (2026-11-16)
+
+- B29: fence contained reads/copies and JSONL admission against in-place changes.
+- Capture registry JSONL/hardware/runtime evidence under one admitted directory;
+  carry validated sidecars through database import without reopening paths.
+- Sync containing directories after atomic artifact replacement, retaining
+  complete visible evidence when durability cannot be confirmed.
+- Synthetic regressions cover file/directory exchanges and file/directory sync
+  faults; no providers or real benchmark campaigns are needed.
+
 ## Completed scoring, hardware and comparison boundaries (2026-11-14)
 
 - B11: reject duplicate model-output JSON members; bound and escape schema

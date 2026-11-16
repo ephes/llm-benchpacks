@@ -864,9 +864,9 @@ def test_result_ingestion_bounds_read_before_allocation(tmp_path, monkeypatch):
     import benchpack.compare as compare
     run = tmp_path / 'run'
     run.mkdir()
-    (run / 'run.jsonl').touch()
+    (run / 'run.jsonl').write_bytes(b'x' * 1000)
     reads = []
-    class Stream(io.BytesIO):
+    class Stream(io.BufferedReader):
         def readline(self, size=-1):
             reads.append(size)
             assert 0 < size <= 33
@@ -875,9 +875,9 @@ def test_result_ingestion_bounds_read_before_allocation(tmp_path, monkeypatch):
             raise AssertionError('unbounded iteration')
     monkeypatch.setattr(compare, 'MAX_RESULT_LINE_BYTES', 32, raising=False)
     import os
+    original_fdopen = os.fdopen
     def stream(fd, *args, **kwargs):
-        os.close(fd)
-        return Stream(b'x'*1000)
+        return Stream(original_fdopen(fd, 'rb', buffering=0))
     monkeypatch.setattr(os, 'fdopen', stream)
     with pytest.raises(CompareError, match='limit'):
         load_result_run(run)
@@ -895,7 +895,7 @@ def test_result_ingestion_normalizes_io_and_decode_errors(tmp_path, monkeypatch,
     if failure != 'utf8':
         import os
         original_open = os.open
-        class Stream(io.BytesIO):
+        class Stream(io.BufferedReader):
             def readline(self, size=-1):
                 injected.append('read')
                 raise OSError('synthetic read failure')
@@ -904,9 +904,9 @@ def test_result_ingestion_normalizes_io_and_decode_errors(tmp_path, monkeypatch,
                 injected.append('open')
                 raise PermissionError('synthetic denial')
             return original_open(name, *a, **kw)
+        original_fdopen = os.fdopen
         def stream(fd, *args, **kwargs):
-            os.close(fd)
-            return Stream()
+            return Stream(original_fdopen(fd, 'rb', buffering=0))
         monkeypatch.setattr(os, 'open', broken_open)
         if failure == 'read':
             monkeypatch.setattr(os, 'fdopen', stream)

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from .safe_files import open_contained_regular
+from .safe_files import open_contained_regular, require_stable_file
 
 
 MISSING = "—"
@@ -108,6 +108,7 @@ def _read_result_run(
     total = 0
     line_number = 0
     digest = hashlib.sha256()
+    initial = os.fstat(fh.fileno())
     try:
         while True:
             line = fh.readline(min(
@@ -136,6 +137,7 @@ def _read_result_run(
             if not isinstance(record, dict):
                 raise CompareError(f"expected JSON object in {source}")
             records.append(record)
+        require_stable_file(fh.fileno(), initial)
     except UnicodeError as exc:
         raise CompareError(f"could not decode {jsonl_path}:{line_number}: invalid UTF-8") from exc
     except OSError as exc:

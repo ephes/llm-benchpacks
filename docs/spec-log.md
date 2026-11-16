@@ -5436,3 +5436,22 @@ and atomically publish JSON referencing an immutable staged curve generation.
 Sample positive-pair indices from compact counts, preserving uniform eligibility
 and new-algorithm seed reproducibility. Existing fixtures remain unchanged. Stage
 and validate all six outputs under cooperating writer locks; compensate failures.
+
+## 2026-11-16: Stable result file reads
+
+Fence contained evidence and JSONL reads against in-place changes; retain opened
+old generations on atomic pathname replacement. Synthetic mutation regressions
+cover patch summaries, copies, bundle publication and registry admission.
+
+## 2026-11-16: Coherent registry source admission
+
+Read each import directory as one descriptor-bound generation; preserve validated
+sidecar snapshots through the DB write. Refuse concurrent directory/sidecar
+changes during admission, with fixture-only rollback and exchange regressions.
+
+## 2026-11-16: Durable artifact acknowledgement
+
+Sync admitted publication directories after replacing reporter/context artifacts.
+Expose visible-but-uncertain durability failures without rolling back evidence;
+shared workspace/log callers retain the same distinction. Synthetic file/directory
+sync fault tests cover reporter artifacts, context and workspace replacements.

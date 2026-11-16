@@ -436,7 +436,11 @@ def _write_authoritative_json(
     except OSError:
         payload["supplemental_error"] = "read_error"
     else:
-        snapshot = read_contained_regular(path.parent, path.name, MAX_VERIFY_JSON_BYTES)
+        try:
+            snapshot = read_contained_regular(path.parent, path.name, MAX_VERIFY_JSON_BYTES)
+        except OSError:
+            # A writer that escaped cleanup may still mutate the file in place.
+            snapshot = None
         if snapshot is None or snapshot.data is None:
             payload["supplemental_error"] = "read_error"
         else:
