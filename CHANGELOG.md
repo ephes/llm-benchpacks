@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Sample Billiger positive pairs without quadratic pools; stage and validate all
+  fixture outputs, serialize writers, and preserve recovery data on rollback failure.
+
 - Withhold quality scores for invalid cluster evidence and publish each result
   atomically with its own complete immutable PR-curve generation.
 

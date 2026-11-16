@@ -906,3 +906,6 @@ precision at each group end, summed without interpolation (zero with no positive
 
 Product-offer invalid evidence has no numeric quality/combined score. Its PR
 reference points to an immutable generation-specific CSV; use `pr_curve.path`.
+
+Billiger fixture publication stages/validates five CSVs plus the report and
+serializes writers, with rollback and retained recovery data on compensation failure.

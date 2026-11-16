@@ -24,3 +24,6 @@ metadata/*.json
 # Local environment
 .env
 .DS_Store
+
+# Stable Billiger fixture publisher locks.
+.billiger-publication.lock

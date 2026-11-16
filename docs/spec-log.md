@@ -5430,3 +5430,9 @@ whole tied-score groups, independent of expected-ID order; history unchanged.
 
 Reject invalid predictions before quality work, retain measured execution data,
 and atomically publish JSON referencing an immutable staged curve generation.
+
+## 2026-11-16 — Bounded Billiger sampling and fixture publication (B11)
+
+Sample positive-pair indices from compact counts, preserving uniform eligibility
+and new-algorithm seed reproducibility. Existing fixtures remain unchanged. Stage
+and validate all six outputs under cooperating writer locks; compensate failures.
