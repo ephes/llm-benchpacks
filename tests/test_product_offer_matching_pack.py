@@ -80,8 +80,13 @@ def test_product_offer_python_reference_verifier_writes_cluster_metrics(
     assert payload["metrics"]["eval_pair_operating_point_from_clusters"][
         "positive_prevalence"
     ] == 0.25
-    assert payload["combined_score"]["formula"].startswith("100 *")
-    assert payload["combined_score"]["components"]["average_precision"] > 0.9020
+    if payload["system_metrics"]["memory_complete"]:
+        assert payload["combined_score"]["formula"].startswith("100 *")
+        assert payload["combined_score"]["components"]["average_precision"] > 0.9020
+    else:
+        assert payload["combined_score"]["value"] is None
+        assert "memory evidence" in payload["combined_score"]["unavailable_reason"]
+    assert payload["pr_curve"]["average_precision"] > 0.9020
     assert payload["pr_curve"]["best_hidden"]["f1"] > 0.80
     assert payload["program_metrics"]["candidate_pairs"] > 3_900_000
     assert payload["program_metrics"]["candidate_token_block_max"] == 500

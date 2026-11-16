@@ -36,11 +36,18 @@ def test_drains_both_pipes_with_bounded_tail(scorer, tmp_path):
 @pytest.mark.parametrize('redirect', [False, True])
 def test_retires_descendants_on_leader_exit(scorer, tmp_path, timeout, redirect):
     # Run the scorer in a watchdog process: the old implementation blocks on EOF.
-    code = f'''import importlib.util, pathlib, sys
+    redirects = ",stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL" if redirect else ""
+    candidate = (
+        "import subprocess,sys,time; "
+        "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']"
+        + redirects + "); open('pid','w').write(str(p.pid))"
+        + ("; time.sleep(30)" if timeout else "")
+    )
+    code = f"""import importlib.util, pathlib, sys
 spec=importlib.util.spec_from_file_location('s', {str(SCORER.resolve())!r})
 s=importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
-s._run_command([sys.executable, '-c', {("import subprocess,sys,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']" + (",stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL" if redirect else "") + "); open('pid','w').write(str(p.pid)); time.sleep(30)" if timeout else "import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']" + (",stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL" if redirect else "") + "); open('pid','w').write(str(p.pid))")!r}], cwd=pathlib.Path('.'), timeout_s=0.3)
-'''
+s._run_command([sys.executable, '-c', {candidate!r}], cwd=pathlib.Path('.'), timeout_s=0.3)
+"""
     pid = None
     try:
         proc = subprocess.Popen([sys.executable, '-c', code], cwd=tmp_path,
@@ -56,7 +63,9 @@ s._run_command([sys.executable, '-c', {("import subprocess,sys,time; p=subproces
         while time.monotonic() < deadline:
             try:
                 os.kill(pid, 0)
-            except ProcessLookupError:
+                if psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                    break
+            except (ProcessLookupError, psutil.NoSuchProcess):
                 break
             time.sleep(.01)
         else:
@@ -358,3 +367,46 @@ def test_generation_reference_survives_outer_normalization(scorer, tmp_path):
     _write_authoritative_json(output, exit_code=0, passed=True)
     assert json.loads(output.read_text())['pr_curve']['path'] == str(curve)
     assert curve.read_bytes() == before
+
+
+def test_all_missed_short_lived_samples_are_unavailable(scorer, tmp_path, monkeypatch):
+    real_spawn = scorer.subprocess.Popen
+    def completed(*args, **kwargs):
+        process = real_spawn(*args, **kwargs)
+        process.wait(timeout=3)
+        return process
+    monkeypatch.setattr(scorer.subprocess, 'Popen', completed)
+    result = scorer._run_command([sys.executable, '-c', 'pass'], cwd=tmp_path, timeout_s=3)
+    assert result['ok']
+    assert result['memory_samples'] == 0
+    assert result['memory_complete'] is False
+    assert result['peak_rss_mb'] is None
+
+
+def test_changed_opened_prediction_generation_is_refused(scorer, tmp_path, monkeypatch):
+    path = tmp_path / 'clusters.csv'
+    path.write_text('offer_id,cluster_id\na,c\n')
+    read = scorer.os.read
+    mutated = False
+    def change(fd, count):
+        nonlocal mutated
+        result = read(fd, count)
+        if not mutated:
+            mutated = True
+            with path.open('ab') as handle:
+                handle.write(b'b,c\n')
+        return result
+    monkeypatch.setattr(scorer.os, 'read', change)
+    value, errors = scorer._load_clusters(path)
+    assert not value
+    assert errors
+
+
+def test_shared_evidence_row_budget(scorer, tmp_path, monkeypatch):
+    monkeypatch.setattr(scorer, 'EVIDENCE_TOTAL_ROWS', 1)
+    clusters, scores = tmp_path / 'clusters.csv', tmp_path / 'pair_scores.csv'
+    clusters.write_text('offer_id,cluster_id\na,c\n')
+    scores.write_text('pair_id,score\np,1\n')
+    budget = scorer._EvidenceBudget()
+    assert scorer._load_clusters(clusters, budget) == ({'a': 'c'}, [])
+    assert scorer._load_pair_scores(scores, budget)[1]
