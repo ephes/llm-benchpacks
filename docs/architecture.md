@@ -1173,3 +1173,6 @@ one bounded aggregate warning keep the two renderers consistent. See the
 
 The product-offer pack-local scorer owns candidate process-group lifecycle and
 bounded pipe capture, and uses psutil for group RSS evidence (see pack README).
+
+The pack-local product-offer scorer publishes an immutable curve generation
+before atomically committing its JSON reference; outer normalization retains it.

@@ -903,3 +903,6 @@ strict finite unique-member metrics JSON; see the pack README for ceilings.
 
 Product-offer AP uses whole tied-score threshold groups: recall increment times
 precision at each group end, summed without interpolation (zero with no positives).
+
+Product-offer invalid evidence has no numeric quality/combined score. Its PR
+reference points to an immutable generation-specific CSV; use `pr_curve.path`.

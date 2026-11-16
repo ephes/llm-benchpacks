@@ -2021,3 +2021,21 @@ whole group is admitted. A positive and a negative tied at the same score have
 AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
 the highest threshold on ties. Published historical artifacts are unchanged;
 older per-item AP can differ for tied scores and must be identified accordingly.
+
+### Valid quality evidence and result publication
+
+All prediction schema, coverage and optional-metrics errors are collected before
+quality calculation. Invalid evidence fails with bounded `prediction_errors`,
+null `metrics`/`pr_curve` and an unavailable combined score. Measured program and
+system execution data remain available. Complete but wrong predictions receive
+normal numeric quality scores, including genuine low scores.
+
+The scorer stages a complete generation-specific PR CSV and strictly serialized
+JSON before publication. It installs the immutable curve first, then atomically
+replaces the JSON with a reference to that exact generation. Serialization,
+write or replacement failure preserves the previous JSON and its referenced
+curve bytes. Old referenced curves remain intact; consumers must read
+`pr_curve.path`, not infer a fixed `.pr-curve.csv` filename. A process crash may
+leave an unreferenced complete curve. This is atomic visibility, not a promise
+of crash durability across power loss. Outer verifier normalization preserves
+the generation reference.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Withhold quality scores for invalid cluster evidence and publish each result
+  atomically with its own complete immutable PR-curve generation.
+
 - Build cluster PR curves in one sorted sweep and compute average precision
   over whole tied-score groups, independent of CSV order.
 

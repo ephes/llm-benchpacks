@@ -12,6 +12,8 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
+import uuid
 from collections import Counter, defaultdict
 from pathlib import Path
 from itertools import groupby
@@ -448,8 +450,10 @@ def _eval_cluster_operating_point(
 ) -> dict[str, Any]:
     predictions = {
         row["pair_id"]: int(
-            predicted_clusters.get(row["offer_id_left"])
-            == predicted_clusters.get(row["offer_id_right"])
+            row["offer_id_left"] in predicted_clusters
+            and row["offer_id_right"] in predicted_clusters
+            and predicted_clusters[row["offer_id_left"]]
+            == predicted_clusters[row["offer_id_right"]]
         )
         for row in eval_pairs
     }
@@ -582,6 +586,35 @@ def _write_pr_curve(path: Path, curve: list[dict[str, Any]]) -> None:
             )
 
 
+def _publish_result(output_path: Path, payload: dict[str, Any], curve) -> None:
+    """Publish one immutable curve generation, then its atomic JSON reference.
+
+    Prior curves remain valid for readers holding an older result. Concurrent
+    publishers use unique curve names; the final JSON replacement is the commit.
+    """
+    generation = output_path.with_name(f"{output_path.stem}.{uuid.uuid4().hex}.pr-curve.csv")
+    if curve is not None:
+        payload["pr_curve"]["path"] = str(generation)
+    # Finish strict serialization before touching any published artifact.
+    serialized = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    with tempfile.TemporaryDirectory(prefix=".cluster-result-", dir=output_path.parent) as directory:
+        stage = Path(directory)
+        if curve is not None:
+            _write_pr_curve(stage / "curve.csv", curve)
+        (stage / "result.json").write_text(serialized, encoding="utf-8")
+        if curve is not None:
+            os.replace(stage / "curve.csv", generation)
+        try:
+            os.replace(stage / "result.json", output_path)
+        except BaseException:
+            if curve is not None:
+                try:
+                    generation.unlink()
+                except OSError:
+                    pass  # An unreferenced complete curve is safe to retain.
+            raise
+
+
 def _combined_score(
     *,
     bcubed: dict[str, Any],
@@ -657,6 +690,7 @@ def main() -> int:
         "checks": [],
     }
 
+    curve = None
     try:
         test_rows = _read_csv(test_path)
         eval_pairs = _read_csv(eval_pairs_path)
@@ -674,6 +708,30 @@ def main() -> int:
             for key, value in run_result.items()
             if key not in {"stdout", "stderr"}
         }
+        system_metrics = {
+            "test_offers": len(expected_offer_ids),
+            "eval_pairs": len(expected_pair_ids),
+            "program_duration_s": round(
+                float(run_result.get("duration_s", 0.0)), 6
+            ),
+            "offers_per_second": round(
+                len(expected_offer_ids) / float(run_result.get("duration_s", 1.0)),
+                6,
+            )
+            if float(run_result.get("duration_s", 0.0)) > 0
+            else None,
+            "eval_pairs_per_second": round(
+                len(expected_pair_ids) / float(run_result.get("duration_s", 1.0)),
+                6,
+            )
+            if float(run_result.get("duration_s", 0.0)) > 0
+            else None,
+            "peak_rss_mb": run_result.get("peak_rss_mb"),
+            "memory_scope": run_result.get("memory_scope"),
+            "memory_complete": run_result.get("memory_complete", False),
+            "memory_samples": run_result.get("memory_samples", 0),
+        }
+        payload["system_metrics"] = system_metrics
         if not run_result.get("ok"):
             payload["error"] = "program failed"
             payload["program_stdout"] = run_result.get("stdout", "")[-2000:]
@@ -696,6 +754,16 @@ def main() -> int:
                     output_name="clusters.csv",
                 )
             )
+            errors += _validate_expected_ids(
+                expected_ids=expected_pair_ids, actual_ids=set(pair_scores),
+                output_name="pair_scores.csv",
+            )
+            payload["prediction_errors"] = errors
+            if errors:
+                payload["metrics"] = None
+                payload["pr_curve"] = None
+                payload["combined_score"] = {"value": None, "unavailable_reason": "invalid prediction evidence"}
+                raise ValueError("invalid prediction evidence")
             bcubed = _bcubed_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
@@ -716,32 +784,7 @@ def main() -> int:
                 labels=pair_labels,
                 scores=pair_scores,
             )
-            pr_curve_path = output_path.with_suffix(".pr-curve.csv")
-            _write_pr_curve(pr_curve_path, curve)
             errors += curve_errors
-            system_metrics = {
-                "test_offers": len(expected_offer_ids),
-                "eval_pairs": len(expected_pair_ids),
-                "program_duration_s": round(
-                    float(run_result.get("duration_s", 0.0)), 6
-                ),
-                "offers_per_second": round(
-                    len(expected_offer_ids) / float(run_result.get("duration_s", 1.0)),
-                    6,
-                )
-                if float(run_result.get("duration_s", 0.0)) > 0
-                else None,
-                "eval_pairs_per_second": round(
-                    len(expected_pair_ids) / float(run_result.get("duration_s", 1.0)),
-                    6,
-                )
-                if float(run_result.get("duration_s", 0.0)) > 0
-                else None,
-                "peak_rss_mb": run_result.get("peak_rss_mb"),
-                "memory_scope": run_result.get("memory_scope"),
-                "memory_complete": run_result.get("memory_complete", False),
-                "memory_samples": run_result.get("memory_samples", 0),
-            }
             payload["metrics"] = {
                 "bcubed": bcubed,
                 "pairwise_cluster": pairwise,
@@ -752,7 +795,6 @@ def main() -> int:
                 payload["program_metrics"] = program_metrics
             payload["pr_curve"] = {
                 **curve_summary,
-                "path": str(pr_curve_path),
                 "score_file": "pair_scores.csv",
             }
             payload["combined_score"] = _combined_score(
@@ -773,10 +815,7 @@ def main() -> int:
         payload["error"] = str(exc)
         payload["passed"] = False
 
-    output_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _publish_result(output_path, payload, curve)
     return 0 if payload["passed"] else 1
 
 

@@ -5425,3 +5425,8 @@ and row budgets across the run and reject ambiguous/nonfinite metrics JSON.
 
 Replace repeated full sweeps with one sorted threshold sweep. Define AP over
 whole tied-score groups, independent of expected-ID order; history unchanged.
+
+## 2026-11-16 — Quality admission and coherent results (B10)
+
+Reject invalid predictions before quality work, retain measured execution data,
+and atomically publish JSON referencing an immutable staged curve generation.

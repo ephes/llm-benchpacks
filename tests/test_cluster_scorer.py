@@ -250,3 +250,111 @@ def test_average_precision_is_invariant_within_ties(scorer):
     _, summary, _ = scorer._precision_recall_curve(
         expected_ids=['p', 'n'], labels={'p': 1, 'n': 0}, scores={'p': 1., 'n': 1.})
     assert summary['average_precision'] == .5
+
+
+def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
+    import json
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir(exist_ok=True)
+    (workspace / 'clusters.csv').write_text(clusters)
+    (workspace / 'pair_scores.csv').write_text(pairs)
+    patch = tmp_path / 'patch'
+    patch.write_text('synthetic change')
+    trusted = {
+        'test_offers.csv': [{'offer_id': 'a'}, {'offer_id': 'b'}],
+        'eval_pairs.csv': [{'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
+        'hidden_test_clusters.csv': [{'offer_id': 'a', 'cluster_id': 'c'},
+                                     {'offer_id': 'b', 'cluster_id': 'c'}],
+        'hidden_eval_pair_labels.csv': [{'pair_id': 'p', 'label': '1'}]}
+    monkeypatch.setattr(scorer, '_read_csv', lambda p: trusted[p.name])
+    monkeypatch.setattr(scorer, '_run_program', lambda *args: {
+        'ok': True, 'duration_s': .5, 'peak_rss_mb': 12,
+        'memory_scope': 'owned_process_group_sampled_rss',
+        'memory_complete': True, 'memory_samples': 2})
+    output = tmp_path / 'verify.json'
+    monkeypatch.setattr(sys, 'argv', ['score', '--workspace', str(workspace),
+        '--case', 'synthetic-python', '--pack-id', 'synthetic', '--pack-version', '0.1',
+        '--source-fixture-id', 'synthetic', '--patch', str(patch), '--output', str(output)])
+    code = scorer.main()
+    return code, json.loads(output.read_text())
+
+
+@pytest.mark.parametrize('clusters,pairs', [
+    ('offer_id,cluster_id\n', 'pair_id,score\np,1\n'),
+    ('offer_id,cluster_id\na,c\na,c\nb,c\n', 'pair_id,score\np,1\n'),
+    ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\n'),
+    ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\np,1\np,0\n')])
+def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch, clusters, pairs):
+    def forbidden(**kwargs):
+        pytest.fail('quality calculation reached with invalid evidence')
+    monkeypatch.setattr(scorer, '_bcubed_metrics', forbidden)
+    code, payload = run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs)
+    assert code == 1
+    assert not payload['passed']
+    assert payload['prediction_errors']
+    assert payload.get('metrics') is None
+    assert payload['combined_score']['value'] is None
+    assert payload['system_metrics']['program_duration_s'] == .5
+    assert payload.get('pr_curve') is None
+
+
+def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monkeypatch):
+    _, payload = run_synthetic_main(scorer, tmp_path, monkeypatch,
+        'offer_id,cluster_id\na,c1\nb,c2\n', 'pair_id,score\np,0\n')
+    assert payload['prediction_errors'] == []
+    assert payload['metrics']['pairwise_cluster']['f1'] == 0
+    assert isinstance(payload['combined_score']['value'], float)
+
+
+def test_missing_cluster_endpoints_are_not_equal(scorer):
+    metrics = scorer._eval_cluster_operating_point(eval_pairs=[{
+        'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
+        pair_labels={'p': 0}, predicted_clusters={})
+    assert metrics['fp'] == 0
+
+
+@pytest.mark.parametrize('failure', ['curve-write', 'json-write', 'curve-replace', 'json-replace', 'serialize'])
+def test_result_publication_preserves_previous_generation(scorer, tmp_path, monkeypatch, failure):
+    import json
+    output = tmp_path / 'verify.json'
+    old_curve = tmp_path / 'old.csv'
+    old_curve.write_bytes(b'old exact curve\n')
+    old_payload = {'passed': True, 'pr_curve': {'path': str(old_curve)}}
+    output.write_text(json.dumps(old_payload))
+    previous = output.read_bytes()
+    payload = {'passed': True, 'pr_curve': {'points': 0}}
+    if failure == 'serialize':
+        payload['bad'] = float('nan')
+    if failure == 'curve-write':
+        monkeypatch.setattr(scorer, '_write_pr_curve', lambda *args: (_ for _ in ()).throw(OSError('curve')))
+    real_write = Path.write_text
+    def write(self, *args, **kwargs):
+        if failure == 'json-write' and self != output:
+            raise OSError('json')
+        return real_write(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'write_text', write)
+    replace = scorer.os.replace
+    def fail_replace(src, dst):
+        if (failure == 'json-replace' and Path(dst) == output or
+            failure == 'curve-replace' and str(dst).endswith('.pr-curve.csv')):
+            raise OSError('replace')
+        return replace(src, dst)
+    monkeypatch.setattr(scorer.os, 'replace', fail_replace)
+    with pytest.raises((OSError, ValueError)):
+        scorer._publish_result(output, payload, [])
+    assert output.read_bytes() == previous
+    assert old_curve.read_bytes() == b'old exact curve\n'
+
+
+def test_generation_reference_survives_outer_normalization(scorer, tmp_path):
+    import json
+    from benchpack.verifiers import _write_authoritative_json
+    output = tmp_path / 'verify.json'
+    scorer._publish_result(output, {'passed': True, 'pr_curve': {'points': 0}}, [])
+    payload = json.loads(output.read_text())
+    curve = Path(payload['pr_curve']['path'])
+    assert curve.exists()
+    before = curve.read_bytes()
+    _write_authoritative_json(output, exit_code=0, passed=True)
+    assert json.loads(output.read_text())['pr_curve']['path'] == str(curve)
+    assert curve.read_bytes() == before
