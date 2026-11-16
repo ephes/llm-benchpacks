@@ -2098,3 +2098,11 @@ members and fit the existing 64 MiB file allowance; runtime metadata retains
 its finite JSON/schema checks. Any admission failure leaves the registry unchanged.
 Store the validated sidecars in the loaded run; the database phase never reopens
 source paths. Later source replacement cannot attach new sidecars to old rows.
+
+The direct-edit and Pi wrappers encode all replacements before mutation, stage
+complete bytes, and publish relative to held no-follow parent descriptors. They
+refuse symlinks, hardlinked targets and changed source generations. Publication
+failure rolls back owned replacements; rollback failure is reported explicitly.
+Executable permissions survive. The local model-call example uses the same
+workspace publication boundary (its fixed output file may be new). Serialize
+writers: generation checks are not isolation from hostile same-user processes.

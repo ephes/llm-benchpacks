@@ -5455,3 +5455,9 @@ Sync admitted publication directories after replacing reporter/context artifacts
 Expose visible-but-uncertain durability failures without rolling back evidence;
 shared workspace/log callers retain the same distinction. Synthetic file/directory
 sync fault tests cover reporter artifacts, context and workspace replacements.
+
+## 2026-11-16 — Example workspace publication (B07)
+
+Pre-encoded batch replacement and descriptor-bound publication now protect the
+OpenAI, Pi and local model-call examples. Offline surrogate, failure, mode,
+hardlink and substitution regressions cover the boundary. No live calls.

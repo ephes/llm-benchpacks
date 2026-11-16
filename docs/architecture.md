@@ -1194,3 +1194,11 @@ file/directory generation fences pass, then carries normalized hardware and
 runtime snapshots on `ResultRun`. `_import_run` consumes only those snapshots
 and the captured canonical source path. Source I/O is complete before SQLite
 mutation, including bundle-import runs; no schema migration is needed.
+
+The direct-edit and Pi wrappers encode all replacements before mutation, stage
+complete bytes, and publish relative to held no-follow parent descriptors. They
+refuse symlinks, hardlinked targets and changed source generations. Publication
+failure rolls back owned replacements; rollback failure is reported explicitly.
+Executable permissions survive. The local model-call example uses the same
+workspace publication boundary (its fixed output file may be new). Serialize
+writers: generation checks are not isolation from hostile same-user processes.

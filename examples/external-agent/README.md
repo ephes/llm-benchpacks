@@ -139,3 +139,11 @@ the token value must stay in the local environment or secret store. For the
 Hetzner service path, the server is reached through the public TLS/Django
 Bearer-auth proxy. Do not install or expect Codex, Claude, Ollama, or this
 repository on the server for this wrapper.
+
+The direct-edit and Pi wrappers encode all replacements before mutation, stage
+complete bytes, and publish relative to held no-follow parent descriptors. They
+refuse symlinks, hardlinked targets and changed source generations. Publication
+failure rolls back owned replacements; rollback failure is reported explicitly.
+Executable permissions survive. The local model-call example uses the same
+workspace publication boundary (its fixed output file may be new). Serialize
+writers: generation checks are not isolation from hostile same-user processes.

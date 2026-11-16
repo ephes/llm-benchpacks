@@ -176,27 +176,13 @@ def test_apply_edits_restores_originals_after_write_failure(
     helper = workspace / "helper.py"
     greeter.write_text("old greeter\n", encoding="utf-8")
     helper.write_text("old helper\n", encoding="utf-8")
-    original_write_text = Path.write_text
-
-    def flaky_write_text(
-        self: Path,
-        data: str,
-        encoding: str | None = None,
-        errors: str | None = None,
-        newline: str | None = None,
-    ) -> int:
-        if self == helper:
-            self.write_bytes(b"partial helper\n")
-            raise OSError("simulated write failure")
-        return original_write_text(
-            self,
-            data,
-            encoding=encoding,
-            errors=errors,
-            newline=newline,
-        )
-
-    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+    import os
+    original_replace = os.replace
+    def flaky_replace(src, dst, **kwargs):
+        if dst == "helper.py" and "example" in str(src):
+            raise OSError("simulated publication failure")
+        return original_replace(src, dst, **kwargs)
+    monkeypatch.setattr(os, "replace", flaky_replace)
 
     with pytest.raises(ValueError, match="could not apply assistant edit payload"):
         agent._apply_edits(

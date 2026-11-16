@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Pre-encode and stage example workspace replacements; bind writes to held
+  no-follow parents, refuse hardlinks/generation changes and report rollback failure.
+
 - Sync artifact directories after atomic reporter/context publication; report
   visible-but-uncertain durability on sync failure and retain complete evidence.
   Shared workspace/log writes preserve that outcome instead of claiming no write.

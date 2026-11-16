@@ -14,6 +14,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+# Support direct execution from a prepared workspace without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_io import replace_workspace_files
+
+
 
 ALLOWED_WORKSPACE_FILE = "external-agent-model-call.txt"
 
@@ -238,12 +243,12 @@ def main(argv: list[str] | None = None) -> int:
         telemetry["output_tokens"] = validated["output_tokens"]
 
     try:
-        target_path.write_text(validated["content"], encoding="utf-8")
+        replace_workspace_files(workspace, [(ALLOWED_WORKSPACE_FILE, validated["content"].encode("utf-8"))], missing=True)
         model_call_log_path.write_text(
             json.dumps(telemetry, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         return _fail(f"could not write model-call example artifacts: {exc}")
 
     print(f"model-call-agent wrote {ALLOWED_WORKSPACE_FILE} for {args.case}")

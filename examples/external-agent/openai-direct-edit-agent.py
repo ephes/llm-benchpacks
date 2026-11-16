@@ -16,6 +16,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+# Support direct execution from a prepared workspace without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_io import replace_workspace_files
+
+
 
 _ALLOWED_PATH_HEADING_RE = re.compile(r"^Allowed repo-root paths? to edit:\s*$")
 _ALLOWED_PATH_RE = re.compile(r"^- `([^`]+)`\s*$")
@@ -344,7 +349,7 @@ def _apply_edits(
     if not isinstance(files, list):
         raise ValueError("assistant edit payload.files must be an array")
     allowed = set(allowed_paths)
-    replacements: list[tuple[Path, str, str]] = []
+    replacements: list[tuple[Path, str, bytes]] = []
     seen_paths: set[str] = set()
     for index, item in enumerate(files, start=1):
         if not isinstance(item, dict):
@@ -363,19 +368,9 @@ def _apply_edits(
         target = _workspace_path(workspace, path)
         if not target.is_file():
             raise ValueError(f"assistant edit target is not a file: {path}")
-        replacements.append((target, path, content))
+        replacements.append((target, path, content.encode("utf-8")))
 
-    originals = {target: target.read_bytes() for target, _, _ in replacements}
-    try:
-        for target, _, content in replacements:
-            target.write_text(content, encoding="utf-8")
-    except OSError as exc:
-        for target, original in originals.items():
-            try:
-                target.write_bytes(original)
-            except OSError:
-                pass
-        raise ValueError(f"could not apply assistant edit payload: {exc}") from exc
+    replace_workspace_files(workspace, [(path, content) for _, path, content in replacements])
 
     summary = payload.get("summary")
     return len(replacements), summary if isinstance(summary, str) and summary else ""
