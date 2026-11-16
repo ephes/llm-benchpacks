@@ -124,3 +124,69 @@ def test_interrupt_reaps_leader_and_preserves_error(scorer, tmp_path, monkeypatc
         scorer._run_command([sys.executable, '-c', 'import time; time.sleep(30)'],
                             cwd=tmp_path, timeout_s=3)
     assert leaders[0].poll() is not None
+
+
+@pytest.mark.parametrize('loader,name', [('_load_clusters', 'clusters.csv'),
+    ('_load_pair_scores', 'pair_scores.csv'), ('_load_program_metrics', 'metrics.json')])
+@pytest.mark.parametrize('kind', ['symlink', 'fifo', 'oversized', 'invalid-utf8'])
+def test_prediction_file_open_admission(scorer, tmp_path, loader, name, kind, monkeypatch):
+    path = tmp_path / name
+    sentinel = tmp_path / 'sentinel'
+    sentinel.write_text('private sentinel')
+    if kind == 'symlink':
+        path.symlink_to(sentinel)
+    elif kind == 'fifo':
+        os.mkfifo(path)
+    elif kind == 'oversized':
+        path.write_bytes(b'x' * (17 * 1024 * 1024))
+    else:
+        path.write_bytes(b'\xff')
+    # Old FIFO readers would block; raise at their path.open to demonstrate the
+    # unsafe reopen without ever entering a blocking read in the regression run.
+    old_open = Path.open
+    def guard(self, *args, **kwargs):
+        if kind == 'fifo' and self == path:
+            raise AssertionError('blocking path.open on FIFO')
+        return old_open(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'open', guard)
+    value, errors = getattr(scorer, loader)(path)
+    assert errors
+    assert not value
+    assert 'private sentinel' not in str(errors)
+
+
+@pytest.mark.parametrize('raw', ['{"n":NaN}', '{"n":Infinity}', '{"n":1e999}',
+    '{"n":1,"n":2}', '{"a":{"n":1,"n":2}}', '{"s":"\\ud800"}',
+    '[' * 1500 + '0' + ']' * 1500])
+def test_strict_candidate_metrics(scorer, tmp_path, raw):
+    path = tmp_path / 'metrics.json'
+    path.write_text(raw)
+    value, errors = scorer._load_program_metrics(path)
+    assert value is None
+    assert errors
+
+
+def test_admission_exact_byte_row_and_aggregate_limits(scorer, tmp_path, monkeypatch):
+    path = tmp_path / 'clusters.csv'
+    raw = b'offer_id,cluster_id\na,c\n'
+    path.write_bytes(raw)
+    monkeypatch.setattr(scorer, 'PREDICTION_FILE_BYTES', len(raw), raising=False)
+    monkeypatch.setattr(scorer, 'PREDICTION_ROWS', 1, raising=False)
+    assert scorer._load_clusters(path) == ({'a': 'c'}, [])
+    path.write_bytes(raw + b'b,c\n')
+    assert scorer._load_clusters(path)[1]
+    monkeypatch.setattr(scorer, 'EVIDENCE_TOTAL_BYTES', len(raw), raising=False)
+    budget = scorer._EvidenceBudget()
+    path.write_bytes(raw)
+    assert not scorer._load_clusters(path, budget)[1]
+    assert scorer._load_clusters(path, budget)[1]
+
+
+def test_metrics_scalar_extensions_round_trip(scorer, tmp_path):
+    import json
+    path = tmp_path / 'metrics.json'
+    path.write_text('{"custom":1.5,"yes":true,"label":"μ","empty":null,"nested":{}}')
+    value, errors = scorer._load_program_metrics(path)
+    assert not errors
+    assert json.loads(json.dumps(value, allow_nan=False)) == {
+        'custom': 1.5, 'yes': True, 'label': 'μ', 'empty': None}

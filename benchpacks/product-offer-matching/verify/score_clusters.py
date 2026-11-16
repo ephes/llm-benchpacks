@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import io
 import math
 import os
 import selectors
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -209,75 +211,142 @@ def _run_program(workspace: Path, case_id: str, output_root: Path) -> dict[str, 
     return result
 
 
-def _load_clusters(path: Path) -> tuple[dict[str, str], list[str]]:
-    errors: list[str] = []
-    if not path.is_file():
-        return {}, ["clusters.csv was not created"]
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames != ["offer_id", "cluster_id"]:
-            errors.append("clusters.csv header must be exactly offer_id,cluster_id")
-        clusters: dict[str, str] = {}
-        for index, row in enumerate(reader, start=2):
-            offer_id = (row.get("offer_id") or "").strip()
-            cluster_id = (row.get("cluster_id") or "").strip()
-            if not offer_id:
-                errors.append(f"row {index} has blank offer_id")
-                continue
-            if offer_id in clusters:
-                errors.append(f"duplicate prediction for offer_id {offer_id}")
-                continue
-            if not cluster_id:
-                errors.append(f"row {index} has blank cluster_id")
-                continue
-            clusters[offer_id] = cluster_id
+PREDICTION_FILE_BYTES = 16 * 1024 * 1024
+METRICS_FILE_BYTES = 64 * 1024
+EVIDENCE_TOTAL_BYTES = 32 * 1024 * 1024
+PREDICTION_ROWS = 100_000
+EVIDENCE_TOTAL_ROWS = 200_000
+MAX_ERRORS = 20
+
+
+class _EvidenceBudget:
+    def __init__(self):
+        self.bytes = 0
+        self.rows = 0
+
+
+def _read_evidence(path: Path, budget: _EvidenceBudget, limit: int) -> str:
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("expected regular file")
+        available = min(limit, EVIDENCE_TOTAL_BYTES - budget.bytes)
+        if before.st_size > available:
+            raise ValueError("evidence byte budget exceeded")
+        data = bytearray()
+        while len(data) <= available:
+            chunk = os.read(fd, min(65536, available + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+        budget.bytes += len(data)
+        after = os.fstat(fd)
+        identity = lambda st: (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+        if len(data) > available or len(data) != before.st_size or identity(before) != identity(after):
+            raise ValueError("evidence changed or exceeded budget")
+        return data.decode("utf-8")
+    finally:
+        os.close(fd)
+
+
+def _prediction_csv(path: Path, fields: list[str], budget: _EvidenceBudget):
+    reader = csv.DictReader(io.StringIO(_read_evidence(path, budget, PREDICTION_FILE_BYTES), newline=""))
+    if reader.fieldnames != fields:
+        raise ValueError("unexpected CSV header")
+    for index, row in enumerate(reader, start=1):
+        budget.rows += 1
+        if index > PREDICTION_ROWS or budget.rows > EVIDENCE_TOTAL_ROWS:
+            raise ValueError("evidence row budget exceeded")
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError("unexpected CSV row width")
+        yield row
+
+
+def _load_clusters(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, str], list[str]]:
+    clusters = {}
+    errors = []
+    try:
+        for index, row in enumerate(_prediction_csv(path, ["offer_id", "cluster_id"], budget or _EvidenceBudget()), 2):
+            offer_id, cluster_id = row["offer_id"].strip(), row["cluster_id"].strip()
+            if not offer_id or not cluster_id:
+                errors.append(f"clusters row {index} has blank id")
+            elif offer_id in clusters:
+                errors.append(f"clusters row {index} duplicates offer_id")
+            else:
+                clusters[offer_id] = cluster_id
+            if len(errors) >= MAX_ERRORS:
+                break
+    except (OSError, ValueError, csv.Error) as exc:
+        return {}, [f"clusters.csv evidence refused ({type(exc).__name__})"]
     return clusters, errors
 
 
-def _load_pair_scores(path: Path) -> tuple[dict[str, float], list[str]]:
-    errors: list[str] = []
-    if not path.is_file():
-        return {}, ["pair_scores.csv was not created"]
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames != ["pair_id", "score"]:
-            errors.append("pair_scores.csv header must be exactly pair_id,score")
-        scores: dict[str, float] = {}
-        for index, row in enumerate(reader, start=2):
-            pair_id = (row.get("pair_id") or "").strip()
-            raw_score = (row.get("score") or "").strip()
-            if not pair_id:
-                errors.append(f"scores row {index} has blank pair_id")
-                continue
-            if pair_id in scores:
-                errors.append(f"duplicate score for pair_id {pair_id}")
-                continue
+def _load_pair_scores(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, float], list[str]]:
+    scores = {}
+    errors = []
+    try:
+        for index, row in enumerate(_prediction_csv(path, ["pair_id", "score"], budget or _EvidenceBudget()), 2):
+            pair_id = row["pair_id"].strip()
             try:
-                score = float(raw_score)
+                score = float(row["score"])
+                valid = math.isfinite(score)
             except ValueError:
-                errors.append(f"scores row {index} has invalid score {raw_score!r}")
-                continue
-            if not math.isfinite(score):
-                errors.append(f"scores row {index} has non-finite score {raw_score!r}")
-                continue
-            scores[pair_id] = score
+                valid = False
+            if not pair_id or not valid:
+                errors.append(f"scores row {index} has invalid id/score")
+            elif pair_id in scores:
+                errors.append(f"scores row {index} duplicates pair_id")
+            else:
+                scores[pair_id] = score
+            if len(errors) >= MAX_ERRORS:
+                break
+    except (OSError, ValueError, csv.Error) as exc:
+        return {}, [f"pair_scores.csv evidence refused ({type(exc).__name__})"]
     return scores, errors
 
 
-def _load_program_metrics(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
-    if not path.is_file():
-        return None, []
+def _unique_members(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate metrics member")
+        result[key] = value
+    return result
+
+
+def _finite_float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("nonfinite metrics number")
+    return value
+
+
+def _invalid_constant(text):
+    raise ValueError("nonfinite metrics constant")
+
+
+def _load_program_metrics(path: Path, budget: _EvidenceBudget | None = None) -> tuple[dict[str, Any] | None, list[str]]:
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, [f"metrics.json could not be parsed: {exc}"]
-    if not isinstance(loaded, dict):
-        return None, ["metrics.json must contain an object"]
-    allowed: dict[str, Any] = {}
-    for key, value in loaded.items():
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            allowed[str(key)] = value
-    return allowed, []
+        raw = _read_evidence(path, budget or _EvidenceBudget(), METRICS_FILE_BYTES)
+        loaded = json.loads(raw, object_pairs_hook=_unique_members,
+                            parse_float=_finite_float, parse_constant=_invalid_constant)
+        if not isinstance(loaded, dict) or len(loaded) > 128:
+            raise ValueError("expected bounded metrics object")
+        allowed = {}
+        for key, value in loaded.items():
+            if len(key.encode("utf-8")) > 128:
+                raise ValueError("metrics key too long")
+            if isinstance(value, str) and len(value.encode("utf-8")) > 4096:
+                raise ValueError("metrics string too long")
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                allowed[key] = value
+        json.dumps(allowed, allow_nan=False)
+        return allowed, []
+    except FileNotFoundError:
+        return None, []
+    except (OSError, ValueError, RecursionError, OverflowError, MemoryError) as exc:
+        return None, [f"metrics.json evidence refused ({type(exc).__name__})"]
 
 
 def _validate_expected_ids(
@@ -609,10 +678,11 @@ def main() -> int:
             payload["program_stderr"] = run_result.get("stderr", "")[-2000:]
             payload["passed"] = False
         else:
-            predicted_clusters, cluster_errors = _load_clusters(workspace / "clusters.csv")
-            pair_scores, score_errors = _load_pair_scores(workspace / "pair_scores.csv")
+            budget = _EvidenceBudget()
+            predicted_clusters, cluster_errors = _load_clusters(workspace / "clusters.csv", budget)
+            pair_scores, score_errors = _load_pair_scores(workspace / "pair_scores.csv", budget)
             program_metrics, metric_errors = _load_program_metrics(
-                workspace / "metrics.json"
+                workspace / "metrics.json", budget
             )
             errors = (
                 cluster_errors

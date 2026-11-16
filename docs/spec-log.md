@@ -5415,3 +5415,8 @@ interrupt/error and existing timeout task outcomes.
 Drain candidate pipes with bounded retained output, retire owned process groups
 on every exit, and identify sampled group RSS explicitly. Incomplete memory
 evidence leaves the combined score unavailable. No fixture/version changes.
+
+## 2026-11-16 — Candidate evidence admission (B08)
+
+Admit CSV and optional metrics through bounded regular descriptors. Share byte
+and row budgets across the run and reject ambiguous/nonfinite metrics JSON.

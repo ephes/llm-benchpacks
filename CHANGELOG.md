@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bound cluster prediction/metrics reads through no-follow regular descriptors;
+  refuse duplicate/nonfinite metrics JSON and oversized scalar extensions.
+
 - Drain clusterer output with bounded tails, retire owned process groups on every
   exit, and measure sampled group RSS with explicit unavailable memory evidence.
 

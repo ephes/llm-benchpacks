@@ -1995,3 +1995,18 @@ memory evidence. Sampling may miss brief allocation peaks. Historical scores
 using only the leader PID have a different scope and must not be compared as
 though the memory methodology were unchanged. Candidate `program_metrics`
 remain self-reported and separate from independently observed system metrics.
+
+### Candidate file admission
+
+Predictions and optional metrics are opened once with no-follow, nonblocking
+regular-file admission. Reads reject changes to the opened file's size or
+metadata. Each CSV is limited to 16 MiB and 100,000 rows; metrics.json to 64 KiB.
+One run shares 32 MiB and 200,000 CSV rows across all candidate evidence.
+Exact-limit files are admitted. Headers and row widths must match the schema;
+errors retain only bounded row diagnostics, never candidate file contents.
+
+Optional metrics require unique JSON members at every depth and finite numbers
+(including exponent overflow rejection). At most 128 top-level fields are
+accepted, with keys up to 128 UTF-8 bytes and scalar strings up to 4096 bytes;
+invalid Unicode scalar strings are refused. Only scalar extensions are retained.
+Missing metrics are optional; present but malformed metrics invalidate evidence.

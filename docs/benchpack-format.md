@@ -897,3 +897,6 @@ and opened-descriptor admission rules.
 Product-offer matching reports sampled owned-process-group RSS with explicit
 `memory_scope`, `memory_samples` and `memory_complete` evidence. Incomplete
 memory evidence makes the combined score unavailable; see the pack README.
+
+Product-offer candidate CSV/metrics admission has shared byte/row limits and
+strict finite unique-member metrics JSON; see the pack README for ceilings.
