@@ -9,6 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Support direct execution from a prepared workspace without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from benchpack.example_io import control_json, read_context_text, replace_example_files
+
 
 def _fail(message: str) -> int:
     print(f"reference-agent: {message}", file=sys.stderr)
@@ -29,7 +33,7 @@ def _string(value: Any, name: str) -> str:
 
 def _load_context(path: Path) -> dict[str, Any]:
     try:
-        return _object(json.loads(path.read_text(encoding="utf-8")), "context")
+        return _object(control_json(read_context_text(path)), "context")
     except OSError as exc:
         raise ValueError(f"could not read context: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -60,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir_arg = Path(args.output_dir).resolve(strict=True)
         context = _load_context(Path(args.context))
 
-        if context.get("version") != 1:
+        if type(context.get("version")) is not int or context["version"] != 1:
             raise ValueError("context.version must be 1")
         case = _object(context.get("case"), "context.case")
         run = _object(context.get("run"), "context.run")
@@ -69,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if _string(case.get("id"), "context.case.id") != args.case:
             raise ValueError("context.case.id does not match --case")
-        if run.get("repetition") != repetition:
+        if type(run.get("repetition")) is not int or run["repetition"] != repetition:
             raise ValueError("context.run.repetition does not match --repetition")
         context_workspace = Path(
             _string(workspace.get("path"), "context.workspace.path")
@@ -88,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
                 run.get("model_call_log_path"),
                 "context.run.model_call_log_path",
             )
-        ).resolve(strict=False)
+        ).absolute()
         model_call_relative = _relative_to(model_call_log_path, output_dir_arg)
         if model_call_relative is None:
             raise ValueError("context.run.model_call_log_path escapes output dir")
@@ -110,20 +114,16 @@ def main(argv: list[str] | None = None) -> int:
         f"repetition={repetition}\n"
     )
     try:
-        marker_path.write_text(marker_text, encoding="utf-8")
-        model_call_log_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "sequence": 1,
-                    "model": model,
-                    "ok": True,
-                }
-            )
-            + "\n",
-            encoding="utf-8",
+        # Admit and stage both destinations before either one is replaced.
+        telemetry = json.dumps(
+            {"schema_version": 1, "sequence": 1, "model": model, "ok": True}
+        ) + "\n"
+        replace_example_files(
+            [(workspace_arg, marker_path.name, marker_text.encode("utf-8")),
+             (output_dir_arg, model_call_relative.as_posix(), telemetry.encode("utf-8"))],
+            missing=True,
         )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         return _fail(f"could not write reference harness artifacts: {exc}")
 
     print(f"reference-agent wrote external-agent-example.txt for {args.case}")

@@ -62,11 +62,14 @@ def publication_lock(output: Path) -> Iterator[Path]:
     """
 
     lock_path = publication_lock_path(output)
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags = os.O_RDWR | os.O_CREAT | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     fd = os.open(lock_path, flags, 0o600)
+    locked = False
+    primary = None
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise PublicationBusyError(f"publication lock is not a regular file: {lock_path}")
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            raise PublicationBusyError(f"publication lock must be a single-link regular file: {lock_path}")
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
@@ -74,9 +77,40 @@ def publication_lock(output: Path) -> Iterator[Path]:
                 f"output {output} is being published by another process "
                 f"(lock {lock_path}); retry when it finishes"
             ) from exc
-        try:
-            yield lock_path
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+        locked = True
+        held = os.fstat(fd)
+        named = lock_path.lstat()
+        if (held.st_nlink != 1 or not stat.S_ISREG(named.st_mode)
+                or named.st_nlink != 1
+                or (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino)):
+            raise PublicationBusyError(f"publication lock was exchanged: {lock_path}")
+        yield lock_path
+    except BaseException as exc:
+        primary = exc
+        raise
     finally:
-        os.close(fd)
+        failures = []
+        if locked:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except BaseException as exc:
+                failures.append(("publication lock unlock failed", exc))
+        try:
+            os.close(fd)
+        except BaseException as exc:
+            failures.append(("publication lock close failed", exc))
+        if failures:
+            if primary is not None:
+                for category, _ in failures:
+                    primary.add_note(category)
+            else:
+                category, cause = failures[0]
+                if not isinstance(cause, Exception):
+                    cause.add_note(category)
+                    for category, _ in failures[1:]:
+                        cause.add_note(category)
+                    raise cause
+                error = OSError(category)
+                for category, _ in failures[1:]:
+                    error.add_note(category)
+                raise error from failures[0][1]

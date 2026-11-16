@@ -1245,6 +1245,8 @@ with open(args.output, "w", encoding="utf-8") as fh:
     assert not any("model-calls" in path.name for path in (out / "raw").iterdir())
     model_call_lines = model_call_log_path.read_text(encoding="utf-8").splitlines()
     assert len(model_call_lines) == 1
+    assert marker.stat().st_mode & 0o777 == 0o600
+    assert model_call_log_path.stat().st_mode & 0o777 == 0o600
     assert json.loads(model_call_lines[0]) == {
         "schema_version": 1,
         "sequence": 1,

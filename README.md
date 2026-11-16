@@ -86,7 +86,11 @@ previous site if publication fails; a failed rollback reports a backup path
 for recovery. Serialize exports to the same site directory. Result bundles also
 stage and validate before replacement, restore the previous bundle on publication
 failure, and report a retained backup if rollback fails. Serialize bundle exports
-to the same output directory.
+to the same output directory. Publication locks must remain single-link regular
+files at their stable names; unsafe or exchanged locks are refused before output
+mutation. Never remove or replace a live publication lock. Lock release errors preserve
+the publication/rollback error with fixed secondary notes; a release-only error
+still fails and can follow a complete publication.
 
 Repo-task preparation retains the exact workspace generation under
 `baseline/<case-id>/rep-NNN/`; patch capture reads that copy, so later fixture
@@ -129,7 +133,12 @@ See
 [`examples/external-agent/reference-agent.py`](examples/external-agent/reference-agent.py)
 for a deterministic local reference harness that validates the public context
 handoff, mutates only the prepared workspace, and writes that optional JSONL
-line without making live model calls. The sibling
+line without making live model calls. It admits bounded stable regular context
+snapshots and duplicate-free JSON with exact integer version/repetition values.
+It stages marker and log together through held no-follow parents, refuses linked
+or changed targets, and restores owned prior artifacts on publication failure.
+New artifacts use mode 0600; existing permissions survive. Failed rollback
+reports retained original backups for recovery. The sibling
 [`examples/external-agent/model-call-agent.py`](examples/external-agent/model-call-agent.py)
 example adds one deterministic local HTTP request to a fake/recorded endpoint
 and records only safe model-call telemetry while keeping the runner boundary

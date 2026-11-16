@@ -885,7 +885,10 @@ paths. Bundle output paths must be disjoint from source result directories so
 `--force` cannot delete source evidence. An owned sibling staging directory is
 validated before publication; forced replacement uses a sibling backup and
 restores it on publication failure, reporting its location if rollback fails.
-Serialize bundle writers to the same destination.
+Serialize bundle writers to the same destination. The shared publication lock
+admits a single-link regular opened inode and checks its stable name after flock.
+Release attempts both unlock and close; cleanup errors cannot replace the body
+failure, and release-only errors still fail after any completed publication.
 `benchpack registry bundle validate
 <bundle-dir>` verifies the manifest, file hashes, row and metadata shape,
 absence of unlisted files, unique run directories and file paths, per-run file
@@ -1217,3 +1220,14 @@ with aggregate data/editable budgets enforced before external execution.
 The Codex and Pi examples share a bounded selector-based POSIX transport. It owns
 stdin delivery, output acquisition, non-reaping exit observation and process-group
 retirement; Pi prompt staging belongs to the enclosing resource scope.
+
+## Deterministic reference artifact ownership
+
+The reference external-agent example shares the bounded context reader and
+duplicate-member control JSON parser with the model/CLI examples. Exact integer
+version/repetition checks run before writes. `example_io.replace_example_files`
+extends the existing workspace replacement path across the workspace marker and
+output telemetry roots: admit held no-follow parents and regular single-link
+targets, stage both encoded artifacts, then replace with owned rollback. New
+leaves are 0600 and existing modes survive. Rollback failure retains original
+backups and is reported explicitly; this is not a crash-atomic multi-file commit.

@@ -1,5 +1,14 @@
 # Implementation Plan
 
+## Completed publication/reference boundaries (2026-11-16, round 115)
+
+- B23: admit current single-link regular lock inodes after flock; retain primary
+  publication/rollback errors while attempting unlock and close.
+- B24: admit bounded unambiguous reference contexts with exact integer authority
+  fields; stage marker/log together through held no-follow parents and compensate
+  reported publication failures, retaining originals when rollback fails.
+- Synthetic offline tests cover unsafe links, exchanges and injected failures.
+
 ## Completed external-agent example boundaries (2026-11-16, round 113)
 
 - B07: pre-encode/stage workspace replacements, hold no-follow parents and source

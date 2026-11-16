@@ -98,11 +98,21 @@ class _Target:
 
 
 def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *, missing=False):
-    """Stage every byte before publication; roll back only owned generations."""
+    """Stage workspace bytes before publication; roll back only owned generations."""
+    replace_example_files([(root, relative, data) for relative, data in replacements], missing=missing)
+
+
+def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missing=False):
+    """Publish an admitted set across example roots with owned rollback.
+
+    Existing targets must be single-link regular files; missing leaves are
+    opt-in. New files use mode 0600 and existing permissions are preserved.
+    This is compensation for reported errors, not a crash-atomic transaction.
+    """
     with ExitStack() as stack:
         entries = []
         try:
-            for relative, data in replacements:
+            for root, relative, data in replacements:
                 target = _Target(stack, root, relative, missing=missing)
                 stage = target.stage(data, stack)
                 backup = target.stage(target.original, stack) if target.original is not None else None
