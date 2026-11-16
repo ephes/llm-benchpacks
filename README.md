@@ -747,3 +747,7 @@ files, 64 MiB JSONL bytes and 100,000 records across all inputs. Directory alias
 and hardlinked files count once; compare requires two distinct files after deduplication.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.
+
+Contained result reads reject in-place changes detected by descriptor size and
+nanosecond mtime/ctime checks. Atomic pathname replacement keeps the complete
+opened generation readable. Retry unstable inputs after their writer has stopped.

@@ -5436,3 +5436,9 @@ and atomically publish JSON referencing an immutable staged curve generation.
 Sample positive-pair indices from compact counts, preserving uniform eligibility
 and new-algorithm seed reproducibility. Existing fixtures remain unchanged. Stage
 and validate all six outputs under cooperating writer locks; compensate failures.
+
+## 2026-11-16: Stable result file reads
+
+Fence contained evidence and JSONL reads against in-place changes; retain opened
+old generations on atomic pathname replacement. Synthetic mutation regressions
+cover patch summaries, copies, bundle publication and registry admission.

@@ -1176,3 +1176,9 @@ bounded pipe capture, and uses psutil for group RSS evidence (see pack README).
 
 The pack-local product-offer scorer publishes an immutable curve generation
 before atomically committing its JSON reference; outer normalization retains it.
+
+Contained evidence reads and copies share `require_stable_file`: descriptor
+identity, size and nanosecond mtime/ctime are fenced after reading, before
+returning bytes or accepting a digest. JSONL uses the same fence. Unlink-only
+ctime changes permit complete old-generation reads during atomic replacement.
+Unstable copies remove their owned destination and abort bundle publication.

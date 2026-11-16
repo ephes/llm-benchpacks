@@ -22,6 +22,25 @@ _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLO
 _CHUNK_BYTES = 1024 * 1024
 
 
+class UnstableFileError(OSError):
+    """An opened evidence file changed while its bytes were being admitted."""
+
+
+def require_stable_file(fd: int, initial: os.stat_result) -> None:
+    """Fence content reads, allowing an unlink-only atomic path replacement.
+
+    Unlinking the opened inode changes ctime/link count without changing its
+    contents. Size and mtime must still match in that case. This is a metadata
+    fence for accidental concurrent writers, not same-user filesystem isolation.
+    """
+    final = os.fstat(fd)
+    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    if (any(getattr(initial, key) != getattr(final, key) for key in fields)
+            or (initial.st_ctime_ns != final.st_ctime_ns
+                and final.st_nlink >= initial.st_nlink)):
+        raise UnstableFileError("opened result file changed during read")
+
+
 @dataclass(frozen=True)
 class FileSnapshot:
     """Bytes read from one verified regular-file descriptor.
@@ -100,7 +119,8 @@ def read_contained_regular(
     if fd is None:
         return None
     try:
-        size = os.fstat(fd).st_size
+        initial = os.fstat(fd)
+        size = initial.st_size
         if size > limit:
             return FileSnapshot(size=size, data=None)
         chunks: list[bytes] = []
@@ -111,6 +131,9 @@ def read_contained_regular(
                 break
             chunks.append(chunk)
             total += len(chunk)
+        require_stable_file(fd, initial)
+    except UnstableFileError:
+        raise
     except OSError:
         return None
     finally:
@@ -139,6 +162,7 @@ def copy_contained_regular(
         return None
     total = 0
     try:
+        initial = os.fstat(fd)
         with open(destination, "xb") as out:
             try:
                 while True:
@@ -151,6 +175,7 @@ def copy_contained_regular(
                             f"source file exceeds {limit} bytes: {relative_path}"
                         )
                     out.write(chunk)
+                require_stable_file(fd, initial)
             except BaseException:
                 out.close()
                 destination.unlink(missing_ok=True)

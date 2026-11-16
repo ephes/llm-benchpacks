@@ -30,7 +30,7 @@ from .external_agent_model_calls import (
 from .output_paths import PublicationBusyError, paths_overlap, publication_lock
 from .report import ReportError, render_report
 from .run_metadata import RunMetadataError, load_optional_run_metadata
-from .safe_files import contained_parts, copy_contained_regular, open_contained_regular
+from .safe_files import contained_parts, copy_contained_regular, open_contained_regular, require_stable_file
 
 
 REGISTRY_SCHEMA_VERSION = 4
@@ -3136,9 +3136,11 @@ def _omitted_artifact(root: Path, relative_path: str, reason: str) -> dict[str, 
         digest = hashlib.sha256()
         size = 0
         try:
+            initial = os.fstat(fd)
             while chunk := os.read(fd, 1024 * 1024):
                 digest.update(chunk)
                 size += len(chunk)
+            require_stable_file(fd, initial)
         finally:
             os.close(fd)
         entry["sha256"] = digest.hexdigest()

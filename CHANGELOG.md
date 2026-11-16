@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refuse unstable in-place result reads before summary/hash admission or bundle
+  publication; keep complete opened generations on atomic pathname replacement.
+
 - Sample Billiger positive pairs without quadratic pools; stage and validate all
   fixture outputs, serialize writers, and preserve recovery data on rollback failure.
 

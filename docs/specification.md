@@ -2064,3 +2064,13 @@ created files). Failed compensation retains stages and a recovery manifest with
 target and backup paths. Do not remove the retained lock files. Readers must
 consume a finished build; multi-file replacement does not provide snapshot reads
 during publication or automatic recovery after an uncatchable process/power loss.
+
+### Stable opened result generations
+
+Contained reads/copies and JSONL ingestion compare opened descriptor identity,
+size and nanosecond mtime/ctime after reading. In-place mutation fails before
+using summaries, hashes or publishing bundles/registry rows; failed copies remove
+their partial destination. Unlink-only ctime/link-count changes from atomic
+pathname replacement are allowed when identity, size and mtime stay unchanged.
+This metadata fence handles concurrent writers, not adversarial same-user code
+that restores timestamps. Hashes and summaries describe the admitted bytes.
