@@ -80,6 +80,57 @@ s._run_command([sys.executable, '-c', {candidate!r}], cwd=pathlib.Path('.'), tim
                 pass
 
 
+@pytest.mark.parametrize('signum', [signal.SIGTERM, signal.SIGHUP])
+def test_group_signal_to_scorer_retires_candidate_session(tmp_path, signum):
+    # The outer verifier signals the scorer's group; the candidate has its own
+    # session and is only retired if the scorer unwinds through its cleanup.
+    workspace = tmp_path / 'workspace'
+    (workspace / 'data').mkdir(parents=True)
+    (workspace / 'data' / 'test_offers.csv').write_text('offer_id\na\n')
+    (workspace / 'data' / 'eval_pairs.csv').write_text('pair_id\np\n')
+    pid_file = tmp_path / 'pid'
+    candidate = (f"import os,time; open({str(pid_file)!r},'w').write(str(os.getpid())); "
+                 "time.sleep(30)")
+    code = f"""import importlib.util, sys
+spec=importlib.util.spec_from_file_location('s', {str(SCORER.resolve())!r})
+s=importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
+s._run_program = lambda w, c, o: s._run_command([sys.executable, '-c', {candidate!r}], cwd=w, timeout_s=30)
+sys.argv = ['score', '--workspace', {str(workspace)!r}, '--case', 'c', '--pack-id', 'p',
+            '--pack-version', '1', '--source-fixture-id', 'f', '--patch', 'missing.patch',
+            '--output', {str(tmp_path / 'out' / 'result.json')!r}]
+s.main()
+"""
+    pid = None
+    proc = subprocess.Popen([sys.executable, '-c', code], cwd=tmp_path, start_new_session=True)
+    try:
+        deadline = time.monotonic() + 10
+        while not (pid_file.exists() and pid_file.read_text()):
+            if time.monotonic() >= deadline or proc.poll() is not None:
+                pytest.fail('candidate did not start')
+            time.sleep(.01)
+        pid = int(pid_file.read_text())
+        os.killpg(proc.pid, signum)
+        proc.wait(timeout=5)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            try:
+                if psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                    break
+            except psutil.NoSuchProcess:
+                break
+            time.sleep(.01)
+        else:
+            pytest.fail('candidate session survived the scorer signal')
+    finally:
+        for target in (pid, proc.pid):
+            if target:
+                try:
+                    os.kill(target, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        proc.wait()
+
+
 def test_memory_includes_owned_worker(scorer, tmp_path):
     try:
         psutil.pids()

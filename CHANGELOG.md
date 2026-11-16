@@ -17,6 +17,7 @@
 - Drain clusterer output with bounded tails, retire owned process groups on every
   exit, and measure sampled group RSS with explicit unavailable memory evidence;
   members or the leader exiting during a sample do not count as failed evidence.
+  SIGTERM/SIGHUP to the scorer retires the candidate session before exiting.
 
 - Reject ambiguous/nonfinite runtime metadata before execution, including nested
   extension values and oversized integer decoder failures.

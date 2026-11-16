@@ -1982,7 +1982,9 @@ Compare requires at least two distinct runs after deduplication.
 The cluster scorer drains stdout/stderr while the candidate runs and retains at
 most 64 KiB per stream. Each candidate runs in a new POSIX process group; the
 scorer kills remaining group members and reaps the leader on completion, timeout
-or interruption, with a bounded cleanup wait. This is lifecycle ownership, not
+or interruption, with a bounded cleanup wait. SIGTERM or SIGHUP to the scorer
+(for example from the outer verifier timeout) unwinds through the same cleanup.
+Each sample drains up to 1 MiB per output stream. This is lifecycle ownership, not
 a security sandbox; candidates must not detach from the owned group.
 
 `system_metrics.memory_scope = "owned_process_group_sampled_rss"` identifies the

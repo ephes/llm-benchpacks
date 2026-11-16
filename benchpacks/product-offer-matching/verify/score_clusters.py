@@ -33,7 +33,16 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 
 OUTPUT_TAIL_BYTES = 65536
+# Drain up to 1 MiB per stream between RSS samples, so a full process scan does
+# not throttle verbose candidates while deadline checks still run regularly.
+DRAIN_READS_PER_SAMPLE = 16
 CLEANUP_GRACE_S = 0.5
+
+
+def _terminate(signum: int, _frame: object) -> None:
+    # Unwind through _run_command's cleanup: the candidate runs in its own
+    # session, so a group signal to the scorer does not reach it.
+    raise SystemExit(128 + signum)
 
 
 def _rss_mb(pgid: int) -> float | None:
@@ -119,10 +128,14 @@ def _run_command(
                 samples += 1
                 peak = max(peak or 0.0, rss)
             for key, _ in selector.select(max(0, min(0.02, deadline - time.monotonic()))):
-                chunk = os.read(key.fd, 8192)
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                else:
+                for _ in range(DRAIN_READS_PER_SAMPLE):
+                    try:
+                        chunk = os.read(key.fd, OUTPUT_TAIL_BYTES)
+                    except BlockingIOError:
+                        break
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        break
                     tails[key.data].extend(chunk)
                     del tails[key.data][:-OUTPUT_TAIL_BYTES]
     finally:
@@ -662,6 +675,8 @@ def _combined_score(
 
 
 def main() -> int:
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, _terminate)
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--case", required=True)
