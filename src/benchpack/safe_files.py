@@ -26,6 +26,15 @@ class UnstableFileError(OSError):
     """An opened evidence file changed while its bytes were being admitted."""
 
 
+class PublishedDurabilityError(OSError):
+    """Complete new bytes are visible, but directory sync did not confirm durability."""
+
+    def __init__(self, name: str) -> None:
+        self.published_name = name
+        super().__init__(f"artifact {name!r} published; directory durability uncertain; "
+                         "retain visible evidence and retry on the same directory")
+
+
 def require_stable_file(fd: int, initial: os.stat_result) -> None:
     """Fence content reads, allowing an unlink-only atomic path replacement.
 
@@ -74,6 +83,7 @@ def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     Returns an open read-only descriptor, or ``None`` when the path is unsafe,
     missing, traverses a symlink, or does not name a regular file. The root
     directory itself may be reached through a symlink; nothing below it may.
+    An integer root is an already admitted directory descriptor, duplicated here.
     """
 
     parts = contained_parts(relative_path)
@@ -142,9 +152,9 @@ def read_opened_regular(fd: int, limit: int) -> FileSnapshot:
             break
         chunks.append(chunk)
         total += len(chunk)
-    require_stable_file(fd, initial)
     if total > limit:
         return FileSnapshot(size=max(initial.st_size, total), data=None)
+    require_stable_file(fd, initial)
     return FileSnapshot(size=total, data=b"".join(chunks))
 
 
@@ -252,7 +262,9 @@ def atomic_write_at(directory: int, name: str, data: bytes) -> None:
 
     Existing regular-file permissions survive replacement; new files follow the
     process umask. Links and special
-    destinations are refused; the owned temporary is removed on every failure.
+    destinations are refused. Pre-replace failures remove only the owned
+    temporary. Post-replace sync failure retains the complete visible file and
+    raises PublishedDurabilityError; it must never trigger rollback.
     """
     if contained_parts(name) != (name,):
         raise ValueError('expected one filename')
@@ -282,3 +294,8 @@ def atomic_write_at(directory: int, name: str, data: bytes) -> None:
         except FileNotFoundError:
             pass
         raise
+
+    try:
+        os.fsync(directory)
+    except OSError as exc:
+        raise PublishedDurabilityError(name) from exc

@@ -1747,7 +1747,10 @@ that file. Serialization, write, or replacement failure preserves any previous
 complete hardware artifact (or leaves the final path absent) and leaves completed
 `run.jsonl` records unchanged. Only a temporary file created by this call is
 removed on failure. Existing file permissions are retained; new files honor the
-process umask. Atomic visibility does not guarantee durability after power loss.
+process umask. Successful publication syncs the file and its containing directory;
+a post-replacement directory-sync error retains the visible complete artifact and
+reports uncertain durability. This does not guarantee durability of the entire
+run or of newly created ancestor directories after power loss.
 
 ## Imported result and model-call admission
 
@@ -1859,7 +1862,9 @@ output directory; parent/final symlinks fail as runner errors. The pair is not a
 transaction: if the second stream fails, the error names already-published logs
 and no success record is returned. External-agent context JSON is serialized
 before filesystem effects and published from an owned sibling temporary. Readers
-see a complete old or new generation; failed writes preserve the previous file.
+see a complete old or new generation. Failures before replacement preserve the
+previous file; post-replacement directory-sync failures retain new bytes and
+report published-but-uncertain durability, including the affected log filename.
 
 Reports deduplicate `run.jsonl` inputs by canonical file identity (including
 symlink and hard-link aliases), retaining the first input's label and path.
@@ -1920,8 +1925,14 @@ filesystem activity. Serialize runs to each output tree.
 Summary content is fully serialized before staging. Write, short-write, flush,
 close or replace failures leave the last successful summary intact and remove
 only the owned temporary. A successful retry summarizes the reporter's persisted
-rows. This is atomic visibility, not a multi-file transaction or crash durability
-guarantee for the entire run.
+rows. Successful sidecar/summary/context publication fsyncs the staged file before
+replacement and the admitted containing directory afterward. A file-sync failure
+preserves the previous artifact; a directory-sync failure reports an already
+published, durability-uncertain outcome and retains the complete visible file.
+Inspect/retry in the same owned directory; never delete or roll back that evidence
+on this error. Unsupported directory sync is also reported as uncertain. This
+is not a multi-file transaction or a crash durability guarantee for the entire
+run (including newly created ancestor directories and JSONL appends).
 
 An append failure compensates with `ftruncate` on the same open descriptor,
 without reopening a pathname. The primary append exception is re-raised; a

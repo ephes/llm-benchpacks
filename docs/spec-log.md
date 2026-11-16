@@ -5448,3 +5448,10 @@ cover patch summaries, copies, bundle publication and registry admission.
 Read each import directory as one descriptor-bound generation; preserve validated
 sidecar snapshots through the DB write. Refuse concurrent directory/sidecar
 changes during admission, with fixture-only rollback and exchange regressions.
+
+## 2026-11-16: Durable artifact acknowledgement
+
+Sync admitted publication directories after replacing reporter/context artifacts.
+Expose visible-but-uncertain durability failures without rolling back evidence;
+shared workspace/log callers retain the same distinction. Synthetic file/directory
+sync fault tests cover reporter artifacts, context and workspace replacements.

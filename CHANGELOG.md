@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sync artifact directories after atomic reporter/context publication; report
+  visible-but-uncertain durability on sync failure and retain complete evidence.
+  Shared workspace/log writes preserve that outcome instead of claiming no write.
+
 - Admit registry JSONL and sidecars through one directory generation and reuse
   validated snapshots during database writes instead of reopening source paths.
 

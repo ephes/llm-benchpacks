@@ -957,3 +957,19 @@ admission apply to both CLIs. Scoring diagnostics and hardware probes have fixed
 resource ceilings; neither may promote ambiguous or partial evidence.
 
 Implemented 2026-11-14 (round 95).
+
+## 2026-11-16: coherent and durably acknowledged result evidence
+
+Fence admitted result descriptors after reading, including nanosecond metadata,
+rather than trusting containment alone. Permit an unlink-only metadata change
+when an atomic replacement leaves complete old bytes on the opened descriptor.
+Registry admission captures all import inputs under one directory, checks their
+shared read interval and passes validated sidecars into the DB write. Do not
+reopen those sources after validation.
+
+A successful atomic artifact publication syncs the staged file and the admitted
+containing directory. Distinguish pre-publication failure from complete visible
+bytes with uncertain durability; retain the latter instead of compensating by
+removing evidence. Report unsupported directory sync as uncertain too. This
+policy covers the shared reporter/context/workspace writer and does not promise
+multi-file transactions or crash durability of newly created ancestors.

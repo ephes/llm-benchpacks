@@ -1142,7 +1142,12 @@ Reporter writes re-admit the original output-directory identity across harness
 execution. JSONL appends use single-link no-follow regular descriptors with
 rollback on the owned descriptor. Sidecar and summary publication reuse
 `safe_files.atomic_write_at` within the admitted directory, keeping prior bytes
-and modes on publication failure. An unsuccessful rollback preserves the primary
+and modes on pre-replacement failure. The helper fsyncs the file before replace
+and the directory after replace. `PublishedDurabilityError` identifies complete
+visible bytes whose directory durability is uncertain; callers retain evidence
+and output-directory ownership and never claim that the workspace is unchanged.
+Context/task wrappers preserve this distinction in their domain errors.
+An unsuccessful append rollback preserves the primary
 exception, attaches a bounded recovery note, and disables append/summary operations
 on that reporter. Metadata admission recursively validates unambiguous finite
 JSON and normalizes extension objects before filesystem effects.

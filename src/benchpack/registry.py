@@ -2965,7 +2965,7 @@ def _load_and_validate_result_dir(path: Path | str, **limits: int) -> ResultRun:
                         continue
                 fd = open_contained_regular(directory, name)
                 if fd is None:
-                    raise RegistryError(f"missing or refused non-regular file: {source / name}")
+                    raise RegistryError(f"missing {name} or refused non-regular file: {source / name}")
                 stack.callback(os.close, fd)
                 opened[name] = (fd, os.fstat(fd))
             with os.fdopen(opened["run.jsonl"][0], "rb", closefd=False) as stream:

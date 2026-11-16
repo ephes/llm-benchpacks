@@ -15,7 +15,7 @@ from pathlib import PurePosixPath
 from time import monotonic, sleep
 
 from .packs import Case, PUBLIC_HARNESS_FENCED_PATCH
-from .safe_files import admitted_directory, atomic_write_at, trusted_root
+from .safe_files import admitted_directory, atomic_write_at, trusted_root, PublishedDurabilityError
 
 
 # Keep timeout cleanup bounded while still giving cooperative harnesses a moment
@@ -197,6 +197,8 @@ class AgentSessionHarnessRequest:
             with admitted_directory(path.parent, base=self._admission_base(),
                                     create=True) as directory:
                 atomic_write_at(directory, path.name, data)
+        except PublishedDurabilityError as exc:
+            raise TaskError('harness workspace file published; durability uncertain') from exc
         except (OSError, UnicodeError) as exc:
             raise TaskError(f'could not write harness workspace file {relative_path!r}') from exc
 
@@ -704,6 +706,11 @@ def _write_task_logs(
             for path, data in streams:
                 atomic_write_at(directory, path.name, data)
                 published.append(path.name)
+    except PublishedDurabilityError as exc:
+        published.append(exc.published_name)
+        raise TaskError(
+            f"task logs published: {', '.join(published)}; durability uncertain"
+        ) from exc
     except (OSError, UnicodeError) as exc:
         raise TaskError(
             f"could not write task logs for repo-task case {request.case.id!r}; "
@@ -943,6 +950,8 @@ def _apply_replacement_file_to_workspace(
                                 create=True) as directory:
             atomic_write_at(directory, destination.name, data)
             published = True
+    except PublishedDurabilityError as exc:
+        raise TaskError("replacement published; workspace durability uncertain") from exc
     except (OSError, UnicodeError) as exc:
         if published:
             raise TaskError("replacement published but workspace admission changed") from exc

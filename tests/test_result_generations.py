@@ -228,3 +228,100 @@ def test_registry_directory_alias_keeps_input_label(tmp_path):
     alias.symlink_to(run, target_is_directory=True)
     loaded = registry._load_and_validate_result_dir(alias)
     assert loaded.label == "alias" and loaded.path == run.resolve()
+
+
+@pytest.mark.parametrize("artifact", ["hardware.json", "run-metadata.json", "summary.md", "context.json"])
+@pytest.mark.parametrize("failure", ["file", "directory"])
+@pytest.mark.parametrize("error_code", [5, 28])  # EIO and ENOSPC
+def test_artifact_sync_failure_keeps_complete_visible_generation(tmp_path, monkeypatch, artifact, failure, error_code):
+    import stat
+    from benchpack.external_agent_context import ExternalAgentContextError, write_external_agent_context
+    from benchpack.results import RunReporter
+    from tests.test_results import make_pack
+
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    final = out / artifact
+    old = b"old generation\n"
+    final.write_bytes(old)
+    final.chmod(0o640)
+    original = os.fsync
+    synced = []
+
+    def fsync(fd):
+        kind = "directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+        synced.append(kind)
+        if kind == failure:
+            raise OSError(error_code, "synthetic sync failure")
+        original(fd)
+
+    actions = {
+        "hardware.json": lambda: reporter.write_hardware({"hostname": "synthetic"}),
+        "run-metadata.json": lambda: reporter.write_run_metadata({"notes": "synthetic"}),
+        "summary.md": lambda: reporter.write_summary({}),
+        "context.json": lambda: write_external_agent_context(final, {"synthetic": True}),
+    }
+    monkeypatch.setattr(os, "fsync", fsync)
+    with pytest.raises((OSError, ExternalAgentContextError)) as error:
+        actions[artifact]()
+    if failure == "directory":
+        assert synced == ["file", "directory"]
+        assert "published" in str(error.value) and "uncertain" in str(error.value)
+        visible = final.read_bytes()
+        assert visible != old
+        if artifact == "summary.md":
+            assert visible.startswith(b"# smoke-chat")
+        else:
+            assert isinstance(json.loads(visible), dict)
+    else:
+        assert synced == ["file"] and final.read_bytes() == old
+    assert stat.S_IMODE(final.stat().st_mode) == 0o640
+    assert not list(out.glob(".benchpack-*.tmp"))
+    # An uncertain sync never releases the reporter's generation ownership.
+    out.rename(tmp_path / "retired")
+    out.mkdir()
+    with pytest.raises(OSError, match="exchanged"):
+        reporter.write_hardware({})
+    assert not list(out.iterdir())
+
+
+def test_atomic_artifact_sync_order(tmp_path, monkeypatch):
+    import stat
+
+    events = []
+    sync, replace = os.fsync, os.replace
+
+    def fsync(fd):
+        events.append("directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file")
+        sync(fd)
+
+    def publish(*args, **kwargs):
+        events.append("replace")
+        replace(*args, **kwargs)
+
+    monkeypatch.setattr(os, "fsync", fsync)
+    monkeypatch.setattr(os, "replace", publish)
+    with safe_files.admitted_directory(tmp_path) as directory:
+        safe_files.atomic_write_at(directory, "artifact.json", b"{}\n")
+    assert events == ["file", "replace", "directory"]
+
+
+
+def test_replacement_sync_failure_does_not_claim_unchanged_workspace(tmp_path, monkeypatch):
+    import stat
+    from benchpack.tasks import TaskError, _apply_replacement_file_to_workspace
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "app.py").write_text("old")
+    original = os.fsync
+
+    def fsync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("synthetic directory sync failure")
+        original(fd)
+
+    monkeypatch.setattr(os, "fsync", fsync)
+    with pytest.raises(TaskError, match="published.*uncertain"):
+        _apply_replacement_file_to_workspace("app.py", "complete new generation", workspace)
+    assert (workspace / "app.py").read_text() == "complete new generation"

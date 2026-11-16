@@ -756,3 +756,8 @@ Registry imports admit one result-directory generation: JSONL and optional
 hardware/runtime sidecars are opened together, fenced before database mutation,
 and carried as validated snapshots into SQLite. A source directory exchange or
 sidecar rewrite during admission fails without changing the registry.
+
+Reporter sidecars, summaries and external-agent contexts sync file data before
+replacement and their containing directory afterward. A directory-sync error
+means complete new bytes are published with uncertain durability: retain them
+and retry in the same directory. This does not make the whole run transactional.

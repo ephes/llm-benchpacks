@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .packs import Case, Pack
-from .safe_files import admitted_directory, atomic_write_at
+from .safe_files import admitted_directory, atomic_write_at, PublishedDurabilityError
 from .tasks import TaskArtifactPaths
 from .workspaces import PreparedWorkspace
 
@@ -147,6 +147,11 @@ def write_external_agent_context(
         data = (json.dumps(context, indent=2, sort_keys=True) + "\n").encode('utf-8')
         with admitted_directory(output_path.parent, create=True) as directory:
             atomic_write_at(directory, output_path.name, data)
+    except PublishedDurabilityError as exc:
+        raise ExternalAgentContextError(
+            f"external-agent context file {output_path} published; durability uncertain; "
+            "retain visible evidence and retry on the same directory"
+        ) from exc
     except (OSError, TypeError, ValueError, RecursionError) as exc:
         raise ExternalAgentContextError(
             f"could not write external-agent context file {output_path}"
