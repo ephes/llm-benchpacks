@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from ._response_json import DuplicateJSONMemberError, unique_response_object
 from . import (
     AdapterRequest,
     AdapterResult,
@@ -84,8 +85,10 @@ def _tps(count: int | None, duration_s: float | None) -> float | None:
 
 def _json_payload_from_response(response: httpx.Response) -> Any:
     try:
-        return response.json()
-    except json.JSONDecodeError:
+        return response.json(object_pairs_hook=unique_response_object)
+    except DuplicateJSONMemberError:
+        return {"text": response.text[:2000]}
+    except (ValueError, RecursionError):
         return {"text": response.text}
 
 
@@ -206,9 +209,14 @@ class OpenAIChatAdapter:
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
             decode_failed = False
+            parse_error = "response is not valid JSON"
             try:
-                response_payload = response.json()
+                response_payload = response.json(object_pairs_hook=unique_response_object)
                 raw_response = json.dumps(response_payload, indent=2)
+            except DuplicateJSONMemberError:
+                decode_failed = True
+                parse_error = "duplicate JSON member"
+                raw_response = json.dumps({"text": response.text[:2000]}, indent=2)
             except (ValueError, RecursionError):
                 decode_failed = True
                 response_payload = {"text": response.text}
@@ -219,7 +227,7 @@ class OpenAIChatAdapter:
                 error = f"HTTP {response.status_code}"
             elif decode_failed:
                 ok = False
-                error = "response parse error: response is not valid JSON"
+                error = "response parse error: " + parse_error
             else:
                 try:
                     usage, output_text = _nonstream_completion(response_payload)
@@ -294,7 +302,7 @@ class OpenAIChatAdapter:
 
                         invalid_event = True
                         error_payload = {"text": data[:2000]}
-                        payload = json.loads(data)
+                        payload = json.loads(data, object_pairs_hook=unique_response_object)
                         error_payload = payload
                         if not isinstance(payload, dict):
                             raise ValueError("event must be an object")
@@ -340,9 +348,12 @@ class OpenAIChatAdapter:
             ok = False
             error = "transport error"
             error_payload = {"error": str(exc)}
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (ValueError, RecursionError):
             ok = False
             error = "stream parse error: invalid event"
+            # Earlier deltas remain raw diagnostics, never credited metrics.
+            usage = {}
+            ttft_s = None
         finally:
             wall_s = time.monotonic() - start
             client.close()

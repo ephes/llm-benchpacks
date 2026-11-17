@@ -767,6 +767,15 @@ Required first:
 - `openai-chat`: OpenAI-compatible `/v1/chat/completions`.
 - `ollama-generate`: Ollama `/api/generate`, using native duration fields.
 
+Both core adapters reject duplicate decoded JSON member names at every object
+depth before extracting text or metrics, including extensions, nested usage and
+OpenAI SSE events. Escaped spellings of the same name also conflict. Such
+responses fail with fixed parse diagnostics (HTTP errors retain their status),
+empty scoring output and unset token/rate/TTFT metrics; wall time remains measured.
+The raw artifact retains up to 2000 characters of the conflicting response/event
+as text, without publishing a last-member-wins interpretation. Earlier valid SSE
+text remains diagnostic only. Subsequent cases can still run.
+
 Likely next:
 
 - `mlx-lm-cli`: direct `mlx_lm.generate` or a small Python wrapper, only if

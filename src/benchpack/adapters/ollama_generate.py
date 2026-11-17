@@ -20,6 +20,7 @@ from typing import Any
 
 import httpx
 
+from ._response_json import DuplicateJSONMemberError, unique_response_object
 from . import (
     AdapterRequest,
     AdapterResult,
@@ -126,19 +127,24 @@ class OllamaGenerateAdapter:
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
             decode_failed = False
+            parse_error = "response is not valid JSON"
             try:
-                decoded = response.json()
+                decoded = response.json(object_pairs_hook=unique_response_object)
                 raw_response = json.dumps(decoded, indent=2)
+            except DuplicateJSONMemberError:
+                decode_failed = True
+                parse_error = "duplicate JSON member"
+                raw_response = json.dumps({"text": response.text[:2000]}, indent=2)
             except (ValueError, RecursionError):
                 decode_failed = True
                 raw_response = json.dumps({"text": response.text}, indent=2)
             request.response_path.write_text(raw_response)
             if response.status_code >= 400:
                 ok = False
-                error = f"HTTP {response.status_code}: {response.text[:200]}"
+                error = f"HTTP {response.status_code}"
             elif decode_failed:
                 ok = False
-                error = "response parse error: response is not valid JSON"
+                error = "response parse error: " + parse_error
             else:
                 try:
                     _validate_completion(decoded)

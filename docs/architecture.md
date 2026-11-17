@@ -1042,6 +1042,13 @@ undecodable responses retain their text there.
 
 ## OpenAI-compatible nonstream completion
 
+The core OpenAI and Ollama decoders use a shared `object_pairs_hook` to refuse
+duplicate decoded names recursively, including unused extensions. SSE event
+decoding uses the same hook. Admission precedes normalized payload publication
+and extraction: duplicate-member failures retain at most 2000 characters of raw
+text, use fixed diagnostics and expose no output/token/rate/TTFT credit. Valid
+earlier streamed text remains raw diagnostics only; wall time is still measured.
+
 Successful nonstream responses must decode to an object without an `error` key
 and contain a nonempty `choices` array. Each choice must be an object with an
 object `message` and explicit string or null `content`; the first choice is

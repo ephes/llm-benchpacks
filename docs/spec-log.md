@@ -4,6 +4,15 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (round 128 B13: unambiguous core responses)
+
+- Reject duplicate decoded object members, including escaped aliases, recursively
+  at core OpenAI/Ollama response boundaries and OpenAI SSE event admission.
+- Keep a 2000-character raw text preview instead of normalized conflicting JSON;
+  clear scoring output and token/rate/TTFT credit after invalid SSE events.
+- Synthetic MockTransport regressions cover both member orders, nested usage,
+  content and extension objects, HTTP failure evidence and subsequent recovery.
+
 ## 2026-11-17 (example cleanup verdict preservation)
 
 - Make owned temporary unlink and descriptor/stream close cleanup best-effort;
