@@ -263,7 +263,7 @@ def test_call_chat_completion_omits_response_format_by_default(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
 
-    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+    def fake_urlopen(request: Any, timeout: float, **kwargs) -> FakeResponse:
         requests.append((request, timeout))
         return FakeResponse()
 
@@ -315,7 +315,7 @@ def test_call_chat_completion_sends_json_object_response_format(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
 
-    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+    def fake_urlopen(request: Any, timeout: float, **kwargs) -> FakeResponse:
         requests.append((request, timeout))
         return FakeResponse()
 
@@ -362,7 +362,7 @@ def test_call_chat_completion_can_send_max_completion_tokens(
                 {"choices": [{"message": {"content": "{\"files\":[]}"}}]}
             ).encode("utf-8")
 
-    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+    def fake_urlopen(request: Any, timeout: float, **kwargs) -> FakeResponse:
         requests.append((request, timeout))
         return FakeResponse()
 
@@ -436,7 +436,7 @@ def test_call_chat_completion_sends_json_schema_response_format(
                 }
             ).encode("utf-8")
 
-    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+    def fake_urlopen(request: Any, timeout: float, **kwargs) -> FakeResponse:
         requests.append((request, timeout))
         return FakeResponse()
 

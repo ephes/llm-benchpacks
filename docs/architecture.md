@@ -1237,6 +1237,11 @@ writers: generation checks are not isolation from hostile same-user processes.
 
 The example HTTP clients share `example_http`: public HTTPConnection/socket
 APIs own one connection, bounded reads and deadline retirement; no redirects.
+A process-wide four-slot admission guard bounds daemon system-resolver jobs
+without a waiting queue. The running resolver releases its slot, even after its
+caller has expired. Only the caller can create sockets or send HTTP bytes.
+Public socket and SSL APIs apply the same remaining deadline to every address
+attempt and TLS handshake before the response timer owns header/body retirement.
 
 Example telemetry destinations retain directory descriptors and the admitted
 leaf generation for the whole external call; publication uses a private sibling
