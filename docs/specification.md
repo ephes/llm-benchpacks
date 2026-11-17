@@ -496,7 +496,8 @@ close. Cleanup I/O errors cannot replace a staging/publication error, uncertain
 durability outcome, `KeyboardInterrupt` or `SystemExit`; fixed secondary notes
 preserve the primary exception and cause. Cleanup failures also write fixed
 `example cleanup warning` lines to stderr, because example agents report only the
-primary message; while an exception unwinds, each distinct note is written once. After a successful edit, even inside a caller's unrelated
+primary message; a note already attached to the unwinding exception is not
+repeated. After a successful edit, even inside a caller's unrelated
 `except` block, that warning reports possible `.benchpack-example-*.tmp` residue
 separately and leaves the applied-edit verdict unchanged. A failure to identify a
 held directory during acknowledgement also reports uncertain durability. Inspect
