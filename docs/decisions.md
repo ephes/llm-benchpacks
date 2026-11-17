@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-11-17: core provider evidence has one interpretation
+
+Decode core OpenAI/Ollama responses and OpenAI SSE events with unique member
+names at every depth before normalization or extraction. Duplicate evidence is
+a failed attempt with a bounded raw text preview and no output/metric credit.
+
+The core OpenAI stream requests a single answer and accepts only choice index 0.
+For supported local servers, an absent index on a singleton means 0; explicit
+malformed/nonzero indices and multi-choice arrays are refused, including duplicate
+0. This keeps existing local compatibility without mixing separate answers.
+
 ## D-001: Separate Repository
 
 Keep the benchmark runner in its own repository instead of adding it to

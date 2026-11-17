@@ -742,6 +742,14 @@ same-user harness execution is not filesystem isolation.
 
 ## Evidence limits
 
+Core OpenAI/Ollama response objects and OpenAI SSE events require unique decoded
+JSON member names at every depth. Conflicts fail without scoring output or
+token/rate/TTFT credit and retain a bounded raw text preview for diagnostics.
+OpenAI streaming accepts at most one choice per event, bound to integer index 0.
+A missing singleton index is treated as 0 for local-server compatibility;
+other indices, booleans and multiple choices fail before delta text is retained.
+Usage-only events and the required `[DONE]` completion marker remain supported.
+
 Model-output JSON must have unique object members. Schema errors use bounded,
 escaped previews (1024 UTF-8 bytes). Hardware commands share a 10-second collector
 deadline and a 64 KiB output ceiling per probe; unavailable probes do not supply

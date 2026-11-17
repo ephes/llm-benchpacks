@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Bind streamed core OpenAI answers to exact integer choice index 0; accept a
+  missing singleton index as 0 for local servers. Reject multiple, unexpected or
+  malformed indices before retaining delta text, preserving usage-only events.
+
+- Reject duplicate decoded JSON members recursively in core OpenAI/Ollama
+  responses and OpenAI SSE events before extracting evidence. Keep bounded raw
+  failure previews and fixed diagnostics, with no output/token/rate/TTFT credit.
+
 - Refuse successful example CLI results when denied process-group signals cannot
   be confirmed absent or zombie-only. Bound membership checks; attempt all cleanup
   stages independently, preserve primary failures with a fixed uncertainty warning,

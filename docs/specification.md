@@ -767,6 +767,15 @@ Required first:
 - `openai-chat`: OpenAI-compatible `/v1/chat/completions`.
 - `ollama-generate`: Ollama `/api/generate`, using native duration fields.
 
+Both core adapters reject duplicate decoded JSON member names at every object
+depth before extracting text or metrics, including extensions, nested usage and
+OpenAI SSE events. Escaped spellings of the same name also conflict. Such
+responses fail with fixed parse diagnostics (HTTP errors retain their status),
+empty scoring output and unset token/rate/TTFT metrics; wall time remains measured.
+The raw artifact retains up to 2000 characters of the conflicting response/event
+as text, without publishing a last-member-wins interpretation. Earlier valid SSE
+text remains diagnostic only. Subsequent cases can still run.
+
 Likely next:
 
 - `mlx-lm-cli`: direct `mlx_lm.generate` or a small Python wrapper, only if
@@ -1747,7 +1756,13 @@ descriptive markers rather than replayable patches.
 The text streaming adapter requires an SSE `data: [DONE]` marker; EOF alone
 is a failed response, even after a finish-reason chunk. Usage-only events
 before the marker are retained. JSON events must be objects with an optional
-choices array of objects, object deltas, and string or null content. Explicit null choices or deltas are rejected. Optional
+choices array containing at most one object, object deltas, and string or null
+content. Each explicit choice index must be the exact integer 0 (never bool,
+float, string or null). A singleton without an index is treated as index 0 for
+local-server compatibility, including when mixed with explicit index-0 events.
+Multiple choices, including duplicate index 0, are refused before retaining any
+text from that event. This single-answer request cannot switch answer identity.
+Explicit null choices or deltas are rejected. Optional
 usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
