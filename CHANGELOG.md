@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Isolate core Ollama/OpenAI HTTP client cleanup faults per case. Preserve the
+  primary transport/HTTP/parse/incomplete-stream failure; cleanup-only failure
+  returns `client cleanup error` without output or token/rate/TTFT credit, so
+  subsequent cases can still record results. Exception text remains private.
+
+- Keep Ollama URL userinfo, query/fragment credentials and transport exception
+  text out of portable adapter results, JSONL, reports and new registry imports.
+  Preserve existing transport URL resolution and credentials.
+
 - Bind streamed core OpenAI answers to exact integer choice index 0; accept a
   missing singleton index as 0 for local servers. Reject multiple, unexpected or
   malformed indices before retaining delta text, preserving usage-only events.

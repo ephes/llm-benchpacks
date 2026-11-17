@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -50,6 +51,14 @@ def _resolve_url(endpoint: str | None) -> str:
     if base.endswith("/api/generate"):
         return base
     return base + "/api/generate"
+
+
+def _summary_endpoint(url: str) -> str:
+    # Retain origin/path identity without transport-only credentials.
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(
+        netloc=parts.netloc.rsplit("@", 1)[-1], query="", fragment="",
+    ))
 
 
 def _tps(count: int | None, duration_ns: int | None) -> float | None:
@@ -116,6 +125,7 @@ class OllamaGenerateAdapter:
         ok = True
         error: str | None = None
         payload: dict[str, Any] = {}
+        cleanup_failed = False
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -123,7 +133,7 @@ class OllamaGenerateAdapter:
             response = client.post(url, json=body)
         except httpx.HTTPError as exc:
             ok = False
-            error = f"transport error: {exc!r}"
+            error = "transport error"
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
             decode_failed = False
@@ -155,7 +165,16 @@ class OllamaGenerateAdapter:
                     payload = decoded
         finally:
             wall_s = time.monotonic() - start
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                # Ordinary cleanup faults cannot replace a request/parse error.
+                cleanup_failed = True
+
+        if cleanup_failed and ok:
+            ok = False
+            error = "client cleanup error"
+            payload = {}
 
         # payload stays empty unless the response is a validated completion.
         prompt_count = payload.get("prompt_eval_count")
@@ -171,7 +190,7 @@ class OllamaGenerateAdapter:
 
         return AdapterResult(
             adapter=self.name,
-            endpoint=url,
+            endpoint=_summary_endpoint(url),
             model=request.model,
             ok=ok,
             timing=Timing(

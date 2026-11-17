@@ -198,6 +198,7 @@ class OpenAIChatAdapter:
         usage: dict[str, Any] = {}
         response_payload: Any = None
         output_text = ""
+        cleanup_failed = False
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -236,7 +237,16 @@ class OpenAIChatAdapter:
                     error = "response parse error: invalid completion"
         finally:
             wall_s = time.monotonic() - start
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                cleanup_failed = True
+
+        if cleanup_failed and ok:
+            ok = False
+            error = "client cleanup error"
+            usage = {}
+            output_text = ""
 
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
@@ -281,6 +291,7 @@ class OpenAIChatAdapter:
         error_payload: Any = None
         completed = False
         invalid_event = False
+        cleanup_failed = False
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -363,11 +374,20 @@ class OpenAIChatAdapter:
             ttft_s = None
         finally:
             wall_s = time.monotonic() - start
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                cleanup_failed = True
 
         if ok and not completed:
             ok = False
             error = "stream ended before [DONE]"
+
+        if cleanup_failed and ok:
+            ok = False
+            error = "client cleanup error"
+            usage = {}
+            ttft_s = None
 
         assembled_text = "".join(output_parts)
         response_payload: dict[str, Any] = {

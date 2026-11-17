@@ -857,9 +857,13 @@ the adapter rechecks before writing raw artifacts or calling transport.
 Raw request artifacts contain the JSON body only, without headers. Compact
 adapter errors use fixed categories (`transport error`, response/stream parse
 error, incomplete stream) or HTTP status codes, never backend response or
-exception text. OpenAI result endpoints omit URL query strings and fragments;
-the actual request retains the configured query. `run.jsonl` and generated
-summaries therefore do not inherit credentials echoed by failing backends.
+exception text. OpenAI and Ollama result endpoints contain the resolved
+origin/path without userinfo, URL query strings or fragments; the actual request
+retains its configured transport credentials/query and existing URL resolution.
+`run.jsonl` and generated
+summaries, including registry metadata imported from these new runs, therefore
+do not inherit endpoint credentials or transport exception text. Historical
+artifacts are not rewritten; inspect/redact them before import or sharing.
 Raw response artifacts intentionally retain backend bodies, invalid events and
 transport diagnostics for local debugging, which can include echoed secrets.
 Treat `raw/` as private and inspect/redact before sharing; it is not covered by
@@ -869,6 +873,15 @@ External-agent context contains the configured environment variable name, never
 the resolved header value. Context files retain the full configured endpoint
 (including query/fragment) for harness transport fidelity and must be treated as
 private, just like raw responses. Harnesses own their own transport policy.
+
+Both core adapters attempt HTTP client cleanup exactly once per acquired client.
+An ordinary close exception preserves an existing transport, HTTP, parse or
+incomplete-stream failure and cannot replace a pending exception. If cleanup
+alone fails after a completed response, return a controlled failed result with
+`error="client cleanup error"`, empty scoring output and unset token, backend,
+rate and TTFT metrics. Keep wall time and private raw response evidence. Later
+cases continue without automatic retries. Cancellation and system-exit
+exceptions are not converted into case results.
 
 
 ## CLI

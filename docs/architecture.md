@@ -447,10 +447,14 @@ from prompt cache when the adapter can identify an equivalent field. It is
 `usage.prompt_tokens_details.cached_tokens`; Ollama native timing fields are not
 treated as cache counts.
 
-`endpoint` is the resolved URL the adapter actually called (after appending
+`endpoint` describes the resolved origin/path the adapter actually called (after appending
 `/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
-argument). OpenAI-compatible result endpoints omit queries and fragments while
-the transport keeps the configured query. It is recorded so result records remain unambiguous when the same
+argument). Both core adapters omit userinfo, queries and fragments from this
+public description while transport keeps its configured credentials/query.
+The public projection does not change transport URL resolution.
+The reporter copies this projection into JSONL; reports and registry imports
+therefore receive the same sanitized endpoint description for newly recorded runs.
+It is recorded so result records remain unambiguous when the same
 adapter/model points at different local servers.
 
 Transport-only adapter configuration is not part of the adapter result
@@ -458,7 +462,7 @@ payload. For example, `openai-chat` may receive an explicit auth environment
 variable name through adapter defaults and send a bearer token in HTTP headers,
 but the runner does not serialize the resolved header. The CLI validates the
 endpoint before replacing output; the adapter repeats validation before raw I/O.
-Userinfo and malformed URLs are refused; authenticated transport requires HTTPS
+For OpenAI, userinfo and malformed URLs are refused; authenticated transport requires HTTPS
 except for explicit loopback development. Compact errors contain only fixed
 categories/statuses. Backend bodies and exceptions remain in private raw
 response artifacts and may echo secrets, so those artifacts require inspection
@@ -1077,6 +1081,18 @@ usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
+
+### Core HTTP client retirement
+
+Ollama and both OpenAI paths attempt `Client.close()` exactly once in their
+request scope's `finally`. Ordinary cleanup exceptions cannot replace a pending
+exception or a controlled transport/HTTP/parse/incomplete-stream result. Stream
+completion is checked before assigning a cleanup-only failure. An otherwise
+valid completion with failed cleanup returns `ok=false`, fixed `client cleanup
+error`, empty output and unset tokens/backend/rate/TTFT metrics; wall time and
+raw evidence remain. Cancellation/system-exit exceptions are not swallowed.
+The reporter can record the failed case and proceed to the next one; no retry
+is introduced.
 
 ### Reporter persistence failures
 
