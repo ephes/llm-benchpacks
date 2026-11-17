@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Own example CLI children from acquisition onward: record cancellation before
+  launch, retire/reap acquired handles on interruption, and restore caller signal
+  dispositions even when handler setup fails.
+
 - Preserve example staging/publication errors and interrupts through temporary
   unlink and descriptor/stream close failures; attempt all remaining cleanup.
   Report cleanup residue separately without changing successfully applied edits,

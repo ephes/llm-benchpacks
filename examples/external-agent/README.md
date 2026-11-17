@@ -236,6 +236,12 @@ ceiling, a combined 16 MiB stdout/stderr ceiling, strict UTF-8 and a finite
 closure before complete delivery fails. Child bodies stay out of diagnostics.
 On success, failure, timeout, interrupt, SIGTERM or SIGHUP, the owned process group
 is terminated then killed before the unreaped leader identity is released.
+On the main thread, cancellation handlers are installed before launch; SIGINT,
+SIGTERM and SIGHUP received during acquisition are recorded until the child
+handle is owned. Observed cancellation prevents launch. Handler setup failure
+also prevents launch and restores installed caller dispositions. Cleanup starts
+as soon as a handle is available, and signals during retirement do not interrupt
+reaping. Ignored signals remain ignored; SIGINT keeps KeyboardInterrupt semantics.
 Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
 Descendants that deliberately create another session are outside group ownership;
 retained pipes still cannot extend the drain deadline. Pi's private prompt

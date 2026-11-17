@@ -1219,7 +1219,11 @@ with aggregate data/editable budgets enforced before external execution.
 
 The Codex and Pi examples share a bounded selector-based POSIX transport. It owns
 stdin delivery, output acquisition, non-reaping exit observation and process-group
-retirement; Pi prompt staging belongs to the enclosing resource scope.
+retirement; Pi prompt staging belongs to the enclosing resource scope. The
+cleanup scope precedes launch. Main-thread signal handlers record cancellation
+before acquisition and settle it only at owned checkpoints, including after
+Popen returns; cleanup retains control through reaping and restores the caller
+signal dispositions. Partial handler setup fails before any launch.
 
 ## Deterministic reference artifact ownership
 

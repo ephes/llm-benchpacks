@@ -68,23 +68,39 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
     if prompt is not None and len(prompt) > MAX_PROMPT_BYTES:
         raise ValueError('agent prompt exceeds byte limit')
     deadline = time.monotonic() + timeout_s
-    process = subprocess.Popen(
-        command, cwd=cwd, stdin=subprocess.PIPE if prompt is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-    )
+    process = None
     retired = False
     primary = None
     handlers = {}
+    pending_signal = None
+
+    def interrupted(number, frame):
+        # Never raise between Popen returning a handle and assigning ownership,
+        # or while retirement is in progress. Settle at the next checkpoint.
+        nonlocal pending_signal
+        if pending_signal is None:
+            pending_signal = number
+
+    def check_cancelled():
+        if pending_signal == signal.SIGINT:
+            raise KeyboardInterrupt
+        if pending_signal is not None:
+            raise SystemExit(128 + pending_signal)
+
     output = {'stdout': bytearray(), 'stderr': bytearray()}
     total = 0
     sent = 0
     try:
         if threading.current_thread() is threading.main_thread():
-            def interrupted(number, frame):
-                raise SystemExit(128 + number)
-            for number in (signal.SIGTERM, signal.SIGHUP):
+            for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
                 if signal.getsignal(number) is not signal.SIG_IGN:
                     handlers[number] = signal.signal(number, interrupted)
+        check_cancelled()
+        process = subprocess.Popen(
+            command, cwd=cwd, stdin=subprocess.PIPE if prompt is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+        )
+        check_cancelled()
         with selectors.DefaultSelector() as selector:
             for name in output:
                 stream = getattr(process, name)
@@ -97,11 +113,13 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
                 else:
                     process.stdin.close()
             while True:
+                check_cancelled()
                 if not retired and time.monotonic() >= deadline:
                     raise AgentTimeout("agent deadline exceeded")
                 if not retired and os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
                     _retire(process)
                     retired = True
+                    check_cancelled()
                     if prompt is not None and sent != len(prompt):
                         raise ValueError('agent exited before complete prompt delivery')
                     # Pipes may contain already written bytes. Drain only those
@@ -144,20 +162,22 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
             stderr = output['stderr'].decode('utf-8')
         except UnicodeError as exc:
             raise ValueError('agent output must be UTF-8') from exc
+        check_cancelled()
         return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except BaseException as exc:
         primary = exc
         raise
     finally:
         try:
-            if not retired:
+            if process is not None and not retired:
                 _retire(process)
         except BaseException:
             if primary is None:
                 raise
             primary.add_note('agent retirement failed')
         finally:
-            for stream in (process.stdin, process.stdout, process.stderr):
+            streams = (process.stdin, process.stdout, process.stderr) if process is not None else ()
+            for stream in streams:
                 if stream is not None:
                     try:
                         stream.close()
@@ -166,3 +186,5 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
                             primary.add_note('agent stream closure failed')
             for number, handler in handlers.items():
                 signal.signal(number, handler)
+            if primary is None:
+                check_cancelled()
