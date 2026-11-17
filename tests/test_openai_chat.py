@@ -36,6 +36,82 @@ class DelayedSSEStream(httpx.SyncByteStream):
                 yield f"data: {json.dumps(event)}\n\n".encode()
 
 
+@pytest.mark.parametrize("choices", [
+    *[[{"index": index, "delta": {"content": "wrong"}}]
+      for index in (9, 1, -1, True, False, None, "0", 0.0, [], {})],
+    [{"index": 0, "delta": {"content": "first"}},
+     {"index": 1, "delta": {"content": "second"}}],
+    [{"index": 1, "delta": {"content": "second"}},
+     {"index": 0, "delta": {"content": "first"}}],
+    [{"index": 0, "delta": {"content": "first"}},
+     {"index": 0, "delta": {"content": "duplicate"}}],
+    [{"delta": {"content": "first"}}, {"delta": {"content": "ambiguous"}}],
+    [{"index": 0}, {"index": 0}],
+])
+@pytest.mark.parametrize("prior", [False, True])
+def test_stream_choice_identity_rejects_without_retaining_delta(tmp_path, choices, prior):
+    events = []
+    if prior:
+        events.append({"choices": [{"index": 0, "delta": {"content": "prior"}}],
+                       "usage": {"prompt_tokens": 3, "completion_tokens": 1}})
+    invalid = {"choices": choices, "usage": {"completion_tokens": 99}}
+    events.extend([invalid, "[DONE]"])
+
+    class ClosingStream(DelayedSSEStream):
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    stream = ClosingStream(events, 0)
+    responses = iter([stream, DelayedSSEStream([
+        {"choices": [{"index": 0, "delta": {"content": "next"}}]}, "[DONE]",
+    ], 0)])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(
+        lambda _: httpx.Response(200, stream=next(responses))))
+    req = make_request(tmp_path, defaults={"stream": True})
+    result = adapter.run(req)
+    assert not result.ok and result.output_text == ""
+    assert result.error == "stream parse error: invalid event"
+    assert result.tokens.to_dict() == {"prompt": None, "output": None, "cached_prompt": None}
+    assert result.timing.ttft_s is None
+    assert result.timing.prefill_tps is None and result.timing.decode_tps is None
+    assert stream.closed
+    raw = json.loads(req.response_path.read_text())
+    assert raw["error_payload"] == invalid
+    assert raw["choices"][0]["message"]["content"] == ("prior" if prior else "")
+    assert [chunk["delta"] for chunk in raw["chunks"]] == (["prior"] if prior else [])
+    assert "usage" not in raw
+    assert adapter.run(req).output_text == "next"
+
+
+@pytest.mark.parametrize("indices", [[0, 0], [None, None], [0, None], [None, 0]])
+def test_stream_choice_zero_and_missing_singleton_index_are_compatible(tmp_path, indices):
+    events = [{"choices": [{"index": 0, "delta": {"role": "assistant"}}]}]
+    for index, text in zip(indices, ["Par", "is."]):
+        choice = {"delta": {"content": text}}
+        if index is not None:
+            choice["index"] = index
+        events.append({"choices": [choice]})
+    events.extend([
+        {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        {"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 2,
+                                  "prompt_tokens_details": {"cached_tokens": 6}}},
+        "[DONE]",
+    ])
+    adapter = OpenAIChatAdapter(transport=httpx.MockTransport(
+        lambda _: httpx.Response(200, stream=DelayedSSEStream(events))))
+    req = make_request(tmp_path, defaults={"stream": True})
+    result = adapter.run(req)
+    assert result.ok and result.output_text == "Paris."
+    assert result.tokens.to_dict() == {"prompt": 7, "output": 2, "cached_prompt": 6}
+    assert 0 < result.timing.ttft_s < result.timing.wall_s
+    raw = json.loads(req.response_path.read_text())
+    assert result.timing.ttft_s == raw["chunks"][1]["offset_s"]
+    assert result.timing.prefill_tps == round(7 / result.timing.ttft_s, 4)
+    assert result.timing.decode_tps == round(2 / (result.timing.wall_s - result.timing.ttft_s), 4)
+
+
 def make_request(tmp_path: Path, **overrides) -> AdapterRequest:
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()

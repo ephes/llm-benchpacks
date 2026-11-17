@@ -1066,7 +1066,13 @@ response artifact; undecodable responses retain their text there.
 The text streaming adapter requires an SSE `data: [DONE]` marker; EOF alone
 is a failed response, even after a finish-reason chunk. Usage-only events
 before the marker are retained. JSON events must be objects with an optional
-choices array of objects, object deltas, and string or null content. Explicit null choices or deltas are rejected. Optional
+choices array containing at most one object, object deltas, and string or null
+content. Bind each choice to exact integer index 0; a missing singleton index is
+treated as 0 for local-server compatibility. Reject explicit bool/float/string/
+null or nonzero indices and multiple choices (including duplicate 0) before
+retaining delta text or usage. Identity errors use the existing failed event
+path with empty scoring output and unset token/rate/TTFT metrics; earlier valid
+text remains raw diagnostics only. Explicit null choices or deltas are rejected. Optional
 usage is an object with nonnegative integer token counts. Structured error
 events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the

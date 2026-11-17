@@ -1,5 +1,13 @@
 # Implementation Plan
 
+## Completed core answer evidence (2026-11-17, round 128 B13)
+
+- Reject duplicate decoded JSON members recursively in core OpenAI/Ollama
+  responses and OpenAI SSE events, keeping bounded raw failure evidence.
+- Bind streamed text to exact integer choice index 0; treat a missing singleton
+  index as 0 for local compatibility and refuse ambiguous multi-choice events.
+- Invalid events cannot credit scoring output or token/rate/TTFT metrics.
+
 ## Completed example process ownership (2026-11-17, round 124 B10)
 
 - Enter child cleanup before launch and record main-thread cancellation through

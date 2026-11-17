@@ -322,10 +322,17 @@ class OpenAIChatAdapter:
                         choices = payload.get("choices", [])
                         if not isinstance(choices, list):
                             raise ValueError("choices must be an array")
+                        if len(choices) > 1:
+                            raise ValueError("stream requires a single choice")
                         delta = ""
                         for choice in choices:
                             if not isinstance(choice, dict):
                                 raise ValueError("choice must be an object")
+                            # Local servers may omit index for a singleton.
+                            # An explicit index must identify our single answer.
+                            index = choice.get("index", 0)
+                            if type(index) is not int or index != 0:
+                                raise ValueError("stream choice index must be zero")
                             delta_payload = choice.get("delta", {})
                             if not isinstance(delta_payload, dict):
                                 raise ValueError("delta must be an object")

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bind streamed core OpenAI answers to exact integer choice index 0; accept a
+  missing singleton index as 0 for local servers. Reject multiple, unexpected or
+  malformed indices before retaining delta text, preserving usage-only events.
+
 - Reject duplicate decoded JSON members recursively in core OpenAI/Ollama
   responses and OpenAI SSE events before extracting evidence. Keep bounded raw
   failure previews and fixed diagnostics, with no output/token/rate/TTFT credit.

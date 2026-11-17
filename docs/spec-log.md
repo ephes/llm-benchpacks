@@ -4,6 +4,16 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (round 128 B13: streamed answer identity)
+
+- Bind the single requested OpenAI answer to exact integer index 0. Maintain
+  local-server compatibility by interpreting a missing singleton index as 0.
+- Reject multiple choices, duplicate indices and explicit malformed/nonzero
+  indices before retaining event text/usage. Keep usage-only events and `[DONE]`.
+- Offline regressions cover interleaving, reordered arrays, duplicate choices,
+  bool/null/string/float indices, late refusal without metric credit, stream
+  closure/recovery and correct index-0/missing-index text, usage and TTFT.
+
 ## 2026-11-17 (round 128 B13: unambiguous core responses)
 
 - Reject duplicate decoded object members, including escaped aliases, recursively
