@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Refuse successful example CLI results when denied process-group signals cannot
+  be confirmed absent or zombie-only. Bound membership checks; attempt all cleanup
+  stages independently, preserve primary failures with a fixed uncertainty warning,
+  and never signal again after reaping the leader.
+
 - Own example CLI children from acquisition onward: record cancellation before
   launch, retire/reap acquired handles on interruption, and restore caller signal
   dispositions even when handler setup fails.

@@ -2213,6 +2213,17 @@ also prevents launch and restores installed caller dispositions. Cleanup starts
 as soon as a handle is available, and signals during retirement do not interrupt
 reaping. Ignored signals remain ignored; SIGINT keeps KeyboardInterrupt semantics.
 Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
+Denied group signals fail cleanup unless a bounded process check confirms only
+zombies, including the unreaped leader, in two matching complete group snapshots.
+The check uses public psutil/OS APIs with at most 4096 inspected process entries
+and a shared 0.1-second budget per denied signal. A vanished group is accepted;
+unreadable, changing or incomplete membership remains unconfirmed. A sandbox
+that denies both group signals and process inspection therefore fails cleanup.
+TERM, grace, KILL and reap are attempted independently, preserving the first
+failure. No second retirement attempt can signal a group after leader reaping.
+Unconfirmed retirement prevents a successful result or edit publication; a fixed
+stderr warning also exposes uncertainty when an earlier error or interrupt is
+preserved. Stream closure and handler restoration still attempt every resource.
 Descendants that deliberately create another session are outside group ownership;
 retained pipes still cannot extend the drain deadline. Pi's private prompt
 file is removed on every exit, including staging failure and SIGTERM/SIGHUP

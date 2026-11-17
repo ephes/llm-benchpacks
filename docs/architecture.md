@@ -1223,7 +1223,14 @@ retirement; Pi prompt staging belongs to the enclosing resource scope. The
 cleanup scope precedes launch. Main-thread signal handlers record cancellation
 before acquisition and settle it only at owned checkpoints, including after
 Popen returns; cleanup retains control through reaping and restores the caller
-signal dispositions. Partial handler setup fails before any launch.
+signal dispositions. Partial handler setup fails before any launch. Group-signal
+permission failures require bounded complete, stable zombie-only membership
+observations including the pinned leader; absent groups are already retired.
+Denied inspection or exhausted admission leaves retirement unconfirmed. The
+transport attempts TERM, grace, KILL and reap independently, keeps the first
+failure with fixed secondary diagnostics, and never retries group signals after
+reaping. Cleanup uncertainty prevents a completed result, while independent
+stream closure and handler restoration preserve any primary failure.
 
 ## Deterministic reference artifact ownership
 

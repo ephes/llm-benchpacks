@@ -5546,3 +5546,18 @@ handlers before launch. Cancellation observed before launch prevents it; during
 Popen it waits for the owned handle, then retires/reaps exactly once. Handler
 setup and launch failures restore caller dispositions. Synthetic signal barriers
 and an immediate post-acquisition trace interruption reproduce the old leaks.
+
+## 2026-11-17 — Confirm example group retirement (round 124 B10, S22)
+
+Denied group signalling no longer implies successful retirement. Public psutil
+and OS group observations must confirm stable zombie-only membership including
+the unreaped leader within 4096 entries and 0.1 seconds per check; absent groups
+remain supported. Live, changing, unreadable or incomplete groups fail closed.
+TERM, grace, KILL and reap are independent attempts retaining the first error;
+fixed notes/warnings report uncertainty without raw process diagnostics. Stream
+closure and signal restoration also proceed independently. No failure retries a
+group signal after reaping. Deterministic denied-signal, membership-change and
+cleanup-fault tests use only synthetic processes and seams. Restricted sandboxes
+that deny both group signals and membership inspection cannot validate successful
+example cleanup; the ordinary synthetic-executable tests require an unrestricted
+local rerun in that case.

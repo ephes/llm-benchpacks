@@ -1,9 +1,12 @@
 # Implementation Plan
 
-## Completed example acquisition ownership (2026-11-17, round 124 B10)
+## Completed example process ownership (2026-11-17, round 124 B10)
 
 - Enter child cleanup before launch and record main-thread cancellation through
   acquisition and retirement; fail handler setup before launching.
+- Refuse unconfirmed denied group signalling; admit only bounded stable zombie
+  membership or confirmed group absence. Attempt all retirement/closure stages,
+  preserve the first failure and never repeat signalling after leader reaping.
 - Deterministic barriers and trace interruption cover cancellation before launch,
   during acquisition and immediately after handle return; no paid agent runs.
 
