@@ -4,6 +4,24 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (round 135 B08: independent HTTP retirement)
+
+- Retain detached sockets and attempt timer cancel/join, socket shutdown,
+  response/connection/socket close independently. Timer joining has a 100 ms cap.
+- Preserve the initiating failure/interrupt; add fixed private notes and a stderr
+  warning for uncertainty. Cleanup-only failure cannot return response bytes.
+- Fault regressions failed before the fix. Cover every owner after success,
+  parse failure, timeout and interrupt, plus cleanup cancellation, live timers,
+  failed stream close with a real socket, and interrupted resolver admission.
+
+## 2026-11-17 (round 135 B08: complete example HTTP lifetime)
+
+- Bound system DNS with four admitted daemon jobs; timed-out libc work retains
+  capacity until completion, without a queue or exit-time join.
+- Carry one monotonic deadline through TCP attempts, TLS and request/response I/O.
+- Offline regressions fail on the prior transport: stalled/repeated resolution,
+  late resolution without request delivery, multiple addresses and silent TLS.
+
 ## 2026-11-17 (round 128 B13: streamed answer identity)
 
 - Bind the single requested OpenAI answer to exact integer index 0. Maintain

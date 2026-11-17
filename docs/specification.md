@@ -2193,10 +2193,25 @@ workspace publication boundary (its fixed output file may be new). Serialize
 writers: generation checks are not isolation from hostile same-user processes.
 
 Example HTTP calls admit at most 16 MiB of actual response bytes, reading in
-64 KiB chunks under one elapsed response deadline (including header/body I/O).
+64 KiB chunks under one monotonic deadline covering system DNS resolution,
+all TCP address attempts, TLS negotiation, request writes and header/body I/O.
+At most four daemon resolver jobs may be outstanding per process, with no queue;
+a timed-out caller leaves admission with the underlying resolver until it exits.
+Saturation fails immediately with `HTTP resolver capacity exceeded`; retry after
+resolution recovers. Abandoned resolver jobs never connect or send a request.
 Non-200 statuses, including every redirect, fail without reading their bodies.
 Requests and credentials therefore remain bound to the configured endpoint;
 no redirect hop is followed. Transport failures use fixed diagnostic categories.
+
+Timer cancellation, its bounded 100 ms join, response close, connection close,
+and socket shutdown/close are attempted independently. A detached response socket
+remains owned. Shutdown stops traffic even if a response stream close fails.
+An initiating error or interrupt remains primary, with fixed cleanup notes and
+an `example cleanup warning: HTTP retirement unconfirmed` stderr warning.
+Cleanup-only faults fail with `HTTP cleanup failed`; an interrupt during cleanup
+retains its cancellation identity. Never treat that result as a successful call;
+retry in a fresh attempt after investigating resource retirement. Diagnostic
+categories contain no response bodies, credentials or cleanup exception text.
 
 Example contexts, HTTP response objects and edit payloads reject duplicate JSON
 members at every nesting level, with controlled decode/depth failures. The

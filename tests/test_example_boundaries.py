@@ -169,7 +169,7 @@ def test_http_slow_drip_uses_shared_deadline(monkeypatch):
             now[0] += .4
             return super().read(1)
     monkeypatch.setattr(example_http.time, 'monotonic', lambda: now[0])
-    monkeypatch.setattr(example_http, 'open_response', lambda *a: Slow(b'{}'))
+    monkeypatch.setattr(example_http, 'open_response', lambda *a, **k: Slow(b'{}'))
     with pytest.raises(ValueError, match='deadline'):
         example_http.response_bytes(urllib.request.Request('http://127.0.0.1/'), .5)
 
@@ -182,7 +182,7 @@ def test_http_error_body_is_not_read(monkeypatch):
         status = 500
         def read1(self, size):
             pytest.fail('error body must not be acquired')
-    monkeypatch.setattr(example_http, 'open_response', lambda *a: Error(b'private'))
+    monkeypatch.setattr(example_http, 'open_response', lambda *a, **k: Error(b'private'))
     with pytest.raises(ValueError, match='status 500'):
         example_http.response_bytes(urllib.request.Request('http://127.0.0.1/'), 1)
 
@@ -244,7 +244,7 @@ def test_complete_response_refuses_other_models(reported):
 @pytest.mark.parametrize('name', ['openai-direct-edit-agent', 'model-call-agent'])
 def test_remote_json_refuses_duplicate_model(name, monkeypatch):
     import io
-    monkeypatch.setattr('benchpack.example_http.open_response', lambda *a: io.BytesIO(b'{"model":"test","model":"other"}'))
+    monkeypatch.setattr('benchpack.example_http.open_response', lambda *a, **k: io.BytesIO(b'{"model":"test","model":"other"}'))
     with pytest.raises(ValueError):
         call_http(agent(name))
 

@@ -1,5 +1,12 @@
 # Implementation Plan
 
+## Completed example HTTP lifetime (2026-11-17, round 135 B08)
+
+- Bound system DNS jobs across caller expiry and reuse one deadline for all TCP
+  attempts, TLS negotiation and request/response I/O.
+- Independently retire timer, response, connection and socket owners, preserving
+  initiating errors/cancellation and refusing cleanup-only success.
+
 ## Completed core answer evidence (2026-11-17, round 128 B13)
 
 - Reject duplicate decoded JSON members recursively in core OpenAI/Ollama
