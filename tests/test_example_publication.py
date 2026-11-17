@@ -322,3 +322,35 @@ def test_interrupt_during_acknowledgement_notes_visible_publication(tmp_path, mo
     assert any('edits published; directory durability uncertain' in note
                for note in interrupt.__notes__)
     assert all((path / 'a').read_bytes() == b'new' for path in paths)
+
+
+@pytest.mark.parametrize('rollback_failure', [False, True])
+def test_interrupt_during_rollback_acknowledgement_keeps_rollback_verdict(
+    tmp_path, monkeypatch, rollback_failure,
+):
+    paths = roots(tmp_path)
+    publication = OSError('primary publication fault')
+    replace = os.replace
+    calls = []
+    def fail_second(src, dst, **kwargs):
+        calls.append(dst)
+        if len(calls) == 2:
+            raise publication
+        if len(calls) == 3 and rollback_failure:
+            raise OSError('rollback')
+        return replace(src, dst, **kwargs)
+    monkeypatch.setattr(os, 'replace', fail_second)
+    interrupt = KeyboardInterrupt()
+    def stop(fd):
+        raise interrupt
+    directory_syncs(monkeypatch, stop)
+    with pytest.raises(KeyboardInterrupt) as caught:
+        replace_example_files([(path, 'a', b'new') for path in paths])
+    assert caught.value is interrupt
+    assert interrupt.__context__ is publication
+    notes = interrupt.__notes__
+    assert any('rollback directory durability uncertain' in note for note in notes)
+    assert any('rollback failed' in note for note in notes) == rollback_failure
+    assert (paths[1] / 'a').read_bytes() == b'old'
+    expected = b'new' if rollback_failure else b'old'
+    assert (paths[0] / 'a').read_bytes() == expected

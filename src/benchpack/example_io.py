@@ -208,12 +208,20 @@ def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missin
                     failed = True
                     if backup is not None:
                         target.retained.add(backup)
-            sync_failure = _sync_parents(target for target, _, _ in entries if target.published is not None)
             rollback = 'edit publication failed'
             if failed:
                 rollback += '; rollback failed; original .benchpack-example-*.tmp backups retained'
+            uncertain = '; rollback directory durability uncertain; inspect visible files before retrying'
+            try:
+                sync_failure = _sync_parents(target for target, _, _ in entries if target.published is not None)
+            except BaseException as interrupt:
+                # A later interrupt or exit wins, but still reports the
+                # rollback outcome and the original failure as context.
+                if not isinstance(interrupt, Exception):
+                    interrupt.add_note(rollback + uncertain)
+                raise
             if sync_failure is not None:
-                rollback += '; rollback directory durability uncertain; inspect visible files before retrying'
+                rollback += uncertain
             if not isinstance(exc, Exception):
                 # Keep interrupts and exits (for example signal SystemExit) intact.
                 if failed or sync_failure is not None:

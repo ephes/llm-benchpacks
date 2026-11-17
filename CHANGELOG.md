@@ -13,7 +13,8 @@
   compensation. Report uncertain publication/rollback durability explicitly,
   including a held-directory identity failure;
   retain complete visible edits after a publication acknowledgement failure,
-  and note that outcome on an interrupt during the acknowledgement.
+  and note that outcome (or the rollback outcome) on an interrupt during either
+  acknowledgement.
 
 - Admit reference-agent contexts with bounded stable regular reads, duplicate-free
   JSON and exact integer version/repetition checks before artifact writes.
