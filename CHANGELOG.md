@@ -4,10 +4,12 @@
 
 - Preserve example staging/publication errors and interrupts through temporary
   unlink and descriptor/stream close failures; attempt all remaining cleanup.
-  Report cleanup residue separately without changing successfully applied edits.
+  Report cleanup residue separately without changing successfully applied edits,
+  also when the caller is handling an unrelated exception.
 
 - Sync distinct held parent directories after example edit publication and
-  compensation. Report uncertain publication/rollback durability explicitly;
+  compensation. Report uncertain publication/rollback durability explicitly,
+  including a held-directory identity failure;
   retain complete visible edits after a publication acknowledgement failure.
 
 - Admit reference-agent contexts with bounded stable regular reads, duplicate-free

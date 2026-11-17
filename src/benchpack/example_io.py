@@ -26,9 +26,12 @@ def _generation(info):
 
 
 def _cleanup_callback(stack, callback, *args, note):
-    """Attempt owned cleanup without replacing the active publication verdict."""
-    def cleanup():
-        primary = sys.exception()
+    """Attempt owned cleanup without replacing the active publication verdict.
+
+    The verdict is the exception unwinding this ExitStack, never an unrelated
+    exception a caller happens to be handling around the helper.
+    """
+    def cleanup(exc_type, primary, traceback):
         try:
             callback(*args)
         except OSError:
@@ -42,7 +45,8 @@ def _cleanup_callback(stack, callback, *args, note):
                     print(f'example cleanup warning: {note}', file=sys.stderr)
                 except (OSError, ValueError):
                     pass
-    stack.callback(cleanup)
+        return False
+    stack.push(cleanup)
 
 
 def _close_callback(stack, fd):
@@ -138,8 +142,15 @@ def _sync_parents(targets):
     seen = set()
     failure = None
     for target in targets:
-        info = os.fstat(target.parent)
-        identity = (info.st_dev, info.st_ino)
+        try:
+            info = os.fstat(target.parent)
+        except OSError as exc:
+            # Still attempt the acknowledgement, but never report it as certain.
+            if failure is None:
+                failure = exc
+            identity = ('fd', target.parent)
+        else:
+            identity = (info.st_dev, info.st_ino)
         if identity in seen:
             continue
         seen.add(identity)

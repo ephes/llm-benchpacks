@@ -12,6 +12,9 @@ working history and open questions.
   continue all cleanup and keep explicitly retained rollback backups.
 - Offline faults combine publication, rollback, unlink and close failures,
   interrupts, uncertain durability and staging stream-close failure.
+- Bind the cleanup verdict to the helper's own unwinding exception, not a
+  caller's handled exception; a held-directory identity failure during
+  acknowledgement still reports uncertain durability.
 
 ## 2026-11-17 (example edit directory durability)
 

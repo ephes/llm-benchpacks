@@ -1,6 +1,7 @@
 """Offline namespace durability and cleanup faults for example edit publication."""
 import os
 import stat
+import sys
 
 import pytest
 
@@ -221,3 +222,51 @@ def test_stage_stream_close_cannot_mask_staging_failure(tmp_path, monkeypatch):
     assert any('descriptor close failed' in note for note in primary.__notes__)
     assert (tmp_path / 'a').read_bytes() == b'old'
     assert not list(tmp_path.glob('.benchpack-example-*.tmp'))
+
+
+def test_cleanup_residue_is_reported_when_caller_is_handling_unrelated_exception(
+    tmp_path, monkeypatch, capsys,
+):
+    (tmp_path / 'a').write_bytes(b'old')
+    unlink = os.unlink
+    unlinks = []
+    def fail_first(name, **kwargs):
+        unlinks.append(name)
+        if len(unlinks) == 1:
+            raise OSError('private cleanup payload')
+        return unlink(name, **kwargs)
+    monkeypatch.setattr(os, 'unlink', fail_first)
+    unrelated = RuntimeError('caller fallback context')
+    try:
+        raise unrelated
+    except RuntimeError:
+        replace_workspace_files(tmp_path, [('a', b'new')])
+    assert (tmp_path / 'a').read_bytes() == b'new'
+    assert not getattr(unrelated, '__notes__', [])
+    error = capsys.readouterr().err
+    assert 'temporary cleanup failed' in error
+    assert 'private cleanup payload' not in error
+
+
+def test_directory_identity_failure_still_reports_uncertain_publication(tmp_path, monkeypatch):
+    paths = roots(tmp_path)
+    fstat = os.fstat
+    failure = OSError('injected directory fstat')
+    def fail_directory(fd):
+        # Only the durability acknowledgement loses directory identity.
+        if sys._getframe(1).f_code.co_name == '_sync_parents':
+            raise failure
+        return fstat(fd)
+    monkeypatch.setattr(os, 'fstat', fail_directory)
+    synced = []
+    fsync = os.fsync
+    def record(fd):
+        if stat.S_ISDIR(fstat(fd).st_mode):
+            synced.append(fd)
+        return fsync(fd)
+    monkeypatch.setattr(os, 'fsync', record)
+    with pytest.raises(ValueError, match='edits published; directory durability uncertain') as caught:
+        replace_example_files([(path, 'a', b'new') for path in paths])
+    assert caught.value.__cause__ is failure
+    assert len(synced) == len(paths)
+    assert all((path / 'a').read_bytes() == b'new' for path in paths)
