@@ -493,12 +493,13 @@ manual retry; never automatically reapply or undo an uncertain publication.
 Owned temporary cleanup attempts every remaining unlink and descriptor/stream
 close. Cleanup I/O errors cannot replace a staging/publication error, uncertain
 durability outcome, `KeyboardInterrupt` or `SystemExit`; fixed secondary notes
-preserve the primary exception and cause. When the helper itself raised
-nothing, even inside a caller's unrelated `except` block, a fixed stderr cleanup
-warning reports possible `.benchpack-example-*.tmp` residue separately and leaves
-the applied-edit verdict unchanged. A failure to identify a held directory during
-acknowledgement also reports uncertain durability. Inspect these files
-before retrying; retained rollback backups are never discarded. Cleanup
+preserve the primary exception and cause. Every cleanup failure also writes a
+fixed `example cleanup warning` line to stderr, because example agents report only
+the primary message. After a successful edit, even inside a caller's unrelated
+`except` block, that warning reports possible `.benchpack-example-*.tmp` residue
+separately and leaves the applied-edit verdict unchanged. A failure to identify a
+held directory during acknowledgement also reports uncertain durability. Inspect
+these files before retrying; retained rollback backups are never discarded. Cleanup
 diagnostics do not include filesystem error payloads or file contents.
 
 

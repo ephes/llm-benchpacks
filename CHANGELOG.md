@@ -5,7 +5,9 @@
 - Preserve example staging/publication errors and interrupts through temporary
   unlink and descriptor/stream close failures; attempt all remaining cleanup.
   Report cleanup residue separately without changing successfully applied edits,
-  also when the caller is handling an unrelated exception.
+  also when the caller is handling an unrelated exception. Cleanup failures also
+  print a fixed stderr warning on failure paths, where example agents show only
+  the primary message.
 
 - Sync distinct held parent directories after example edit publication and
   compensation. Report uncertain publication/rollback durability explicitly,

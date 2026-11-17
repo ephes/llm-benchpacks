@@ -15,6 +15,8 @@ working history and open questions.
 - Bind the cleanup verdict to the helper's own unwinding exception, not a
   caller's handled exception; a held-directory identity failure during
   acknowledgement still reports uncertain durability.
+- Write the fixed cleanup warning to stderr on failure paths too, since example
+  agents print only the primary message; cover it through an example edit entry.
 
 ## 2026-11-17 (example edit directory durability)
 

@@ -36,15 +36,16 @@ def _cleanup_callback(stack, callback, *args, note):
             callback(*args)
         except OSError:
             if primary is not None:
-                if note not in getattr(primary, '__notes__', ()):
-                    primary.add_note(note)
-            else:
-                # Cleanup residue is separate from an already applied edit.
-                # Fixed text keeps file contents and OS error payloads private.
-                try:
-                    print(f'example cleanup warning: {note}', file=sys.stderr)
-                except (OSError, ValueError):
-                    pass
+                if note in getattr(primary, '__notes__', ()):
+                    return False
+                primary.add_note(note)
+            # Example callers print only str(exc), so residue is also reported
+            # on stderr. Cleanup residue is separate from the edit verdict.
+            # Fixed text keeps file contents and OS error payloads private.
+            try:
+                print(f'example cleanup warning: {note}', file=sys.stderr)
+            except (OSError, ValueError):
+                pass
         return False
     stack.push(cleanup)
 

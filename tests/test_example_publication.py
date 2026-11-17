@@ -91,10 +91,14 @@ def test_rollback_syncs_compensating_namespace_changes(tmp_path, monkeypatch, ex
 
 def test_staging_failure_never_acknowledges_publication(tmp_path, monkeypatch):
     (tmp_path / 'a').write_bytes(b'old')
-    synced = directory_syncs(monkeypatch)
-    def fail(fd):
+    synced = []
+    def fail_regular(fd):
+        # Record directory acknowledgements; fail only the staged file sync.
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            synced.append(fd)
+            return None
         raise OSError('stage fsync fault')
-    monkeypatch.setattr(os, 'fsync', fail)
+    monkeypatch.setattr(os, 'fsync', fail_regular)
     with pytest.raises(ValueError, match='could not stage'):
         replace_workspace_files(tmp_path, [('a', b'new')])
     assert not synced
@@ -276,3 +280,29 @@ def test_directory_identity_failure_still_reports_uncertain_publication(tmp_path
     assert caught.value.__cause__ is failure
     assert len(synced) == len(paths)
     assert all((path / 'a').read_bytes() == b'new' for path in paths)
+
+
+def test_example_entry_point_reports_residue_on_publication_failure(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    from pathlib import Path
+    script = Path(__file__).resolve().parents[1] / 'examples/external-agent/openai-direct-edit-agent.py'
+    spec = importlib.util.spec_from_file_location('openai_direct_edit_agent', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / 'a').write_bytes(b'old')
+    def fail_replace(*args, **kwargs):
+        raise OSError('primary publication fault')
+    monkeypatch.setattr(os, 'replace', fail_replace)
+    def fail_unlink(*args, **kwargs):
+        raise OSError('private cleanup payload')
+    monkeypatch.setattr(os, 'unlink', fail_unlink)
+    with pytest.raises(ValueError) as caught:
+        module._apply_edits(tmp_path, {'files': [{'path': 'a', 'content': 'new'}]}, ('a',))
+    # Example callers report only str(exc); the residue must still be visible.
+    assert 'temporary cleanup failed' not in str(caught.value)
+    error = capsys.readouterr().err
+    assert 'example cleanup warning' in error
+    assert 'temporary cleanup failed' in error
+    assert 'private cleanup payload' not in error
+    assert (tmp_path / 'a').read_bytes() == b'old'
+    assert len(list(tmp_path.glob('.benchpack-example-*.tmp'))) == 2
