@@ -4,6 +4,15 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (example cleanup verdict preservation)
+
+- Make owned temporary unlink and descriptor/stream close cleanup best-effort;
+  preserve primary errors, causes and interruption identity with fixed notes.
+- Report cleanup-only residue on stderr while keeping the applied-edit verdict;
+  continue all cleanup and keep explicitly retained rollback backups.
+- Offline faults combine publication, rollback, unlink and close failures,
+  interrupts, uncertain durability and staging stream-close failure.
+
 ## 2026-11-17 (example edit directory durability)
 
 - Acknowledge staged example replacements across all distinct held parent

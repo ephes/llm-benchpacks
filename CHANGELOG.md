@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Preserve example staging/publication errors and interrupts through temporary
+  unlink and descriptor/stream close failures; attempt all remaining cleanup.
+  Report cleanup residue separately without changing successfully applied edits.
+
 - Sync distinct held parent directories after example edit publication and
   compensation. Report uncertain publication/rollback durability explicitly;
   retain complete visible edits after a publication acknowledgement failure.

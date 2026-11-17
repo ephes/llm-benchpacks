@@ -98,3 +98,126 @@ def test_staging_failure_never_acknowledges_publication(tmp_path, monkeypatch):
         replace_workspace_files(tmp_path, [('a', b'new')])
     assert not synced
     assert (tmp_path / 'a').read_bytes() == b'old'
+
+
+@pytest.mark.parametrize('primary', [OSError('publication'), KeyboardInterrupt(), SystemExit(143)])
+@pytest.mark.parametrize('rollback_failure', [False, True])
+def test_cleanup_preserves_publication_verdict_and_attempts_every_resource(
+    tmp_path, monkeypatch, primary, rollback_failure,
+):
+    from benchpack import example_io
+    for name in ('a', 'b'):
+        (tmp_path / name).write_bytes(name.encode())
+    staged = []
+    stage = example_io._Target.stage
+    def remember(self, *args, **kwargs):
+        result = stage(self, *args, **kwargs)
+        staged.append(result)
+        return result
+    monkeypatch.setattr(example_io._Target, 'stage', remember)
+    replace = os.replace
+    calls = []
+    def publication(src, dst, **kwargs):
+        calls.append(dst)
+        if dst == 'b':
+            raise primary
+        if len(calls) == 3 and rollback_failure:
+            raise OSError('rollback')
+        return replace(src, dst, **kwargs)
+    monkeypatch.setattr(os, 'replace', publication)
+    discarded = []
+    def unlink(name, **kwargs):
+        discarded.append(name)
+        raise OSError('SECONDARY secret cleanup payload')
+    monkeypatch.setattr(os, 'unlink', unlink)
+    closed = []
+    close = os.close
+    def close_then_fail(fd):
+        close(fd)
+        closed.append(fd)
+        raise OSError('SECONDARY close payload')
+    monkeypatch.setattr(os, 'close', close_then_fail)
+    expected = ValueError if isinstance(primary, OSError) else type(primary)
+    with pytest.raises(expected) as caught:
+        replace_workspace_files(tmp_path, [('a', b'new'), ('b', b'new')])
+    if expected is ValueError:
+        assert caught.value.__cause__ is primary
+        assert ('rollback failed' in str(caught.value)) == rollback_failure
+    else:
+        assert caught.value is primary
+    notes = getattr(caught.value, '__notes__', [])
+    assert any('temporary cleanup failed' in note for note in notes)
+    assert any('descriptor close failed' in note for note in notes)
+    assert 'SECONDARY' not in str(caught.value) + ' '.join(notes)
+    retained = {staged[1]} if rollback_failure else set()
+    assert set(discarded) == set(staged) - retained
+    assert len(discarded) == len(staged) - len(retained)
+    # Two ancestors + one source + two stage and two held descriptors per target.
+    assert len(closed) == 14
+    if rollback_failure:
+        assert (tmp_path / staged[1]).read_bytes() == b'a'
+    assert (tmp_path / 'b').read_bytes() == b'b'
+
+
+def test_successful_edits_keep_applied_verdict_and_report_cleanup_residue(tmp_path, monkeypatch, capsys):
+    (tmp_path / 'a').write_bytes(b'old')
+    unlinks = []
+    unlink = os.unlink
+    def fail_existing(name, **kwargs):
+        unlinks.append(name)
+        if len(unlinks) == 1:
+            raise OSError('private cleanup payload')
+        return unlink(name, **kwargs)
+    monkeypatch.setattr(os, 'unlink', fail_existing)
+    replace_workspace_files(tmp_path, [('a', b'new')])
+    assert (tmp_path / 'a').read_bytes() == b'new'
+    assert len(unlinks) == 2
+    residue = list(tmp_path.glob('.benchpack-example-*.tmp'))
+    assert len(residue) == 1
+    assert residue[0].read_bytes() == b'old'
+    error = capsys.readouterr().err
+    assert 'temporary cleanup failed' in error
+    assert 'publication verdict unchanged' in error
+    assert 'private cleanup payload' not in error
+
+
+def test_cleanup_does_not_mask_uncertain_publication(tmp_path, monkeypatch):
+    paths = roots(tmp_path)
+    def fail_sync(fd):
+        raise OSError('sync')
+    directory_syncs(monkeypatch, fail_sync)
+    def fail_unlink(*args, **kwargs):
+        raise OSError('cleanup')
+    monkeypatch.setattr(os, 'unlink', fail_unlink)
+    with pytest.raises(ValueError, match='edits published; directory durability uncertain') as caught:
+        replace_example_files([(path, 'a', b'new') for path in paths])
+    assert any('temporary cleanup failed' in note for note in caught.value.__notes__)
+    assert all((path / 'a').read_bytes() == b'new' for path in paths)
+
+
+def test_stage_stream_close_cannot_mask_staging_failure(tmp_path, monkeypatch):
+    (tmp_path / 'a').write_bytes(b'old')
+    primary = OSError('stage sync')
+    def fail_sync(fd):
+        raise primary
+    monkeypatch.setattr(os, 'fsync', fail_sync)
+    fdopen = os.fdopen
+    class CloseFailure:
+        def __init__(self, *args, **kwargs):
+            self.stream = fdopen(*args, **kwargs)
+        def __getattr__(self, name):
+            return getattr(self.stream, name)
+        def close(self):
+            self.stream.close()
+            raise OSError('secondary stream close')
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.close()
+    monkeypatch.setattr(os, 'fdopen', CloseFailure)
+    with pytest.raises(ValueError, match='could not stage') as caught:
+        replace_workspace_files(tmp_path, [('a', b'new')])
+    assert caught.value.__cause__ is primary
+    assert any('descriptor close failed' in note for note in primary.__notes__)
+    assert (tmp_path / 'a').read_bytes() == b'old'
+    assert not list(tmp_path.glob('.benchpack-example-*.tmp'))

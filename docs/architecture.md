@@ -1240,3 +1240,12 @@ the complete visible new files. A rollback directory-sync failure reports
 `rollback directory durability uncertain`, retaining the original publication
 failure as the cause. Inspect visible files and retained backups before any
 manual retry; never automatically reapply or undo an uncertain publication.
+
+Owned temporary cleanup attempts every remaining unlink and descriptor/stream
+close. Cleanup I/O errors cannot replace a staging/publication error, uncertain
+durability outcome, `KeyboardInterrupt` or `SystemExit`; fixed secondary notes
+preserve the primary exception and cause. Without an active exception, a fixed
+stderr cleanup warning reports possible `.benchpack-example-*.tmp` residue
+separately and leaves the applied-edit verdict unchanged. Inspect these files
+before retrying; retained rollback backups are never discarded. Cleanup
+diagnostics do not include filesystem error payloads or file contents.

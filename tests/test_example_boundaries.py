@@ -330,9 +330,10 @@ def test_telemetry_partial_stage_failure_is_atomic(tmp_path, monkeypatch):
     path.write_bytes(b'previous')
     original = os.fdopen
     class Partial:
-        def __init__(self, fd, mode): self.stream = original(fd, mode)
+        def __init__(self, fd, mode, **kwargs): self.stream = original(fd, mode, **kwargs)
         def __enter__(self): return self
         def __exit__(self, *args): self.stream.close()
+        def close(self): self.stream.close()
         def write(self, data):
             self.stream.write(data[:2])
             return 2

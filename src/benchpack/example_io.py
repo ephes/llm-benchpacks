@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 import uuid
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -24,6 +25,31 @@ def _generation(info):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
+def _cleanup_callback(stack, callback, *args, note):
+    """Attempt owned cleanup without replacing the active publication verdict."""
+    def cleanup():
+        primary = sys.exception()
+        try:
+            callback(*args)
+        except OSError:
+            if primary is not None:
+                if note not in getattr(primary, '__notes__', ()):
+                    primary.add_note(note)
+            else:
+                # Cleanup residue is separate from an already applied edit.
+                # Fixed text keeps file contents and OS error payloads private.
+                try:
+                    print(f'example cleanup warning: {note}', file=sys.stderr)
+                except (OSError, ValueError):
+                    pass
+    stack.callback(cleanup)
+
+
+def _close_callback(stack, fd):
+    _cleanup_callback(stack, os.close, fd,
+                      note='example descriptor close failed; publication verdict unchanged')
+
+
 class _Target:
     def __init__(self, stack, root, relative, *, missing=False):
         parts = contained_parts(relative)
@@ -31,11 +57,11 @@ class _Target:
             raise ValueError('unsafe workspace path')
         absolute = Path(os.path.abspath(root))
         fd = os.open(absolute.parent, _DIR)
-        stack.callback(os.close, fd)
+        _close_callback(stack, fd)
         self.edges = []
         for part in (absolute.name, *parts[:-1]):
             child = os.open(part, _DIR, dir_fd=fd)
-            stack.callback(os.close, child)
+            _close_callback(stack, child)
             self.edges.append((fd, part, child))
             fd = child
         self.parent, self.name = fd, parts[-1]
@@ -46,7 +72,7 @@ class _Target:
                 raise
             self.info, self.original = None, None
         else:
-            stack.callback(os.close, source)
+            _close_callback(stack, source)
             self.info = os.fstat(source)
             if not stat.S_ISREG(self.info.st_mode) or self.info.st_nlink != 1:
                 raise OSError('example target must be a regular file with one link')
@@ -83,8 +109,13 @@ class _Target:
                 os.unlink(name, dir_fd=self.parent)
             except FileNotFoundError:
                 pass
-        stack.callback(discard)
-        with os.fdopen(fd, 'wb') as stream:
+        _cleanup_callback(stack, discard,
+                          note='example temporary cleanup failed; .benchpack-example-*.tmp residue may remain; publication verdict unchanged')
+        with ExitStack() as writing:
+            _close_callback(writing, fd)
+            stream = os.fdopen(fd, 'wb', closefd=False)
+            _cleanup_callback(writing, stream.close,
+                              note='example descriptor close failed; publication verdict unchanged')
             if stream.write(data) != len(data):
                 raise OSError('short example stage write')
             stream.flush()
@@ -93,7 +124,7 @@ class _Target:
             os.fsync(stream.fileno())
             held = os.dup(stream.fileno())
             self.staged_fds[name] = held
-            stack.callback(os.close, held)
+            _close_callback(stack, held)
         return name
 
 
