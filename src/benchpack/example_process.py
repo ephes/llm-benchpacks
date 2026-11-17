@@ -6,14 +6,19 @@ import os
 import selectors
 import signal
 import subprocess
+import sys
 import threading
 import time
 from contextlib import contextmanager
+
+import psutil
 
 MAX_AGENT_OUTPUT_BYTES = 16 * 1024 * 1024
 MAX_PROMPT_BYTES = 32 * 1024 * 1024
 _RETIRE_GRACE_S = 0.1
 _REAP_S = 0.5
+_MAX_GROUP_SCAN = 4096
+_GROUP_SCAN_S = 0.1
 
 
 class AgentTimeout(ValueError):
@@ -38,25 +43,75 @@ def exit_on_termination_signals():
             signal.signal(number, handler)
 
 
+def _zombie_only_group(pid):
+    """Conservatively confirm a complete group snapshot with its pinned leader."""
+    deadline = time.monotonic() + _GROUP_SCAN_S
+    snapshots = []
+    inspected = 0
+    try:
+        # A member can fork and exit during enumeration. Require the same
+        # complete zombie membership twice; new descendants make it uncertain.
+        for _ in range(2):
+            members = set()
+            for member in psutil.process_iter():
+                inspected += 1
+                if inspected > _MAX_GROUP_SCAN or time.monotonic() >= deadline:
+                    return False
+                try:
+                    # The pinned leader is a session leader, so its pgid is its
+                    # pid. Darwin reports ESRCH from getpgid for zombies, so
+                    # identify it by pid; live members still expose their pgid,
+                    # and an unattributable zombie no longer holds resources.
+                    if member.pid != pid and os.getpgid(member.pid) != pid:
+                        continue
+                    if member.status() != psutil.STATUS_ZOMBIE:
+                        return False
+                    members.add(member.pid)
+                except (ProcessLookupError, psutil.NoSuchProcess):
+                    continue
+            snapshots.append(members)
+    except (OSError, psutil.Error):
+        return False
+    return (time.monotonic() < deadline and pid in snapshots[0]
+            and snapshots[0] == snapshots[1])
+
+
 def _signal_group(pid, number):
     try:
         os.killpg(pid, number)
-    except (ProcessLookupError, PermissionError):
-        # Darwin can report EPERM for a group containing only an exiting zombie.
+    except ProcessLookupError:
         pass
+    except PermissionError:
+        # Darwin can report EPERM for zombies, but a denied live group is not
+        # proof of retirement. Failed/incomplete inspection stays unconfirmed.
+        if not _zombie_only_group(pid):
+            raise ValueError('agent process-group retirement unconfirmed') from None
 
 
 def _retire(process):
     # Do not reap/poll the session leader until after the final group signal:
     # its unreaped pid reserves the identity even when descendants hold pipes.
-    try:
-        _signal_group(process.pid, signal.SIGTERM)
-        time.sleep(_RETIRE_GRACE_S)
-    finally:
+    failure = None
+    for stage, operation in (
+        ('terminate', lambda: _signal_group(process.pid, signal.SIGTERM)),
+        ('grace', lambda: time.sleep(_RETIRE_GRACE_S)),
+        ('kill', lambda: _signal_group(process.pid, signal.SIGKILL)),
+        ('reap', lambda: process.wait(timeout=_REAP_S)),
+    ):
         try:
-            _signal_group(process.pid, signal.SIGKILL)
-        finally:
-            process.wait(timeout=_REAP_S)
+            operation()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note(f'agent {stage} failed; process-group retirement unconfirmed')
+    if failure is not None:
+        # CLI examples intentionally print only their primary error category.
+        try:
+            print('example cleanup warning: agent process-group retirement unconfirmed', file=sys.stderr)
+        except BaseException:
+            pass
+        raise failure
 
 
 def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
@@ -68,23 +123,39 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
     if prompt is not None and len(prompt) > MAX_PROMPT_BYTES:
         raise ValueError('agent prompt exceeds byte limit')
     deadline = time.monotonic() + timeout_s
-    process = subprocess.Popen(
-        command, cwd=cwd, stdin=subprocess.PIPE if prompt is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-    )
+    process = None
     retired = False
     primary = None
     handlers = {}
+    pending_signal = None
+
+    def interrupted(number, frame):
+        # Never raise between Popen returning a handle and assigning ownership,
+        # or while retirement is in progress. Settle at the next checkpoint.
+        nonlocal pending_signal
+        if pending_signal is None:
+            pending_signal = number
+
+    def check_cancelled():
+        if pending_signal == signal.SIGINT:
+            raise KeyboardInterrupt
+        if pending_signal is not None:
+            raise SystemExit(128 + pending_signal)
+
     output = {'stdout': bytearray(), 'stderr': bytearray()}
     total = 0
     sent = 0
     try:
         if threading.current_thread() is threading.main_thread():
-            def interrupted(number, frame):
-                raise SystemExit(128 + number)
-            for number in (signal.SIGTERM, signal.SIGHUP):
+            for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
                 if signal.getsignal(number) is not signal.SIG_IGN:
                     handlers[number] = signal.signal(number, interrupted)
+        check_cancelled()
+        process = subprocess.Popen(
+            command, cwd=cwd, stdin=subprocess.PIPE if prompt is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+        )
+        check_cancelled()
         with selectors.DefaultSelector() as selector:
             for name in output:
                 stream = getattr(process, name)
@@ -97,11 +168,15 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
                 else:
                     process.stdin.close()
             while True:
+                check_cancelled()
                 if not retired and time.monotonic() >= deadline:
                     raise AgentTimeout("agent deadline exceeded")
                 if not retired and os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
-                    _retire(process)
+                    # _retire attempts all stages, including reaping, on failure.
+                    # Never signal the group again after that identity is released.
                     retired = True
+                    _retire(process)
+                    check_cancelled()
                     if prompt is not None and sent != len(prompt):
                         raise ValueError('agent exited before complete prompt delivery')
                     # Pipes may contain already written bytes. Drain only those
@@ -144,25 +219,39 @@ def run_agent(command, *, cwd, timeout_s, prompt: bytes | None = None):
             stderr = output['stderr'].decode('utf-8')
         except UnicodeError as exc:
             raise ValueError('agent output must be UTF-8') from exc
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        check_cancelled()
     except BaseException as exc:
         primary = exc
-        raise
     finally:
         try:
-            if not retired:
+            if process is not None and not retired:
                 _retire(process)
-        except BaseException:
+        except BaseException as exc:
             if primary is None:
-                raise
-            primary.add_note('agent retirement failed')
+                primary = exc
+            else:
+                note = 'agent retirement failed; process-group retirement unconfirmed'
+                primary.add_note(note)
         finally:
-            for stream in (process.stdin, process.stdout, process.stderr):
+            streams = (process.stdin, process.stdout, process.stderr) if process is not None else ()
+            for stream in streams:
                 if stream is not None:
                     try:
                         stream.close()
-                    except OSError:
-                        if primary is not None:
+                    except BaseException as exc:
+                        if primary is None:
+                            primary = exc
+                        else:
                             primary.add_note('agent stream closure failed')
             for number, handler in handlers.items():
-                signal.signal(number, handler)
+                try:
+                    signal.signal(number, handler)
+                except BaseException as exc:
+                    if primary is None:
+                        primary = exc
+                    else:
+                        primary.add_note('agent signal restoration failed')
+    if primary is not None:
+        raise primary
+    check_cancelled()
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)

@@ -991,3 +991,13 @@ restore an original, retain its private sibling backup rather than overwriting a
 newer concurrent generation. Atomic telemetry publication syncs complete private
 bytes and the parent directory; sync failure after replacement means uncertain
 durability of visible evidence, not permission to erase that evidence.
+
+## 2026-11-17: example process retirement requires evidence
+
+Retain the unreaped leader through final group signalling. Permission denial
+alone never establishes retirement: require confirmed absence or bounded stable
+zombie-only membership, otherwise fail the result and expose fixed uncertainty
+diagnostics while retaining the primary failure. Attempt all cleanup stages and
+never retry group signals after the leader identity has been released. Restricted
+process inspection is a cleanup failure, not permission to assume descendants
+stopped. These example safeguards do not change the runner harness contract.
