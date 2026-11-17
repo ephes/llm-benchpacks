@@ -1022,3 +1022,15 @@ It receives only host/port, never headers or body, and cannot continue into TCP.
 The caller owns public socket/SSL operations, applying one remaining deadline to
 all addresses and TLS before starting the header/body shutdown timer. No private
 HTTP client internals or new transport dependency is required.
+
+## 2026-11-17: HTTP retirement preserves the initiating verdict
+
+Treat the example response, connection, detached socket and cancellation timer
+as independent owners. Attempt every retirement stage despite ordinary faults or
+interrupts; cap timer joining at 100 ms and report a surviving timer as uncertain.
+Shut down socket traffic independently because a failed response file close may
+retain the descriptor even after socket.close(). The original operation's error
+or cancellation remains authoritative with fixed secondary categories and a
+stderr warning. A cleanup-only fault refuses success, preserving a cleanup
+interrupt's identity. These guarantees use public APIs and do not promise to
+recover from arbitrary process death or to interrupt a stalled libc resolver.

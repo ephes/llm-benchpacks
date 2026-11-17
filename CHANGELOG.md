@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Retire example HTTP timers, responses, connections and detached sockets
+  independently. Bound timer joining, stop socket traffic despite stream-close
+  faults, preserve initiating errors/interrupts with private cleanup categories,
+  and refuse success when cleanup remains uncertain.
+
 - Bound the complete example HTTP call, including system DNS, all TCP attempts
   and TLS negotiation, under one deadline. Keep at most four outstanding resolver
   jobs per process, retain admission after caller timeout and never let abandoned

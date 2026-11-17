@@ -1242,6 +1242,12 @@ without a waiting queue. The running resolver releases its slot, even after its
 caller has expired. Only the caller can create sockets or send HTTP bytes.
 Public socket and SSL APIs apply the same remaining deadline to every address
 attempt and TLS handshake before the response timer owns header/body retirement.
+Retirement independently cancels/joins the timer (100 ms limit), shuts down held
+sockets and closes the response, connection and sockets. Retain sockets detached
+by HTTPConnection so a response-close failure cannot skip their retirement.
+Preserve primary exception identity with fixed secondary notes and stderr warning;
+cleanup-only failures refuse success. Resolver-start interruption transfers or
+cancels admission before any late worker may enter libc resolution.
 
 Example telemetry destinations retain directory descriptors and the admitted
 leaf generation for the whole external call; publication uses a private sibling

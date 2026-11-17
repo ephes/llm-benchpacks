@@ -2203,6 +2203,16 @@ Non-200 statuses, including every redirect, fail without reading their bodies.
 Requests and credentials therefore remain bound to the configured endpoint;
 no redirect hop is followed. Transport failures use fixed diagnostic categories.
 
+Timer cancellation, its bounded 100 ms join, response close, connection close,
+and socket shutdown/close are attempted independently. A detached response socket
+remains owned. Shutdown stops traffic even if a response stream close fails.
+An initiating error or interrupt remains primary, with fixed cleanup notes and
+an `example cleanup warning: HTTP retirement unconfirmed` stderr warning.
+Cleanup-only faults fail with `HTTP cleanup failed`; an interrupt during cleanup
+retains its cancellation identity. Never treat that result as a successful call;
+retry in a fresh attempt after investigating resource retirement. Diagnostic
+categories contain no response bodies, credentials or cleanup exception text.
+
 Example contexts, HTTP response objects and edit payloads reject duplicate JSON
 members at every nesting level, with controlled decode/depth failures. The
 OpenAI direct-edit wrapper requires `finish_reason: "stop"` before parsing or
