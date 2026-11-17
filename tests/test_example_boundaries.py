@@ -733,3 +733,25 @@ def test_termination_scope_respects_ignored_signals():
             assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
     finally:
         signal.signal(signal.SIGHUP, previous)
+
+
+def test_real_exited_session_leader_group_is_confirmed():
+    # Darwin denies group signals to a zombie-only group and reports ESRCH from
+    # getpgid for the zombie leader; retirement must still be confirmed.
+    import os
+    import subprocess
+    import sys
+
+    from benchpack.example_process import _retire
+
+    process = subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+    try:
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        _retire(process)
+    finally:
+        if process.returncode is None:
+            process.kill()
+            process.wait(timeout=5)
+    assert process.returncode == 0

@@ -58,7 +58,11 @@ def _zombie_only_group(pid):
                 if inspected > _MAX_GROUP_SCAN or time.monotonic() >= deadline:
                     return False
                 try:
-                    if os.getpgid(member.pid) != pid:
+                    # The pinned leader is a session leader, so its pgid is its
+                    # pid. Darwin reports ESRCH from getpgid for zombies, so
+                    # identify it by pid; live members still expose their pgid,
+                    # and an unattributable zombie no longer holds resources.
+                    if member.pid != pid and os.getpgid(member.pid) != pid:
                         continue
                     if member.status() != psutil.STATUS_ZOMBIE:
                         return False

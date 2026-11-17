@@ -246,6 +246,31 @@ def test_denied_zombie_only_group_is_confirmed(owned, denied):
     assert owned[1] == [signal.SIGTERM, signal.SIGKILL]
 
 
+def darwin_getpgid(members, leader):
+    # Darwin reports ESRCH from getpgid for zombies, including the pinned leader.
+    def getpgid(pid):
+        member = next(m for m in members if m.pid == pid)
+        if member.state == psutil.STATUS_ZOMBIE:
+            raise ProcessLookupError
+        return leader
+    return getpgid
+
+
+def test_darwin_zombie_only_group_is_confirmed(owned, denied, monkeypatch):
+    denied[1].state = psutil.STATUS_ZOMBIE
+    monkeypatch.setattr(transport.os, 'getpgid', darwin_getpgid(denied, owned[0].pid))
+    transport._retire(owned[0])
+    assert owned[0].waits == [transport._REAP_S]
+    assert owned[1] == [signal.SIGTERM, signal.SIGKILL]
+
+
+def test_darwin_live_member_with_zombie_leader_stays_unconfirmed(owned, denied, monkeypatch):
+    monkeypatch.setattr(transport.os, 'getpgid', darwin_getpgid(denied, owned[0].pid))
+    with pytest.raises(ValueError, match='process-group retirement unconfirmed'):
+        transport._retire(owned[0])
+    assert owned[0].waits == [transport._REAP_S]
+
+
 def test_changing_zombie_membership_stays_unconfirmed(owned, denied, monkeypatch):
     denied[1].state = psutil.STATUS_ZOMBIE
     scans = 0

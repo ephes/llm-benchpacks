@@ -245,6 +245,9 @@ reaping. Ignored signals remain ignored; SIGINT keeps KeyboardInterrupt semantic
 Retirement grace is 0.1 seconds, reap and final pipe drain each at most 0.5 seconds.
 Denied group signals fail cleanup unless a bounded process check confirms only
 zombies, including the unreaped leader, in two matching complete group snapshots.
+The leader is identified by its pid because it is the session leader and Darwin
+reports ESRCH from getpgid for zombies; a zombie whose group cannot be read holds
+no resources and is not counted, while live members must expose their group.
 The check uses public psutil/OS APIs with at most 4096 inspected process entries
 and a shared 0.1-second budget per denied signal. A vanished group is accepted;
 unreadable, changing or incomplete membership remains unconfirmed. A sandbox
