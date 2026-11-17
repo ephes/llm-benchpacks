@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep Ollama URL userinfo, query/fragment credentials and transport exception
+  text out of portable adapter results, JSONL, reports and new registry imports.
+  Preserve existing transport URL resolution and credentials.
+
 - Bind streamed core OpenAI answers to exact integer choice index 0; accept a
   missing singleton index as 0 for local servers. Reject multiple, unexpected or
   malformed indices before retaining delta text, preserving usage-only events.

@@ -5580,3 +5580,13 @@ cleanup-fault tests use only synthetic processes and seams. Restricted sandboxes
 that deny both group signals and membership inspection cannot validate successful
 example cleanup; the ordinary synthetic-executable tests require an unrestricted
 local rerun in that case.
+
+## 2026-11-17 — Private Ollama result endpoints (round 131 B07, S14)
+
+Ollama now publishes only resolved origin/path endpoint identity and fixed
+transport error categories. Userinfo, query and fragment stay transport-only;
+existing transport URL resolution is unchanged. Synthetic MockTransport tests
+cover IPv6/ports, base/full paths, success and transport failures through the
+AdapterResult, reporter, report and isolated registry import. Existing artifacts
+are not rewritten and raw response diagnostics remain private. No live model
+or real registry was used.

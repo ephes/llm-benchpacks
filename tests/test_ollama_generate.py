@@ -10,6 +10,10 @@ import pytest
 
 from benchpack.adapters import AdapterRequest
 from benchpack.adapters.ollama_generate import OllamaGenerateAdapter
+from benchpack.packs import load_pack
+from benchpack.registry import import_result_dirs, load_registry_report_runs, query_registry_results
+from benchpack.report import load_report_runs, render_report
+from benchpack.results import RunReporter
 
 
 def make_request(tmp_path: Path, **overrides) -> AdapterRequest:
@@ -25,6 +29,51 @@ def make_request(tmp_path: Path, **overrides) -> AdapterRequest:
     }
     base.update(overrides)
     return AdapterRequest(**base)
+
+
+@pytest.mark.parametrize("failure", [None, httpx.ConnectError, httpx.ReadTimeout])
+@pytest.mark.parametrize("path", ["/proxy", "/proxy/api/generate"])
+@pytest.mark.parametrize("authority", ["example.test:1234", "[::1]:1234"])
+def test_ollama_portable_endpoint_and_errors_are_private(
+    tmp_path: Path, failure, path: str, authority: str,
+) -> None:
+    endpoint = f"https://user-canary:password-canary@{authority}{path}?token=query-canary#fragment-canary"
+    # Privacy projection must not change the adapter's existing URL resolution.
+    resolved = endpoint + "/api/generate"
+    public = f"https://{authority}{path}"
+    captured = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(str(request.url))
+        if failure:
+            raise failure("private-exception-canary " + endpoint, request=request)
+        return httpx.Response(200, json={"done": True, "response": "synthetic"})
+
+    pack = load_pack(Path(__file__).resolve().parents[1] / "benchpacks/smoke-chat")
+    out = tmp_path / "run"
+    reporter = RunReporter(out, pack)
+    request_path, response_path = reporter.case_paths(pack.cases[0])
+    result = OllamaGenerateAdapter(transport=httpx.MockTransport(handler)).run(
+        AdapterRequest("synthetic", "test-model", endpoint, {}, request_path, response_path)
+    )
+    assert result.endpoint == public
+    assert captured == [resolved]
+    assert result.ok is (failure is None)
+    assert result.error == ("transport error" if failure else None)
+    record = reporter.record(pack.cases[0], result, {})
+    reporter.write_summary({})
+    db = tmp_path / "synthetic.sqlite"
+    import_result_dirs([out], db)
+    runs = load_registry_report_runs(db)
+    assert runs[0].records[0]["endpoint"] == public
+    portable = "\n".join([
+        json.dumps(result.to_dict()), json.dumps(record),
+        (out / "run.jsonl").read_text(), (out / "summary.md").read_text(),
+        render_report(load_report_runs([out])), render_report(runs),
+        str(query_registry_results(db)),
+    ])
+    for canary in ("user-canary", "password-canary", "query-canary", "fragment-canary", "private-exception-canary"):
+        assert canary not in portable
 
 
 def test_ollama_generate_derives_tps_from_native_durations(tmp_path: Path) -> None:

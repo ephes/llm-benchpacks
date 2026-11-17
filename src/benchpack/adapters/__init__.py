@@ -72,10 +72,9 @@ class RawPaths:
 class AdapterResult:
     """The narrow payload an adapter returns; reporter wraps it.
 
-    ``endpoint`` is the resolved URL the adapter actually called — distinct
-    from the user's possibly-shorter ``--endpoint`` argument — so result records
-    are unambiguous when comparing the same adapter/model against different
-    local servers.
+    ``endpoint`` describes the resolved origin/path the adapter called, without
+    URL userinfo, query or fragment. Transport-only credentials stay private;
+    origin/path still distinguish the same adapter/model on different servers.
 
     ``output_text`` carries the backend's textual output and is consumed by the
     reporter for scoring; it is not written into ``run.jsonl``.

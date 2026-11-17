@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -50,6 +51,14 @@ def _resolve_url(endpoint: str | None) -> str:
     if base.endswith("/api/generate"):
         return base
     return base + "/api/generate"
+
+
+def _summary_endpoint(url: str) -> str:
+    # Retain origin/path identity without transport-only credentials.
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(
+        netloc=parts.netloc.rsplit("@", 1)[-1], query="", fragment="",
+    ))
 
 
 def _tps(count: int | None, duration_ns: int | None) -> float | None:
@@ -123,7 +132,7 @@ class OllamaGenerateAdapter:
             response = client.post(url, json=body)
         except httpx.HTTPError as exc:
             ok = False
-            error = f"transport error: {exc!r}"
+            error = "transport error"
             request.response_path.write_text(json.dumps({"error": str(exc)}))
         else:
             decode_failed = False
@@ -171,7 +180,7 @@ class OllamaGenerateAdapter:
 
         return AdapterResult(
             adapter=self.name,
-            endpoint=url,
+            endpoint=_summary_endpoint(url),
             model=request.model,
             ok=ok,
             timing=Timing(

@@ -447,10 +447,14 @@ from prompt cache when the adapter can identify an equivalent field. It is
 `usage.prompt_tokens_details.cached_tokens`; Ollama native timing fields are not
 treated as cache counts.
 
-`endpoint` is the resolved URL the adapter actually called (after appending
+`endpoint` describes the resolved origin/path the adapter actually called (after appending
 `/v1/chat/completions`, `/api/generate`, etc. to the user's `--endpoint`
-argument). OpenAI-compatible result endpoints omit queries and fragments while
-the transport keeps the configured query. It is recorded so result records remain unambiguous when the same
+argument). Both core adapters omit userinfo, queries and fragments from this
+public description while transport keeps its configured credentials/query.
+The public projection does not change transport URL resolution.
+The reporter copies this projection into JSONL; reports and registry imports
+therefore receive the same sanitized endpoint description for newly recorded runs.
+It is recorded so result records remain unambiguous when the same
 adapter/model points at different local servers.
 
 Transport-only adapter configuration is not part of the adapter result
@@ -458,7 +462,7 @@ payload. For example, `openai-chat` may receive an explicit auth environment
 variable name through adapter defaults and send a bearer token in HTTP headers,
 but the runner does not serialize the resolved header. The CLI validates the
 endpoint before replacing output; the adapter repeats validation before raw I/O.
-Userinfo and malformed URLs are refused; authenticated transport requires HTTPS
+For OpenAI, userinfo and malformed URLs are refused; authenticated transport requires HTTPS
 except for explicit loopback development. Compact errors contain only fixed
 categories/statuses. Backend bodies and exceptions remain in private raw
 response artifacts and may echo secrets, so those artifacts require inspection

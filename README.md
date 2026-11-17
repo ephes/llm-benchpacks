@@ -423,8 +423,11 @@ environment variable name in adapter defaults or external-agent context. It
 does not implicitly read `OPENAI_API_KEY`. Authenticated remote endpoints require
 HTTPS; HTTP is allowed for explicit `localhost` or loopback IP literals only.
 Malformed URLs and userinfo are rejected before output replacement or transport.
-Compact errors contain categories/statuses only, and OpenAI result endpoints
-omit query strings/fragments. Private raw response artifacts can still contain
+Core adapter errors contain categories/statuses only. OpenAI and Ollama result
+endpoints describe the resolved origin/path, omitting userinfo, query strings
+and fragments in JSONL, reports and subsequently imported registry metadata.
+The projection does not change transport URL resolution or credentials.
+Private raw response artifacts can still contain
 backend-echoed secrets. External-agent context files also retain the full
 configured endpoint, including query/fragment: treat them as private and
 inspect/redact before sharing. Do not put API keys, bearer tokens,
