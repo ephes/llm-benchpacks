@@ -101,12 +101,16 @@ def test_staging_failure_never_acknowledges_publication(tmp_path, monkeypatch):
     assert (tmp_path / 'a').read_bytes() == b'old'
 
 
-@pytest.mark.parametrize('primary', [OSError('publication'), KeyboardInterrupt(), SystemExit(143)])
+@pytest.mark.parametrize('make_primary', [
+    lambda: OSError('publication'), KeyboardInterrupt, lambda: SystemExit(143),
+], ids=['oserror', 'interrupt', 'exit'])
 @pytest.mark.parametrize('rollback_failure', [False, True])
 def test_cleanup_preserves_publication_verdict_and_attempts_every_resource(
-    tmp_path, monkeypatch, primary, rollback_failure,
+    tmp_path, monkeypatch, make_primary, rollback_failure,
 ):
     from benchpack import example_io
+    # A fresh exception per case keeps notes from leaking between parameters.
+    primary = make_primary()
     for name in ('a', 'b'):
         (tmp_path / name).write_bytes(name.encode())
     staged = []
@@ -146,6 +150,8 @@ def test_cleanup_preserves_publication_verdict_and_attempts_every_resource(
         assert ('rollback failed' in str(caught.value)) == rollback_failure
     else:
         assert caught.value is primary
+        notes = getattr(primary, '__notes__', [])
+        assert any('rollback failed' in note for note in notes) == rollback_failure
     notes = getattr(caught.value, '__notes__', [])
     assert any('temporary cleanup failed' in note for note in notes)
     assert any('descriptor close failed' in note for note in notes)
