@@ -1082,6 +1082,18 @@ events and malformed shapes fail that case without interrupting later cases.
 Failed output is empty for scoring; assembled partial text, chunks and the
 invalid/error payload (up to 2000 characters for undecodable JSON) remain in the raw response for diagnostics.
 
+### Core HTTP client retirement
+
+Ollama and both OpenAI paths attempt `Client.close()` exactly once in their
+request scope's `finally`. Ordinary cleanup exceptions cannot replace a pending
+exception or a controlled transport/HTTP/parse/incomplete-stream result. Stream
+completion is checked before assigning a cleanup-only failure. An otherwise
+valid completion with failed cleanup returns `ok=false`, fixed `client cleanup
+error`, empty output and unset tokens/backend/rate/TTFT metrics; wall time and
+raw evidence remain. Cancellation/system-exit exceptions are not swallowed.
+The reporter can record the failed case and proceed to the next one; no retry
+is introduced.
+
 ### Reporter persistence failures
 
 Each RunReporter exclusively owns its run.jsonl file: callers must serialize

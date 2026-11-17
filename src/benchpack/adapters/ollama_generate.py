@@ -125,6 +125,7 @@ class OllamaGenerateAdapter:
         ok = True
         error: str | None = None
         payload: dict[str, Any] = {}
+        cleanup_failed = False
 
         client = httpx.Client(transport=self._transport, timeout=self._timeout)
         start = time.monotonic()
@@ -164,7 +165,16 @@ class OllamaGenerateAdapter:
                     payload = decoded
         finally:
             wall_s = time.monotonic() - start
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                # Ordinary cleanup faults cannot replace a request/parse error.
+                cleanup_failed = True
+
+        if cleanup_failed and ok:
+            ok = False
+            error = "client cleanup error"
+            payload = {}
 
         # payload stays empty unless the response is a validated completion.
         prompt_count = payload.get("prompt_eval_count")

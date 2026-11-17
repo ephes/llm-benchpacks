@@ -5590,3 +5590,13 @@ cover IPv6/ports, base/full paths, success and transport failures through the
 AdapterResult, reporter, report and isolated registry import. Existing artifacts
 are not rewritten and raw response diagnostics remain private. No live model
 or real registry was used.
+
+## 2026-11-17 — Isolate core client cleanup (round 131 B07, S15)
+
+Each core HTTP client is closed once without letting ordinary cleanup faults
+replace the primary request/parse/HTTP/incomplete-stream outcome. A cleanup-only
+fault becomes a fixed failed result with no output/token/rate/TTFT credit,
+retaining raw evidence and wall time. Tests inject OSError and RuntimeError
+through HTTPX transport close after success and each failure category, including
+mid-stream read failure, and record a second successful case. No live model
+calls or automatic retries were introduced.

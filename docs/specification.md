@@ -874,6 +874,15 @@ the resolved header value. Context files retain the full configured endpoint
 (including query/fragment) for harness transport fidelity and must be treated as
 private, just like raw responses. Harnesses own their own transport policy.
 
+Both core adapters attempt HTTP client cleanup exactly once per acquired client.
+An ordinary close exception preserves an existing transport, HTTP, parse or
+incomplete-stream failure and cannot replace a pending exception. If cleanup
+alone fails after a completed response, return a controlled failed result with
+`error="client cleanup error"`, empty scoring output and unset token, backend,
+rate and TTFT metrics. Keep wall time and private raw response evidence. Later
+cases continue without automatic retries. Cancellation and system-exit
+exceptions are not converted into case results.
+
 
 ## CLI
 

@@ -434,6 +434,13 @@ inspect/redact before sharing. Do not put API keys, bearer tokens,
 or endpoint credentials in tracked docs, run metadata, task logs, model-call
 logs, or committed result artifacts.
 
+Both core adapters attempt HTTP client cleanup once per case. A cleanup fault
+preserves an existing request/response failure. If cleanup is the only failure,
+the result has `ok=false` and `error="client cleanup error"`, with no scoring
+output, tokens or rate/TTFT metrics; wall time and private raw evidence remain.
+Later cases continue. Inspect the local runtime/client before deliberately
+retrying; the runner does not automatically repeat the request.
+
 `benchpack compare` is read-only and compares existing result directories that
 contain `run.jsonl`. It prints per-case medians for wall time, TTFT, decode TPS,
 total TPS, output tokens, prompt tokens, backend-reported cached prompt tokens,
