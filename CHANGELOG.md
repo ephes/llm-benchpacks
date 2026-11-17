@@ -12,7 +12,8 @@
 - Sync distinct held parent directories after example edit publication and
   compensation. Report uncertain publication/rollback durability explicitly,
   including a held-directory identity failure;
-  retain complete visible edits after a publication acknowledgement failure.
+  retain complete visible edits after a publication acknowledgement failure,
+  and note that outcome on an interrupt during the acknowledgement.
 
 - Admit reference-agent contexts with bounded stable regular reads, duplicate-free
   JSON and exact integer version/repetition checks before artifact writes.

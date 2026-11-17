@@ -52,7 +52,8 @@ Example edit publication syncs every staged file before replacement and each
 distinct held parent directory after all replacements. Compensation syncs the
 parents of published targets as well. A directory-sync failure after complete
 publication reports `edits published; directory durability uncertain` and retains
-the complete visible new files. A rollback directory-sync failure reports
+the complete visible new files; an interrupt or exit during that acknowledgement
+keeps its identity and carries the same fixed note. A rollback directory-sync failure reports
 `rollback directory durability uncertain`, retaining the original publication
 failure as the cause. Inspect visible files and retained backups before any
 manual retry; never automatically reapply or undo an uncertain publication.

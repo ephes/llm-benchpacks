@@ -17,6 +17,8 @@ working history and open questions.
   acknowledgement still reports uncertain durability.
 - Write the fixed cleanup warning to stderr on failure paths too, since example
   agents print only the primary message; cover it through an example edit entry.
+- Keep interrupt/exit identity during the post-publication acknowledgement and
+  note the visible, uncertain publication on it.
 
 ## 2026-11-17 (example edit directory durability)
 

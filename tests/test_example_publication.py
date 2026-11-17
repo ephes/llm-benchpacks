@@ -306,3 +306,19 @@ def test_example_entry_point_reports_residue_on_publication_failure(tmp_path, mo
     assert 'private cleanup payload' not in error
     assert (tmp_path / 'a').read_bytes() == b'old'
     assert len(list(tmp_path.glob('.benchpack-example-*.tmp'))) == 2
+
+
+@pytest.mark.parametrize('make_interrupt', [KeyboardInterrupt, lambda: SystemExit(143)],
+                         ids=['interrupt', 'exit'])
+def test_interrupt_during_acknowledgement_notes_visible_publication(tmp_path, monkeypatch, make_interrupt):
+    paths = roots(tmp_path)
+    interrupt = make_interrupt()
+    def stop(fd):
+        raise interrupt
+    directory_syncs(monkeypatch, stop)
+    with pytest.raises(type(interrupt)) as caught:
+        replace_example_files([(path, 'a', b'new') for path in paths])
+    assert caught.value is interrupt
+    assert any('edits published; directory durability uncertain' in note
+               for note in interrupt.__notes__)
+    assert all((path / 'a').read_bytes() == b'new' for path in paths)

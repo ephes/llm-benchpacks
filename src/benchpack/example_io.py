@@ -224,9 +224,17 @@ def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missin
             raise ValueError('could not apply assistant edit payload') from exc
         # All complete new bytes are visible. A failed acknowledgement cannot
         # safely turn that outcome into rollback or an automatic retry.
-        failure = _sync_parents(target for target, _, _ in entries)
+        uncertain = 'edits published; directory durability uncertain; inspect visible files before retrying'
+        try:
+            failure = _sync_parents(target for target, _, _ in entries)
+        except BaseException as exc:
+            # An interrupt or exit during acknowledgement keeps its identity,
+            # but must not hide that every new file is already visible.
+            if not isinstance(exc, Exception):
+                exc.add_note(uncertain)
+            raise
         if failure is not None:
-            raise ValueError('edits published; directory durability uncertain; inspect visible files before retrying') from failure
+            raise ValueError(uncertain) from failure
 
 
 def control_json(text):
