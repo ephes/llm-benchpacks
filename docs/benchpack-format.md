@@ -446,6 +446,13 @@ Rules:
   `external-agent`, a subprocess timeout is captured in the task stderr log
   after the runner stops the external process group with a bounded
   terminate-then-kill cleanup policy.
+  Shipped example edit writers sync staged files and distinct held parent
+  directories. A post-publication directory-sync failure retains complete visible
+  edits and reports uncertain durability; inspect before manually retrying.
+  Compensation also syncs changed parents and reports any uncertain rollback.
+  Example cleanup attempts all owned temporary unlinks and descriptor closes;
+  errors keep the primary verdict, with fixed notes and a separate stderr warning.
+  These are example storage guarantees, not new manifest or result fields.
 - Runner-side internal in-process harness callables cannot be combined with
   task timeout.
 - Public harness selection does not change adapter request or result schemas.

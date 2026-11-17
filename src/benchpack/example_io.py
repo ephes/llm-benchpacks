@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 import uuid
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -24,6 +25,36 @@ def _generation(info):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
+def _cleanup_callback(stack, callback, *args, note):
+    """Attempt owned cleanup without replacing the active publication verdict.
+
+    The verdict is the exception unwinding this ExitStack, never an unrelated
+    exception a caller happens to be handling around the helper.
+    """
+    def cleanup(exc_type, primary, traceback):
+        try:
+            callback(*args)
+        except OSError:
+            if primary is not None:
+                if note in getattr(primary, '__notes__', ()):
+                    return False
+                primary.add_note(note)
+            # Example callers print only str(exc), so residue is also reported
+            # on stderr. Cleanup residue is separate from the edit verdict.
+            # Fixed text keeps file contents and OS error payloads private.
+            try:
+                print(f'example cleanup warning: {note}', file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+        return False
+    stack.push(cleanup)
+
+
+def _close_callback(stack, fd):
+    _cleanup_callback(stack, os.close, fd,
+                      note='example descriptor close failed; publication verdict unchanged')
+
+
 class _Target:
     def __init__(self, stack, root, relative, *, missing=False):
         parts = contained_parts(relative)
@@ -31,11 +62,11 @@ class _Target:
             raise ValueError('unsafe workspace path')
         absolute = Path(os.path.abspath(root))
         fd = os.open(absolute.parent, _DIR)
-        stack.callback(os.close, fd)
+        _close_callback(stack, fd)
         self.edges = []
         for part in (absolute.name, *parts[:-1]):
             child = os.open(part, _DIR, dir_fd=fd)
-            stack.callback(os.close, child)
+            _close_callback(stack, child)
             self.edges.append((fd, part, child))
             fd = child
         self.parent, self.name = fd, parts[-1]
@@ -46,7 +77,7 @@ class _Target:
                 raise
             self.info, self.original = None, None
         else:
-            stack.callback(os.close, source)
+            _close_callback(stack, source)
             self.info = os.fstat(source)
             if not stat.S_ISREG(self.info.st_mode) or self.info.st_nlink != 1:
                 raise OSError('example target must be a regular file with one link')
@@ -83,8 +114,13 @@ class _Target:
                 os.unlink(name, dir_fd=self.parent)
             except FileNotFoundError:
                 pass
-        stack.callback(discard)
-        with os.fdopen(fd, 'wb') as stream:
+        _cleanup_callback(stack, discard,
+                          note='example temporary cleanup failed; .benchpack-example-*.tmp residue may remain; publication verdict unchanged')
+        with ExitStack() as writing:
+            _close_callback(writing, fd)
+            stream = os.fdopen(fd, 'wb', closefd=False)
+            _cleanup_callback(writing, stream.close,
+                              note='example descriptor close failed; publication verdict unchanged')
             if stream.write(data) != len(data):
                 raise OSError('short example stage write')
             stream.flush()
@@ -93,7 +129,7 @@ class _Target:
             os.fsync(stream.fileno())
             held = os.dup(stream.fileno())
             self.staged_fds[name] = held
-            stack.callback(os.close, held)
+            _close_callback(stack, held)
         return name
 
 
@@ -102,11 +138,38 @@ def replace_workspace_files(root: Path, replacements: list[tuple[str, bytes]], *
     replace_example_files([(root, relative, data) for relative, data in replacements], missing=missing)
 
 
+def _sync_parents(targets):
+    """Acknowledge each held directory once, attempting all after an I/O error."""
+    seen = set()
+    failure = None
+    for target in targets:
+        try:
+            info = os.fstat(target.parent)
+        except OSError as exc:
+            # Still attempt the acknowledgement, but never report it as certain.
+            if failure is None:
+                failure = exc
+            identity = ('fd', target.parent)
+        else:
+            identity = (info.st_dev, info.st_ino)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        try:
+            os.fsync(target.parent)
+        except OSError as exc:
+            if failure is None:
+                failure = exc
+    return failure
+
+
 def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missing=False):
     """Publish an admitted set across example roots with owned rollback.
 
     Existing targets must be single-link regular files; missing leaves are
     opt-in. New files use mode 0600 and existing permissions are preserved.
+    Sync distinct held parents after publication and compensation. A publication
+    sync failure retains complete visible edits with explicitly uncertain durability.
     This is compensation for reported errors, not a crash-atomic transaction.
     """
     with ExitStack() as stack:
@@ -145,15 +208,41 @@ def replace_example_files(replacements: list[tuple[Path, str, bytes]], *, missin
                     failed = True
                     if backup is not None:
                         target.retained.add(backup)
-            rollback = 'edit publication failed; rollback failed; original .benchpack-example-*.tmp backups retained'
+            rollback = 'edit publication failed'
+            if failed:
+                rollback += '; rollback failed; original .benchpack-example-*.tmp backups retained'
+            uncertain = '; rollback directory durability uncertain; inspect visible files before retrying'
+            try:
+                sync_failure = _sync_parents(target for target, _, _ in entries if target.published is not None)
+            except BaseException as interrupt:
+                # A later interrupt or exit wins, but still reports the
+                # rollback outcome and the original failure as context.
+                if not isinstance(interrupt, Exception):
+                    interrupt.add_note(rollback + uncertain)
+                raise
+            if sync_failure is not None:
+                rollback += uncertain
             if not isinstance(exc, Exception):
                 # Keep interrupts and exits (for example signal SystemExit) intact.
-                if failed:
+                if failed or sync_failure is not None:
                     exc.add_note(rollback)
                 raise
-            if failed:
+            if failed or sync_failure is not None:
                 raise ValueError(rollback) from exc
             raise ValueError('could not apply assistant edit payload') from exc
+        # All complete new bytes are visible. A failed acknowledgement cannot
+        # safely turn that outcome into rollback or an automatic retry.
+        uncertain = 'edits published; directory durability uncertain; inspect visible files before retrying'
+        try:
+            failure = _sync_parents(target for target, _, _ in entries)
+        except BaseException as exc:
+            # An interrupt or exit during acknowledgement keeps its identity,
+            # but must not hide that every new file is already visible.
+            if not isinstance(exc, Exception):
+                exc.add_note(uncertain)
+            raise
+        if failure is not None:
+            raise ValueError(uncertain) from failure
 
 
 def control_json(text):

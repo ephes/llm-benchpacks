@@ -4,6 +4,32 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-17 (example cleanup verdict preservation)
+
+- Make owned temporary unlink and descriptor/stream close cleanup best-effort;
+  preserve primary errors, causes and interruption identity with fixed notes.
+- Report cleanup-only residue on stderr while keeping the applied-edit verdict;
+  continue all cleanup and keep explicitly retained rollback backups.
+- Offline faults combine publication, rollback, unlink and close failures,
+  interrupts, uncertain durability and staging stream-close failure.
+- Bind the cleanup verdict to the helper's own unwinding exception, not a
+  caller's handled exception; a held-directory identity failure during
+  acknowledgement still reports uncertain durability.
+- Write the fixed cleanup warning to stderr on failure paths too, since example
+  agents print only the primary message; cover it through an example edit entry.
+- Keep interrupt/exit identity during the post-publication acknowledgement and
+  note the visible, uncertain publication on it; an interrupt during the
+  compensation sync carries the full rollback outcome.
+
+## 2026-11-17 (example edit directory durability)
+
+- Acknowledge staged example replacements across all distinct held parent
+  directories, including marker/log roots; sync compensating namespace changes.
+- Keep complete visible edits after a publication directory-sync failure and
+  report uncertain durability separately from a pre-publication refusal.
+- Offline fault fixtures cover two-root acknowledgement and rollback sync,
+  including restoration and removal of newly created targets.
+
 ## 2026-11-16 (reference agent storage boundary)
 
 - Reuse bounded opened regular context snapshots and duplicate-member admission;

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Preserve example staging/publication errors and interrupts through temporary
+  unlink and descriptor/stream close failures; attempt all remaining cleanup.
+  Report cleanup residue separately without changing successfully applied edits,
+  also when the caller is handling an unrelated exception. Cleanup failures also
+  print a fixed stderr warning on failure paths, where example agents show only
+  the primary message.
+
+- Sync distinct held parent directories after example edit publication and
+  compensation. Report uncertain publication/rollback durability explicitly,
+  including a held-directory identity failure;
+  retain complete visible edits after a publication acknowledgement failure,
+  and note that outcome (or the rollback outcome) on an interrupt during either
+  acknowledgement.
+
 - Admit reference-agent contexts with bounded stable regular reads, duplicate-free
   JSON and exact integer version/repetition checks before artifact writes.
 - Stage reference marker/log bytes together through held no-follow parents;

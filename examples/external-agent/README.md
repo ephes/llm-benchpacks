@@ -48,6 +48,30 @@ never overwrite a newer concurrent leaf during rollback. This is compensation
 for filesystem errors, not a crash-atomic pair or isolation from hostile
 same-user writers. Serialize attempts and recover retained originals before retrying.
 
+Example edit publication syncs every staged file before replacement and each
+distinct held parent directory after all replacements. Compensation syncs the
+parents of published targets as well. A directory-sync failure after complete
+publication reports `edits published; directory durability uncertain` and retains
+the complete visible new files; an interrupt or exit during that acknowledgement
+keeps its identity and carries the same fixed note. A rollback directory-sync
+failure reports `rollback directory durability uncertain`, retaining the original
+publication failure as the cause; an interrupt or exit during that sync carries
+the full rollback outcome as a note. Inspect visible files and retained backups before any
+manual retry; never automatically reapply or undo an uncertain publication.
+
+Owned temporary cleanup attempts every remaining unlink and descriptor/stream
+close. Cleanup I/O errors cannot replace a staging/publication error, uncertain
+durability outcome, `KeyboardInterrupt` or `SystemExit`; fixed secondary notes
+preserve the primary exception and cause. Cleanup failures also write fixed
+`example cleanup warning` lines to stderr, because example agents report only the
+primary message; a note already attached to the unwinding exception is not
+repeated. After a successful edit, even inside a caller's unrelated
+`except` block, that warning reports possible `.benchpack-example-*.tmp` residue
+separately and leaves the applied-edit verdict unchanged. A failure to identify a
+held directory during acknowledgement also reports uncertain durability. Inspect
+these files before retrying; retained rollback backups are never discarded. Cleanup
+diagnostics do not include filesystem error payloads or file contents.
+
 The model-call log line follows the recommended minimal shape:
 
 ```json
