@@ -61,7 +61,7 @@ from .registry import (
     query_registry_results,
     validate_result_bundle,
 )
-from .results import RunReporter
+from .results import ResultEncodingError, RunReporter
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, load_run_metadata
 from .tasks import (
     ExternalProcessHarness,
@@ -446,18 +446,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 verify_metadata = verifier_result.verify
                 repo_task_metadata = verifier_result.repo_task
                 scoring_override = verifier_result.scoring
-            reporter.record(
-                case,
-                result,
-                sample,
-                repetition=repetition if repetitions > 1 else None,
-                workspace=workspace_metadata,
-                patch=patch_metadata,
-                task=task_metadata,
-                verify=verify_metadata,
-                repo_task=repo_task_metadata,
-                scoring_override=scoring_override,
-            )
+            try:
+                reporter.record(
+                    case,
+                    result,
+                    sample,
+                    repetition=repetition if repetitions > 1 else None,
+                    workspace=workspace_metadata,
+                    patch=patch_metadata,
+                    task=task_metadata,
+                    verify=verify_metadata,
+                    repo_task=repo_task_metadata,
+                    scoring_override=scoring_override,
+                )
+            except ResultEncodingError as exc:
+                raise SystemExit(str(exc)) from exc
 
     reporter.write_hardware(hardware)
     reporter.write_summary(hardware, run_metadata=run_metadata)

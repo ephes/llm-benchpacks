@@ -5618,3 +5618,12 @@ retaining raw evidence and wall time. Tests inject OSError and RuntimeError
 through HTTPX transport close after success and each failure category, including
 mid-stream read failure, and record a second successful case. No live model
 calls or automatic retries were introduced.
+
+## 2026-11-19 — Benchmark evidence and result artifacts (round 149 B27)
+
+Repo-task reports use the former and current paths of a Git rename to determine
+whether it touched source. The reporter encodes measured rows as strict JSON
+before opening `run.jsonl` for append. Nonfinite optional timing, token, and
+resource fields become `null`. Nonfinite wall time, scoring and backend values
+fail encoding while preserving previous rows. The regressions use a disposable
+Git repository and synthetic measurements.

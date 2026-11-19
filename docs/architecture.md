@@ -513,6 +513,11 @@ to `run.jsonl`:
 Adapters do not produce or read these fields. The reporter is also where pack
 id/version get attached for cross-run comparison.
 
+The reporter encodes each row as strict JSON before opening the append target.
+Nonfinite optional timing, token, and resource values become `null`. Any other
+nonfinite value, including one in the backend table or scoring object, causes
+an encoding error and leaves previously written rows intact.
+
 Warmup executions are runner/reporter concerns. They call the same adapter and
 write raw artifacts under `raw/`, but they do not produce result records and are
 not scored.

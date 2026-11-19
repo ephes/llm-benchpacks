@@ -564,6 +564,28 @@ def test_cli_run_produces_full_artifact_tree(tmp_path: Path, monkeypatch) -> Non
     assert "repetition" not in record
 
 
+def test_cli_run_refuses_nonfinite_required_timing(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_adapter(monkeypatch)
+
+    class NonfiniteAdapter(adapters_pkg.ADAPTERS["openai-chat"]):
+        def run(self, request: AdapterRequest) -> AdapterResult:
+            result = super().run(request)
+            result.timing.wall_s = float("inf")
+            return result
+
+    monkeypatch.setitem(adapters_pkg.ADAPTERS, "openai-chat", NonfiniteAdapter)
+    monkeypatch.setattr("benchpack.cli.collect_hardware", lambda: {})
+    monkeypatch.setattr("benchpack.cli.sample_resources", lambda: {})
+    monkeypatch.chdir(tmp_path)
+    _write_smoke_pack(tmp_path)
+    out = tmp_path / "run"
+
+    with pytest.raises(SystemExit, match="could not encode run.jsonl record as strict JSON"):
+        main(_argv(["--out", str(out)]))
+
+    assert not (out / "run.jsonl").exists()
+
+
 def test_cli_run_records_json_schema_scoring(tmp_path: Path, monkeypatch) -> None:
     _install_output_adapter(
         monkeypatch,

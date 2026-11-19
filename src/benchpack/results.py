@@ -9,6 +9,7 @@ is appended so that the ``scoring`` field is present in the same record.
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 from contextlib import contextmanager
@@ -39,10 +40,19 @@ def _relativize(path: str, base: Path) -> str:
         return str(candidate)
 
 
+def _optional_telemetry(value: Any) -> Any:
+    return None if isinstance(value, float) and not math.isfinite(value) else value
+
+
 def _total_tps(tokens_out: int | None, wall_s: float | None) -> float | None:
     if not tokens_out or not wall_s:
         return None
-    return round(tokens_out / wall_s, 4)
+    tps = tokens_out / wall_s
+    return round(tps, 4) if math.isfinite(tps) else None
+
+
+class ResultEncodingError(ValueError):
+    """A measured row cannot be encoded as strict JSON."""
 
 
 class RunReporter:
@@ -144,9 +154,16 @@ class RunReporter:
             else evaluate(scoring_cfg, adapter_result.output_text)
         )
 
-        timing = adapter_result.timing.to_dict()
+        timing = {
+            key: value if key == "wall_s" else _optional_telemetry(value)
+            for key, value in adapter_result.timing.to_dict().items()
+        }
+        tokens = {
+            key: _optional_telemetry(value)
+            for key, value in adapter_result.tokens.to_dict().items()
+        }
         timing["total_tps"] = _total_tps(
-            adapter_result.tokens.output, adapter_result.timing.wall_s
+            tokens["output"], timing["wall_s"],
         )
 
         record: dict[str, Any] = {
@@ -157,10 +174,10 @@ class RunReporter:
             "model": adapter_result.model,
             "ok": adapter_result.ok,
             "timing": timing,
-            "tokens": adapter_result.tokens.to_dict(),
+            "tokens": tokens,
             "resources": {
-                "memory_mb": sample.get("memory_mb"),
-                "gpu_memory_mb": sample.get("gpu_memory_mb"),
+                "memory_mb": _optional_telemetry(sample.get("memory_mb")),
+                "gpu_memory_mb": _optional_telemetry(sample.get("gpu_memory_mb")),
             },
             "scoring": scoring_result,
             "raw": {
@@ -193,7 +210,10 @@ class RunReporter:
         if adapter_result.error is not None:
             record["error"] = adapter_result.error
 
-        payload = (json.dumps(record) + "\n").encode("utf-8")
+        try:
+            payload = (json.dumps(record, allow_nan=False) + "\n").encode("utf-8")
+        except ValueError as exc:
+            raise ResultEncodingError("could not encode run.jsonl record as strict JSON") from exc
         # This reporter exclusively owns the file; no concurrent appenders.
         # Unbuffered writes make rollback independent of pending text buffers.
         with self._directory() as directory:

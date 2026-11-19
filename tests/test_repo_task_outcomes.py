@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,47 @@ def test_repo_task_outcomes_parse_quoted_git_diff_paths_with_spaces(
     )[0]
 
     assert outcome.outcome == "failed-source-mutation"
+
+
+@pytest.mark.parametrize(
+    ("former", "current", "expected"),
+    [
+        ("a/src/app.py", ".cache/app.py", "failed-source-mutation"),
+        (".cache/app.py", "b/src/app.py", "failed-source-mutation"),
+        ("src data/app.py", ".cache/app.py", "failed-source-mutation"),
+        (".cache/archive file.py", ".cache/app.py", "failed-non-source-mutation"),
+        (".cache/archive file.pyc", "résumé file.pyc", "failed-non-source-mutation"),
+    ],
+)
+def test_repo_task_outcomes_classify_both_git_rename_paths(
+    tmp_path: Path, former: str, current: str, expected: str,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    old_path = repo / former
+    new_path = repo / current
+    old_path.parent.mkdir(parents=True)
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    old_path.write_text("same contents\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-f", "--", former], cwd=repo, check=True)
+    baseline = subprocess.check_output(["git", "write-tree"], cwd=repo).decode().strip()
+    subprocess.run(["git", "mv", "--", former, current], cwd=repo, check=True)
+    patch = subprocess.check_output(
+        ["git", "-c", "core.quotePath=true", "diff", "--cached", "--find-renames",
+         "--default-prefix", "--no-ext-diff", "--no-color", baseline],
+        cwd=repo,
+    )
+    assert b"rename from " in patch and b"rename to " in patch
+    assert b"\n--- " not in patch and b"\n+++ " not in patch
+    (tmp_path / "rename.diff").write_bytes(patch)
+
+    [outcome] = summarize_repo_task_outcomes(
+        [_repo_task_record(patch={"path": "rename.diff"})], tmp_path,
+    )
+
+    assert outcome.patch_bytes == len(patch)
+    assert outcome.outcome == expected
 
 
 def test_repo_task_outcomes_classify_generated_only_patch_as_non_source_mutation(
