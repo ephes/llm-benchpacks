@@ -1124,13 +1124,14 @@ a failed rename also retains the empty destination reservation for inspection.
 
 ### Hardware evidence publication
 
-The reporter serializes `hardware.json` before creating an exclusive sibling
-UTF-8 temporary file, then atomically replaces the final artifact after closing
-that file. Serialization, write, or replacement failure preserves any previous
-complete hardware artifact (or leaves the final path absent) and leaves completed
-`run.jsonl` records unchanged. Only a temporary file created by this call is
-removed on failure. Existing file permissions are retained; new files honor the
-process umask. Atomic visibility does not guarantee durability after power loss.
+The reporter serializes `hardware.json` with `allow_nan=False` before creating
+an exclusive sibling UTF-8 temporary file, then atomically replaces the final
+artifact after closing that file. Serialization, write, or replacement failure
+preserves any previous complete hardware artifact (or leaves the final path
+absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
+file created by this call is removed on failure. Existing file permissions are
+retained and new files honor the process umask. Atomic visibility does not
+guarantee durability after power loss.
 
 ### Verifier JSON ownership
 

@@ -52,7 +52,7 @@ def _total_tps(tokens_out: int | None, wall_s: float | None) -> float | None:
 
 
 class ResultEncodingError(ValueError):
-    """A measured row cannot be encoded as strict JSON."""
+    """Measured result evidence cannot be encoded as strict JSON."""
 
 
 class RunReporter:
@@ -244,7 +244,10 @@ class RunReporter:
         return record
 
     def write_hardware(self, hardware: dict[str, Any]) -> None:
-        data = (json.dumps(hardware, indent=2) + "\n").encode("utf-8")
+        try:
+            data = (json.dumps(hardware, indent=2, allow_nan=False) + "\n").encode("utf-8")
+        except ValueError as exc:
+            raise ResultEncodingError("could not encode hardware.json as strict JSON") from exc
         with self._directory() as directory:
             atomic_write_at(directory, "hardware.json", data)
 

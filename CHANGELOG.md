@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject NaN and infinity before publishing `hardware.json`, preserving any
+  previously published hardware artifact.
+
 - Refuse further appends and summaries when closing an output descriptor fails
   after a complete `run.jsonl` append.
 

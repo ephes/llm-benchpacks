@@ -1829,15 +1829,17 @@ a failed rename also retains the empty destination reservation for inspection.
 
 ## Hardware evidence publication
 
-The reporter serializes `hardware.json` before creating an exclusive sibling
-UTF-8 temporary file, then atomically replaces the final artifact after closing
-that file. Serialization, write, or replacement failure preserves any previous
-complete hardware artifact (or leaves the final path absent) and leaves completed
-`run.jsonl` records unchanged. Only a temporary file created by this call is
-removed on failure. Existing file permissions are retained; new files honor the
-process umask. Successful publication syncs the file and its containing directory;
-a post-replacement directory-sync error retains the visible complete artifact and
-reports uncertain durability. This does not guarantee durability of the entire
+The reporter serializes `hardware.json` as strict JSON before creating an
+exclusive sibling UTF-8 temporary file, then atomically replaces the final
+artifact after closing that file. Nonfinite numbers at any depth cause a CLI
+error before hardware publication. Serialization, write, or replacement failure
+preserves any previous complete hardware artifact (or leaves the final path
+absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
+file created by this call is removed on failure. Existing file permissions are
+retained and new files honor the process umask. Successful publication syncs the
+file and its containing directory. A post-replacement directory-sync error
+retains the visible complete artifact and reports uncertain durability. This
+does not guarantee durability of the entire
 run or of newly created ancestor directories after power loss.
 
 ## Imported result and model-call admission

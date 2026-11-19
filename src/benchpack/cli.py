@@ -462,7 +462,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             except ResultEncodingError as exc:
                 raise SystemExit(str(exc)) from exc
 
-    reporter.write_hardware(hardware)
+    try:
+        reporter.write_hardware(hardware)
+    except ResultEncodingError as exc:
+        raise SystemExit(str(exc)) from exc
     reporter.write_summary(hardware, run_metadata=run_metadata)
 
     print(str(out_dir))

@@ -99,6 +99,10 @@ Every run should write a `hardware.json` file with:
 Profiles should be data, not assumptions. The pack decides what matters, but the
 runner records what the host actually reports.
 
+Hardware artifacts require finite JSON numbers, including nested GPU telemetry.
+The runner reports an encoding error if telemetry contains NaN or infinity and
+preserves any existing `hardware.json` file.
+
 ## Probe limits
 
 Hardware probes drain stdout and stderr under a combined 64 KiB byte ceiling. Excess

@@ -11,7 +11,7 @@ import pytest
 
 from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
 from benchpack.packs import Case, Pack, Scoring
-from benchpack.results import RunReporter
+from benchpack.results import ResultEncodingError, RunReporter
 
 
 def make_pack(tmp_path: Path, scoring: Scoring | None = None) -> Pack:
@@ -512,6 +512,24 @@ def test_write_hardware_writes_json(tmp_path: Path) -> None:
     reporter.write_hardware({"hostname": "h", "platform": "darwin", "gpus": []})
     data = json.loads((out / "hardware.json").read_text())
     assert data["hostname"] == "h"
+
+
+@pytest.mark.parametrize("telemetry", [float("nan"), float("inf"), float("-inf")])
+def test_write_hardware_refuses_nonfinite_telemetry(
+    tmp_path: Path, telemetry: float,
+) -> None:
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    valid = {"hostname": "test", "gpus": [{"model": "test-gpu", "vram_mb": 1024.5}]}
+    reporter.write_hardware(valid)
+    artifact = out / "hardware.json"
+    previous = artifact.read_bytes()
+    assert json.loads(previous) == valid
+
+    with pytest.raises(ResultEncodingError, match=r"hardware\.json.*strict JSON"):
+        reporter.write_hardware({"gpus": [{"vram_mb": telemetry}]})
+
+    assert artifact.read_bytes() == previous
 
 
 def test_write_run_metadata_writes_json(tmp_path: Path) -> None:
