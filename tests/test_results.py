@@ -842,6 +842,49 @@ def test_record_failure_preserves_file_and_records(tmp_path, monkeypatch, failur
     assert (reporter.output_dir / 'summary.md').read_text().count('| capital |') == 2
 
 
+@pytest.mark.parametrize("target", ["artifact", "directory"])
+def test_record_retires_reporter_after_append_descriptor_close_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: str,
+) -> None:
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(tmp_path / "run", pack)
+    result = make_adapter_result(reporter.output_dir)
+    original_open = os.open
+    original_close = os.close
+    output_parent = reporter.output_dir.parent.resolve()
+    target_fd = None
+
+    def track_append_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal target_fd
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        if ((target == "artifact" and path == "run.jsonl") or
+                (target == "directory" and path == output_parent)):
+            target_fd = fd
+        return fd
+
+    def fail_close(fd):
+        original_close(fd)
+        if fd == target_fd:
+            raise OSError("injected descriptor close failure")
+
+    with monkeypatch.context() as faults:
+        faults.setattr(os, "open", track_append_open)
+        faults.setattr(os, "close", fail_close)
+        with pytest.raises(OSError, match="injected descriptor close failure"):
+            reporter.record(pack.cases[0], result, {})
+
+    persisted = (reporter.output_dir / "run.jsonl").read_bytes()
+    (row,) = persisted.splitlines()
+    assert json.loads(row)["case"] == pack.cases[0].id
+    assert reporter.records == []
+    with pytest.raises(OSError, match="uncertain"):
+        reporter.record(pack.cases[0], result, {})
+    with pytest.raises(OSError, match="uncertain"):
+        reporter.write_summary({})
+    assert (reporter.output_dir / "run.jsonl").read_bytes() == persisted
+    assert not (reporter.output_dir / "summary.md").exists()
+
+
 def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> None:
     import benchpack.results as results
 

@@ -216,8 +216,9 @@ class RunReporter:
             raise ResultEncodingError("could not encode run.jsonl record as strict JSON") from exc
         # This reporter exclusively owns the file; no concurrent appenders.
         # Unbuffered writes make rollback independent of pending text buffers.
-        with self._directory() as directory:
-            with self._artifact(directory, "run.jsonl") as fd:
+        appended = False
+        try:
+            with self._directory() as directory, self._artifact(directory, "run.jsonl") as fd:
                 previous_length = os.fstat(fd).st_size
                 try:
                     with os.fdopen(fd, "a+b", buffering=0, closefd=False) as fh:
@@ -232,6 +233,13 @@ class RunReporter:
                         exc.add_note("run.jsonl rollback failed; stream uncertain; "
                                      "further appends and summaries refused")
                     raise
+                appended = True
+        except BaseException as exc:
+            if appended:
+                self._jsonl_uncertain = True
+                exc.add_note("run.jsonl append cleanup failed; stream uncertain; "
+                             "further appends and summaries refused")
+            raise
         self.records.append(record)
         return record
 
@@ -394,7 +402,7 @@ class RunReporter:
 
     def _require_certain_stream(self) -> None:
         if self._jsonl_uncertain:
-            raise OSError("run.jsonl stream uncertain after failed rollback; "
+            raise OSError("run.jsonl stream uncertain; "
                           "inspect the artifact and start a fresh reporter/output")
 
 

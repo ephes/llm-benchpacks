@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refuse further appends and summaries when closing an output descriptor fails
+  after a complete `run.jsonl` append.
+
 - Classify both paths in Git renames when reporting repo-task source mutations.
 
 - Write strict JSON to `run.jsonl`. Record nonfinite optional telemetry as

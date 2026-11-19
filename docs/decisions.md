@@ -953,8 +953,9 @@ artifacts rather than path-only checks after untrusted harness work. Retain the
 output directory's identity across that work and refuse linked append targets.
 Keep summary publication independent of JSONL persistence; a staging failure
 preserves the last successful summary. Compensate failed appends on the opened
-descriptor. If compensation fails, preserve the useful primary error and mark
-the stream uncertain instead of continuing with misleading in-memory evidence.
+descriptor. Mark the stream uncertain if compensation fails or a descriptor
+close fails after a complete append. Preserve the error and refuse further
+appends and summaries, since disk and memory may disagree.
 Same-user subprocesses remain trusted for arbitrary filesystem access.
 
 ## D-043: Scoring And Comparison Require Bounded Unambiguous Evidence

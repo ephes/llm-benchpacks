@@ -1803,10 +1803,12 @@ undecodable responses retain their text there.
 
 ## Reporter persistence failures
 
-The reporter requires exclusive ownership of run.jsonl. Serialization precedes
-mutation and summaries advance after a complete append and close. Caught write
-or close failures restore the previous file length; rollback failures require
-manual JSONL recovery. This does not guarantee durability across crashes.
+The reporter requires exclusive ownership of `run.jsonl`. Serialization precedes
+mutation and summaries advance after a complete append and successful descriptor
+cleanup. Write or stream wrapper failures attempt to restore the previous file
+length while the append descriptor is open. If rollback fails or a descriptor
+close fails after a complete append, inspect the retained file and start a fresh
+reporter in a new output directory. This does not guarantee durability across crashes.
 
 ## Hardware evidence failures
 
@@ -2024,9 +2026,10 @@ run (including newly created ancestor directories and JSONL appends).
 An append failure compensates with `ftruncate` on the same open descriptor,
 without reopening a pathname. The primary append exception is re-raised; a
 failed compensation adds bounded recovery context and marks the reporter stream
-uncertain. No memory record is added, and subsequent appends and summary writes
-refuse. Preserve/inspect the possibly partial `run.jsonl` and start a fresh
-output directory; do not treat an uncertain stream as complete evidence.
+uncertain. A descriptor close failure after a complete append also marks the
+stream uncertain and adds recovery context to the close error. In both cases,
+no memory record is added and subsequent appends and summary writes refuse.
+Preserve and inspect `run.jsonl` and start a fresh output directory.
 
 ## Unambiguous scoring and bounded diagnostics
 

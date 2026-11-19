@@ -4,6 +4,12 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-19 (round 152 B26: measured output integrity)
+
+- Retire the reporter if an output descriptor fails to close after a complete
+  JSONL append. Keep the disk evidence for inspection and block summaries and
+  retries through that reporter.
+
 ## 2026-11-17 (round 135 B08: independent HTTP retirement)
 
 - Retain detached sockets and attempt timer cancel/join, socket shutdown,
