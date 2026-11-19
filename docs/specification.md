@@ -1041,7 +1041,10 @@ from interleaving result rows or overwriting each other's `raw/` files.
 - Or pass `--out <dir>` to write somewhere distinct.
 
 `run.jsonl` itself is append-only within a single run: the reporter appends
-one record per measured execution as it executes.
+one record per measured execution as it executes. Nonfinite values in optional
+timing, token, and resource fields are written as `null`. Other nonfinite
+values, including required wall time and arbitrary scoring metrics, cause a
+record encoding error before any bytes are appended.
 
 ### `benchpack compare`
 

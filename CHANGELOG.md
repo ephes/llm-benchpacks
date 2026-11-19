@@ -4,6 +4,9 @@
 
 - Classify both paths in Git renames when reporting repo-task source mutations.
 
+- Write strict JSON to `run.jsonl`. Record nonfinite optional telemetry as
+  `null` and reject other nonfinite values before appending.
+
 - Retire example HTTP timers, responses, connections and detached sockets
   independently. Bound timer joining, stop socket traffic despite stream-close
   faults, preserve initiating errors/interrupts with private cleanup categories,

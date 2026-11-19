@@ -136,6 +136,72 @@ def test_record_appends_to_run_jsonl(tmp_path: Path) -> None:
     assert record["tokens"]["cached_prompt"] is None
 
 
+def _reject_nonfinite_json(constant: str) -> None:
+    pytest.fail(f"Nonfinite JSON constant: {constant}")
+
+
+@pytest.mark.parametrize(
+    ("wall_s", "output"), [(4.0, None), (1e-308, 192)],
+    ids=["nonfinite-tokens", "overflowing-rate"],
+)
+def test_record_normalizes_nonfinite_optional_telemetry(
+    tmp_path: Path, wall_s: float, output: int | None,
+) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    adapter_result = make_adapter_result(out)
+    adapter_result.timing = Timing(
+        wall_s=wall_s, ttft_s=float("nan"), prefill_tps=float("inf"), decode_tps=42.0,
+    )
+    if output is None:
+        # An adapter can supply runtime values outside the annotated schema.
+        adapter_result.tokens.output = float("-inf")  # type: ignore[assignment]
+
+    record = reporter.record(
+        pack.cases[0], adapter_result,
+        sample={"memory_mb": float("-inf"), "gpu_memory_mb": 14820},
+    )
+
+    assert json.loads(
+        (out / "run.jsonl").read_text(), parse_constant=_reject_nonfinite_json,
+    ) == record
+    assert record["timing"] == {
+        "wall_s": wall_s, "ttft_s": None, "prefill_tps": None, "decode_tps": 42.0,
+        "total_tps": None,
+    }
+    assert record["tokens"] == {"prompt": 32768, "output": output, "cached_prompt": None}
+    assert record["resources"] == {"memory_mb": None, "gpu_memory_mb": 14820}
+
+
+@pytest.mark.parametrize("field", ["scoring", "wall_s"])
+def test_record_rejects_nonfinite_row_before_append(tmp_path: Path, field: str) -> None:
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    case = pack.cases[0]
+    adapter_result = make_adapter_result(out)
+    first = reporter.record(case, adapter_result, sample={})
+    run_jsonl = out / "run.jsonl"
+    original = run_jsonl.read_bytes()
+
+    scoring = None
+    if field == "scoring":
+        scoring = {"mode": "verify-script", "passed": True, "metrics": {"extra": float("nan")}}
+    else:
+        adapter_result.timing.wall_s = float("inf")
+    with pytest.raises(ValueError, match=r"run\.jsonl"):
+        reporter.record(case, adapter_result, sample={}, scoring_override=scoring)
+
+    assert run_jsonl.read_bytes() == original
+    assert reporter.records == [first]
+    reporter.record(case, make_adapter_result(out), sample={})
+    assert [
+        json.loads(line, parse_constant=_reject_nonfinite_json)
+        for line in run_jsonl.read_text().splitlines()
+    ] == [first, first]
+
+
 def test_record_writes_cached_prompt_tokens_to_run_jsonl(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path)
