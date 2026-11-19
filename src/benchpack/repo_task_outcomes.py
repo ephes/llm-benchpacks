@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -226,20 +227,47 @@ def _patch_snapshot(
 
 
 def _extract_patch_paths(lines: list[str]) -> tuple[str, ...]:
-    paths: list[str] = []
-    seen: set[str] = set()
-    for line in lines:
-        path = _path_from_patch_line(line)
-        if path is None or path in seen:
+    return tuple(dict.fromkeys(_iter_patch_paths(lines)))
+
+
+def _iter_patch_paths(lines: list[str]) -> Iterator[str]:
+    git_header = None
+    for index, line in enumerate(lines):
+        if line.startswith("diff --git "):
+            if git_header is not None and (path := _path_from_git_diff_line(git_header)):
+                yield path
+            git_header = line
             continue
-        seen.add(path)
-        paths.append(path)
-    return tuple(paths)
+        if (
+            git_header is not None
+            and line.startswith("rename from ")
+            and index + 1 < len(lines)
+        ):
+            following = lines[index + 1]
+            if following.startswith("rename to "):
+                former = _rename_label(line.removeprefix("rename from "))
+                current = _rename_label(following.removeprefix("rename to "))
+                if former and current:
+                    yield former
+                    yield current
+                    git_header = None
+                    continue
+        path = _path_from_patch_line(line)
+        if path is not None:
+            yield path
+    if git_header is not None and (path := _path_from_git_diff_line(git_header)):
+        yield path
+
+
+def _rename_label(label: str) -> str:
+    # Git's extended headers omit the a/ and b/ prefixes. The quoted form
+    # leaves slashes and every generated-path name and suffix literal.
+    if label.startswith('"') and label.endswith('"'):
+        return label[1:-1]
+    return label
 
 
 def _path_from_patch_line(line: str) -> str | None:
-    if line.startswith("diff --git "):
-        return _path_from_git_diff_line(line)
     for prefix in ("--- ", "+++ "):
         if line.startswith(prefix):
             return _normalize_diff_label(line[len(prefix) :])

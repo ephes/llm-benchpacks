@@ -1169,8 +1169,9 @@ outcome label such as `passed`, `failed-no-mutation`,
 `failed-source-mutation`, `failed-non-source-mutation`, or
 `failed-unknown-mutation`. The source/non-source split is derived from patch
 artifact paths only; generated/cache artifacts such as `__pycache__` and
-`.pytest_cache` do not count as source mutations. The patch byte count and the
-patch paths are both derived from one bounded snapshot read through a single
+`.pytest_cache` do not count as source mutations. A Git rename counts as a
+source mutation when either its former or current path is a source path.
+The patch byte count and paths are both derived from one bounded snapshot through a single
 opened descriptor: the patch path is walked component by component from the
 result directory without following symlinks, must name a regular file (FIFOs
 and devices are refused without blocking), and is read up to 8 MiB

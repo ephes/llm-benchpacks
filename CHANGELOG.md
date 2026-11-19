@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Classify both paths in Git renames when reporting repo-task source mutations.
+
 - Retire example HTTP timers, responses, connections and detached sockets
   independently. Bound timer joining, stop socket traffic despite stream-close
   faults, preserve initiating errors/interrupts with private cleanup categories,
