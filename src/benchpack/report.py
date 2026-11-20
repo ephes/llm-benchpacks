@@ -29,6 +29,7 @@ from .compare import (
     pack_versions,
     prefill_parity_statuses,
     summarize_runs,
+    unique_json_object,
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .repo_task_outcomes import (
@@ -540,6 +541,8 @@ def _metadata_notes_cell(metadata: dict[str, Any]) -> str:
 
 def _pack_cell(run: ResultRun) -> str:
     versions = pack_versions([run])
+    if not versions:
+        return MISSING
     if len(versions) == 1:
         pack_id, version = next(iter(versions))
         return f"{pack_id} {version}"
@@ -554,12 +557,27 @@ def _hardware_cell(run: ResultRun) -> str:
     if run.artifact_root is None:
         return "hardware.json missing"
     path = run.artifact_root / "hardware.json"
-    if not path.is_file():
-        return "hardware.json missing"
     try:
-        hardware = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            mode = path.stat().st_mode
+        except (FileNotFoundError, NotADirectoryError):
+            return "hardware.json missing"
+        if not stat.S_ISREG(mode):
+            return "hardware.json missing"
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ReportError(f"{path} is not valid UTF-8") from exc
+    except OSError as exc:
+        raise ReportError(f"could not read {path}: {exc.strerror}") from exc
+
+    try:
+        hardware = json.loads(text, object_pairs_hook=unique_json_object)
+    except RecursionError as exc:
+        raise ReportError(f"{path} exceeds JSON nesting limit") from exc
     except json.JSONDecodeError as exc:
         raise ReportError(f"could not parse {path}: {exc.msg}") from exc
+    except ValueError as exc:
+        raise ReportError(f"could not parse {path}: invalid JSON domain") from exc
     if not isinstance(hardware, dict):
         raise ReportError(f"expected JSON object in {path}")
     return _hardware_object_cell(hardware)

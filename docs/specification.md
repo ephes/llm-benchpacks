@@ -1156,16 +1156,24 @@ benchpack report <result-dir> [<result-dir> ...]
 benchpack report --set <manifest.toml>
 ```
 
+The report renderer displays `—` in the pack column when a run has no pack
+version entries. It shows one label for a single pack version and lists the
+labels for mixed runs.
+
 `benchpack report` reads existing result directories and writes only Markdown to
 stdout. Each input must be a directory containing `run.jsonl`; when
 `hardware.json` is present beside it, the report includes host identity fields
 such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware_model_identifier`, `ram_mb`, `os`, and `gpus`. Missing
-`hardware.json` is tolerated and reported explicitly. When
-`run-metadata.json` is present, the report includes a concise table for the
+`hardware.json` is tolerated and reported explicitly. Read failures, invalid
+UTF-8, and JSON parsing failures in a hardware sidecar produce a report error.
+Hardware JSON objects require unique decoded member names at every depth.
+When `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
-`run-metadata.json` is tolerated and reported explicitly; malformed metadata
-fails with a clear error. When external-agent model-call JSONL artifacts exist
+`run-metadata.json` is tolerated and reported explicitly, including when it
+disappears before the read can open it. Other read errors and malformed
+metadata fail with a clear error. An explicit `benchpack run --run-metadata`
+path must be readable. When external-agent model-call JSONL artifacts exist
 under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
 safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
 unsafe JSONL lines are counted as invalid without echoing their payloads. When

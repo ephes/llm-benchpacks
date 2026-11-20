@@ -23,7 +23,12 @@ class RunMetadataError(ValueError):
 def load_run_metadata(path: Path | str) -> dict[str, Any]:
     """Load and validate a user-supplied run metadata JSON object."""
 
-    metadata_path = Path(path)
+    metadata = _load_run_metadata(Path(path), optional=False)
+    assert metadata is not None
+    return metadata
+
+
+def _load_run_metadata(metadata_path: Path, *, optional: bool) -> dict[str, Any] | None:
     try:
         text = metadata_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
@@ -31,6 +36,8 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
             f"run metadata file {metadata_path} is not valid UTF-8"
         ) from exc
     except OSError as exc:
+        if optional and isinstance(exc, FileNotFoundError):
+            return None
         raise RunMetadataError(
             f"could not read run metadata file {metadata_path}: {exc.strerror}"
         ) from exc
@@ -56,10 +63,7 @@ def load_run_metadata(path: Path | str) -> dict[str, Any]:
 def load_optional_run_metadata(result_dir: Path | str) -> dict[str, Any] | None:
     """Load optional ``run-metadata.json`` from a result directory."""
 
-    metadata_path = Path(result_dir) / RUN_METADATA_FILENAME
-    if not metadata_path.exists():
-        return None
-    return load_run_metadata(metadata_path)
+    return _load_run_metadata(Path(result_dir) / RUN_METADATA_FILENAME, optional=True)
 
 
 def validate_run_metadata(

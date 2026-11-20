@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 
 import pytest
 
+from benchpack.compare import ResultRun
 from benchpack.report import (
     ReportError,
     load_report_runs,
@@ -434,6 +436,23 @@ def test_report_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     assert "WARNING: compared records use different pack ids or versions" in output
 
 
+def test_report_distinguishes_missing_single_and_mixed_pack_identity(tmp_path: Path) -> None:
+    empty = ResultRun(
+        path=tmp_path / "empty", label="empty", records=[],
+        run_metadata={"notes": "metadata only"},
+    )
+    single = tmp_path / "single"
+    mixed = tmp_path / "mixed"
+    _write_run(single)
+    _write_run(mixed, rows=[_record("short", pack_id="smoke-chat"), _record("short")])
+
+    output = render_report([empty, *load_report_runs([single, mixed])])
+
+    assert "| empty | — | — | — | — | hardware.json missing |" in output
+    assert "| single | runtime-sweep 0.1.0 | openai-chat |" in output
+    assert "| mixed | mixed: runtime-sweep 0.1.0, smoke-chat 0.1.0 | openai-chat |" in output
+
+
 def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     _write_run(run_a)
@@ -441,6 +460,64 @@ def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
 
     with pytest.raises(ReportError, match="could not parse"):
         render_report(load_report_runs([run_a]))
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        (b'{"chip":"\xff"}', r"hardware\.json.*not valid UTF-8"),
+        (
+            b'{"gpu":' + b"[" * 100_000 + b"0" + b"]" * 100_000 + b"}",
+            r"hardware\.json.*nesting limit",
+        ),
+        (b'{"ram_mb":' + b"9" * 5000 + b"}", r"hardware\.json.*invalid JSON domain"),
+    ],
+    ids=["invalid-utf8", "nesting-limit", "integer-limit"],
+)
+def test_report_normalizes_hardware_decode_errors(
+    tmp_path: Path, contents: bytes, message: str,
+) -> None:
+    run = tmp_path / "run"
+    _write_run(run)
+    (run / "hardware.json").write_bytes(contents)
+
+    with pytest.raises(ReportError, match=message):
+        render_report(load_report_runs([run]))
+
+
+def test_report_normalizes_hardware_read_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = tmp_path / "run"
+    _write_run(run, hardware={"hostname": "synthetic"})
+    original_open = Path.open
+
+    def fail_hardware_open(self, *args, **kwargs):
+        if self == run / "hardware.json":
+            raise OSError(errno.EIO, "Input/output error", self)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_hardware_open)
+
+    with pytest.raises(ReportError, match=r"could not read .*hardware\.json: Input/output error"):
+        render_report(load_report_runs([run]))
+
+
+@pytest.mark.parametrize(
+    "hardware",
+    [
+        '{"hostname":"first","hostname":"second"}',
+        r'{"gpus":[{"model":"first","m\u006fdel":"second"}]}',
+    ],
+    ids=["top-level", "nested-decoded-name"],
+)
+def test_report_rejects_duplicate_hardware_json_members(tmp_path: Path, hardware: str) -> None:
+    run = tmp_path / "run"
+    _write_run(run)
+    (run / "hardware.json").write_text(hardware, encoding="utf-8")
+
+    with pytest.raises(ReportError, match=r"could not parse .*hardware\.json: invalid JSON domain"):
+        render_report(load_report_runs([run]))
 
 
 def test_load_report_set_expands_relative_paths_from_manifest_dir(

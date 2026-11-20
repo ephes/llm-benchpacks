@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 
@@ -137,6 +138,41 @@ def test_load_optional_run_metadata_tolerates_missing_artifact(
     tmp_path: Path,
 ) -> None:
     assert load_optional_run_metadata(tmp_path) is None
+
+
+def test_load_optional_run_metadata_tolerates_disappearance_at_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / RUN_METADATA_FILENAME
+    path.write_text("{}", encoding="utf-8")
+    original_open = Path.open
+
+    def open_after_removal(self, *args, **kwargs):
+        if self == path:
+            path.unlink()
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_after_removal)
+
+    assert load_optional_run_metadata(tmp_path) is None
+
+
+def test_load_optional_run_metadata_reports_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / RUN_METADATA_FILENAME
+    path.write_text("{}", encoding="utf-8")
+    original_open = Path.open
+
+    def deny_open(self, *args, **kwargs):
+        if self == path:
+            raise PermissionError(errno.EACCES, "Permission denied", path)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_open)
+
+    with pytest.raises(RunMetadataError, match="could not read.*Permission denied"):
+        load_optional_run_metadata(tmp_path)
 
 
 @pytest.mark.parametrize("destination", ["symlink", "dangling symlink", "directory"])

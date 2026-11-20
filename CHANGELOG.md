@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Reject duplicate JSON object members at every depth in hardware sidecars
+  read by `benchpack report`.
+
+- Report hardware sidecar I/O, UTF-8, and JSON parser-limit failures as
+  controlled `benchpack report` errors.
+
+- Show the missing-value marker in reports when there are no pack version
+  entries.
+
+- Treat optional run metadata that disappears before opening as missing in
+  reports. Explicit metadata inputs and other read errors still fail.
+
 - Reject symlinks, directories, and other special destinations before the
   standalone run metadata writer stages output or copies permissions.
 
