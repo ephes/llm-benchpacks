@@ -1156,6 +1156,10 @@ benchpack report <result-dir> [<result-dir> ...]
 benchpack report --set <manifest.toml>
 ```
 
+The report renderer displays `—` in the pack column when a run has no pack
+version entries. It shows one label for a single pack version and lists the
+labels for mixed runs.
+
 `benchpack report` reads existing result directories and writes only Markdown to
 stdout. Each input must be a directory containing `run.jsonl`; when
 `hardware.json` is present beside it, the report includes host identity fields

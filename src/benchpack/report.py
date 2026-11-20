@@ -540,6 +540,8 @@ def _metadata_notes_cell(metadata: dict[str, Any]) -> str:
 
 def _pack_cell(run: ResultRun) -> str:
     versions = pack_versions([run])
+    if not versions:
+        return MISSING
     if len(versions) == 1:
         pack_id, version = next(iter(versions))
         return f"{pack_id} {version}"

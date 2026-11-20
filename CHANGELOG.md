@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show the missing-value marker in reports when there are no pack version
+  entries.
+
 - Treat optional run metadata that disappears before opening as missing in
   reports. Explicit metadata inputs and other read errors still fail.
 

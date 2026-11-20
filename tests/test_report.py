@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from benchpack.compare import ResultRun
 from benchpack.report import (
     ReportError,
     load_report_runs,
@@ -432,6 +433,23 @@ def test_report_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     output = render_report(load_report_runs([run_a, run_b]))
 
     assert "WARNING: compared records use different pack ids or versions" in output
+
+
+def test_report_distinguishes_missing_single_and_mixed_pack_identity(tmp_path: Path) -> None:
+    empty = ResultRun(
+        path=tmp_path / "empty", label="empty", records=[],
+        run_metadata={"notes": "metadata only"},
+    )
+    single = tmp_path / "single"
+    mixed = tmp_path / "mixed"
+    _write_run(single)
+    _write_run(mixed, rows=[_record("short", pack_id="smoke-chat"), _record("short")])
+
+    output = render_report([empty, *load_report_runs([single, mixed])])
+
+    assert "| empty | — | — | — | — | hardware.json missing |" in output
+    assert "| single | runtime-sweep 0.1.0 | openai-chat |" in output
+    assert "| mixed | mixed: runtime-sweep 0.1.0, smoke-chat 0.1.0 | openai-chat |" in output
 
 
 def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
