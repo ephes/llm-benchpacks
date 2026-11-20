@@ -1803,10 +1803,12 @@ undecodable responses retain their text there.
 
 ## Reporter persistence failures
 
-The reporter requires exclusive ownership of run.jsonl. Serialization precedes
-mutation and summaries advance after a complete append and close. Caught write
-or close failures restore the previous file length; rollback failures require
-manual JSONL recovery. This does not guarantee durability across crashes.
+The reporter requires exclusive ownership of `run.jsonl`. Serialization precedes
+mutation and summaries advance after a complete append and successful descriptor
+cleanup. Write or stream wrapper failures attempt to restore the previous file
+length while the append descriptor is open. If rollback fails or a descriptor
+close fails after a complete append, inspect the retained file and start a fresh
+reporter in a new output directory. This does not guarantee durability across crashes.
 
 ## Hardware evidence failures
 
@@ -1827,15 +1829,18 @@ a failed rename also retains the empty destination reservation for inspection.
 
 ## Hardware evidence publication
 
-The reporter serializes `hardware.json` before creating an exclusive sibling
-UTF-8 temporary file, then atomically replaces the final artifact after closing
-that file. Serialization, write, or replacement failure preserves any previous
-complete hardware artifact (or leaves the final path absent) and leaves completed
-`run.jsonl` records unchanged. Only a temporary file created by this call is
-removed on failure. Existing file permissions are retained; new files honor the
-process umask. Successful publication syncs the file and its containing directory;
-a post-replacement directory-sync error retains the visible complete artifact and
-reports uncertain durability. This does not guarantee durability of the entire
+The reporter serializes `hardware.json` as strict JSON before creating an
+exclusive sibling UTF-8 temporary file, then atomically replaces the final
+artifact after closing that file. Nonfinite numbers at any depth cause a CLI
+error right after hardware collection, before output creation or model calls;
+the reporter applies the same check before hardware publication. Serialization, write, or replacement failure
+preserves any previous complete hardware artifact (or leaves the final path
+absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
+file created by this call is removed on failure. Existing file permissions are
+retained and new files honor the process umask. Successful publication syncs the
+file and its containing directory. A post-replacement directory-sync error
+retains the visible complete artifact and reports uncertain durability. This
+does not guarantee durability of the entire
 run or of newly created ancestor directories after power loss.
 
 ## Imported result and model-call admission
@@ -2024,9 +2029,10 @@ run (including newly created ancestor directories and JSONL appends).
 An append failure compensates with `ftruncate` on the same open descriptor,
 without reopening a pathname. The primary append exception is re-raised; a
 failed compensation adds bounded recovery context and marks the reporter stream
-uncertain. No memory record is added, and subsequent appends and summary writes
-refuse. Preserve/inspect the possibly partial `run.jsonl` and start a fresh
-output directory; do not treat an uncertain stream as complete evidence.
+uncertain. A descriptor close failure after a complete append also marks the
+stream uncertain and adds recovery context to the close error. In both cases,
+no memory record is added and subsequent appends and summary writes refuse.
+Preserve and inspect `run.jsonl` and start a fresh output directory.
 
 ## Unambiguous scoring and bounded diagnostics
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Reject NaN and infinity in collected hardware telemetry before output
+  creation or model calls, and again before publishing `hardware.json`,
+  preserving any previously published hardware artifact.
+
+- Refuse further appends and summaries when closing an output descriptor fails
+  after a complete `run.jsonl` append.
+
 - Classify both paths in Git renames when reporting repo-task source mutations.
 
 - Write strict JSON to `run.jsonl`. Record nonfinite optional telemetry as

@@ -744,10 +744,14 @@ integers fail before output creation or model calls. Reporter artifacts refuse
 symlinks/special files and output-directory exchange after harness execution;
 append targets also refuse hard links. Hardware, runtime metadata and summaries
 publish complete sibling files atomically, preserving the last successful file
-on staging/replace failure. Failed JSONL appends roll back on the opened file;
-if rollback fails, the append error stays primary with a recovery note, and that
-reporter refuses further appends or summaries. Inspect the retained artifact and
-start a new output directory. These checks protect parent artifact writes;
+on staging/replace failure. Nonfinite hardware telemetry fails the run before
+output creation or model calls; the reporter re-checks before publishing
+`hardware.json` and leaves any prior hardware file and completed JSONL rows
+intact. Failed JSONL appends roll back on the opened file.
+If rollback fails or a descriptor close fails after a complete append, the
+error carries a recovery note and the reporter refuses further appends and
+summaries. Inspect the retained artifact and start a new output directory.
+These checks protect parent artifact writes;
 same-user harness execution is not filesystem isolation.
 
 ## Evidence limits

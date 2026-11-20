@@ -11,7 +11,7 @@ import pytest
 
 from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
 from benchpack.packs import Case, Pack, Scoring
-from benchpack.results import RunReporter
+from benchpack.results import ResultEncodingError, RunReporter
 
 
 def make_pack(tmp_path: Path, scoring: Scoring | None = None) -> Pack:
@@ -514,6 +514,24 @@ def test_write_hardware_writes_json(tmp_path: Path) -> None:
     assert data["hostname"] == "h"
 
 
+@pytest.mark.parametrize("telemetry", [float("nan"), float("inf"), float("-inf")])
+def test_write_hardware_refuses_nonfinite_telemetry(
+    tmp_path: Path, telemetry: float,
+) -> None:
+    out = tmp_path / "run"
+    reporter = RunReporter(out, make_pack(tmp_path))
+    valid = {"hostname": "test", "gpus": [{"model": "test-gpu", "vram_mb": 1024.5}]}
+    reporter.write_hardware(valid)
+    artifact = out / "hardware.json"
+    previous = artifact.read_bytes()
+    assert json.loads(previous) == valid
+
+    with pytest.raises(ResultEncodingError, match=r"hardware\.json.*strict JSON"):
+        reporter.write_hardware({"gpus": [{"vram_mb": telemetry}]})
+
+    assert artifact.read_bytes() == previous
+
+
 def test_write_run_metadata_writes_json(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path)
@@ -840,6 +858,49 @@ def test_record_failure_preserves_file_and_records(tmp_path, monkeypatch, failur
     assert len(persisted) == 2
     reporter.write_summary({'hostname': 'test'})
     assert (reporter.output_dir / 'summary.md').read_text().count('| capital |') == 2
+
+
+@pytest.mark.parametrize("target", ["artifact", "directory"])
+def test_record_retires_reporter_after_append_descriptor_close_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: str,
+) -> None:
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(tmp_path / "run", pack)
+    result = make_adapter_result(reporter.output_dir)
+    original_open = os.open
+    original_close = os.close
+    output_parent = reporter.output_dir.parent.resolve()
+    target_fd = None
+
+    def track_append_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal target_fd
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        if ((target == "artifact" and path == "run.jsonl") or
+                (target == "directory" and path == output_parent)):
+            target_fd = fd
+        return fd
+
+    def fail_close(fd):
+        original_close(fd)
+        if fd == target_fd:
+            raise OSError("injected descriptor close failure")
+
+    with monkeypatch.context() as faults:
+        faults.setattr(os, "open", track_append_open)
+        faults.setattr(os, "close", fail_close)
+        with pytest.raises(OSError, match="injected descriptor close failure"):
+            reporter.record(pack.cases[0], result, {})
+
+    persisted = (reporter.output_dir / "run.jsonl").read_bytes()
+    (row,) = persisted.splitlines()
+    assert json.loads(row)["case"] == pack.cases[0].id
+    assert reporter.records == []
+    with pytest.raises(OSError, match="uncertain"):
+        reporter.record(pack.cases[0], result, {})
+    with pytest.raises(OSError, match="uncertain"):
+        reporter.write_summary({})
+    assert (reporter.output_dir / "run.jsonl").read_bytes() == persisted
+    assert not (reporter.output_dir / "summary.md").exists()
 
 
 def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> None:

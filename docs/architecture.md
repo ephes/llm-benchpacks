@@ -1104,12 +1104,11 @@ is introduced.
 Each RunReporter exclusively owns its run.jsonl file: callers must serialize
 record calls and must not share the output with other writers. Records are
 serialized before I/O and added to the in-memory summary only after a complete
-unbuffered append and successful close. Serialization/open/write failures
-propagate to the caller. Caught write or close failures truncate the file to its
-previous byte length before raising, so a retry appends one complete line.
-This is not crash-proof storage or an fsync durability guarantee. If truncation
-also fails, that error propagates with the append error chained; stop using the
-reporter and repair the JSONL file before retrying.
+unbuffered append and successful descriptor cleanup. Serialization/open/write
+failures propagate to the caller. A write or stream wrapper failure triggers
+rollback on the still-open descriptor. If rollback fails, or if descriptor
+cleanup fails after the complete append, the reporter refuses further appends
+and summaries. This is not crash-proof storage or an fsync durability guarantee.
 
 ### Failed workspace preparation
 
@@ -1125,13 +1124,16 @@ a failed rename also retains the empty destination reservation for inspection.
 
 ### Hardware evidence publication
 
-The reporter serializes `hardware.json` before creating an exclusive sibling
-UTF-8 temporary file, then atomically replaces the final artifact after closing
-that file. Serialization, write, or replacement failure preserves any previous
-complete hardware artifact (or leaves the final path absent) and leaves completed
-`run.jsonl` records unchanged. Only a temporary file created by this call is
-removed on failure. Existing file permissions are retained; new files honor the
-process umask. Atomic visibility does not guarantee durability after power loss.
+The CLI encodes collected hardware with the shared strict encoder right after
+`collect_hardware()`, so nonfinite telemetry fails before output creation or
+model calls. The reporter serializes `hardware.json` with `allow_nan=False`
+again before creating an exclusive sibling UTF-8 temporary file, then atomically replaces the final
+artifact after closing that file. Serialization, write, or replacement failure
+preserves any previous complete hardware artifact (or leaves the final path
+absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
+file created by this call is removed on failure. Existing file permissions are
+retained and new files honor the process umask. Atomic visibility does not
+guarantee durability after power loss.
 
 ### Verifier JSON ownership
 
@@ -1184,10 +1186,11 @@ and the directory after replace. `PublishedDurabilityError` identifies complete
 visible bytes whose directory durability is uncertain; callers retain evidence
 and output-directory ownership and never claim that the workspace is unchanged.
 Context/task wrappers preserve this distinction in their domain errors.
-An unsuccessful append rollback preserves the primary
-exception, attaches a bounded recovery note, and disables append/summary operations
-on that reporter. Metadata admission recursively validates unambiguous finite
-JSON and normalizes extension objects before filesystem effects.
+An unsuccessful append rollback or a descriptor close failure after a complete
+append preserves the error, attaches a bounded recovery note, and disables
+append and summary operations on that reporter. Metadata admission recursively
+validates unambiguous finite JSON and normalizes extension objects before
+filesystem effects.
 
 ## Bounded evidence ownership
 
