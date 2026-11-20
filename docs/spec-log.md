@@ -8,6 +8,8 @@ working history and open questions.
 
 - Translate collection input open failures into the same controlled errors as
   read failures in compare and report. Release any descriptor the reader acquired.
+- Cap shared comparison summaries at 100,000 run/case pairs before constructing
+  summaries. Include missing-case placeholders in the count.
 
 ## 2026-11-19 (round 152 B26: measured output integrity)
 

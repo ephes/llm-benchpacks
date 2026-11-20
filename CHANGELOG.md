@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject comparison and report summaries above 100,000 run/case rows before
+  expansion, counting placeholders for missing cases.
+
 - Report unreadable `run.jsonl` inputs as controlled errors in `benchpack compare`
   and `benchpack report`.
 

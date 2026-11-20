@@ -19,6 +19,7 @@ MISSING = "—"
 MAX_RESULT_LINE_BYTES = 1024 * 1024
 MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
 MAX_RESULT_RECORDS = 100_000
+MAX_CASE_SUMMARIES = 100_000
 
 
 class CompareError(ValueError):
@@ -271,6 +272,12 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
             if key not in seen_cases:
                 seen_cases.add(key)
                 case_order.append(key)
+    summary_count = len(runs) * len(case_order)
+    if summary_count > MAX_CASE_SUMMARIES:
+        raise CompareError(
+            f"comparison summary row limit exceeded ({summary_count} rows, "
+            f"limit {MAX_CASE_SUMMARIES}). Split the inputs into smaller groups."
+        )
     labels = case_labels(case_order)
 
     summaries: list[CaseSummary] = []

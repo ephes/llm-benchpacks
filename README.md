@@ -728,7 +728,10 @@ for fixture admission, recovery and methodology boundaries.
 
 `benchpack report` deduplicates input file identities and admits at most 100 runs,
 64 MiB of total `run.jsonl` bytes and 100,000 records. Split larger reports into
-smaller groups; existing per-run limits also apply.
+smaller groups; existing per-run limits also apply. Compare and report summaries
+are limited to 100,000 rows, including placeholders for missing cases. The
+number of rows is the number of runs times the number of distinct (pack id,
+case id) pairs across them.
 
 Result ingestion rejects duplicate JSON members at every nesting level. It opens
 `run.jsonl` without following a final symlink, admits the actual regular-file

@@ -16,7 +16,7 @@ from benchpack.compare import (
 )
 
 
-from benchpack.report import render_report
+from benchpack.report import ReportError, render_report
 
 
 _UNSET = object()
@@ -191,6 +191,43 @@ def test_summarize_runs_groups_by_case_and_ignores_null_metrics(
     assert summaries[3].prompt_rows == 0
     assert summaries[0].cached_prompt_tokens is None
     assert summaries[0].cache_rows == 0
+
+
+@pytest.mark.parametrize(
+    ("summarize", "error"),
+    [
+        (summarize_runs, CompareError),
+        (render_comparison, CompareError),
+        (render_report, ReportError),
+    ],
+)
+def test_summary_budget_rejects_sparse_runs_before_expansion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, summarize, error
+) -> None:
+    import benchpack.compare as compare
+
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_run(run_a, rows=[_record("short", pack_id="pack-a")] * 3)
+    _write_run(run_b, rows=[_record("short", pack_id="pack-b")])
+    runs = [load_result_run(run_a), load_result_run(run_b)]
+
+    monkeypatch.setattr(compare, "MAX_CASE_SUMMARIES", 4, raising=False)
+    summaries = summarize_runs(runs)
+    assert [(item.run_label, item.display_case, item.rows) for item in summaries] == [
+        ("run-a", "pack-a/short", 3),
+        ("run-b", "pack-a/short", 0),
+        ("run-a", "pack-b/short", 0),
+        ("run-b", "pack-b/short", 1),
+    ]
+
+    def unexpected_summary(*args, **kwargs):
+        pytest.fail("constructed a summary before checking the budget")
+
+    monkeypatch.setattr(compare, "MAX_CASE_SUMMARIES", 3)
+    monkeypatch.setattr(compare, "CaseSummary", unexpected_summary)
+    with pytest.raises(error, match=r"summary row limit exceeded.*4 rows.*limit 3"):
+        summarize(runs)
 
 
 def test_summarize_runs_reports_prompt_token_median(tmp_path: Path) -> None:

@@ -965,8 +965,10 @@ per pack. Split mixed sources into separate directories. Only completed rows
 (`ok: true`) supply speed and token medians or cache-parity evidence; correctness
 scoring remains separate. Explicit failure counts preserve visibility of refused
 or partial requests. Nonnegative metric domains and descriptor-based cumulative
-admission apply to both CLIs. Scoring diagnostics and hardware probes have fixed
-resource ceilings; neither may promote ambiguous or partial evidence.
+admission apply to both CLIs. Bound summary expansion independently of input
+size because sparse runs still produce one row per run and distinct case.
+Scoring diagnostics and hardware probes have fixed resource ceilings to avoid
+promoting ambiguous or partial evidence.
 
 Implemented 2026-11-14 (round 95).
 

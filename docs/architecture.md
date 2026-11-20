@@ -1172,8 +1172,10 @@ descriptor, including those for duplicate inputs.
 ## Result evidence and publication integrity
 
 Comparison summaries retain prompt/cache homogeneity alongside coverage and finite
-medians. Directory and SQLite-backed reports use the same conservative parity
-helper; no result schema or registry migration is required.
+medians. After grouping, the shared summary builder checks the run count times
+the distinct case-key count against a limit of 100,000 rows before allocating
+summaries. Directory and SQLite-backed reports use the same summary builder and
+conservative parity helper. This requires no result schema or registry migration.
 
 Result ingestion reuses `safe_files.open_contained_regular` for final-file
 admission and recursive unique-member decoding. Registry import validates all

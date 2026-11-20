@@ -1063,6 +1063,12 @@ be opened or read, the file contains no JSON records, or a JSONL row cannot be
 parsed as a JSON object. Reports over result directories use the same controlled
 diagnostic for open and read errors.
 
+Comparison summaries admit at most 100,000 rows, calculated as the number of
+runs times the number of distinct (pack id, case id) pairs across those runs.
+Missing-case placeholders count toward the limit. Compare and report, including
+registry-backed reports, reject larger summaries before constructing any rows.
+Split large input selections into smaller groups.
+
 The initial summary is intentionally small and deterministic:
 
 - Inputs are identified by directory basename and path.
