@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 
@@ -459,6 +460,47 @@ def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
 
     with pytest.raises(ReportError, match="could not parse"):
         render_report(load_report_runs([run_a]))
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        (b'{"chip":"\xff"}', r"hardware\.json.*not valid UTF-8"),
+        (
+            b'{"gpu":' + b"[" * 100_000 + b"0" + b"]" * 100_000 + b"}",
+            r"hardware\.json.*nesting limit",
+        ),
+        (b'{"ram_mb":' + b"9" * 5000 + b"}", r"hardware\.json.*invalid JSON domain"),
+    ],
+    ids=["invalid-utf8", "nesting-limit", "integer-limit"],
+)
+def test_report_normalizes_hardware_decode_errors(
+    tmp_path: Path, contents: bytes, message: str,
+) -> None:
+    run = tmp_path / "run"
+    _write_run(run)
+    (run / "hardware.json").write_bytes(contents)
+
+    with pytest.raises(ReportError, match=message):
+        render_report(load_report_runs([run]))
+
+
+def test_report_normalizes_hardware_read_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = tmp_path / "run"
+    _write_run(run, hardware={"hostname": "synthetic"})
+    original_open = Path.open
+
+    def fail_hardware_open(self, *args, **kwargs):
+        if self == run / "hardware.json":
+            raise OSError(errno.EIO, "Input/output error", self)
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_hardware_open)
+
+    with pytest.raises(ReportError, match=r"could not read .*hardware\.json: Input/output error"):
+        render_report(load_report_runs([run]))
 
 
 def test_load_report_set_expands_relative_paths_from_manifest_dir(

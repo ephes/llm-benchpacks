@@ -1165,8 +1165,9 @@ stdout. Each input must be a directory containing `run.jsonl`; when
 `hardware.json` is present beside it, the report includes host identity fields
 such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware_model_identifier`, `ram_mb`, `os`, and `gpus`. Missing
-`hardware.json` is tolerated and reported explicitly. When
-`run-metadata.json` is present, the report includes a concise table for the
+`hardware.json` is tolerated and reported explicitly. Read failures, invalid
+UTF-8, and JSON parsing failures in a hardware sidecar produce a report error.
+When `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly, including when it
 disappears before the read can open it. Other read errors and malformed

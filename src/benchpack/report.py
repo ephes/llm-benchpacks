@@ -556,12 +556,27 @@ def _hardware_cell(run: ResultRun) -> str:
     if run.artifact_root is None:
         return "hardware.json missing"
     path = run.artifact_root / "hardware.json"
-    if not path.is_file():
-        return "hardware.json missing"
     try:
-        hardware = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            mode = path.stat().st_mode
+        except (FileNotFoundError, NotADirectoryError):
+            return "hardware.json missing"
+        if not stat.S_ISREG(mode):
+            return "hardware.json missing"
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ReportError(f"{path} is not valid UTF-8") from exc
+    except OSError as exc:
+        raise ReportError(f"could not read {path}: {exc.strerror}") from exc
+
+    try:
+        hardware = json.loads(text)
+    except RecursionError as exc:
+        raise ReportError(f"{path} exceeds JSON nesting limit") from exc
     except json.JSONDecodeError as exc:
         raise ReportError(f"could not parse {path}: {exc.msg}") from exc
+    except ValueError as exc:
+        raise ReportError(f"could not parse {path}: invalid JSON domain") from exc
     if not isinstance(hardware, dict):
         raise ReportError(f"expected JSON object in {path}")
     return _hardware_object_cell(hardware)

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Report hardware sidecar I/O, UTF-8, and JSON parser-limit failures as
+  controlled `benchpack report` errors.
+
 - Show the missing-value marker in reports when there are no pack version
   entries.
 
