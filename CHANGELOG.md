@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Treat optional run metadata that disappears before opening as missing in
+  reports. Explicit metadata inputs and other read errors still fail.
+
 - Reject symlinks, directories, and other special destinations before the
   standalone run metadata writer stages output or copies permissions.
 

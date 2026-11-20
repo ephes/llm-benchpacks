@@ -1164,8 +1164,10 @@ such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware.json` is tolerated and reported explicitly. When
 `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
-`run-metadata.json` is tolerated and reported explicitly; malformed metadata
-fails with a clear error. When external-agent model-call JSONL artifacts exist
+`run-metadata.json` is tolerated and reported explicitly, including when it
+disappears before the read can open it. Other read errors and malformed
+metadata fail with a clear error. An explicit `benchpack run --run-metadata`
+path must be readable. When external-agent model-call JSONL artifacts exist
 under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
 safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
 unsafe JSONL lines are counted as invalid without echoing their payloads. When
