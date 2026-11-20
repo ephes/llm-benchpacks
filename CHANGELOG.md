@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject symlinks, directories, and other special destinations before the
+  standalone run metadata writer stages output or copies permissions.
+
 - Reject comparison and report summaries above 100,000 run/case rows before
   expansion, counting placeholders for missing cases.
 

@@ -139,6 +139,34 @@ def test_load_optional_run_metadata_tolerates_missing_artifact(
     assert load_optional_run_metadata(tmp_path) is None
 
 
+@pytest.mark.parametrize("destination", ["symlink", "dangling symlink", "directory"])
+def test_write_run_metadata_refuses_nonregular_destination(
+    tmp_path: Path, destination: str,
+) -> None:
+    path = tmp_path / RUN_METADATA_FILENAME
+    target = tmp_path / "other.json"
+    if destination == "directory":
+        path.mkdir()
+        target = path / "other.json"
+    else:
+        path.symlink_to(target)
+    if destination != "dangling symlink":
+        target.write_bytes(b'{"notes":"previous"}\n')
+
+    with pytest.raises(RunMetadataError, match="regular file"):
+        write_run_metadata(tmp_path, {"notes": "new"})
+
+    if destination == "directory":
+        assert path.is_dir()
+    else:
+        assert path.readlink() == target
+    if destination == "dangling symlink":
+        assert not target.exists()
+    else:
+        assert target.read_bytes() == b'{"notes":"previous"}\n'
+    assert not list(tmp_path.glob(".run-metadata.json.*.tmp"))
+
+
 @pytest.mark.parametrize("failure", ["write", "replace"])
 def test_write_run_metadata_preserves_previous_artifact_on_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,

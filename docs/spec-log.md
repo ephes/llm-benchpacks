@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-20 (round 157 B26: standalone run metadata publication)
+
+- Require an absent or regular `run-metadata.json` destination before staging
+  and copying permissions. Refuse symlinks and other special destinations.
+
 ## 2026-11-20 (round 155 B30: comparison admission)
 
 - Translate collection input open failures into the same controlled errors as
