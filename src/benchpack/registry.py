@@ -534,7 +534,12 @@ def _publish_static_site(
         staging = staging_parent / "site"
         staging.mkdir()
         for filename, contents in output_files.items():
-            (staging / filename).write_text(contents, encoding="utf-8")
+            with (staging / filename).open("w", encoding="utf-8") as stream:
+                stream.write(contents)
+                stream.flush()
+                os.fsync(stream.fileno())
+        with admitted_directory(staging) as directory:
+            os.fsync(directory)
         if site_root.exists():
             backup = Path(tempfile.mkdtemp(prefix=f".{site_root.name}-backup-", dir=site_root.parent))
             backup.rmdir()
@@ -551,6 +556,15 @@ def _publish_static_site(
                         f"{rollback_error}; previous site retained at {backup}"
                     ) from rollback_error
             raise
+        try:
+            with admitted_directory(site_root.parent, base=site_root.parent) as parent:
+                os.fsync(parent)
+        except OSError as exc:
+            recovery = f"; previous site retained at {backup}" if backup is not None else ""
+            raise RegistryError(
+                f"registry site published at {site_root}, but directory durability uncertain: "
+                f"{exc}{recovery}"
+            ) from exc
         if backup is not None:
             try:
                 if backup.is_dir():

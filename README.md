@@ -530,6 +530,11 @@ and quantization, the generated `report.md`, and a machine-readable
 data. The export uses SQLite only; source result directories and large
 artifacts are not required.
 
+The export syncs all staged files before publishing the site. When replacing
+an existing site with `--force`, it retains the previous site until the parent
+directory sync succeeds. If that sync fails, the error names the visible new
+site and the retained backup, when present, for recovery.
+
 For local browsing, `just site` is the shortest path. It renders the default
 `registry/site` export from the explicitly curated
 `registry/llm-benchpacks.sqlite` and refreshes the tracked agent-wrap dataset.

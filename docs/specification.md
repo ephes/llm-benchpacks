@@ -1548,9 +1548,13 @@ checks; uncheckable paths fail closed before publication, even for unselected
 runs or fresh output. Relative agent-wrap provenance paths are interpreted from the export process
 working directory; paths in other checkouts should be recorded as absolute. Symlink
 output directories are refused. All three files are generated in a sibling
-staging directory before publication. Replacement renames the old output to
-a backup, publishes the staged site, and then removes the backup. Write errors
-leave the old output intact; failed publication restores it. If restoration
+staging directory. Export syncs the staged files and their directory before
+publication. Replacement renames the old output to a backup. After promoting
+the staged site, export syncs the output's parent before removing the backup.
+If this sync fails, export reports that the new site is visible with uncertain
+durability and names the retained backup if there was a previous site. Write
+and staging sync errors leave the old output intact. A promotion error triggers
+restoration. If restoration
 also fails, the error names the retained backup for manual recovery. Temporary
 staging cleanup is best-effort and cannot mask the publication outcome. A
 backup-removal failure reports that the new site is published and names the

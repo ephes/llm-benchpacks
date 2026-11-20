@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -2155,22 +2156,22 @@ def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, mo
     export_registry_static_site(db, site)
     before = {p.name: p.read_bytes() for p in site.iterdir()}
     writes = []
-    original_write = Path.write_text
+    original_open = Path.open
     original_rename = Path.rename
     injected = []
-    def fail_write(path, *args, **kwargs):
+    def fail_open(path, *args, **kwargs):
         writes.append(path.name)
         if len(writes) == 2:
             injected.append(True)
             raise OSError("injected write failure")
-        return original_write(path, *args, **kwargs)
+        return original_open(path, *args, **kwargs)
     def fail_publish(path, target):
         if Path(target) == site and path != site and not injected:
             injected.append(True)
             raise OSError("injected publish failure")
         return original_rename(path, target)
-    monkeypatch.setattr(Path, "write_text" if failure == "write" else "rename",
-                        fail_write if failure == "write" else fail_publish)
+    monkeypatch.setattr(Path, "open" if failure == "write" else "rename",
+                        fail_open if failure == "write" else fail_publish)
     with pytest.raises(RegistryError, match="injected"):
         export_registry_static_site(db, site, force=True)
     assert injected
@@ -2178,6 +2179,54 @@ def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, mo
     assert sorted(p.name for p in tmp_path.iterdir()) == [
         ".site.benchpack-publish.lock", "registry.sqlite", "run-a", "site"
     ]
+
+
+def test_registry_site_sync_failure_retains_both_generations(tmp_path: Path, monkeypatch) -> None:
+    first = tmp_path / "run-a"
+    second = tmp_path / "run-b"
+    _write_result_dir(first)
+    _write_result_dir(second)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([first, second], db)
+    site = tmp_path / "site"
+    export_registry_static_site(db, site, labels=["run-a"])
+    before = {path.name: path.read_bytes() for path in site.iterdir()}
+
+    rename = Path.rename
+    fsync = os.fsync
+    parent = tmp_path.stat()
+    synced = []
+    staged = {}
+
+    def record_promotion(source, target):
+        if target == site:
+            staged.update({path.name: path.read_bytes() for path in source.iterdir()})
+        return rename(source, target)
+
+    def fail_parent_sync(fd):
+        info = os.fstat(fd)
+        if os.path.samestat(info, parent) and staged:
+            assert all(
+                any(os.path.samestat(previous, path.stat()) for previous in synced[:-1])
+                for path in site.iterdir()
+            )
+            assert os.path.samestat(synced[-1], site.stat())
+            raise OSError("injected parent sync failure")
+        fsync(fd)
+        synced.append(info)
+
+    monkeypatch.setattr(Path, "rename", record_promotion)
+    monkeypatch.setattr(os, "fsync", fail_parent_sync)
+    with pytest.raises(RegistryError, match="published.*durability uncertain") as error:
+        export_registry_static_site(db, site, labels=["run-b"], force=True)
+
+    backup, = tmp_path.glob(".site-backup-*")
+    assert str(site) in str(error.value)
+    assert str(backup) in str(error.value)
+    assert {path.name: path.read_bytes() for path in backup.iterdir()} == before
+    assert {path.name: path.read_bytes() for path in site.iterdir()} == staged
+    assert staged != before
+    assert not list(tmp_path.glob(".site-stage-*"))
 
 
 @pytest.mark.parametrize("protected", ["database", "results", "nested", "symlink"])

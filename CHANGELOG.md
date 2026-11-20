@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Sync static registry sites before retiring the previous generation. Retain
+  the backup when the new site is visible but the parent sync fails.
+
 - Load registry duplicate groups and their members in one ordered query.
 
 - Refuse report sidecars from a replacement result directory after admitting

@@ -4,6 +4,12 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-20 (round 163 B27)
+
+- Read duplicate registry groups and members in one ordered SQLite projection.
+- Sync the staged static site and its files before promotion. Retain the prior
+  generation and report uncertain durability when the parent sync fails.
+
 ## 2026-11-20 (round 161 B24)
 
 - Acknowledge JSONL appends after file sync and sync the directory before
