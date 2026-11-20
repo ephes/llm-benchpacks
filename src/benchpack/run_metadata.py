@@ -17,7 +17,7 @@ KNOWN_OBJECT_SECTIONS = ("host", "runtime", "model", "operating_conditions")
 
 
 class RunMetadataError(ValueError):
-    """Raised when user-supplied run metadata cannot be loaded."""
+    """Raised for invalid run metadata or an unsupported output destination."""
 
 
 def load_run_metadata(path: Path | str) -> dict[str, Any]:
@@ -125,20 +125,32 @@ def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path
 
     output_path = Path(output_dir) / RUN_METADATA_FILENAME
     text = json.dumps(validate_run_metadata(metadata), indent=2, sort_keys=True, allow_nan=False) + "\n"
+    try:
+        destination_mode = output_path.lstat().st_mode
+    except FileNotFoundError:
+        destination_mode = None
+    if destination_mode is not None and not stat.S_ISREG(destination_mode):
+        raise RunMetadataError(f"run metadata destination must be a regular file: {output_path}")
+
     temporary_path = output_path.with_name(f".{RUN_METADATA_FILENAME}.{uuid.uuid4().hex}.tmp")
     owned = False
+    primary_error: BaseException | None = None
     try:
         with temporary_path.open("x", encoding="utf-8") as temporary:
             owned = True
-            try:
-                mode = stat.S_IMODE(output_path.stat().st_mode)
-            except FileNotFoundError:
-                pass
-            else:
-                temporary_path.chmod(mode)
+            if destination_mode is not None:
+                temporary_path.chmod(stat.S_IMODE(destination_mode))
             temporary.write(text)
         temporary_path.replace(output_path)
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
         if owned:
-            temporary_path.unlink(missing_ok=True)
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except BaseException:
+                if primary_error is None:
+                    raise
+                primary_error.add_note("run metadata staging cleanup failed")
     return output_path

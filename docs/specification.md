@@ -2009,6 +2009,14 @@ limits, invalid JSON values and serialization failures become `RunMetadataError`
 before output creation or adapter/harness calls. Normalized metadata is serialized
 with `allow_nan=False`; valid extension objects roundtrip.
 
+The standalone `write_run_metadata` helper accepts an absent destination or
+an existing regular file. It checks the destination entry without following
+symlinks before staging, and raises `RunMetadataError` for symlinks, directories,
+and other special files. It copies permission bits only from regular files.
+If publication and staging cleanup both fail, the helper re-raises the
+publication exception with a cleanup note. A cleanup-only error is raised
+directly and can follow successful publication.
+
 `benchpack run --out` must name a real directory: a symlinked output directory
 is refused before any output is created (ancestors may still be links). The
 reporter binds its output directory identity at construction and verifies

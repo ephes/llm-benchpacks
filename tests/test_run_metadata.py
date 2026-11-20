@@ -139,6 +139,34 @@ def test_load_optional_run_metadata_tolerates_missing_artifact(
     assert load_optional_run_metadata(tmp_path) is None
 
 
+@pytest.mark.parametrize("destination", ["symlink", "dangling symlink", "directory"])
+def test_write_run_metadata_refuses_nonregular_destination(
+    tmp_path: Path, destination: str,
+) -> None:
+    path = tmp_path / RUN_METADATA_FILENAME
+    target = tmp_path / "other.json"
+    if destination == "directory":
+        path.mkdir()
+        target = path / "other.json"
+    else:
+        path.symlink_to(target)
+    if destination != "dangling symlink":
+        target.write_bytes(b'{"notes":"previous"}\n')
+
+    with pytest.raises(RunMetadataError, match="regular file"):
+        write_run_metadata(tmp_path, {"notes": "new"})
+
+    if destination == "directory":
+        assert path.is_dir()
+    else:
+        assert path.readlink() == target
+    if destination == "dangling symlink":
+        assert not target.exists()
+    else:
+        assert target.read_bytes() == b'{"notes":"previous"}\n'
+    assert not list(tmp_path.glob(".run-metadata.json.*.tmp"))
+
+
 @pytest.mark.parametrize("failure", ["write", "replace"])
 def test_write_run_metadata_preserves_previous_artifact_on_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
@@ -190,6 +218,46 @@ def test_write_run_metadata_preserves_previous_artifact_on_failure(
     assert path.read_bytes() == previous
     assert unrelated.read_bytes() == b"another writer"
     assert set(tmp_path.iterdir()) == {path, unrelated}
+
+
+@pytest.mark.parametrize("replace_fails", [True, False], ids=["both-fail", "cleanup-only"])
+def test_write_run_metadata_reports_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replace_fails: bool,
+) -> None:
+    path = tmp_path / RUN_METADATA_FILENAME
+    previous = b'{"notes":"previous"}\n'
+    path.write_bytes(previous)
+    publication_error = OSError("injected replace failure")
+    cleanup_error = PermissionError("injected unlink failure")
+    original_replace = Path.replace
+    staged_path = None
+
+    def replace(self, target):
+        nonlocal staged_path
+        assert target == path
+        staged_path = self
+        if replace_fails:
+            raise publication_error
+        return original_replace(self, target)
+
+    def unlink(self, *, missing_ok=False):
+        assert self == staged_path
+        assert missing_ok
+        raise cleanup_error
+
+    monkeypatch.setattr(Path, "replace", replace)
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    with pytest.raises(OSError) as error:
+        write_run_metadata(tmp_path, {"notes": "new"})
+
+    if replace_fails:
+        assert path.read_bytes() == previous
+        assert error.value is publication_error
+        assert error.value.__notes__ == ["run metadata staging cleanup failed"]
+    else:
+        assert load_run_metadata(path) == {"notes": "new"}
+        assert error.value is cleanup_error
 
 
 @pytest.mark.parametrize("metadata", [{"notes": []}, {"extra": object()}])
