@@ -1267,13 +1267,20 @@ def _read_agent_dataset(path: Path) -> bytes:
             f"agent-wrap data {path} requires a readable regular file without symlinks"
         )
     try:
-        if os.fstat(fd).st_size > MAX_AGENT_DATASET_BYTES:
+        initial = os.fstat(fd)
+        if initial.st_size > MAX_AGENT_DATASET_BYTES:
             raise RegistryError("agent-wrap dataset byte limit exceeded")
         with os.fdopen(fd, "rb") as fh:
             fd = None  # The file object now owns the descriptor.
             data = fh.read(MAX_AGENT_DATASET_BYTES + 1)
-        if len(data) > MAX_AGENT_DATASET_BYTES:
-            raise RegistryError("agent-wrap dataset byte limit exceeded")
+            if len(data) > MAX_AGENT_DATASET_BYTES:
+                raise RegistryError("agent-wrap dataset byte limit exceeded")
+            require_stable_file(fh.fileno(), initial)
+            if len(data) != initial.st_size:
+                raise RegistryError(
+                    f"incomplete read of agent-wrap data {path}: "
+                    f"expected {initial.st_size} bytes, read {len(data)}"
+                )
         return data
     finally:
         if fd is not None:
@@ -1295,6 +1302,8 @@ def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, An
         raise RegistryError("could not parse agent-wrap JSON data") from exc
     except (ValueError, RecursionError) as exc:
         raise RegistryError("could not parse agent-wrap JSON data") from exc
+    except UnstableFileError as exc:
+        raise RegistryError(f"agent-wrap data {path} changed during read") from exc
     except OSError as exc:
         raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
     if not isinstance(dataset, dict):

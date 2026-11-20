@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject agent-wrap datasets that change in place or return incomplete bytes
+  during admission, before writing to the registry.
+
 - Reject incomplete `run.jsonl` reads before admitting rows or a digest, even
   when the last row read is valid JSON.
 

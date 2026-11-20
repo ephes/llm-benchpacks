@@ -1431,7 +1431,10 @@ Agent datasets are admitted before database creation or mutation: at most
 16 MiB of actual UTF-8 input and 10,000 rows. The leaf path must be a regular
 file, without a symlink; its parent directory may be reached through a link.
 Size and contents come from one descriptor, with an actual read limit even
-if the file grows. Duplicate JSON members at every object depth are refused
+if the file grows. Before decoding, import verifies that the opened generation
+stayed stable and the bytes read match its initial size. Atomic pathname
+replacement preserves admission of a complete, unchanged opened generation.
+Duplicate JSON members at every object depth are refused
 without including member names or values in the error. Repeated array values
 are allowed. Split larger curated histories into independently owned sources.
 Wall time must be finite, nonnegative and representable as a float; diff and
