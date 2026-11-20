@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Load registry duplicate groups and their members in one ordered query.
+
 - Refuse report sidecars from a replacement result directory after admitting
   `run.jsonl`. Open hardware and runtime metadata relative to the verified
   directory descriptor, and fail the report with a clear refusal when either

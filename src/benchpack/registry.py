@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -328,44 +329,38 @@ def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateG
             conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
-            duplicate_hashes = conn.execute(
+            members = conn.execute(
                 """
-                SELECT run_jsonl_sha256
+                SELECT runs.run_jsonl_sha256, runs.id, runs.label, runs.result_dir,
+                       runs.row_count, runs.imported_at
                 FROM runs
-                GROUP BY run_jsonl_sha256
-                HAVING COUNT(*) > 1
-                ORDER BY MIN(id)
-                """
-            ).fetchall()
-            groups: list[RegistryDuplicateGroup] = []
-            for hash_row in duplicate_hashes:
-                rows = conn.execute(
-                    """
-                    SELECT id, label, result_dir, row_count, imported_at
+                JOIN (
+                    SELECT run_jsonl_sha256, MIN(id) AS first_id
                     FROM runs
-                    WHERE run_jsonl_sha256 = ?
-                    ORDER BY id
-                    """,
-                    (hash_row["run_jsonl_sha256"],),
-                ).fetchall()
-                groups.append(
-                    RegistryDuplicateGroup(
-                        run_jsonl_sha256=hash_row["run_jsonl_sha256"],
-                        runs=[
-                            RegistryDuplicateRun(
-                                run_id=int(row["id"]),
-                                label=str(row["label"]),
-                                result_dir=Path(row["result_dir"]),
-                                row_count=int(row["row_count"]),
-                                imported_at=str(row["imported_at"]),
-                            )
-                            for row in rows
-                        ],
-                    )
+                    GROUP BY run_jsonl_sha256
+                    HAVING COUNT(*) > 1
+                ) AS repeated USING (run_jsonl_sha256)
+                ORDER BY repeated.first_id, runs.id
+                """
+            )
+            return [
+                RegistryDuplicateGroup(
+                    run_jsonl_sha256=digest,
+                    runs=[
+                        RegistryDuplicateRun(
+                            run_id=int(row["id"]),
+                            label=str(row["label"]),
+                            result_dir=Path(row["result_dir"]),
+                            row_count=int(row["row_count"]),
+                            imported_at=str(row["imported_at"]),
+                        )
+                        for row in rows
+                    ],
                 )
+                for digest, rows in groupby(members, key=lambda row: row["run_jsonl_sha256"])
+            ]
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
-    return groups
 
 
 def query_registry_results(

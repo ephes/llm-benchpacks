@@ -454,6 +454,35 @@ def test_registry_duplicates_finds_runs_with_same_run_jsonl(
     ]
 
 
+@pytest.mark.parametrize("pair_count", [2, 20])
+def test_registry_duplicates_projects_members_with_fixed_query_count(
+    tmp_path: Path, monkeypatch, pair_count: int,
+) -> None:
+    sources = [tmp_path / f"run-{index}" for index in range(2 * pair_count + 1)]
+    for index, source in enumerate(sources):
+        _write_result_dir(source, [_record(f"case-{index % (pair_count + 1)}")])
+    db = tmp_path / "registry.sqlite"
+    summaries = import_result_dirs(sources, db)
+    selects = []
+    connect = sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        conn.set_trace_callback(
+            lambda sql: selects.append(sql) if sql.lstrip().upper().startswith("SELECT") else None
+        )
+        return conn
+
+    monkeypatch.setattr(registry.sqlite3, "connect", traced_connect)
+    groups = find_registry_duplicate_runs(db)
+
+    assert [[run.run_id for run in group.runs] for group in groups] == [
+        [summaries[index].run_id, summaries[index + pair_count + 1].run_id]
+        for index in range(pair_count)
+    ]
+    assert len(selects) == 2  # Schema check and one duplicate-member query.
+
+
 def test_registry_duplicates_cli_reports_groups(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
