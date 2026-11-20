@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Refuse report sidecars from a replacement result directory after admitting
+  `run.jsonl`. Open hardware and runtime metadata relative to the verified
+  directory descriptor.
+
 - Sync each complete `run.jsonl` append and its directory entry before the
   first receipt for that file. Preserve visible rows on sync failure and
   refuse further appends and summaries from that reporter.

@@ -3849,10 +3849,10 @@ def test_cli_result_collection_handles_open_error(tmp_path, monkeypatch, capsys,
     original_open = compare.open_contained_regular
     opened = []
 
-    def deny_second(path, name):
-        if path == run_b:
+    def deny_second(directory, name):
+        if os.fstat(directory).st_ino == run_b.stat().st_ino:
             raise PermissionError("synthetic denial")
-        fd = original_open(path, name)
+        fd = original_open(directory, name)
         assert fd is not None
         opened.append(fd)
         return fd

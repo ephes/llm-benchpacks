@@ -789,6 +789,11 @@ Contained result reads reject in-place changes detected by descriptor size and
 nanosecond mtime/ctime checks. Atomic pathname replacement keeps the complete
 opened generation readable. Retry unstable inputs after their writer has stopped.
 
+Reports read `hardware.json` and `run-metadata.json` from the directory that
+supplied the rows. If that directory is exchanged or an input alias is
+retargeted before the metadata opens, reload the report inputs. Sidecar
+symlinks are refused.
+
 Registry imports admit one result-directory generation: JSONL and optional
 hardware/runtime sidecars are opened together, fenced before database mutation,
 and carried as validated snapshots into SQLite. A source directory exchange or

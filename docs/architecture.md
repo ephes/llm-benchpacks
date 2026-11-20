@@ -1235,6 +1235,12 @@ returning bytes or accepting a digest. JSONL uses the same fence. Unlink-only
 ctime changes permit complete old-generation reads during atomic replacement.
 Unstable copies remove their owned destination and abort bundle publication.
 
+Compare and report loaders open `run.jsonl` relative to an admitted
+directory descriptor and retain its device and inode on `ResultRun`. Report
+sidecar reads check a reopened directory descriptor against that identity,
+then read a regular file relative to it. Relabeling a run preserves its
+directory identity.
+
 Registry admission opens JSONL and both optional sidecars relative to one
 admitted directory descriptor before parsing. It keeps all descriptors until
 file/directory generation fences pass, then carries normalized hardware and

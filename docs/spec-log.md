@@ -8,6 +8,8 @@ working history and open questions.
 
 - Acknowledge JSONL appends after file sync and sync the directory before
   the first receipt for each file. Retire the reporter on uncertain durability.
+- Bind report hardware and runtime sidecar reads to the admitted result
+  directory identity, including when the input is a directory alias.
 
 ## 2026-11-20 (round 157 B26: standalone run metadata publication)
 

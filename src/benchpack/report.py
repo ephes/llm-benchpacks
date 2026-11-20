@@ -40,7 +40,8 @@ from .repo_task_outcomes import (
     format_verify_exit_code,
     summarize_repo_task_outcomes,
 )
-from .run_metadata import RunMetadataError, load_optional_run_metadata
+from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, parse_run_metadata
+from .safe_files import open_regular_at, open_result_directory, require_stable_file
 
 
 MAX_REPORT_SET_BYTES = 1024 * 1024
@@ -519,8 +520,12 @@ def _runtime_metadata(run: ResultRun) -> dict[str, Any] | None:
         return run.run_metadata
     if run.artifact_root is None:
         return None
+    path = run.artifact_root / RUN_METADATA_FILENAME
+    text = _read_companion_text(run, path)
+    if text is None:
+        return None
     try:
-        return load_optional_run_metadata(run.artifact_root)
+        return parse_run_metadata(text, source=path)
     except RunMetadataError as exc:
         raise ReportError(str(exc)) from exc
 
@@ -557,18 +562,9 @@ def _hardware_cell(run: ResultRun) -> str:
     if run.artifact_root is None:
         return "hardware.json missing"
     path = run.artifact_root / "hardware.json"
-    try:
-        try:
-            mode = path.stat().st_mode
-        except (FileNotFoundError, NotADirectoryError):
-            return "hardware.json missing"
-        if not stat.S_ISREG(mode):
-            return "hardware.json missing"
-        text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise ReportError(f"{path} is not valid UTF-8") from exc
-    except OSError as exc:
-        raise ReportError(f"could not read {path}: {exc.strerror}") from exc
+    text = _read_companion_text(run, path)
+    if text is None:
+        return "hardware.json missing"
 
     try:
         hardware = json.loads(text, object_pairs_hook=unique_json_object)
@@ -581,6 +577,35 @@ def _hardware_cell(run: ResultRun) -> str:
     if not isinstance(hardware, dict):
         raise ReportError(f"expected JSON object in {path}")
     return _hardware_object_cell(hardware)
+
+
+def _read_companion_text(run: ResultRun, path: Path) -> str | None:
+    try:
+        with open_result_directory(path.parent) as directory:
+            if run.directory_identity is not None:
+                info = os.fstat(directory)
+                if (info.st_dev, info.st_ino) != run.directory_identity:
+                    raise ReportError(f"result directory {path.parent} was exchanged")
+            try:
+                fd = open_regular_at(directory, path.name)
+            except FileNotFoundError:
+                return None
+            if fd is None:
+                if path.name == RUN_METADATA_FILENAME:
+                    raise ReportError(f"run metadata file {path} must be a regular file")
+                return None
+            try:
+                initial = os.fstat(fd)
+                with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as stream:
+                    text = stream.read()
+                require_stable_file(fd, initial)
+                return text
+            finally:
+                os.close(fd)
+    except UnicodeDecodeError as exc:
+        raise ReportError(f"{path} is not valid UTF-8") from exc
+    except OSError as exc:
+        raise ReportError(f"could not read {path}: {exc.strerror or exc}") from exc
 
 
 def _hardware_object_cell(hardware: dict[str, Any]) -> str:

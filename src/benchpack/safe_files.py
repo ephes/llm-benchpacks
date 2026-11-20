@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import stat
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -77,6 +78,35 @@ def contained_parts(relative_path: str) -> tuple[str, ...] | None:
     return parts
 
 
+@contextmanager
+def open_result_directory(path: Path) -> Iterator[int]:
+    """Hold the resolved directory descriptor, allowing directory aliases."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
+def open_regular_at(directory: int, name: str) -> int | None:
+    """Open one no-follow regular file relative to an admitted directory.
+
+    A special file returns None. Open and inspection errors propagate.
+    """
+    if contained_parts(name) != (name,):
+        raise ValueError("expected a single filename")
+    fd = os.open(name, _FILE_FLAGS, dir_fd=directory)
+    try:
+        if stat.S_ISREG(os.fstat(fd).st_mode):
+            os.set_blocking(fd, True)
+            return fd
+    except BaseException:
+        os.close(fd)
+        raise
+    os.close(fd)
+    return None
+
+
 def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     """Open ``root/relative_path`` as a regular file without following links.
 
@@ -103,20 +133,11 @@ def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
             os.close(current)
             current = child
         try:
-            fd = os.open(parts[-1], _FILE_FLAGS, dir_fd=current)
+            return open_regular_at(current, parts[-1])
         except OSError:
             return None
     finally:
         os.close(current)
-    try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            os.close(fd)
-            return None
-        os.set_blocking(fd, True)
-    except OSError:
-        os.close(fd)
-        return None
-    return fd
 
 
 def read_contained_regular(

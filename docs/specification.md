@@ -1173,7 +1173,11 @@ user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly, including when it
 disappears before the read can open it. Other read errors and malformed
 metadata fail with a clear error. An explicit `benchpack run --run-metadata`
-path must be readable. When external-agent model-call JSONL artifacts exist
+path must be readable. The report opens both sidecars relative to a directory
+descriptor whose device and inode match the one that supplied `run.jsonl`.
+An exchanged directory or retargeted input alias fails the report. Sidecar
+opens refuse symlinks and hold the checked directory through each read.
+When external-agent model-call JSONL artifacts exist
 under `task/<case-id>/rep-NNN.model-calls.jsonl`, the report includes aggregate
 safe telemetry summaries. Missing model-call logs are tolerated. Malformed or
 unsafe JSONL lines are counted as invalid without echoing their payloads. When
