@@ -29,6 +29,7 @@ from .compare import (
     pack_versions,
     prefill_parity_statuses,
     summarize_runs,
+    unique_json_object,
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .repo_task_outcomes import (
@@ -570,7 +571,7 @@ def _hardware_cell(run: ResultRun) -> str:
         raise ReportError(f"could not read {path}: {exc.strerror}") from exc
 
     try:
-        hardware = json.loads(text)
+        hardware = json.loads(text, object_pairs_hook=unique_json_object)
     except RecursionError as exc:
         raise ReportError(f"{path} exceeds JSON nesting limit") from exc
     except json.JSONDecodeError as exc:

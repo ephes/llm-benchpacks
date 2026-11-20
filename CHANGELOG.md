@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject duplicate JSON object members at every depth in hardware sidecars
+  read by `benchpack report`.
+
 - Report hardware sidecar I/O, UTF-8, and JSON parser-limit failures as
   controlled `benchpack report` errors.
 

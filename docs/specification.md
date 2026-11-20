@@ -1167,6 +1167,7 @@ such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware_model_identifier`, `ram_mb`, `os`, and `gpus`. Missing
 `hardware.json` is tolerated and reported explicitly. Read failures, invalid
 UTF-8, and JSON parsing failures in a hardware sidecar produce a report error.
+Hardware JSON objects require unique decoded member names at every depth.
 When `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly, including when it

@@ -503,6 +503,23 @@ def test_report_normalizes_hardware_read_error(
         render_report(load_report_runs([run]))
 
 
+@pytest.mark.parametrize(
+    "hardware",
+    [
+        '{"hostname":"first","hostname":"second"}',
+        r'{"gpus":[{"model":"first","m\u006fdel":"second"}]}',
+    ],
+    ids=["top-level", "nested-decoded-name"],
+)
+def test_report_rejects_duplicate_hardware_json_members(tmp_path: Path, hardware: str) -> None:
+    run = tmp_path / "run"
+    _write_run(run)
+    (run / "hardware.json").write_text(hardware, encoding="utf-8")
+
+    with pytest.raises(ReportError, match=r"could not parse .*hardware\.json: invalid JSON domain"):
+        render_report(load_report_runs([run]))
+
+
 def test_load_report_set_expands_relative_paths_from_manifest_dir(
     tmp_path: Path,
 ) -> None:
