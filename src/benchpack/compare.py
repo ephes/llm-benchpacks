@@ -160,6 +160,10 @@ def _read_result_run(
                 raise CompareError(f"expected JSON object in {source}")
             records.append(record)
         require_stable_file(fh.fileno(), initial)
+        if total != initial.st_size:
+            raise CompareError(
+                f"incomplete read of {jsonl_path}: expected {initial.st_size} bytes, read {total}"
+            )
     except UnicodeError as exc:
         raise CompareError(f"could not decode {jsonl_path}:{line_number}: invalid UTF-8") from exc
     except OSError as exc:

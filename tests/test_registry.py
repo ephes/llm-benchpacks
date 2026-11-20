@@ -8,7 +8,9 @@ import os
 import shutil
 import sqlite3
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -621,6 +623,29 @@ def test_registry_query_cli_outputs_json(
     assert output[0]["label"] == "run-a"
     assert output[0]["case"] == "long"
     assert output[0]["timing"]["wall_s"] == 1.25
+
+
+def test_registry_import_refuses_result_stream_with_premature_eof(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "run-a"
+    _write_result_dir(source, [_record("short"), _record("long")])
+    db = tmp_path / "registry.sqlite"
+    fdopen = os.fdopen
+    jsonl = (source / "run.jsonl").stat()
+
+    @contextmanager
+    def open_truncated(fd, *args, **kwargs):
+        with fdopen(fd, *args, **kwargs) as stream:
+            if os.path.samestat(os.fstat(fd), jsonl):
+                reader = Mock(wraps=stream)
+                reader.readline.side_effect = [stream.readline(), b""]
+                yield reader
+            else:
+                yield stream
+
+    monkeypatch.setattr(os, "fdopen", open_truncated)
+    with pytest.raises(RegistryError, match="incomplete read of .*run.jsonl"):
+        import_result_dirs([source], db)
+    assert not db.exists()
 
 
 def test_registry_query_rejects_invalid_limit(tmp_path: Path) -> None:

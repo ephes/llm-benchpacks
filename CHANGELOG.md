@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reject incomplete `run.jsonl` reads before admitting rows or a digest, even
+  when the last row read is valid JSON.
+
 - Sync static registry sites before retiring the previous generation. Retain
   the backup when the new site is visible but the parent sync fails.
 
