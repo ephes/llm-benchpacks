@@ -19,6 +19,7 @@ MISSING = "—"
 MAX_RESULT_LINE_BYTES = 1024 * 1024
 MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
 MAX_RESULT_RECORDS = 100_000
+MAX_CASE_SUMMARIES = 100_000
 
 
 class CompareError(ValueError):
@@ -165,10 +166,11 @@ def load_result_runs(
         if not path.is_dir():
             raise CompareError(f"result input must be a directory: {path}")
         jsonl_path = path / "run.jsonl"
-        fd = open_contained_regular(path, "run.jsonl")
-        if fd is None:
-            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+        fd = None
         try:
+            fd = open_contained_regular(path, "run.jsonl")
+            if fd is None:
+                raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
             info = os.fstat(fd)
             identity = (info.st_dev, info.st_ino)
             if identity in seen:
@@ -188,7 +190,8 @@ def load_result_runs(
         except OSError as exc:
             raise CompareError(f"could not read {jsonl_path}") from exc
         finally:
-            os.close(fd)
+            if fd is not None:
+                os.close(fd)
     return runs
 
 
@@ -269,6 +272,12 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
             if key not in seen_cases:
                 seen_cases.add(key)
                 case_order.append(key)
+    summary_count = len(runs) * len(case_order)
+    if summary_count > MAX_CASE_SUMMARIES:
+        raise CompareError(
+            f"comparison summary row limit exceeded ({summary_count} rows, "
+            f"limit {MAX_CASE_SUMMARIES}). Split the inputs into smaller groups."
+        )
     labels = case_labels(case_order)
 
     summaries: list[CaseSummary] = []

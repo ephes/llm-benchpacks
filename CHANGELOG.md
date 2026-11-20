@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reject comparison and report summaries above 100,000 run/case rows before
+  expansion, counting placeholders for missing cases.
+
+- Report unreadable `run.jsonl` inputs as controlled errors in `benchpack compare`
+  and `benchpack report`.
+
 - Reject NaN and infinity in collected hardware telemetry before output
   creation or model calls, and again before publishing `hardware.json`,
   preserving any previously published hardware artifact.

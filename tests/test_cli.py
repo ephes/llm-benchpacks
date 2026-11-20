@@ -3835,6 +3835,41 @@ def test_cli_compare_rejects_missing_run_jsonl(tmp_path: Path) -> None:
         main(["compare", str(run_a), str(run_b)])
 
 
+@pytest.mark.parametrize("command", ["compare", "report"])
+def test_cli_result_collection_handles_open_error(tmp_path, monkeypatch, capsys, command):
+    import errno
+    import os
+
+    import benchpack.compare as compare
+
+    run_a = tmp_path / "run-a"
+    run_b = tmp_path / "run-b"
+    _write_compare_run(run_a)
+    _write_compare_run(run_b)
+    original_open = compare.open_contained_regular
+    opened = []
+
+    def deny_second(path, name):
+        if path == run_b:
+            raise PermissionError("synthetic denial")
+        fd = original_open(path, name)
+        assert fd is not None
+        opened.append(fd)
+        return fd
+
+    monkeypatch.setattr(compare, "open_contained_regular", deny_second)
+    with pytest.raises(SystemExit) as exc_info:
+        main([command, str(run_a), str(run_b)])
+
+    assert f"could not read {run_b / 'run.jsonl'}" in str(exc_info.value)
+    assert "synthetic denial" not in str(exc_info.value)
+    assert capsys.readouterr().out == ""
+    assert len(opened) == 1
+    with pytest.raises(OSError) as closed:
+        os.fstat(opened[0])
+    assert closed.value.errno == errno.EBADF
+
+
 def test_cli_compare_rejects_run_jsonl_with_no_records(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
