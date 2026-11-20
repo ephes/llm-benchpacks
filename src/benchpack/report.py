@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
@@ -590,6 +591,10 @@ def _read_companion_text(run: ResultRun, path: Path) -> str | None:
                 fd = open_regular_at(directory, path.name)
             except FileNotFoundError:
                 return None
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise ReportError(f"refusing symlinked sidecar {path}") from exc
+                raise
             if fd is None:
                 if path.name == RUN_METADATA_FILENAME:
                     raise ReportError(f"run metadata file {path} must be a regular file")

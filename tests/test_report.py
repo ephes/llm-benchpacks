@@ -218,6 +218,18 @@ def test_report_opens_companion_relative_to_verified_directory(tmp_path, monkeyp
     assert "old-host" in report and "new-host" not in report
 
 
+@pytest.mark.parametrize("sidecar", ["hardware.json", "run-metadata.json"])
+def test_report_refuses_symlinked_sidecar(tmp_path: Path, sidecar: str) -> None:
+    run_dir = tmp_path / "run"
+    _write_run(run_dir)
+    target = tmp_path / "outside.json"
+    target.write_text(json.dumps({"hostname": "outside-host"}) + "\n", encoding="utf-8")
+    (run_dir / sidecar).symlink_to(target)
+
+    with pytest.raises(ReportError, match="refusing symlinked sidecar"):
+        render_report(load_report_runs([run_dir]))
+
+
 def test_report_tolerates_missing_hardware_json(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     _write_run(run_a)

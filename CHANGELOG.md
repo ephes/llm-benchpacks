@@ -4,7 +4,8 @@
 
 - Refuse report sidecars from a replacement result directory after admitting
   `run.jsonl`. Open hardware and runtime metadata relative to the verified
-  directory descriptor.
+  directory descriptor, and fail the report with a clear refusal when either
+  sidecar is a symlink.
 
 - Sync each complete `run.jsonl` append and its directory entry before the
   first receipt for that file. Preserve visible rows on sync failure and
