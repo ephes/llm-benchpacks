@@ -165,10 +165,11 @@ def load_result_runs(
         if not path.is_dir():
             raise CompareError(f"result input must be a directory: {path}")
         jsonl_path = path / "run.jsonl"
-        fd = open_contained_regular(path, "run.jsonl")
-        if fd is None:
-            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+        fd = None
         try:
+            fd = open_contained_regular(path, "run.jsonl")
+            if fd is None:
+                raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
             info = os.fstat(fd)
             identity = (info.st_dev, info.st_ino)
             if identity in seen:
@@ -188,7 +189,8 @@ def load_result_runs(
         except OSError as exc:
             raise CompareError(f"could not read {jsonl_path}") from exc
         finally:
-            os.close(fd)
+            if fd is not None:
+                os.close(fd)
     return runs
 
 

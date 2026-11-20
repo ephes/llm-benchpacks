@@ -1165,7 +1165,9 @@ stream publishes. External context serialization precedes filesystem effects.
 The external executor owns process-group cleanup and stream closure on every
 exceptional exit, including interrupts. `report.load_report_runs` deduplicates
 input file identities and supplies remaining report-wide byte/record allowances
-to the existing bounded comparison reader.
+to the existing bounded comparison reader. The collection reader translates
+descriptor-open and read errors to `CompareError` and closes each acquired
+descriptor, including those for duplicate inputs.
 
 ## Result evidence and publication integrity
 
