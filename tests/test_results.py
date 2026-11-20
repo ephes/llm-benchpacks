@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -901,6 +902,45 @@ def test_record_retires_reporter_after_append_descriptor_close_fails(
         reporter.write_summary({})
     assert (reporter.output_dir / "run.jsonl").read_bytes() == persisted
     assert not (reporter.output_dir / "summary.md").exists()
+
+
+@pytest.mark.parametrize("failure", ["file", "directory", None])
+def test_record_acknowledges_only_synced_appends(tmp_path, monkeypatch, failure):
+    out = tmp_path / "run"
+    pack = make_pack(tmp_path)
+    reporter = RunReporter(out, pack)
+    result = make_adapter_result(out)
+    sync = os.fsync
+    events = []
+
+    def sync_append(fd):
+        kind = "directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+        events.append(kind)
+        assert len(reporter.records) == 0
+        assert json.loads((out / "run.jsonl").read_text())["case"] == pack.cases[0].id
+        if kind == failure:
+            raise OSError("synthetic sync failure")
+        sync(fd)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "fsync", sync_append)
+        if failure is not None:
+            with pytest.raises(OSError, match="synthetic sync failure") as caught:
+                reporter.record(pack.cases[0], result, {})
+            assert any("durability uncertain" in note for note in caught.value.__notes__)
+        else:
+            record = reporter.record(pack.cases[0], result, {})
+            assert reporter.records == [record]
+
+    assert events == (["file"] if failure == "file" else ["file", "directory"])
+    if failure is not None:
+        assert reporter.records == []
+        with pytest.raises(OSError, match="uncertain"):
+            reporter.record(pack.cases[0], result, {})
+        with pytest.raises(OSError, match="uncertain"):
+            reporter.write_summary({})
+        assert not (out / "summary.md").exists()
+        assert len((out / "run.jsonl").read_text().splitlines()) == 1
 
 
 def test_record_rollback_failure_reports_both_errors(tmp_path, monkeypatch) -> None:

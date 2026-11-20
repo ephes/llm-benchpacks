@@ -750,10 +750,12 @@ publish complete sibling files atomically, preserving the last successful file
 on staging/replace failure. Nonfinite hardware telemetry fails the run before
 output creation or model calls; the reporter re-checks before publishing
 `hardware.json` and leaves any prior hardware file and completed JSONL rows
-intact. Failed JSONL appends roll back on the opened file.
-If rollback fails or a descriptor close fails after a complete append, the
-error carries a recovery note and the reporter refuses further appends and
-summaries. Inspect the retained artifact and start a new output directory.
+intact. Partial JSONL appends roll back on the opened file. The reporter syncs
+each complete append and syncs the containing directory before acknowledging
+the first row for that file. Sync failures retain the visible row with
+uncertain durability. A sync, rollback or post-append close failure carries a
+recovery note and disables further appends and summaries. Inspect the retained
+artifact and start a new output directory.
 These checks protect parent artifact writes;
 same-user harness execution is not filesystem isolation.
 
@@ -786,6 +788,11 @@ for the complete contracts.
 Contained result reads reject in-place changes detected by descriptor size and
 nanosecond mtime/ctime checks. Atomic pathname replacement keeps the complete
 opened generation readable. Retry unstable inputs after their writer has stopped.
+
+Reports read `hardware.json` and `run-metadata.json` from the directory that
+supplied the rows. If that directory is exchanged or an input alias is
+retargeted before the metadata opens, reload the report inputs. Sidecar
+symlinks are refused.
 
 Registry imports admit one result-directory generation: JSONL and optional
 hardware/runtime sidecars are opened together, fenced before database mutation,

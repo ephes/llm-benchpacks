@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import errno
 import json
+import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from benchpack.compare import ResultRun
+from benchpack.compare import ResultRun, load_result_run
 from benchpack.report import (
     ReportError,
     load_report_runs,
@@ -153,6 +155,79 @@ def test_report_uses_compare_cache_missing_behavior(tmp_path: Path) -> None:
         "| run-b | short | 1 | 1 | 1.000 | 0.200 | — | 40.00 | 30.00 | "
         "60 | 10 | 8 | 1/1 | cache-missing |"
     ) in output
+
+
+@pytest.mark.parametrize("companion", ["hardware", "runtime"])
+@pytest.mark.parametrize("via_alias", [False, True])
+def test_report_refuses_companions_from_replaced_result_directory(
+    tmp_path: Path, companion: str, via_alias: bool,
+) -> None:
+    source = tmp_path / "run"
+    replacement = tmp_path / "replacement"
+    _write_run(
+        source, hardware={"hostname": "old-host"},
+        metadata={"runtime": {"name": "old-runtime"}},
+    )
+    _write_run(
+        replacement, hardware={"hostname": "new-host"},
+        metadata={"runtime": {"name": "new-runtime"}},
+    )
+    if via_alias:
+        alias = tmp_path / "alias"
+        alias.symlink_to(source, target_is_directory=True)
+        (run,) = load_report_runs([alias])
+    else:
+        run = load_result_run(source)
+
+    if companion == "runtime":
+        run = replace(run, hardware={"hostname": "old-host"})
+    report = render_report([run])
+    assert "old-host" in report and "old-runtime" in report
+
+    if via_alias:
+        alias.unlink()
+        alias.symlink_to(replacement, target_is_directory=True)
+    else:
+        source.rename(tmp_path / "retired")
+        replacement.rename(source)
+
+    with pytest.raises(ReportError, match="result directory.*exchanged"):
+        render_report([run])
+
+
+def test_report_opens_companion_relative_to_verified_directory(tmp_path, monkeypatch):
+    source, replacement = tmp_path / "run", tmp_path / "replacement"
+    _write_run(source, hardware={"hostname": "old-host"})
+    _write_run(replacement, hardware={"hostname": "new-host"})
+    (run,) = load_report_runs([source])
+    run = replace(run, run_metadata={"notes": "saved metadata"})
+    original_open = os.open
+    swapped = False
+
+    def exchange_before_open(name, *args, **kwargs):
+        nonlocal swapped
+        if name == "hardware.json":
+            source.rename(tmp_path / "retired")
+            replacement.rename(source)
+            swapped = True
+        return original_open(name, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", exchange_before_open)
+    report = render_report([run])
+    assert swapped
+    assert "old-host" in report and "new-host" not in report
+
+
+@pytest.mark.parametrize("sidecar", ["hardware.json", "run-metadata.json"])
+def test_report_refuses_symlinked_sidecar(tmp_path: Path, sidecar: str) -> None:
+    run_dir = tmp_path / "run"
+    _write_run(run_dir)
+    target = tmp_path / "outside.json"
+    target.write_text(json.dumps({"hostname": "outside-host"}) + "\n", encoding="utf-8")
+    (run_dir / sidecar).symlink_to(target)
+
+    with pytest.raises(ReportError, match="refusing symlinked sidecar"):
+        render_report(load_report_runs([run_dir]))
 
 
 def test_report_tolerates_missing_hardware_json(tmp_path: Path) -> None:
@@ -490,14 +565,14 @@ def test_report_normalizes_hardware_read_error(
 ) -> None:
     run = tmp_path / "run"
     _write_run(run, hardware={"hostname": "synthetic"})
-    original_open = Path.open
+    original_open = os.open
 
-    def fail_hardware_open(self, *args, **kwargs):
-        if self == run / "hardware.json":
-            raise OSError(errno.EIO, "Input/output error", self)
-        return original_open(self, *args, **kwargs)
+    def fail_hardware_open(name, *args, **kwargs):
+        if name == "hardware.json":
+            raise OSError(errno.EIO, "Input/output error", name)
+        return original_open(name, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", fail_hardware_open)
+    monkeypatch.setattr(os, "open", fail_hardware_open)
 
     with pytest.raises(ReportError, match=r"could not read .*hardware\.json: Input/output error"):
         render_report(load_report_runs([run]))

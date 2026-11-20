@@ -42,22 +42,27 @@ def _load_run_metadata(metadata_path: Path, *, optional: bool) -> dict[str, Any]
             f"could not read run metadata file {metadata_path}: {exc.strerror}"
         ) from exc
 
+    return parse_run_metadata(text, source=metadata_path)
+
+
+def parse_run_metadata(text: str, *, source: Path | str) -> dict[str, Any]:
+    """Decode and validate run metadata from admitted text."""
     try:
         metadata = json.loads(text, object_pairs_hook=unique_json_object)
     except RecursionError as exc:
         raise RunMetadataError(
-            f"run metadata file {metadata_path} exceeds JSON nesting limit"
+            f"run metadata file {source} exceeds JSON nesting limit"
         ) from exc
     except json.JSONDecodeError as exc:
         raise RunMetadataError(
-            f"could not parse run metadata file {metadata_path}: {exc.msg}"
+            f"could not parse run metadata file {source}: {exc.msg}"
         ) from exc
     except ValueError as exc:
         raise RunMetadataError(
-            f"could not parse run metadata file {metadata_path}: invalid JSON domain"
+            f"could not parse run metadata file {source}: invalid JSON domain"
         ) from exc
 
-    return validate_run_metadata(metadata, source=metadata_path)
+    return validate_run_metadata(metadata, source=source)
 
 
 def load_optional_run_metadata(result_dir: Path | str) -> dict[str, Any] | None:

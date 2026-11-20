@@ -8,11 +8,13 @@ import math
 import os
 import re
 from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from .safe_files import open_contained_regular, require_stable_file
+from .safe_files import open_contained_regular, open_result_directory, require_stable_file
 
 
 MISSING = "—"
@@ -40,6 +42,8 @@ class ResultRun:
     # SHA-256 of exactly the run.jsonl bytes admitted through the opened
     # descriptor; None for runs rebuilt from the registry index.
     source_sha256: str | None = None
+    # Device and inode of the directory used to open the on-disk rows.
+    directory_identity: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -84,22 +88,39 @@ def load_result_run(
     """Load ``run.jsonl`` from a result directory."""
 
     path = Path(result_dir)
+    with _open_result_input(path) as (fh, directory_identity):
+        return _read_result_run(
+            path, fh, byte_limit=byte_limit, record_limit=record_limit,
+            directory_identity=directory_identity,
+        )
+
+
+@contextmanager
+def _open_result_input(path: Path) -> Iterator[tuple[BinaryIO, tuple[int, int]]]:
     if not path.is_dir():
         raise CompareError(f"result input must be a directory: {path}")
 
     jsonl_path = path / "run.jsonl"
     try:
-        fd = open_contained_regular(path, "run.jsonl")
-        if fd is None:
-            raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
-        with os.fdopen(fd, "rb") as fh:
-            return _read_result_run(path, fh, byte_limit=byte_limit, record_limit=record_limit)
+        with open_result_directory(path) as directory:
+            info = os.fstat(directory)
+            fd = open_contained_regular(directory, "run.jsonl")
+            if fd is None:
+                raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
+            try:
+                stream = os.fdopen(fd, "rb")
+            except BaseException:
+                os.close(fd)
+                raise
+            with stream:
+                yield stream, (info.st_dev, info.st_ino)
     except OSError as exc:
         raise CompareError(f"could not read {jsonl_path}") from exc
 
 
 def _read_result_run(
     path: Path, fh: BinaryIO, *, byte_limit: int, record_limit: int,
+    directory_identity: tuple[int, int] | None = None,
 ) -> ResultRun:
     """Parse one already opened input with the remaining actual-byte allowance."""
     jsonl_path = path / "run.jsonl"
@@ -150,6 +171,7 @@ def _read_result_run(
     return ResultRun(
         path=path, label=path.name, records=records, artifact_root=path,
         source_bytes=total, source_sha256=digest.hexdigest(),
+        directory_identity=directory_identity,
     )
 
 
@@ -163,35 +185,23 @@ def load_result_runs(
     total_bytes = total_records = 0
     for raw_path in result_dirs:
         path = Path(raw_path)
-        if not path.is_dir():
-            raise CompareError(f"result input must be a directory: {path}")
-        jsonl_path = path / "run.jsonl"
-        fd = None
-        try:
-            fd = open_contained_regular(path, "run.jsonl")
-            if fd is None:
-                raise CompareError(f"missing run.jsonl or refused non-regular file: {jsonl_path}")
-            info = os.fstat(fd)
+        with _open_result_input(path) as (fh, directory_identity):
+            info = os.fstat(fh.fileno())
             identity = (info.st_dev, info.st_ino)
             if identity in seen:
                 continue
             if (len(runs) >= run_limit or total_bytes >= byte_limit
                     or total_records >= record_limit):
                 raise CompareError("total run/byte/record limit exceeded")
-            with os.fdopen(fd, "rb", closefd=False) as fh:
-                run = _read_result_run(
-                    path, fh, byte_limit=byte_limit - total_bytes,
-                    record_limit=record_limit - total_records,
-                )
+            run = _read_result_run(
+                path, fh, byte_limit=byte_limit - total_bytes,
+                record_limit=record_limit - total_records,
+                directory_identity=directory_identity,
+            )
             seen.add(identity)
             total_bytes += run.source_bytes
             total_records += len(run.records)
             runs.append(run)
-        except OSError as exc:
-            raise CompareError(f"could not read {jsonl_path}") from exc
-        finally:
-            if fd is not None:
-                os.close(fd)
     return runs
 
 
@@ -527,18 +537,7 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
             if candidate_counts[candidate] > 1
             else candidate
         )
-        labeled.append(
-            ResultRun(
-                path=run.path,
-                label=label,
-                records=run.records,
-                hardware=run.hardware,
-                run_metadata=run.run_metadata,
-                artifact_root=run.artifact_root,
-                source_bytes=run.source_bytes,
-                source_sha256=run.source_sha256,
-            )
-        )
+        labeled.append(replace(run, label=label))
     return labeled
 
 

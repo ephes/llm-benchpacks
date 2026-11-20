@@ -981,12 +981,20 @@ Registry admission captures all import inputs under one directory, checks their
 shared read interval and passes validated sidecars into the DB write. Do not
 reopen those sources after validation.
 
+Filesystem reports bind lazy hardware and runtime reads to the directory
+identity admitted with the JSONL rows. Each read uses an opened directory
+descriptor for both the identity check and the relative sidecar open.
+
 A successful atomic artifact publication syncs the staged file and the admitted
 containing directory. Distinguish pre-publication failure from complete visible
 bytes with uncertain durability; retain the latter instead of compensating by
 removing evidence. Report unsupported directory sync as uncertain too. This
 policy covers the shared reporter/context/workspace writer and does not promise
 multi-file transactions or crash durability of newly created ancestors.
+
+JSONL receipts require a file sync for each complete append and a directory
+sync before the first receipt for the file. Retain complete rows on sync
+failure and retire the reporter with a recovery diagnostic.
 
 ## 2026-11-16: external-agent examples own their executable boundaries
 
