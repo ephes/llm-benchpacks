@@ -55,6 +55,14 @@ class ResultEncodingError(ValueError):
     """Measured result evidence cannot be encoded as strict JSON."""
 
 
+def encode_hardware(hardware: dict[str, Any]) -> bytes:
+    """Encode hardware evidence as strict JSON bytes for ``hardware.json``."""
+    try:
+        return (json.dumps(hardware, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    except ValueError as exc:
+        raise ResultEncodingError("could not encode hardware.json as strict JSON") from exc
+
+
 class RunReporter:
     """Coordinates raw paths, scoring, ``run.jsonl``, ``hardware.json`` and ``summary.md``."""
 
@@ -244,10 +252,7 @@ class RunReporter:
         return record
 
     def write_hardware(self, hardware: dict[str, Any]) -> None:
-        try:
-            data = (json.dumps(hardware, indent=2, allow_nan=False) + "\n").encode("utf-8")
-        except ValueError as exc:
-            raise ResultEncodingError("could not encode hardware.json as strict JSON") from exc
+        data = encode_hardware(hardware)
         with self._directory() as directory:
             atomic_write_at(directory, "hardware.json", data)
 

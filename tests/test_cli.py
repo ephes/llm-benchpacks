@@ -587,7 +587,7 @@ def test_cli_run_refuses_nonfinite_required_timing(tmp_path: Path, monkeypatch) 
 
 
 def test_cli_run_reports_nonfinite_hardware(tmp_path: Path, monkeypatch) -> None:
-    _install_fake_adapter(monkeypatch)
+    calls = _install_fake_adapter(monkeypatch)
     monkeypatch.setattr(
         "benchpack.cli.collect_hardware", lambda: {"gpus": [{"vram_mb": float("nan")}]},
     )
@@ -599,9 +599,8 @@ def test_cli_run_reports_nonfinite_hardware(tmp_path: Path, monkeypatch) -> None
     with pytest.raises(SystemExit, match=r"hardware\.json.*strict JSON"):
         main(_argv(["--out", str(out)]))
 
-    assert (out / "run.jsonl").is_file()
-    assert not (out / "hardware.json").exists()
-    assert not (out / "summary.md").exists()
+    assert calls == []
+    assert not out.exists()
 
 
 def test_cli_run_records_json_schema_scoring(tmp_path: Path, monkeypatch) -> None:

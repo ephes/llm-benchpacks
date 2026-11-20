@@ -10,7 +10,8 @@ working history and open questions.
   JSONL append. Keep the disk evidence for inspection and block summaries and
   retries through that reporter.
 - Reject nonfinite hardware telemetry before sidecar publication and report the
-  encoding error via the CLI. Preserve previous hardware bytes and measured rows.
+  encoding error via the CLI right after hardware collection, before output
+  creation or model calls. Preserve previous hardware bytes and measured rows.
 
 ## 2026-11-17 (round 135 B08: independent HTTP retirement)
 

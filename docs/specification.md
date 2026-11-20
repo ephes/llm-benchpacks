@@ -1832,7 +1832,8 @@ a failed rename also retains the empty destination reservation for inspection.
 The reporter serializes `hardware.json` as strict JSON before creating an
 exclusive sibling UTF-8 temporary file, then atomically replaces the final
 artifact after closing that file. Nonfinite numbers at any depth cause a CLI
-error before hardware publication. Serialization, write, or replacement failure
+error right after hardware collection, before output creation or model calls;
+the reporter applies the same check before hardware publication. Serialization, write, or replacement failure
 preserves any previous complete hardware artifact (or leaves the final path
 absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
 file created by this call is removed on failure. Existing file permissions are

@@ -61,7 +61,7 @@ from .registry import (
     query_registry_results,
     validate_result_bundle,
 )
-from .results import ResultEncodingError, RunReporter
+from .results import ResultEncodingError, RunReporter, encode_hardware
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, load_run_metadata
 from .tasks import (
     ExternalProcessHarness,
@@ -245,6 +245,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             raise SystemExit(str(exc)) from exc
 
     hardware = collect_hardware()
+    try:
+        # Fail before output creation or model calls; write_hardware re-checks.
+        encode_hardware(hardware)
+    except ResultEncodingError as exc:
+        raise SystemExit(str(exc)) from exc
     host_label = args.host_label or _derive_host_label(hardware)
     date = datetime.now().strftime("%Y-%m-%d")
     out_dir = Path(args.out) if args.out else Path("results") / f"{date}-{host_label}"

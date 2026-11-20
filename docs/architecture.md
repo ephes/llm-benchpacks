@@ -1124,8 +1124,10 @@ a failed rename also retains the empty destination reservation for inspection.
 
 ### Hardware evidence publication
 
-The reporter serializes `hardware.json` with `allow_nan=False` before creating
-an exclusive sibling UTF-8 temporary file, then atomically replaces the final
+The CLI encodes collected hardware with the shared strict encoder right after
+`collect_hardware()`, so nonfinite telemetry fails before output creation or
+model calls. The reporter serializes `hardware.json` with `allow_nan=False`
+again before creating an exclusive sibling UTF-8 temporary file, then atomically replaces the final
 artifact after closing that file. Serialization, write, or replacement failure
 preserves any previous complete hardware artifact (or leaves the final path
 absent) and leaves completed `run.jsonl` records unchanged. Only a temporary
