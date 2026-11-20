@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-20 (round 161 B24)
+
+- Acknowledge JSONL appends after file sync and sync the directory before
+  the first receipt for each file. Retire the reporter on uncertain durability.
+
 ## 2026-11-20 (round 157 B26: standalone run metadata publication)
 
 - Require an absent or regular `run-metadata.json` destination before staging

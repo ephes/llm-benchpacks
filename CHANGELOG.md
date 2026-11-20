@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sync each complete `run.jsonl` append and its directory entry before the
+  first receipt for that file. Preserve visible rows on sync failure and
+  refuse further appends and summaries from that reporter.
+
 - Reject duplicate JSON object members at every depth in hardware sidecars
   read by `benchpack report`.
 

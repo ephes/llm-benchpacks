@@ -988,6 +988,10 @@ removing evidence. Report unsupported directory sync as uncertain too. This
 policy covers the shared reporter/context/workspace writer and does not promise
 multi-file transactions or crash durability of newly created ancestors.
 
+JSONL receipts require a file sync for each complete append and a directory
+sync before the first receipt for the file. Retain complete rows on sync
+failure and retire the reporter with a recovery diagnostic.
+
 ## 2026-11-16: external-agent examples own their executable boundaries
 
 Shipped examples enforce their own input, HTTP, workspace publication, child

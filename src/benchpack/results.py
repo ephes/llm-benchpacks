@@ -74,6 +74,7 @@ class RunReporter:
         self.records: list[dict[str, Any]] = []
         self._jsonl_uncertain = False
         self._jsonl_path = self.output_dir / "run.jsonl"
+        self._synced_jsonl_identity: tuple[int, int] | None = None
         self._trusted_output = trusted_root(self.output_dir)
         with admitted_directory(self._trusted_output) as directory:
             opened = os.fstat(directory)
@@ -225,9 +226,12 @@ class RunReporter:
         # This reporter exclusively owns the file; no concurrent appenders.
         # Unbuffered writes make rollback independent of pending text buffers.
         appended = False
+        synced = False
         try:
-            with self._directory() as directory, self._artifact(directory, "run.jsonl") as fd:
-                previous_length = os.fstat(fd).st_size
+            with self._directory() as directory, self._artifact(directory, self._jsonl_path.name) as fd:
+                opened = os.fstat(fd)
+                previous_length = opened.st_size
+                identity = (opened.st_dev, opened.st_ino)
                 try:
                     with os.fdopen(fd, "a+b", buffering=0, closefd=False) as fh:
                         fh.seek(0, 2)
@@ -242,12 +246,19 @@ class RunReporter:
                                      "further appends and summaries refused")
                     raise
                 appended = True
+                os.fsync(fd)
+                if previous_length == 0 or identity != self._synced_jsonl_identity:
+                    os.fsync(directory)
+                synced = True
         except BaseException as exc:
             if appended:
                 self._jsonl_uncertain = True
-                exc.add_note("run.jsonl append cleanup failed; stream uncertain; "
+                reason = ("append cleanup failed; stream uncertain" if synced else
+                          "append visible; durability uncertain")
+                exc.add_note(f"run.jsonl {reason}; "
                              "further appends and summaries refused")
             raise
+        self._synced_jsonl_identity = identity
         self.records.append(record)
         return record
 

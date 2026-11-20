@@ -1103,12 +1103,14 @@ is introduced.
 
 Each RunReporter exclusively owns its run.jsonl file: callers must serialize
 record calls and must not share the output with other writers. Records are
-serialized before I/O and added to the in-memory summary only after a complete
-unbuffered append and successful descriptor cleanup. Serialization/open/write
-failures propagate to the caller. A write or stream wrapper failure triggers
-rollback on the still-open descriptor. If rollback fails, or if descriptor
-cleanup fails after the complete append, the reporter refuses further appends
-and summaries. This is not crash-proof storage or an fsync durability guarantee.
+serialized before I/O and added to the in-memory summary after a complete
+unbuffered append, file sync and successful descriptor cleanup. The first
+receipt for an opened file identity also requires a directory sync.
+Serialization/open/write failures propagate to the caller. A write or stream
+wrapper failure triggers rollback on the still-open descriptor. A sync failure
+retains the complete visible row with uncertain durability. A failed rollback,
+sync or descriptor cleanup after a complete append disables further appends
+and summaries on that reporter.
 
 ### Failed workspace preparation
 
@@ -1183,15 +1185,16 @@ inputs through this reader before opening a database for mutation.
 
 Reporter writes re-admit the original output-directory identity across harness
 execution. JSONL appends use single-link no-follow regular descriptors with
-rollback on the owned descriptor. Sidecar and summary publication reuse
+rollback on the owned descriptor for write failures and a sync before
+acknowledgement. Sidecar and summary publication reuse
 `safe_files.atomic_write_at` within the admitted directory, keeping prior bytes
 and modes on pre-replacement failure. The helper fsyncs the file before replace
 and the directory after replace. `PublishedDurabilityError` identifies complete
 visible bytes whose directory durability is uncertain; callers retain evidence
 and output-directory ownership and never claim that the workspace is unchanged.
 Context/task wrappers preserve this distinction in their domain errors.
-An unsuccessful append rollback or a descriptor close failure after a complete
-append preserves the error, attaches a bounded recovery note, and disables
+An unsuccessful append rollback or a sync or descriptor close failure after a
+complete append preserves the error, attaches a bounded recovery note, and disables
 append and summary operations on that reporter. Metadata admission recursively
 validates unambiguous finite JSON and normalizes extension objects before
 filesystem effects.

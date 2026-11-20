@@ -1820,11 +1820,12 @@ undecodable responses retain their text there.
 ## Reporter persistence failures
 
 The reporter requires exclusive ownership of `run.jsonl`. Serialization precedes
-mutation and summaries advance after a complete append and successful descriptor
-cleanup. Write or stream wrapper failures attempt to restore the previous file
-length while the append descriptor is open. If rollback fails or a descriptor
-close fails after a complete append, inspect the retained file and start a fresh
-reporter in a new output directory. This does not guarantee durability across crashes.
+mutation. Summaries advance after a complete append, a successful file sync
+and descriptor cleanup. The first receipt for a file also requires a sync of
+its containing directory. Write or stream wrapper failures attempt to restore
+the previous file length while the append descriptor is open. If rollback,
+sync or post-append descriptor close fails, inspect the retained file and
+start a fresh reporter in a new output directory.
 
 ## Hardware evidence failures
 
@@ -2048,14 +2049,16 @@ published, durability-uncertain outcome and retains the complete visible file.
 Inspect/retry in the same owned directory; never delete or roll back that evidence
 on this error. Unsupported directory sync is also reported as uncertain. This
 is not a multi-file transaction or a crash durability guarantee for the entire
-run (including newly created ancestor directories and JSONL appends).
+run (including newly created ancestor directories).
 
 An append failure compensates with `ftruncate` on the same open descriptor,
 without reopening a pathname. The primary append exception is re-raised; a
 failed compensation adds bounded recovery context and marks the reporter stream
-uncertain. A descriptor close failure after a complete append also marks the
-stream uncertain and adds recovery context to the close error. In both cases,
-no memory record is added and subsequent appends and summary writes refuse.
+uncertain. After a complete append, the reporter fsyncs the file and, on the
+first receipt for that file identity, its containing directory. Sync and
+descriptor close failures retain the complete row, mark the stream uncertain,
+and add recovery context. An uncertain row stays out of memory and the
+reporter refuses subsequent appends and summary writes.
 Preserve and inspect `run.jsonl` and start a fresh output directory.
 
 ## Unambiguous scoring and bounded diagnostics
