@@ -8,6 +8,8 @@ working history and open questions.
 
 - Require an absent or regular `run-metadata.json` destination before staging
   and copying permissions. Refuse symlinks and other special destinations.
+- Preserve the publication exception and attach a note when stage cleanup
+  also fails. Propagate a cleanup-only exception directly.
 
 ## 2026-11-20 (round 155 B30: comparison admission)
 

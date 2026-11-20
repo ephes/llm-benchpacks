@@ -134,6 +134,7 @@ def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path
 
     temporary_path = output_path.with_name(f".{RUN_METADATA_FILENAME}.{uuid.uuid4().hex}.tmp")
     owned = False
+    primary_error: BaseException | None = None
     try:
         with temporary_path.open("x", encoding="utf-8") as temporary:
             owned = True
@@ -141,7 +142,15 @@ def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path
                 temporary_path.chmod(stat.S_IMODE(destination_mode))
             temporary.write(text)
         temporary_path.replace(output_path)
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
         if owned:
-            temporary_path.unlink(missing_ok=True)
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except BaseException:
+                if primary_error is None:
+                    raise
+                primary_error.add_note("run metadata staging cleanup failed")
     return output_path

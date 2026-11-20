@@ -5,6 +5,9 @@
 - Reject symlinks, directories, and other special destinations before the
   standalone run metadata writer stages output or copies permissions.
 
+- Preserve standalone run metadata publication errors when temporary-file
+  cleanup also fails, and report the cleanup failure in an exception note.
+
 - Reject comparison and report summaries above 100,000 run/case rows before
   expansion, counting placeholders for missing cases.
 
