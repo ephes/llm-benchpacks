@@ -5,7 +5,8 @@ import os
 import sqlite3
 import subprocess
 import sys
-from contextlib import closing
+from contextlib import closing, contextmanager
+from unittest.mock import Mock
 
 import pytest
 
@@ -155,6 +156,52 @@ def test_dataset_growth_checked_on_open_descriptor(tmp_path, monkeypatch):
     with pytest.raises(registry.RegistryError, match="byte limit"):
         registry.import_agent_wrap_results(data, db)
     assert not db.exists()
+
+
+@pytest.mark.parametrize("change", ["rewrite", "short-read", "replace"])
+def test_dataset_admits_only_complete_opened_generation(tmp_path, monkeypatch, change):
+    data, db = tmp_path / "data.json", tmp_path / "db.sqlite"
+    _dataset(data)
+    with data.open("ab") as stream:
+        stream.write(b" ")
+    admitted = data.stat()
+    replacement = tmp_path / "replacement.json"
+    _dataset(replacement, labels=("replacement",))
+    fdopen = os.fdopen
+
+    def read(stream, limit):
+        contents = stream.read(limit)
+        if change == "rewrite":
+            data.write_bytes(contents[:-1] + b"\n")
+            os.utime(data, ns=(admitted.st_atime_ns, admitted.st_mtime_ns + 1_000_000_000))
+        elif change == "short-read":
+            return contents[:-1]
+        else:
+            replacement.replace(data)
+        return contents
+
+    @contextmanager
+    def open_at_read_barrier(fd, *args, **kwargs):
+        with fdopen(fd, *args, **kwargs) as stream:
+            if os.path.samestat(os.fstat(fd), admitted):
+                reader = Mock(wraps=stream)
+                reader.read.side_effect = lambda limit: read(stream, limit)
+                yield reader
+            else:
+                yield stream
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "fdopen", open_at_read_barrier)
+        if change == "replace":
+            assert registry.import_agent_wrap_results(data, db).rows_imported == 2
+        else:
+            message = "changed during read" if change == "rewrite" else "incomplete read"
+            with pytest.raises(registry.RegistryError, match=message):
+                registry.import_agent_wrap_results(data, db)
+            assert not db.exists()
+
+    expected = 1 if change == "replace" else 2
+    assert registry.import_agent_wrap_results(data, db).rows_imported == expected
 
 
 def test_dataset_replacement_after_open_keeps_descriptor(tmp_path, monkeypatch):

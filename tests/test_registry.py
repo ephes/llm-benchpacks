@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -454,6 +457,35 @@ def test_registry_duplicates_finds_runs_with_same_run_jsonl(
     ]
 
 
+@pytest.mark.parametrize("pair_count", [2, 20])
+def test_registry_duplicates_projects_members_with_fixed_query_count(
+    tmp_path: Path, monkeypatch, pair_count: int,
+) -> None:
+    sources = [tmp_path / f"run-{index}" for index in range(2 * pair_count + 1)]
+    for index, source in enumerate(sources):
+        _write_result_dir(source, [_record(f"case-{index % (pair_count + 1)}")])
+    db = tmp_path / "registry.sqlite"
+    summaries = import_result_dirs(sources, db)
+    selects = []
+    connect = sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        conn.set_trace_callback(
+            lambda sql: selects.append(sql) if sql.lstrip().upper().startswith("SELECT") else None
+        )
+        return conn
+
+    monkeypatch.setattr(registry.sqlite3, "connect", traced_connect)
+    groups = find_registry_duplicate_runs(db)
+
+    assert [[run.run_id for run in group.runs] for group in groups] == [
+        [summaries[index].run_id, summaries[index + pair_count + 1].run_id]
+        for index in range(pair_count)
+    ]
+    assert len(selects) == 2  # Schema check and one duplicate-member query.
+
+
 def test_registry_duplicates_cli_reports_groups(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -591,6 +623,29 @@ def test_registry_query_cli_outputs_json(
     assert output[0]["label"] == "run-a"
     assert output[0]["case"] == "long"
     assert output[0]["timing"]["wall_s"] == 1.25
+
+
+def test_registry_import_refuses_result_stream_with_premature_eof(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "run-a"
+    _write_result_dir(source, [_record("short"), _record("long")])
+    db = tmp_path / "registry.sqlite"
+    fdopen = os.fdopen
+    jsonl = (source / "run.jsonl").stat()
+
+    @contextmanager
+    def open_truncated(fd, *args, **kwargs):
+        with fdopen(fd, *args, **kwargs) as stream:
+            if os.path.samestat(os.fstat(fd), jsonl):
+                reader = Mock(wraps=stream)
+                reader.readline.side_effect = [stream.readline(), b""]
+                yield reader
+            else:
+                yield stream
+
+    monkeypatch.setattr(os, "fdopen", open_truncated)
+    with pytest.raises(RegistryError, match="incomplete read of .*run.jsonl"):
+        import_result_dirs([source], db)
+    assert not db.exists()
 
 
 def test_registry_query_rejects_invalid_limit(tmp_path: Path) -> None:
@@ -2126,22 +2181,22 @@ def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, mo
     export_registry_static_site(db, site)
     before = {p.name: p.read_bytes() for p in site.iterdir()}
     writes = []
-    original_write = Path.write_text
+    original_open = Path.open
     original_rename = Path.rename
     injected = []
-    def fail_write(path, *args, **kwargs):
+    def fail_open(path, *args, **kwargs):
         writes.append(path.name)
         if len(writes) == 2:
             injected.append(True)
             raise OSError("injected write failure")
-        return original_write(path, *args, **kwargs)
+        return original_open(path, *args, **kwargs)
     def fail_publish(path, target):
         if Path(target) == site and path != site and not injected:
             injected.append(True)
             raise OSError("injected publish failure")
         return original_rename(path, target)
-    monkeypatch.setattr(Path, "write_text" if failure == "write" else "rename",
-                        fail_write if failure == "write" else fail_publish)
+    monkeypatch.setattr(Path, "open" if failure == "write" else "rename",
+                        fail_open if failure == "write" else fail_publish)
     with pytest.raises(RegistryError, match="injected"):
         export_registry_static_site(db, site, force=True)
     assert injected
@@ -2149,6 +2204,54 @@ def test_registry_site_publication_failure_preserves_old_site(tmp_path: Path, mo
     assert sorted(p.name for p in tmp_path.iterdir()) == [
         ".site.benchpack-publish.lock", "registry.sqlite", "run-a", "site"
     ]
+
+
+def test_registry_site_sync_failure_retains_both_generations(tmp_path: Path, monkeypatch) -> None:
+    first = tmp_path / "run-a"
+    second = tmp_path / "run-b"
+    _write_result_dir(first)
+    _write_result_dir(second)
+    db = tmp_path / "registry.sqlite"
+    import_result_dirs([first, second], db)
+    site = tmp_path / "site"
+    export_registry_static_site(db, site, labels=["run-a"])
+    before = {path.name: path.read_bytes() for path in site.iterdir()}
+
+    rename = Path.rename
+    fsync = os.fsync
+    parent = tmp_path.stat()
+    synced = []
+    staged = {}
+
+    def record_promotion(source, target):
+        if target == site:
+            staged.update({path.name: path.read_bytes() for path in source.iterdir()})
+        return rename(source, target)
+
+    def fail_parent_sync(fd):
+        info = os.fstat(fd)
+        if os.path.samestat(info, parent) and staged:
+            assert all(
+                any(os.path.samestat(previous, path.stat()) for previous in synced[:-1])
+                for path in site.iterdir()
+            )
+            assert os.path.samestat(synced[-1], site.stat())
+            raise OSError("injected parent sync failure")
+        fsync(fd)
+        synced.append(info)
+
+    monkeypatch.setattr(Path, "rename", record_promotion)
+    monkeypatch.setattr(os, "fsync", fail_parent_sync)
+    with pytest.raises(RegistryError, match="published.*durability uncertain") as error:
+        export_registry_static_site(db, site, labels=["run-b"], force=True)
+
+    backup, = tmp_path.glob(".site-backup-*")
+    assert str(site) in str(error.value)
+    assert str(backup) in str(error.value)
+    assert {path.name: path.read_bytes() for path in backup.iterdir()} == before
+    assert {path.name: path.read_bytes() for path in site.iterdir()} == staged
+    assert staged != before
+    assert not list(tmp_path.glob(".site-stage-*"))
 
 
 @pytest.mark.parametrize("protected", ["database", "results", "nested", "symlink"])

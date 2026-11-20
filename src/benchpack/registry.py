@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -328,44 +329,38 @@ def find_registry_duplicate_runs(db_path: Path | str) -> list[RegistryDuplicateG
             conn.execute("BEGIN")
             conn.row_factory = sqlite3.Row
             _assert_report_schema(conn, db)
-            duplicate_hashes = conn.execute(
+            members = conn.execute(
                 """
-                SELECT run_jsonl_sha256
+                SELECT runs.run_jsonl_sha256, runs.id, runs.label, runs.result_dir,
+                       runs.row_count, runs.imported_at
                 FROM runs
-                GROUP BY run_jsonl_sha256
-                HAVING COUNT(*) > 1
-                ORDER BY MIN(id)
-                """
-            ).fetchall()
-            groups: list[RegistryDuplicateGroup] = []
-            for hash_row in duplicate_hashes:
-                rows = conn.execute(
-                    """
-                    SELECT id, label, result_dir, row_count, imported_at
+                JOIN (
+                    SELECT run_jsonl_sha256, MIN(id) AS first_id
                     FROM runs
-                    WHERE run_jsonl_sha256 = ?
-                    ORDER BY id
-                    """,
-                    (hash_row["run_jsonl_sha256"],),
-                ).fetchall()
-                groups.append(
-                    RegistryDuplicateGroup(
-                        run_jsonl_sha256=hash_row["run_jsonl_sha256"],
-                        runs=[
-                            RegistryDuplicateRun(
-                                run_id=int(row["id"]),
-                                label=str(row["label"]),
-                                result_dir=Path(row["result_dir"]),
-                                row_count=int(row["row_count"]),
-                                imported_at=str(row["imported_at"]),
-                            )
-                            for row in rows
-                        ],
-                    )
+                    GROUP BY run_jsonl_sha256
+                    HAVING COUNT(*) > 1
+                ) AS repeated USING (run_jsonl_sha256)
+                ORDER BY repeated.first_id, runs.id
+                """
+            )
+            return [
+                RegistryDuplicateGroup(
+                    run_jsonl_sha256=digest,
+                    runs=[
+                        RegistryDuplicateRun(
+                            run_id=int(row["id"]),
+                            label=str(row["label"]),
+                            result_dir=Path(row["result_dir"]),
+                            row_count=int(row["row_count"]),
+                            imported_at=str(row["imported_at"]),
+                        )
+                        for row in rows
+                    ],
                 )
+                for digest, rows in groupby(members, key=lambda row: row["run_jsonl_sha256"])
+            ]
     except sqlite3.Error as exc:
         raise RegistryError(f"could not read registry database {db}: {exc}") from exc
-    return groups
 
 
 def query_registry_results(
@@ -539,7 +534,12 @@ def _publish_static_site(
         staging = staging_parent / "site"
         staging.mkdir()
         for filename, contents in output_files.items():
-            (staging / filename).write_text(contents, encoding="utf-8")
+            with (staging / filename).open("w", encoding="utf-8") as stream:
+                stream.write(contents)
+                stream.flush()
+                os.fsync(stream.fileno())
+        with admitted_directory(staging) as directory:
+            os.fsync(directory)
         if site_root.exists():
             backup = Path(tempfile.mkdtemp(prefix=f".{site_root.name}-backup-", dir=site_root.parent))
             backup.rmdir()
@@ -556,6 +556,15 @@ def _publish_static_site(
                         f"{rollback_error}; previous site retained at {backup}"
                     ) from rollback_error
             raise
+        try:
+            with admitted_directory(site_root.parent, base=site_root.parent) as parent:
+                os.fsync(parent)
+        except OSError as exc:
+            recovery = f"; previous site retained at {backup}" if backup is not None else ""
+            raise RegistryError(
+                f"registry site published at {site_root}, but directory durability uncertain: "
+                f"{exc}{recovery}"
+            ) from exc
         if backup is not None:
             try:
                 if backup.is_dir():
@@ -1258,13 +1267,20 @@ def _read_agent_dataset(path: Path) -> bytes:
             f"agent-wrap data {path} requires a readable regular file without symlinks"
         )
     try:
-        if os.fstat(fd).st_size > MAX_AGENT_DATASET_BYTES:
+        initial = os.fstat(fd)
+        if initial.st_size > MAX_AGENT_DATASET_BYTES:
             raise RegistryError("agent-wrap dataset byte limit exceeded")
         with os.fdopen(fd, "rb") as fh:
             fd = None  # The file object now owns the descriptor.
             data = fh.read(MAX_AGENT_DATASET_BYTES + 1)
-        if len(data) > MAX_AGENT_DATASET_BYTES:
-            raise RegistryError("agent-wrap dataset byte limit exceeded")
+            if len(data) > MAX_AGENT_DATASET_BYTES:
+                raise RegistryError("agent-wrap dataset byte limit exceeded")
+            require_stable_file(fh.fileno(), initial)
+            if len(data) != initial.st_size:
+                raise RegistryError(
+                    f"incomplete read of agent-wrap data {path}: "
+                    f"expected {initial.st_size} bytes, read {len(data)}"
+                )
         return data
     finally:
         if fd is not None:
@@ -1286,6 +1302,8 @@ def _load_and_validate_agent_wrap_dataset(data_path: Path | str) -> dict[str, An
         raise RegistryError("could not parse agent-wrap JSON data") from exc
     except (ValueError, RecursionError) as exc:
         raise RegistryError("could not parse agent-wrap JSON data") from exc
+    except UnstableFileError as exc:
+        raise RegistryError(f"agent-wrap data {path} changed during read") from exc
     except OSError as exc:
         raise RegistryError(f"could not read {path}: {exc.strerror}") from exc
     if not isinstance(dataset, dict):

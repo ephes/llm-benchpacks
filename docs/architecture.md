@@ -1180,8 +1180,11 @@ summaries. Directory and SQLite-backed reports use the same summary builder and
 conservative parity helper. This requires no result schema or registry migration.
 
 Result ingestion reuses `safe_files.open_contained_regular` for final-file
-admission and recursive unique-member decoding. Registry import validates all
-inputs through this reader before opening a database for mutation.
+admission and recursive unique-member decoding. The JSONL reader checks that
+the opened file stayed stable and that the byte count matches its initial size
+before returning records and a digest. Agent-wrap imports apply the same
+descriptor checks to the dataset before decoding. Registry import completes
+input validation before opening a database for mutation.
 
 Reporter writes re-admit the original output-directory identity across harness
 execution. JSONL appends use single-link no-follow regular descriptors with

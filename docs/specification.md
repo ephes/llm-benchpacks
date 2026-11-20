@@ -1368,7 +1368,9 @@ existing schema version `4` registry. It groups imported `runs` rows by the
 registry-stored `run_jsonl_sha256` value and prints only groups where more than one
 run has identical `run.jsonl` contents. Each duplicate entry includes the
 registry run id, label, row count, import time, and indexed result-directory
-identity. If no duplicates are present, the command prints a compact
+identity. A single query retrieves the duplicate members. Groups appear in
+order of their earliest registry run ID, with members ordered by run ID.
+If no duplicates are present, the command prints a compact
 no-duplicates message and exits successfully.
 
 This is duplicate visibility, not automatic moderation or deletion. It does not
@@ -1429,7 +1431,10 @@ Agent datasets are admitted before database creation or mutation: at most
 16 MiB of actual UTF-8 input and 10,000 rows. The leaf path must be a regular
 file, without a symlink; its parent directory may be reached through a link.
 Size and contents come from one descriptor, with an actual read limit even
-if the file grows. Duplicate JSON members at every object depth are refused
+if the file grows. Before decoding, import verifies that the opened generation
+stayed stable and the bytes read match its initial size. Atomic pathname
+replacement preserves admission of a complete, unchanged opened generation.
+Duplicate JSON members at every object depth are refused
 without including member names or values in the error. Repeated array values
 are allowed. Split larger curated histories into independently owned sources.
 Wall time must be finite, nonnegative and representable as a float; diff and
@@ -1546,9 +1551,13 @@ checks; uncheckable paths fail closed before publication, even for unselected
 runs or fresh output. Relative agent-wrap provenance paths are interpreted from the export process
 working directory; paths in other checkouts should be recorded as absolute. Symlink
 output directories are refused. All three files are generated in a sibling
-staging directory before publication. Replacement renames the old output to
-a backup, publishes the staged site, and then removes the backup. Write errors
-leave the old output intact; failed publication restores it. If restoration
+staging directory. Export syncs the staged files and their directory before
+publication. Replacement renames the old output to a backup. After promoting
+the staged site, export syncs the output's parent before removing the backup.
+If this sync fails, export reports that the new site is visible with uncertain
+durability and names the retained backup if there was a previous site. Write
+and staging sync errors leave the old output intact. A promotion error triggers
+restoration. If restoration
 also fails, the error names the retained backup for manual recovery. Temporary
 staging cleanup is best-effort and cannot mask the publication outcome. A
 backup-removal failure reports that the new site is published and names the
@@ -2204,8 +2213,10 @@ during publication or automatic recovery after an uncatchable process/power loss
 
 Contained reads/copies and JSONL ingestion compare opened descriptor identity,
 size and nanosecond mtime/ctime after reading. In-place mutation fails before
-using summaries, hashes or publishing bundles/registry rows; failed copies remove
-their partial destination. Unlink-only ctime/link-count changes from atomic
+using summaries, hashes or publishing bundles/registry rows. JSONL ingestion
+also requires the bytes read to match the opened file's initial size, even if
+a premature EOF follows a complete record. Failed copies remove their partial
+destination. Unlink-only ctime/link-count changes from atomic
 pathname replacement are allowed when identity, size and mtime stay unchanged.
 This metadata fence handles concurrent writers, not adversarial same-user code
 that restores timestamps. Hashes and summaries describe the admitted bytes.

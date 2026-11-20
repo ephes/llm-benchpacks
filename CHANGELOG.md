@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Reject agent-wrap datasets that change in place or return incomplete bytes
+  during admission, before writing to the registry.
+
+- Reject incomplete `run.jsonl` reads before admitting rows or a digest, even
+  when the last row read is valid JSON.
+
+- Sync static registry sites before retiring the previous generation. Retain
+  the backup when the new site is visible but the parent sync fails.
+
+- Load registry duplicate groups and their members in one ordered query.
+
 - Refuse report sidecars from a replacement result directory after admitting
   `run.jsonl`. Open hardware and runtime metadata relative to the verified
   directory descriptor, and fail the report with a clear refusal when either
