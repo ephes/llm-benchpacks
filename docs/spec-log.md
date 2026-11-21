@@ -4,6 +4,13 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 173 B25)
+
+- Count each malformed non-null timing or token section once in the shared
+  compare/report metric warning. Keep missing and null sections compatible.
+- Refuse a compare/report input set when a later reference to the same opened
+  inode disagrees with the first read's size or nanosecond mtime/ctime.
+
 ## 2026-11-21 (round 171 B23)
 
 - Use the bounded context read diagnostic for example context open failures.

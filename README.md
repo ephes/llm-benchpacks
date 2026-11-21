@@ -789,8 +789,12 @@ attempts. Timing and rates must be finite and nonnegative. Tokens must be exact
 nonnegative counts. Cached prompt counts
 above the same row's valid prompt count leave cache coverage incomplete and
 block prefill parity. Invalid supplied metrics produce one bounded warning.
+A non-null `timing` or `tokens` section that is not an object counts as one
+invalid sample. Missing and null sections are accepted without a metric warning.
 Both CLIs admit at most 100 distinct run files, 64 MiB JSONL bytes and 100,000
-records across all inputs. Directory aliases and hardlinked files count once.
+records across all inputs. Directory aliases and hardlinked files count once
+when the opened file's size and nanosecond mtime/ctime match. Both commands
+reject the input set if those values change between references to the same inode.
 Compare requires two distinct files after deduplication.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.

@@ -2127,10 +2127,15 @@ All-failed groups have unavailable performance and cannot establish prefill pari
 Compare/report metrics require finite nonnegative timing/rate values and exact
 nonnegative token counts (integral floats accepted, booleans refused). Invalid
 supplied values are unavailable and generate one bounded aggregate warning in both
-renderers; valid zero remains evidence. Both CLIs share cumulative admission: 100
+renderers; valid zero remains evidence. Each non-null `timing` or `tokens`
+section that is not an object counts as one invalid sample. Missing and null
+sections contribute no warning. Both CLIs share cumulative admission: 100
 distinct opened run files, 64 MiB actual JSONL bytes and 100,000 records, with the
-existing per-line limit. File identity deduplicates directory aliases and hardlinked files from the
-descriptor actually read. Limits apply before admitting excess records or another run.
+existing per-line limit. Opened descriptor identity deduplicates directory
+aliases and hardlinked files when their size and nanosecond mtime/ctime agree
+with the snapshot used to read the first reference. Both CLIs reject the input
+set when a later reference to the same inode differs in any of these fields.
+Limits apply before admitting excess records or another run.
 Compare requires at least two distinct runs after deduplication.
 
 ### Candidate execution and memory evidence

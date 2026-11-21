@@ -1256,6 +1256,21 @@ def test_comparison_metric_domains(tmp_path, section, field, attribute, invalid)
     assert run.records[0][section][field] == invalid
 
 
+@pytest.mark.parametrize("section, malformed", [("timing", 0), ("tokens", [])])
+def test_malformed_metric_section_warns_once(tmp_path, section, malformed):
+    row = _record("short")
+    del row[section]
+    _write_run(tmp_path / "legacy", rows=[row, dict(row, **{section: None})])
+    _write_run(tmp_path / "malformed", rows=[dict(row, **{section: malformed})])
+    runs = [load_result_run(tmp_path / name) for name in ("legacy", "malformed")]
+
+    for renderer in (render_comparison, render_report):
+        assert "invalid metric" not in renderer(runs[:1])
+        warnings = [line for line in renderer(runs).splitlines() if "invalid metric" in line]
+        assert len(warnings) == 1
+        assert warnings[0].startswith("WARNING: 1 invalid metric samples ignored")
+
+
 @pytest.mark.parametrize('command', ['compare', 'report'])
 @pytest.mark.parametrize('limit', ['MAX_REPORT_RUNS', 'MAX_REPORT_BYTES', 'MAX_REPORT_RECORDS'])
 def test_compare_and_report_share_total_input_limits(tmp_path, monkeypatch, command, limit):
@@ -1338,3 +1353,35 @@ def test_compare_deduplicates_aliases_before_total_budget(tmp_path, monkeypatch,
     monkeypatch.setattr(report, 'MAX_REPORT_RUNS', 2)
     assert main(['compare', *(str(tmp_path / name) for name in ('a', 'alias', 'b'))]) == 0
     assert '| alias |' not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", ["compare", "report"])
+def test_cli_refuses_run_changed_between_alias_opens(tmp_path, monkeypatch, capsys, command):
+    import os
+
+    from benchpack import compare
+    from benchpack.cli import main
+
+    first, alias, other = (tmp_path / name for name in ("first", "alias", "other"))
+    _write_run(first, rows=[_record("old")])
+    _write_run(other)
+    alias.mkdir()
+    source = first / "run.jsonl"
+    os.link(source, alias / "run.jsonl")
+    original = source.stat()
+    open_regular = compare.open_contained_regular
+    opens = 0
+
+    def open_with_mutation(directory, name):
+        nonlocal opens
+        opens += 1
+        if opens == 2:
+            source.write_bytes(source.read_bytes().replace(b'"old"', b'"new"'))
+            os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns - 1_000_000_000))
+        return open_regular(directory, name)
+
+    monkeypatch.setattr(compare, "open_contained_regular", open_with_mutation)
+    with pytest.raises(SystemExit, match="run.jsonl changed between input references"):
+        main([command, str(first), str(alias), str(other)])
+    assert opens == 2
+    assert capsys.readouterr().out == ""
