@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Run hardware probes in the C locale so translated systems retain CPU and
+  memory metadata.
+
 - Refuse invalid supplied pack IDs in compare and report. Keep rows with
   missing pack IDs readable as unlabeled legacy data.
 

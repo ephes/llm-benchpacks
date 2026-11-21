@@ -53,6 +53,7 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
         process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL, bufsize=0,
+            env={**os.environ, "LC_ALL": "C"},
             start_new_session=os.name == "posix",
         )
     except OSError:
