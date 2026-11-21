@@ -2037,6 +2037,11 @@ and serialization failures become `RunMetadataError` before output creation or
 adapter/harness calls. Normalized metadata is serialized with `allow_nan=False`
 and valid extension objects roundtrip.
 
+Python callers must supply string keys in every metadata dictionary, including
+objects inside extension arrays. Validation checks those keys before JSON
+serialization and raises `RunMetadataError` for other key types before staging
+can begin. An existing metadata file keeps its prior bytes.
+
 The standalone `write_run_metadata` helper accepts an absent destination or
 an existing regular file. It checks the destination entry without following
 symlinks before staging, and raises `RunMetadataError` for symlinks, directories,

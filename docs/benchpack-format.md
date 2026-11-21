@@ -897,7 +897,9 @@ is an error in either order; split/repair invalid packs before running them.
 
 Pack manifests are unchanged. Runtime metadata extensions must contain finite,
 unambiguous JSON; duplicate members and nonfinite numbers are rejected before a
-run. Every object in imported `run.jsonl` also requires unique member names.
+run. The Python metadata writer requires string keys in nested objects as well
+as at the root. Every object in imported `run.jsonl` also requires unique member
+names.
 Result artifacts are runner-owned: an external harness must not replace
 `run.jsonl`, `summary.md`, `hardware.json`, `run-metadata.json` or their output
 directory with links or another directory generation. These parent write checks

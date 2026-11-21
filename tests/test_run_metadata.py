@@ -401,3 +401,25 @@ def test_metadata_extension_roundtrip(tmp_path):
     }
     path = write_run_metadata(tmp_path, metadata)
     assert load_run_metadata(path) == metadata
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {1: "value"},
+        {"extension": {"nested": [{1: "value"}]}},
+        {"extension": {"nested": ({False: "value"},)}},
+    ],
+    ids=["root", "nested-integer-key", "nested-boolean-key"],
+)
+def test_metadata_writer_refuses_nonstring_keys_before_publication(tmp_path, metadata):
+    previous = {"extension": {"nested": [{"1": "value", "false": "value"}]}}
+    path = write_run_metadata(tmp_path, previous)
+    original = path.read_bytes()
+    assert load_run_metadata(path) == previous
+
+    with pytest.raises(RunMetadataError, match="invalid JSON domain"):
+        write_run_metadata(tmp_path, metadata)
+
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]

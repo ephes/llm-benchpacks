@@ -8,6 +8,7 @@ working history and open questions.
 
 - Compare JSON-schema numbers exactly and apply the same numeric admission to
   pack schemas and model output.
+- Reject nonstring dictionary keys before serializing metadata from Python.
 
 ## 2026-11-21 (round 174 B26)
 

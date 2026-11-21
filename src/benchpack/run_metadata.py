@@ -121,6 +121,7 @@ def validate_run_metadata(
                 )
 
     try:
+        _require_string_keys(metadata)
         # Strict serialization validates the entire extension tree, including
         # overflowed exponent literals; decoding returns normalized JSON values.
         text = json.dumps(metadata, allow_nan=False, ensure_ascii=False)
@@ -133,6 +134,24 @@ def validate_run_metadata(
         ) from exc
     except (ValueError, TypeError, OverflowError, RecursionError) as exc:
         raise RunMetadataError(f"invalid JSON domain in run metadata file {source}") from exc
+
+
+def _require_string_keys(value: Any) -> None:
+    pending = [value]
+    seen: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if not isinstance(item, (dict, list, tuple)) or id(item) in seen:
+            continue
+        # Leave cycle rejection to json.dumps, which also allows shared subtrees.
+        seen.add(id(item))
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    raise TypeError("JSON object keys must be strings")
+                pending.append(child)
+        else:
+            pending.extend(item)
 
 
 def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path:
