@@ -652,6 +652,10 @@ and UTF-8 errors also become `CompareError`. Registry and bundle preflight use
 this loader before any database mutation. Split larger historical runs into
 separate result directories before comparison or import.
 
+For multiple compare/report inputs, the reader uses the same descriptor stat
+for the initial read fence and later alias checks. A repeat device/inode pair
+is deduplicated only when size and nanosecond mtime/ctime still agree.
+
 The compare utility warns when pack ids or versions differ. The `prefill_tps
 med` column is gated because prefill comparisons require explicit prompt-cache
 parity: non-comparable cases render `—` even when `timing.prefill_tps` values

@@ -8,6 +8,8 @@ working history and open questions.
 
 - Count each malformed non-null timing or token section once in the shared
   compare/report metric warning. Keep missing and null sections compatible.
+- Refuse a compare/report input set when a later reference to the same opened
+  inode disagrees with the first read's size or nanosecond mtime/ctime.
 
 ## 2026-11-21 (round 171 B23)
 

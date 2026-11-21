@@ -121,6 +121,7 @@ def _open_result_input(path: Path) -> Iterator[tuple[BinaryIO, tuple[int, int]]]
 def _read_result_run(
     path: Path, fh: BinaryIO, *, byte_limit: int, record_limit: int,
     directory_identity: tuple[int, int] | None = None,
+    initial: os.stat_result | None = None,
 ) -> ResultRun:
     """Parse one already opened input with the remaining actual-byte allowance."""
     jsonl_path = path / "run.jsonl"
@@ -130,7 +131,8 @@ def _read_result_run(
     total = 0
     line_number = 0
     digest = hashlib.sha256()
-    initial = os.fstat(fh.fileno())
+    if initial is None:
+        initial = os.fstat(fh.fileno())
     try:
         while True:
             line = fh.readline(min(
@@ -185,14 +187,17 @@ def load_result_runs(
 ) -> list[ResultRun]:
     """Admit a bounded collection, deduplicating the descriptors actually read."""
     runs: list[ResultRun] = []
-    seen: set[tuple[int, int]] = set()
+    seen: dict[tuple[int, int], tuple[int, int, int]] = {}
     total_bytes = total_records = 0
     for raw_path in result_dirs:
         path = Path(raw_path)
         with _open_result_input(path) as (fh, directory_identity):
             info = os.fstat(fh.fileno())
             identity = (info.st_dev, info.st_ino)
+            generation = (info.st_size, info.st_mtime_ns, info.st_ctime_ns)
             if identity in seen:
+                if seen[identity] != generation:
+                    raise CompareError(f"run.jsonl changed between input references: {path / 'run.jsonl'}")
                 continue
             if (len(runs) >= run_limit or total_bytes >= byte_limit
                     or total_records >= record_limit):
@@ -200,9 +205,9 @@ def load_result_runs(
             run = _read_result_run(
                 path, fh, byte_limit=byte_limit - total_bytes,
                 record_limit=record_limit - total_records,
-                directory_identity=directory_identity,
+                directory_identity=directory_identity, initial=info,
             )
-            seen.add(identity)
+            seen[identity] = generation
             total_bytes += run.source_bytes
             total_records += len(run.records)
             runs.append(run)
