@@ -463,6 +463,30 @@ def test_prefill_parity_status_comparable_when_prompt_and_cache_match(
     ) in output
 
 
+@pytest.mark.parametrize(
+    ("cached_prompt", "status", "prefill"),
+    [(11, "cache-missing", "—"), (10, "comparable", "100.00")],
+)
+def test_prefill_parity_requires_possible_cached_prompt_counts(
+    tmp_path: Path, cached_prompt: int, status: str, prefill: str,
+) -> None:
+    run_dirs = [tmp_path / "run-a", tmp_path / "run-b"]
+    for run_dir in run_dirs:
+        _write_run(run_dir, rows=[_record("short", prompt_tokens=10, cached_prompt=cached_prompt)])
+    runs = [load_result_run(run_dir) for run_dir in run_dirs]
+
+    assert _prefill_statuses(*run_dirs) == {"short": status}
+    for output in (render_comparison(runs), render_report(runs)):
+        for run_dir in run_dirs:
+            assert f"| {run_dir.name} | short | 1 | 1 | 1.000 | 0.200 | {prefill} |" in output
+        if status == "cache-missing":
+            assert "| 10 | — | 0/1 | cache-missing |" in output
+            assert "WARNING: 2 invalid metric samples ignored" in output
+        else:
+            assert "| 10 | 10 | 1/1 | comparable |" in output
+            assert "invalid metric samples" not in output
+
+
 def test_render_comparison_hides_prefill_tps_for_comparable_case_without_metric(
     tmp_path: Path,
 ) -> None:
@@ -1181,6 +1205,32 @@ def test_scoring_failure_is_still_a_completed_metric_sample(tmp_path):
     row['scoring'] = {'mode': 'contains', 'passed': False}
     _write_run(tmp_path / 'completed', rows=[row])
     assert summarize_runs([load_result_run(tmp_path / 'completed')])[0].wall_s == 9
+
+
+@pytest.mark.parametrize("command", ["compare", "report"])
+@pytest.mark.parametrize("invalid_pack", [{"id": 42}, {"id": None}, {"id": "  "}, []])
+def test_cli_refuses_invalid_pack_identity(tmp_path, capsys, command, invalid_pack):
+    from benchpack.cli import main
+
+    legacy = _record("short")
+    del legacy["pack"]
+    labeled = _record("short")
+    invalid = dict(legacy, pack=invalid_pack)
+    legacy_dir, labeled_dir, invalid_dir = (
+        tmp_path / name for name in ("legacy", "labeled", "invalid")
+    )
+    _write_run(legacy_dir, rows=[legacy, dict(legacy, pack={})])
+    _write_run(labeled_dir, rows=[labeled])
+    _write_run(invalid_dir, rows=[invalid])
+
+    main([command, str(legacy_dir), str(labeled_dir)])
+    output = capsys.readouterr().out
+    assert "| legacy | —/short | 2 |" in output
+    assert "| labeled | runtime-sweep/short | 1 |" in output
+
+    with pytest.raises(SystemExit, match="invalid pack identity"):
+        main([command, str(legacy_dir), str(labeled_dir), str(invalid_dir)])
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.parametrize('section, field, attribute, invalid', [

@@ -620,8 +620,9 @@ Emitted `WARNING:` lines:
   comparisons.
 - Prompt-token median differences mean cache parity is not comparable across
   different prompts.
-- Incomplete cache metadata means some measured rows lack numeric
-  `tokens.cached_prompt`.
+- Incomplete cache metadata means some measured rows lack a valid
+  `tokens.cached_prompt` (a numeric count that does not exceed the row's
+  prompt count).
 - Cached prompt-token median differences mean prefill speed should not be
   compared.
 

@@ -447,7 +447,7 @@ total TPS, output tokens, prompt tokens, backend-reported cached prompt tokens,
 and prefill TPS gated on prefill parity. The `prefill_tps med` column renders a
 numeric median only when that case's `prefill parity` status is `comparable`;
 otherwise it renders `—`. Compare also prints cache metadata coverage as
-numeric cached-token rows over successful rows for each case/run group and a
+valid cached-token rows over successful rows for each case/run group and a
 case-level `prefill parity` status repeated on each run row. The status is one
 of `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
 `cache-mixed`, `cache-diff`, or `comparable`, in that priority order. Compare
@@ -780,13 +780,18 @@ deadline and a 64 KiB output ceiling per probe; unavailable probes do not supply
 identity. Resource sampling has a 5-second deadline.
 
 Compare/report require homogeneous adapter/model identities and one version per
-pack in each run. This also applies to registry reports and site export; split
-mixed imported sources into separate result directories. Only `ok: true` rows supply metric medians and cache coverage;
-`rows`, `ok` and `failed` keep all attempts visible. Timing/rates must be finite
-and nonnegative; tokens must be exact nonnegative counts. Invalid supplied
-metrics produce one bounded warning. Both CLIs admit at most 100 distinct run
-files, 64 MiB JSONL bytes and 100,000 records across all inputs. Directory aliases
-and hardlinked files count once; compare requires two distinct files after deduplication.
+pack in each run. A supplied `pack` must be an object and a supplied `pack.id`
+must be a nonblank string. Legacy rows without a pack ID remain readable.
+The same rules apply to registry reports and site export. Split mixed imported
+sources into separate result directories. Only `ok: true` rows supply metric
+medians and cache coverage. The `rows`, `ok` and `failed` counts show all
+attempts. Timing and rates must be finite and nonnegative. Tokens must be exact
+nonnegative counts. Cached prompt counts
+above the same row's valid prompt count leave cache coverage incomplete and
+block prefill parity. Invalid supplied metrics produce one bounded warning.
+Both CLIs admit at most 100 distinct run files, 64 MiB JSONL bytes and 100,000
+records across all inputs. Directory aliases and hardlinked files count once.
+Compare requires two distinct files after deduplication.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.
 

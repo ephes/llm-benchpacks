@@ -220,12 +220,19 @@ def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def record_pack_id(record: dict[str, Any]) -> str | None:
-    """Return a record's pack id, or ``None`` when it is absent or malformed."""
+    """Return an admitted pack id, or ``None`` for unlabeled legacy rows."""
 
-    pack = record.get("pack")
-    if isinstance(pack, dict) and isinstance(pack.get("id"), str):
-        return pack["id"]
-    return None
+    if "pack" not in record:
+        return None
+    pack = record["pack"]
+    if not isinstance(pack, dict):
+        raise CompareError("invalid pack identity: pack must be an object")
+    if "id" not in pack:
+        return None
+    pack_id = pack["id"]
+    if not isinstance(pack_id, str) or not pack_id.strip():
+        raise CompareError("invalid pack identity: pack.id must be a nonblank string")
+    return pack_id
 
 
 def group_case_records(
@@ -252,7 +259,7 @@ def case_labels(keys: list[tuple[str | None, str]]) -> dict[tuple[str | None, st
 
 
 def validate_run_identity(run: ResultRun) -> None:
-    """Refuse pooled runtime identities and multiple versions of one pack."""
+    """Refuse mixed runtime identities, invalid pack ids and mixed pack versions."""
     for field in ("adapter", "model"):
         identities = set()
         for record in run.records:
@@ -264,11 +271,12 @@ def validate_run_identity(run: ResultRun) -> None:
             raise CompareError(f"mixed runtime identity: {field}; split result runs")
     versions: dict[str | None, set[str | None]] = {}
     for record in run.records:
+        pack_id = record_pack_id(record)
         pack = record.get("pack")
         version = pack.get("version") if isinstance(pack, dict) else None
         if version is not None and not isinstance(version, str):
             raise CompareError("mixed or invalid pack version identity; split result runs")
-        versions.setdefault(record_pack_id(record), set()).add(version)
+        versions.setdefault(pack_id, set()).add(version)
     if any(len(values) > 1 for values in versions.values()):
         raise CompareError("mixed pack version identity; split result runs")
 
@@ -438,6 +446,7 @@ def render_comparison(runs: list[ResultRun]) -> str:
     """Render a compact Markdown table comparing loaded result runs."""
 
     runs = disambiguate_runs(runs)
+    summaries = summarize_runs(runs)
     pack_version_set = pack_versions(runs)
     lines: list[str] = ["# benchpack compare", "", "Inputs:"]
     for run in runs:
@@ -469,7 +478,6 @@ def render_comparison(runs: list[ResultRun]) -> str:
     )
     lines.append("")
 
-    summaries = summarize_runs(runs)
     prefill_statuses = prefill_parity_statuses(summaries)
     warning_lines = metric_warnings(runs) + cache_warnings(summaries)
     for warning in warning_lines:
@@ -549,13 +557,9 @@ def _pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
     versions: set[tuple[str, str]] = set()
     for run in runs:
         for record in run.records:
+            pack_id = record_pack_id(record)
             pack = record.get("pack")
-            if isinstance(pack, dict):
-                pack_id = pack.get("id")
-                version = pack.get("version")
-            else:
-                pack_id = None
-                version = None
+            version = pack.get("version") if isinstance(pack, dict) else None
             versions.add((str(pack_id), str(version)))
     return versions
 
@@ -590,7 +594,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         ):
             warnings.append(
                 "WARNING: cache metadata incomplete for case "
-                f"{case}; some rows lack numeric `tokens.cached_prompt`."
+                f"{case}; some rows lack valid `tokens.cached_prompt`."
             )
             continue
 
@@ -678,11 +682,21 @@ def _numeric_metric_values(
         section = row.get(section_name)
         if not isinstance(section, dict):
             continue
-        value = section.get(field_name)
-        numeric_value = _metric_value(value, section_name)
+        numeric_value = _section_metric_value(section, section_name, field_name)
         if numeric_value is not None:
             values.append(numeric_value)
     return values
+
+
+def _section_metric_value(
+    values: dict[str, Any], section: str, field: str,
+) -> float | None:
+    value = _metric_value(values.get(field), section)
+    if value is not None and (section, field) == ("tokens", "cached_prompt"):
+        prompt = _metric_value(values.get("prompt"), section)
+        if prompt is not None and value > prompt:
+            return None
+    return value
 
 
 def _metric_value(value: Any, section: str) -> float | None:
@@ -713,13 +727,14 @@ def metric_warnings(runs: list[ResultRun]) -> list[str]:
                     continue
                 for field in fields:
                     value = values.get(field)
-                    if value is not None and _metric_value(value, section) is None:
+                    if value is not None and _section_metric_value(values, section, field) is None:
                         invalid += 1
     if not invalid:
         return []
     return [
         f"WARNING: {invalid} invalid metric samples ignored; timing/rates require "
-        "finite nonnegative values and tokens require exact nonnegative counts."
+        "finite nonnegative values and tokens require exact nonnegative counts. "
+        "Cached prompt counts cannot exceed prompt counts."
     ]
 
 

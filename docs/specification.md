@@ -1091,9 +1091,11 @@ The initial summary is intentionally small and deterministic:
   `comparable`; all other statuses render `—` for that column.
 - `tokens.prompt` is summarized with overflow-safe finite medians when numeric samples
   are present so cache interpretation is visible beside generated-token counts.
-- `tokens.cached_prompt` is summarized with overflow-safe finite medians when numeric
-  samples are present, and `cache rows` displays numeric cached-token rows over
-  successful rows for the case/run group.
+- `tokens.cached_prompt` is summarized with overflow-safe finite medians over
+  valid samples, and `cache rows` displays valid cached-token rows over
+  successful rows for the case/run group. A cached count greater than the
+  same row's valid prompt count is ignored and leaves cache coverage incomplete.
+  A missing prompt count still prevents prompt parity.
 - `prefill parity` displays a deterministic case-level prompt/cache
   comparability status repeated on each run row for that case.
 - Null, boolean, non-numeric, non-finite, negative timings/rates,
@@ -1105,7 +1107,7 @@ The initial summary is intentionally small and deterministic:
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
-  case/run group has successful rows without numeric `tokens.cached_prompt`.
+  case/run group has successful rows without valid `tokens.cached_prompt`.
 - When all compared runs for a case have successful rows and every successful row in those
   case/run groups has a numeric `tokens.prompt` value, but the resulting
   `tokens.prompt` medians differ, compare warns that cache parity is not
@@ -2104,8 +2106,9 @@ independently.
 ## Comparable successful metric populations
 
 Compare/report refuse differing adapter or model identities within one run, and
-differing versions of the same pack, before aggregation. A missing identity is
-distinct from a present one; homogeneous legacy runs remain readable. Separate
+differing versions of the same pack, before aggregation. A supplied `pack` must
+be an object, and a supplied `pack.id` must be a nonblank string. Rows without
+a `pack` or `pack.id` retain their unlabeled legacy identity. Separate
 runtimes or pack versions into separate result directories. Registry import
 continues to retain mixed sources and their row identities, but registry reports
 and static site export (which includes a report) refuse them before publication.
