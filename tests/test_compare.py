@@ -839,6 +839,25 @@ def test_render_comparison_disambiguates_duplicate_basenames(tmp_path: Path) -> 
     assert "| second/run-x | short |" in output
 
 
+@pytest.mark.parametrize("render", [render_comparison, render_report])
+def test_run_label_suffixes_preserve_literal_candidates(tmp_path: Path, render) -> None:
+    paths = [
+        tmp_path / "first" / "p" / "run",
+        tmp_path / "second" / "p" / "run",
+        tmp_path / "first" / "p" / "run#1",
+        tmp_path / "first" / "q" / "run#1",
+    ]
+    for wall_s, path in enumerate(paths, start=1):
+        _write_run(path, rows=[_record("short", wall_s=wall_s)])
+
+    output = render([load_result_run(path) for path in paths])
+
+    labels = ["p/run#2", "p/run#3", "p/run#1", "q/run#1"]
+    assert [line.split("`")[1] for line in output.splitlines() if line.startswith("- `")] == labels
+    for wall_s, label in enumerate(labels, start=1):
+        assert f"| {label} | short | 1 | 1 | {wall_s:.3f} |" in output
+
+
 def test_render_comparison_pluralizes_single_input_row(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"

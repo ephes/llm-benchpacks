@@ -545,15 +545,16 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
         candidates.append(f"{parent}/{run.path.name}" if parent else run.path.name)
 
     candidate_counts = Counter(candidates)
-    seen: Counter[str] = Counter()
+    reserved = set(candidates)
+    suffixes: Counter[str] = Counter()
     labeled: list[ResultRun] = []
     for run, candidate in zip(runs, candidates, strict=True):
-        seen[candidate] += 1
-        label = (
-            f"{candidate}#{seen[candidate]}"
-            if candidate_counts[candidate] > 1
-            else candidate
-        )
+        label = candidate
+        if candidate_counts[candidate] > 1:
+            while label in reserved:
+                suffixes[candidate] += 1
+                label = f"{candidate}#{suffixes[candidate]}"
+            reserved.add(label)
         labeled.append(replace(run, label=label))
     return labeled
 

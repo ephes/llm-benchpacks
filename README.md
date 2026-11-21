@@ -796,6 +796,8 @@ records across all inputs. Directory aliases and hardlinked files count once
 when the opened file's size and nanosecond mtime/ctime match. Both commands
 reject the input set if those values change between references to the same inode.
 Compare requires two distinct files after deduplication.
+Compare and report use unique run labels. Colliding labels get numbered
+suffixes in input order, skipping labels already reserved by directory names.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.
 

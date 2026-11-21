@@ -2137,6 +2137,10 @@ with the snapshot used to read the first reference. Both CLIs reject the input
 set when a later reference to the same inode differs in any of these fields.
 Limits apply before admitting excess records or another run.
 Compare requires at least two distinct runs after deduplication.
+Compare and report qualify repeated directory basenames with the immediate
+parent name when available. If these labels still collide, the renderers
+assign numbered suffixes such as `#1` in input order, skipping all initial
+labels and any suffix already assigned.
 
 ### Candidate execution and memory evidence
 
