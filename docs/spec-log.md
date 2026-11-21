@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 174 B26)
+
+- Reserve all path-derived labels before assigning compare/report run suffixes.
+- Reject records with missing, nontext or blank case IDs before aggregation.
+
 ## 2026-11-21 (round 173 B25)
 
 - Count each malformed non-null timing or token section once in the shared

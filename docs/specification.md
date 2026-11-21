@@ -2116,6 +2116,10 @@ a `pack` or `pack.id` retain their unlabeled legacy identity. Separate
 runtimes or pack versions into separate result directories. Registry import
 continues to retain mixed sources and their row identities, but registry reports
 and static site export (which includes a report) refuse them before publication.
+Each record must have a nonblank string `case`, including legacy rows without
+a pack ID. Case grouping rejects missing, nontext or blank case IDs before
+aggregation. The diagnostic names the source run and the 1-based record number
+(blank JSONL lines do not count as records).
 Performance/token medians and prompt/cache coverage use only rows with `ok: true`;
 total, successful and failed
 row counts remain visible. Scoring correctness is independent of transport completion.
@@ -2137,6 +2141,10 @@ with the snapshot used to read the first reference. Both CLIs reject the input
 set when a later reference to the same inode differs in any of these fields.
 Limits apply before admitting excess records or another run.
 Compare requires at least two distinct runs after deduplication.
+Compare and report qualify repeated directory basenames with the immediate
+parent name when available. If these labels still collide, the renderers
+assign numbered suffixes such as `#1` in input order, skipping all initial
+labels and any suffix already assigned.
 
 ### Candidate execution and memory evidence
 

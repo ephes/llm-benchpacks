@@ -241,15 +241,16 @@ def record_pack_id(record: dict[str, Any]) -> str | None:
 
 
 def group_case_records(
-    records: list[dict[str, Any]],
+    run: ResultRun,
 ) -> dict[tuple[str | None, str], list[dict[str, Any]]]:
     """Group records by (pack id, case id) in first-seen order, in one pass."""
 
     groups: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
-    for record in records:
+    for record_number, record in enumerate(run.records, start=1):
         case = record.get("case")
-        if isinstance(case, str):
-            groups.setdefault((record_pack_id(record), case), []).append(record)
+        if not isinstance(case, str) or not case.strip():
+            raise CompareError(f"{run.path}: record {record_number}: case must be a nonblank string")
+        groups.setdefault((record_pack_id(record), case), []).append(record)
     return groups
 
 
@@ -291,7 +292,7 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
 
     for run in runs:
         validate_run_identity(run)
-    grouped = [group_case_records(run.records) for run in runs]
+    grouped = [group_case_records(run) for run in runs]
     case_order: list[tuple[str | None, str]] = []
     seen_cases: set[tuple[str | None, str]] = set()
     for groups in grouped:
@@ -545,15 +546,16 @@ def _disambiguate_labels(runs: list[ResultRun]) -> list[ResultRun]:
         candidates.append(f"{parent}/{run.path.name}" if parent else run.path.name)
 
     candidate_counts = Counter(candidates)
-    seen: Counter[str] = Counter()
+    reserved = set(candidates)
+    suffixes: Counter[str] = Counter()
     labeled: list[ResultRun] = []
     for run, candidate in zip(runs, candidates, strict=True):
-        seen[candidate] += 1
-        label = (
-            f"{candidate}#{seen[candidate]}"
-            if candidate_counts[candidate] > 1
-            else candidate
-        )
+        label = candidate
+        if candidate_counts[candidate] > 1:
+            while label in reserved:
+                suffixes[candidate] += 1
+                label = f"{candidate}#{suffixes[candidate]}"
+            reserved.add(label)
         labeled.append(replace(run, label=label))
     return labeled
 

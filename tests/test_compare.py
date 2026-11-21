@@ -839,6 +839,25 @@ def test_render_comparison_disambiguates_duplicate_basenames(tmp_path: Path) -> 
     assert "| second/run-x | short |" in output
 
 
+@pytest.mark.parametrize("render", [render_comparison, render_report])
+def test_run_label_suffixes_preserve_literal_candidates(tmp_path: Path, render) -> None:
+    paths = [
+        tmp_path / "first" / "p" / "run",
+        tmp_path / "second" / "p" / "run",
+        tmp_path / "first" / "p" / "run#1",
+        tmp_path / "first" / "q" / "run#1",
+    ]
+    for wall_s, path in enumerate(paths, start=1):
+        _write_run(path, rows=[_record("short", wall_s=wall_s)])
+
+    output = render([load_result_run(path) for path in paths])
+
+    labels = ["p/run#2", "p/run#3", "p/run#1", "q/run#1"]
+    assert [line.split("`")[1] for line in output.splitlines() if line.startswith("- `")] == labels
+    for wall_s, label in enumerate(labels, start=1):
+        assert f"| {label} | short | 1 | 1 | {wall_s:.3f} |" in output
+
+
 def test_render_comparison_pluralizes_single_input_row(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
@@ -1198,6 +1217,26 @@ def test_cli_mixed_identity_has_controlled_error(tmp_path, command, capsys):
     with pytest.raises(SystemExit, match='mixed runtime identity'):
         main(args)
     assert capsys.readouterr().out == ''
+
+
+@pytest.mark.parametrize("command", ["compare", "report"])
+@pytest.mark.parametrize("case", [_UNSET, None, 42, "", " \t"])
+def test_cli_refuses_unattributed_comparison_record(tmp_path, capsys, command, case):
+    from benchpack.cli import main
+
+    valid, invalid = tmp_path / "valid", tmp_path / "invalid"
+    _write_run(valid)
+    malformed = _record("short", wall_s=99.0)
+    if case is _UNSET:
+        del malformed["case"]
+    else:
+        malformed["case"] = case
+    _write_run(invalid, rows=[_record("short"), malformed])
+
+    with pytest.raises(SystemExit, match="case must be a nonblank string") as exc:
+        main([command, str(valid), str(invalid)])
+    assert f"{invalid}: record 2" in str(exc.value)
+    assert capsys.readouterr().out == ""
 
 
 def test_scoring_failure_is_still_a_completed_metric_sample(tmp_path):
