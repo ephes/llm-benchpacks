@@ -6,6 +6,7 @@ import json
 import re
 import stat
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,8 @@ from .compare import unique_json_object
 
 RUN_METADATA_FILENAME = "run-metadata.json"
 KNOWN_OBJECT_SECTIONS = ("host", "runtime", "model", "operating_conditions")
+MAX_RUN_METADATA_NODES = 100_000
+MAX_RUN_METADATA_DEPTH = 64
 
 
 class RunMetadataError(ValueError):
@@ -120,8 +123,8 @@ def validate_run_metadata(
                     f"or number in {source}"
                 )
 
+    _validate_expanded_tree(metadata, source=source)
     try:
-        _require_string_keys(metadata)
         # Strict serialization validates the entire extension tree, including
         # overflowed exponent literals; decoding returns normalized JSON values.
         text = json.dumps(metadata, allow_nan=False, ensure_ascii=False)
@@ -136,22 +139,31 @@ def validate_run_metadata(
         raise RunMetadataError(f"invalid JSON domain in run metadata file {source}") from exc
 
 
-def _require_string_keys(value: Any) -> None:
-    pending = [value]
-    seen: set[int] = set()
+def _validate_expanded_tree(value: Any, *, source: Path | str) -> None:
+    # Keep one iterator per depth so wide containers need no extra work list.
+    pending: list[Iterator[tuple[Any, Any]]] = [iter((("", value),))]
+    nodes = 0
     while pending:
-        item = pending.pop()
-        if not isinstance(item, (dict, list, tuple)) or id(item) in seen:
+        entry = next(pending[-1], None)
+        if entry is None:
+            pending.pop()
             continue
-        # Leave cycle rejection to json.dumps, which also allows shared subtrees.
-        seen.add(id(item))
+        key, item = entry
+        nodes += 1
+        if nodes > MAX_RUN_METADATA_NODES:
+            raise RunMetadataError(
+                f"expanded run metadata exceeds node limit ({MAX_RUN_METADATA_NODES}) in {source}"
+            )
+        if len(pending) - 1 > MAX_RUN_METADATA_DEPTH:
+            raise RunMetadataError(
+                f"expanded run metadata exceeds depth limit ({MAX_RUN_METADATA_DEPTH}) in {source}"
+            )
+        if not isinstance(key, str):
+            raise RunMetadataError(f"invalid JSON domain in run metadata file {source}")
         if isinstance(item, dict):
-            for key, child in item.items():
-                if not isinstance(key, str):
-                    raise TypeError("JSON object keys must be strings")
-                pending.append(child)
-        else:
-            pending.extend(item)
+            pending.append(iter(item.items()))
+        elif isinstance(item, (list, tuple)):
+            pending.append((("", child) for child in item))
 
 
 def write_run_metadata(output_dir: Path | str, metadata: dict[str, Any]) -> Path:

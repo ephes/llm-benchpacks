@@ -2049,9 +2049,10 @@ adapter/harness calls. Normalized metadata is serialized with `allow_nan=False`
 and valid extension objects roundtrip.
 
 Python callers must supply string keys in every metadata dictionary, including
-objects inside extension arrays. Validation checks those keys before JSON
-serialization and raises `RunMetadataError` for other key types before staging
-can begin. An existing metadata file keeps its prior bytes.
+objects inside extension arrays. Before JSON serialization, validation checks
+those keys and limits the expanded tree to 100,000 value occurrences and a
+depth of 64 (root at depth zero). Shared subtrees count on every reference.
+Violations raise `RunMetadataError` before staging, preserving existing metadata.
 
 The standalone `write_run_metadata` helper accepts an absent destination or
 an existing regular file. It checks the destination entry without following

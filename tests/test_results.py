@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from benchpack import run_metadata
 from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
 from benchpack.packs import Case, Pack, Scoring
 from benchpack.results import ResultEncodingError, RunReporter
@@ -547,6 +548,43 @@ def test_write_run_metadata_writes_json(tmp_path: Path) -> None:
     data = json.loads((out / "run-metadata.json").read_text())
     assert data["runtime"] == {"name": "llama-server", "version": "9010"}
     assert data["model"]["quantization"] == "Q4_K_M"
+
+
+@pytest.mark.parametrize("reporter_writer", [False, True])
+@pytest.mark.parametrize("limit", ["nodes", "depth"])
+def test_metadata_writers_bound_expanded_tree_before_serializing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reporter_writer: bool, limit: str,
+) -> None:
+    def write(metadata):
+        if reporter_writer:
+            RunReporter(tmp_path, make_pack(tmp_path)).write_run_metadata(metadata)
+        else:
+            run_metadata.write_run_metadata(tmp_path, metadata)
+
+    shared = {"value": "sample"}
+    small = {"extension": [shared, shared]}
+    write(small)
+    artifact = tmp_path / "run-metadata.json"
+    previous = artifact.read_bytes()
+    previous_entries = set(tmp_path.iterdir())
+    assert json.loads(previous) == small
+
+    nested = shared
+    if limit == "nodes":
+        monkeypatch.setattr(run_metadata, "MAX_RUN_METADATA_NODES", 15, raising=False)
+        for _ in range(4):
+            nested = [nested, nested]
+    else:
+        monkeypatch.setattr(run_metadata, "MAX_RUN_METADATA_DEPTH", 4, raising=False)
+        for _ in range(4):
+            nested = [nested]
+
+    with patch.object(json, "dumps", wraps=json.dumps) as dumps:
+        with pytest.raises(run_metadata.RunMetadataError, match="expanded.*limit"):
+            write({"extension": nested})
+        dumps.assert_not_called()
+    assert artifact.read_bytes() == previous
+    assert set(tmp_path.iterdir()) == previous_entries
 
 
 def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
