@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -234,6 +235,29 @@ def test_linux_release_file_preserves_other_hardware(monkeypatch, tmp_path, evid
     assert "collector_error" not in hw
 
 
+def test_linux_probe_uses_c_locale_without_changing_parent(monkeypatch, tmp_path):
+    probe = tmp_path / "lscpu"
+    probe.write_text(
+        '#!/bin/sh\n'
+        'if [ "$LC_ALL" = C ]; then\n'
+        '    printf "Model name: Test CPU\\nCPU(s): 8\\n"\n'
+        'else\n'
+        '    printf "Modellname: Test CPU\\nProzessoren: 8\\n"\n'
+        'fi\n',
+        encoding="utf-8",
+    )
+    probe.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
+    monkeypatch.setattr(hardware.platform, "system", lambda: "Linux")
+
+    hw = collect_hardware()
+
+    assert hw["cpu_model"] == "Test CPU"
+    assert hw["cpu_count"] == 8
+    assert os.environ["LC_ALL"] == "de_DE.UTF-8"
+
+
 def test_probe_output_budget_and_recovery():
     import sys
     # Both streams count, including discarded stderr. Partial stdout is refused.
@@ -329,7 +353,7 @@ def test_probe_unkillable_leader_stays_unavailable(monkeypatch, tmp_path):
 
 def test_probe_combined_budget_boundary():
     import sys
-    source = "import os; os.write(1, b'x' * 32768); os.write(2, b'y' * 32768)"
+    source = "import os; os.write(1, b'x' * 32768); os.write(2, b'\\xff' * 32768)"
     assert hardware._run([sys.executable, '-c', source]) == 'x' * 32768
     assert hardware._run([sys.executable, '-c', source + "; os.write(2, b'z')"]) is None
 

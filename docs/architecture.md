@@ -1212,6 +1212,8 @@ paths, and a final 1024-byte UTF-8 ceiling bounds every error without changing r
 evidence or the scoring verdict.
 
 Hardware probes use nonblocking bounded pipe reads and POSIX process groups.
+Each probe runs with `LC_ALL=C` for stable parser labels. The invoking process
+keeps its locale.
 Every exit retires the group, reaps the leader and closes owned streams; setup
 failures also enter cleanup. Cleanup has a 0.25-second reap allowance. All
 metadata commands receive remaining time from one 10-second monotonic deadline;
