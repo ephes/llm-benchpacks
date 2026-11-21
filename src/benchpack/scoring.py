@@ -6,15 +6,30 @@ import json
 import math
 import re
 import reprlib
+from decimal import Decimal
 from itertools import islice
 from typing import Any
 
+from ._scoring_json import parse_json_decimal, reject_json_constant
 from .packs import Scoring
 
 
 MAX_SCORING_ERROR_BYTES = 1024
 _TRUNCATED = "[truncated]"
-_REPR = reprlib.Repr()
+
+
+class _DiagnosticRepr(reprlib.Repr):
+    # Decoded JSON decimals must read as JSON numbers in scoring diagnostics.
+    def repr_Decimal(self, value: Decimal, level: int) -> str:
+        text = str(value).lower()
+        if len(text) <= self.maxlong:
+            return text
+        head = max(0, (self.maxlong - len(self.fillvalue)) // 2)
+        tail = max(0, self.maxlong - len(self.fillvalue) - head)
+        return text[:head] + self.fillvalue + text[len(text) - tail:]
+
+
+_REPR = _DiagnosticRepr()
 _REPR.maxstring = _REPR.maxother = _REPR.maxlong = 120
 _REPR.maxlist = _REPR.maxdict = _REPR.maxtuple = 4
 _REPR.maxlevel = 3
@@ -75,8 +90,8 @@ def evaluate(scoring: Scoring | None, output: str) -> dict[str, Any] | None:
         try:
             parsed = json.loads(
                 output,
-                parse_constant=_reject_json_constant,
-                parse_float=_finite_json_float,
+                parse_constant=reject_json_constant,
+                parse_float=parse_json_decimal,
                 object_pairs_hook=_unique_members,
             )
         except (ValueError, RecursionError) as exc:
@@ -93,17 +108,6 @@ def evaluate(scoring: Scoring | None, output: str) -> dict[str, Any] | None:
         }
 
     raise NotImplementedError(f"scoring mode {scoring.mode!r} is not implemented")
-
-
-def _reject_json_constant(value: str) -> Any:
-    raise ValueError("non-finite JSON number")
-
-
-def _finite_json_float(value: str) -> float:
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError("JSON number exceeds finite float range")
-    return number
 
 
 def _validate_json_schema(
@@ -185,10 +189,10 @@ def _validate_json_schema(
 
     if _is_json_number(value):
         minimum = schema.get("minimum")
-        if _is_json_number(minimum) and value < minimum:
+        if _is_json_number(minimum) and value < _comparison_number(minimum):
             return f"{path} must be >= {_safe_repr(minimum)}"
         maximum = schema.get("maximum")
-        if _is_json_number(maximum) and value > maximum:
+        if _is_json_number(maximum) and value > _comparison_number(maximum):
             return f"{path} must be <= {_safe_repr(maximum)}"
 
     return None
@@ -212,7 +216,7 @@ def _matches_json_type(value: Any, expected_type: Any) -> bool:
         return isinstance(value, str)
     if expected_type == "integer":
         return (isinstance(value, int) and not isinstance(value, bool)) or (
-            isinstance(value, float) and math.isfinite(value) and value.is_integer()
+            isinstance(value, Decimal) and value == value.to_integral_value()
         )
     if expected_type == "number":
         return _is_json_number(value)
@@ -224,14 +228,23 @@ def _matches_json_type(value: Any, expected_type: Any) -> bool:
 
 
 def _is_json_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return (
+        (isinstance(value, int) and not isinstance(value, bool))
+        or (isinstance(value, Decimal) and value.is_finite())
+        or (isinstance(value, float) and math.isfinite(value))
+    )
+
+
+def _comparison_number(value: int | float | Decimal) -> int | Decimal:
+    # Python callers can still supply floats directly in Scoring.schema_data.
+    return Decimal(str(value)) if isinstance(value, float) else value
 
 
 def _json_values_equal(left: Any, right: Any) -> bool:
     if isinstance(left, bool) or isinstance(right, bool):
         return isinstance(left, bool) and isinstance(right, bool) and left == right
     if _is_json_number(left) and _is_json_number(right):
-        return left == right
+        return _comparison_number(left) == _comparison_number(right)
     if left is None or right is None:
         return left is None and right is None
     if isinstance(left, str) or isinstance(right, str):

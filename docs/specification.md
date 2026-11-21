@@ -696,8 +696,10 @@ or ignored.
 
 Manifest loading requires string `expected` for `contains` and string
 `pattern` for `regex`, and compiles regex patterns before execution. Empty
-strings are valid. JSON-schema output decoding rejects non-JSON numeric
-constants and float/exponent literals that overflow the finite float range.
+strings are valid. JSON-schema decoding rejects non-JSON numeric constants in
+both schemas and model outputs. Decimal and exponent literals must fit the
+decimal representation and pass the finite float overflow check. Numeric
+equality, bounds, and integer checks use the exact values from both documents.
 Integer literals are not limited to float range, but remain subject to
 Python's integer string digit limit (4300 digits by default). The `integer` type
 accepts finite mathematically integral numbers such as `1.0` and `1e0`,
@@ -2034,6 +2036,11 @@ when the input uses JSON escapes. Decoder integer limits, invalid JSON values
 and serialization failures become `RunMetadataError` before output creation or
 adapter/harness calls. Normalized metadata is serialized with `allow_nan=False`
 and valid extension objects roundtrip.
+
+Python callers must supply string keys in every metadata dictionary, including
+objects inside extension arrays. Validation checks those keys before JSON
+serialization and raises `RunMetadataError` for other key types before staging
+can begin. An existing metadata file keeps its prior bytes.
 
 The standalone `write_run_metadata` helper accepts an absent destination or
 an existing regular file. It checks the destination entry without following

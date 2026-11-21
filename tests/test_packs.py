@@ -31,6 +31,7 @@ from benchpack.packs import (
     repetitions_from_defaults,
     warmup_from_defaults,
 )
+from benchpack.scoring import evaluate
 from benchpack.workspaces import validate_repo_task_case
 
 
@@ -599,6 +600,44 @@ scoring = { mode = "json-schema", schema = "fixtures/shape.schema.json" }
         "required": ["ok"],
         "properties": {"ok": {"const": True}},
     }
+
+
+@pytest.mark.parametrize(
+    "schema, accepted, refused",
+    [
+        ('{"const":1.0000000000000000001}', "1.00000000000000000010", "1"),
+        ('{"enum":[{"n":0.1}]}', '{"n":1e-1}', '{"n":0.1000000000000000001}'),
+        ('{"type":"integer"}', "1.00e0", "1.0000000000000000001"),
+        ('{"maximum":1.0000000000000000001}', "1.0000000000000000001", "1.0000000000000000002"),
+        ('{"minimum":1.0000000000000000001}', "1.0000000000000000001", "1"),
+        ('{"const":0}', "0e-999", "1e-999"),
+        ('{"const":9007199254740993}', "9007199254740993.0", "9007199254740992"),
+    ],
+)
+def test_loaded_schema_compares_json_numbers_exactly(tmp_path, schema, accepted, refused):
+    pack_dir = write_manifest(
+        tmp_path,
+        '[pack]\nid="jsonpack"\nversion="1"\n'
+        '[scoring]\nmode="json-schema"\nschema="schema.json"\n',
+    )
+    (pack_dir / "schema.json").write_text(schema, encoding="utf-8")
+    scoring = load_pack(pack_dir).scoring
+
+    assert evaluate(scoring, refused)["passed"] is False
+    assert evaluate(scoring, accepted)["passed"] is True
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "1e999"])
+def test_loaded_schema_rejects_nonfinite_numbers(tmp_path, value):
+    pack_dir = write_manifest(
+        tmp_path,
+        '[pack]\nid="jsonpack"\nversion="1"\n'
+        '[scoring]\nmode="json-schema"\nschema="schema.json"\n',
+    )
+    (pack_dir / "schema.json").write_text('{"const":[' + value + ']}', encoding="utf-8")
+
+    with pytest.raises(InvalidScoringSchemaError, match="not valid JSON"):
+        load_pack(pack_dir)
 
 
 def test_load_pack_rejects_json_schema_path_escape(tmp_path: Path) -> None:

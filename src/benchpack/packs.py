@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ._scoring_json import parse_json_decimal, reject_json_constant
 from .safe_files import read_contained_regular
 
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -291,6 +292,8 @@ def _scoring_schema_from_value(
     try:
         loaded = json.loads(
             budget.read(schema_path, MAX_SCHEMA_BYTES, "scoring.schema", InvalidScoringSchemaError),
+            parse_constant=reject_json_constant,
+            parse_float=parse_json_decimal,
             object_pairs_hook=_unique_schema_members,
         )
     except OSError as exc:
