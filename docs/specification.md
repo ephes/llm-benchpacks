@@ -1226,7 +1226,10 @@ one or more positional result directories or one report-set manifest. The
 manifest must be a regular file of at most 1 MiB (`MAX_REPORT_SET_BYTES`) and
 valid UTF-8; oversized, non-regular, non-UTF-8, unparseable or excessively
 nested manifests fail with a report error before any result directory is
-inspected. The manifest shape is intentionally narrow:
+inspected. The reader checks the opened file's size and nanosecond timestamps
+for detected in-place changes before parsing. An atomic pathname replacement
+leaves the originally opened generation readable. The manifest shape is
+intentionally narrow:
 
 ```toml
 version = 1

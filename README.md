@@ -488,7 +488,9 @@ result_dirs = [
 ]
 ```
 
-Relative `result_dirs` entries resolve relative to the manifest file. The
+Relative `result_dirs` entries resolve relative to the manifest file. An in-place
+edit detected during the read fails the report. An atomic replacement leaves
+the originally opened manifest readable. The
 manifest is source-only and read-only: it does not schedule runs, start
 servers, copy artifacts, or write report files.
 

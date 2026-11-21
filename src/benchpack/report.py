@@ -46,6 +46,7 @@ from .repo_task_outcomes import (
 )
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, parse_run_metadata
 from .safe_files import (
+    UnstableFileError,
     open_regular_at,
     open_result_directory,
     read_opened_regular,
@@ -148,25 +149,20 @@ def _read_report_set_bytes(manifest_path: Path) -> bytes:
                 f"report set manifest must be a regular file: {manifest_path}"
             )
         os.set_blocking(fd, True)
-        chunks: list[bytes] = []
-        total = 0
-        while total <= MAX_REPORT_SET_BYTES:
-            chunk = os.read(fd, MAX_REPORT_SET_BYTES + 1 - total)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
+        snapshot = read_opened_regular(fd, MAX_REPORT_SET_BYTES)
+    except UnstableFileError as exc:
+        raise ReportError(f"report set manifest changed during read: {manifest_path}") from exc
     except OSError as exc:
         raise ReportError(
             f"could not read report set manifest {manifest_path}: {exc.strerror}"
         ) from exc
     finally:
         os.close(fd)
-    if total > MAX_REPORT_SET_BYTES:
+    if snapshot.data is None:
         raise ReportError(
             f"report set manifest exceeds {MAX_REPORT_SET_BYTES} bytes: {manifest_path}"
         )
-    return b"".join(chunks)
+    return snapshot.data
 
 
 def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
