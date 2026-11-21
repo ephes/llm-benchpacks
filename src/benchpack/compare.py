@@ -594,7 +594,7 @@ def _cache_warnings(summaries: list[CaseSummary]) -> list[str]:
         ):
             warnings.append(
                 "WARNING: cache metadata incomplete for case "
-                f"{case}; some rows lack numeric `tokens.cached_prompt`."
+                f"{case}; some rows lack valid `tokens.cached_prompt`."
             )
             continue
 
@@ -682,11 +682,21 @@ def _numeric_metric_values(
         section = row.get(section_name)
         if not isinstance(section, dict):
             continue
-        value = section.get(field_name)
-        numeric_value = _metric_value(value, section_name)
+        numeric_value = _section_metric_value(section, section_name, field_name)
         if numeric_value is not None:
             values.append(numeric_value)
     return values
+
+
+def _section_metric_value(
+    values: dict[str, Any], section: str, field: str,
+) -> float | None:
+    value = _metric_value(values.get(field), section)
+    if value is not None and (section, field) == ("tokens", "cached_prompt"):
+        prompt = _metric_value(values.get("prompt"), section)
+        if prompt is not None and value > prompt:
+            return None
+    return value
 
 
 def _metric_value(value: Any, section: str) -> float | None:
@@ -717,13 +727,14 @@ def metric_warnings(runs: list[ResultRun]) -> list[str]:
                     continue
                 for field in fields:
                     value = values.get(field)
-                    if value is not None and _metric_value(value, section) is None:
+                    if value is not None and _section_metric_value(values, section, field) is None:
                         invalid += 1
     if not invalid:
         return []
     return [
         f"WARNING: {invalid} invalid metric samples ignored; timing/rates require "
-        "finite nonnegative values and tokens require exact nonnegative counts."
+        "finite nonnegative values and tokens require exact nonnegative counts. "
+        "Cached prompt counts cannot exceed prompt counts."
     ]
 
 

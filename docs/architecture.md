@@ -632,8 +632,10 @@ record dictionaries as loaded, groups by pack-scoped case identity (pack id,
 case id) and input run in a single pass per run, and renders a
 stdout-only table of median wall time, TTFT, decode TPS, total TPS, and output
 tokens. It also reports median numeric `tokens.prompt`, median numeric
-`tokens.cached_prompt`, and cache metadata coverage, expressed as numeric
-cached-token rows over successful rows, for each case/run group. It computes median
+`tokens.cached_prompt`, and cache metadata coverage, expressed as valid
+cached-token rows over successful rows, for each case/run group. When both
+counts are valid individually, a cached count above the row's prompt count
+is excluded from the cached median and coverage. It computes median
 numeric `timing.prefill_tps` but renders that median only when the case-level
 `prefill parity` status is `comparable`.
 

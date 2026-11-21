@@ -463,6 +463,30 @@ def test_prefill_parity_status_comparable_when_prompt_and_cache_match(
     ) in output
 
 
+@pytest.mark.parametrize(
+    ("cached_prompt", "status", "prefill"),
+    [(11, "cache-missing", "—"), (10, "comparable", "100.00")],
+)
+def test_prefill_parity_requires_possible_cached_prompt_counts(
+    tmp_path: Path, cached_prompt: int, status: str, prefill: str,
+) -> None:
+    run_dirs = [tmp_path / "run-a", tmp_path / "run-b"]
+    for run_dir in run_dirs:
+        _write_run(run_dir, rows=[_record("short", prompt_tokens=10, cached_prompt=cached_prompt)])
+    runs = [load_result_run(run_dir) for run_dir in run_dirs]
+
+    assert _prefill_statuses(*run_dirs) == {"short": status}
+    for output in (render_comparison(runs), render_report(runs)):
+        for run_dir in run_dirs:
+            assert f"| {run_dir.name} | short | 1 | 1 | 1.000 | 0.200 | {prefill} |" in output
+        if status == "cache-missing":
+            assert "| 10 | — | 0/1 | cache-missing |" in output
+            assert "WARNING: 2 invalid metric samples ignored" in output
+        else:
+            assert "| 10 | 10 | 1/1 | comparable |" in output
+            assert "invalid metric samples" not in output
+
+
 def test_render_comparison_hides_prefill_tps_for_comparable_case_without_metric(
     tmp_path: Path,
 ) -> None:

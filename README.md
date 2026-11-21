@@ -782,13 +782,16 @@ identity. Resource sampling has a 5-second deadline.
 Compare/report require homogeneous adapter/model identities and one version per
 pack in each run. A supplied `pack` must be an object and a supplied `pack.id`
 must be a nonblank string. Legacy rows without a pack ID remain readable.
-This also applies to registry reports and site export; split
-mixed imported sources into separate result directories. Only `ok: true` rows supply metric medians and cache coverage;
-`rows`, `ok` and `failed` keep all attempts visible. Timing/rates must be finite
-and nonnegative; tokens must be exact nonnegative counts. Invalid supplied
-metrics produce one bounded warning. Both CLIs admit at most 100 distinct run
-files, 64 MiB JSONL bytes and 100,000 records across all inputs. Directory aliases
-and hardlinked files count once; compare requires two distinct files after deduplication.
+The same rules apply to registry reports and site export. Split mixed imported
+sources into separate result directories. Only `ok: true` rows supply metric
+medians and cache coverage. The `rows`, `ok` and `failed` counts show all
+attempts. Timing and rates must be finite and nonnegative. Tokens must be exact
+nonnegative counts. Cached prompt counts
+above the same row's valid prompt count leave cache coverage incomplete and
+block prefill parity. Invalid supplied metrics produce one bounded warning.
+Both CLIs admit at most 100 distinct run files, 64 MiB JSONL bytes and 100,000
+records across all inputs. Directory aliases and hardlinked files count once.
+Compare requires two distinct files after deduplication.
 See the [specification](docs/specification.md#comparison-metric-and-input-admission)
 for the complete contracts.
 
