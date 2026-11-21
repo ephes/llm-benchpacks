@@ -447,7 +447,7 @@ total TPS, output tokens, prompt tokens, backend-reported cached prompt tokens,
 and prefill TPS gated on prefill parity. The `prefill_tps med` column renders a
 numeric median only when that case's `prefill parity` status is `comparable`;
 otherwise it renders `—`. Compare also prints cache metadata coverage as
-numeric cached-token rows over successful rows for each case/run group and a
+valid cached-token rows over successful rows for each case/run group and a
 case-level `prefill parity` status repeated on each run row. The status is one
 of `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
 `cache-mixed`, `cache-diff`, or `comparable`, in that priority order. Compare
