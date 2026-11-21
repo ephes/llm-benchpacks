@@ -376,7 +376,28 @@ def test_metadata_writer_refuses_nonfinite_before_effects(tmp_path, value):
     assert list(tmp_path.iterdir()) == [path]
 
 
+@pytest.mark.parametrize("nested", [r'"\ud800"', r'{"\udfff": "value"}'], ids=["value", "key"])
+@pytest.mark.parametrize("entry_point", ["load", "write"])
+def test_metadata_refuses_nested_surrogates_before_publication(tmp_path, nested, entry_point):
+    payload = '{"extension": {"nested": [' + nested + ']}}'
+    source = tmp_path / "input.json"
+    source.write_text(payload, encoding="utf-8")
+    path = tmp_path / RUN_METADATA_FILENAME
+    path.write_bytes(b"previous")
+
+    with pytest.raises(RunMetadataError, match="Unicode scalar values"):
+        if entry_point == "load":
+            load_run_metadata(source)
+        else:
+            write_run_metadata(tmp_path, json.loads(payload))
+
+    assert path.read_bytes() == b"previous"
+    assert set(tmp_path.iterdir()) == {path, source}
+
+
 def test_metadata_extension_roundtrip(tmp_path):
-    metadata = {'extension': {'nested': [None, True, 3, 1.25, {'label': 'valid'}]}}
+    metadata = {
+        "extension": {"nested": [None, True, 3, 1.25, {"label-\U0001f680": "\U0001f680"}]}
+    }
     path = write_run_metadata(tmp_path, metadata)
     assert load_run_metadata(path) == metadata

@@ -123,8 +123,14 @@ def validate_run_metadata(
     try:
         # Strict serialization validates the entire extension tree, including
         # overflowed exponent literals; decoding returns normalized JSON values.
-        text = json.dumps(metadata, allow_nan=False)
+        text = json.dumps(metadata, allow_nan=False, ensure_ascii=False)
+        # Check keys and values before ASCII escaping can hide surrogates.
+        text.encode("utf-8")
         return json.loads(text, object_pairs_hook=unique_json_object)
+    except UnicodeEncodeError as exc:
+        raise RunMetadataError(
+            f"run metadata file {source} must contain only Unicode scalar values"
+        ) from exc
     except (ValueError, TypeError, OverflowError, RecursionError) as exc:
         raise RunMetadataError(f"invalid JSON domain in run metadata file {source}") from exc
 

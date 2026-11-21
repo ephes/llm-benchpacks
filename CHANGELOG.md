@@ -8,6 +8,9 @@
 - Keep valid hardware probe stdout when diagnostic stderr contains non-UTF-8
   bytes. Both streams still count toward the shared output limit.
 
+- Refuse unpaired Unicode surrogates in run metadata keys and values before
+  publishing provenance artifacts.
+
 - Refuse invalid supplied pack IDs in compare and report. Keep rows with
   missing pack IDs readable as unlabeled legacy data.
 
