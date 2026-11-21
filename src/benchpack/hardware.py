@@ -60,7 +60,6 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
         return None
     selector = None
     output = bytearray()
-    errors = bytearray()
     total = 0
     retired = False
     try:
@@ -85,11 +84,8 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
                     return None
                 if key.fileobj is process.stdout:
                     output.extend(chunk)
-                else:
-                    errors.extend(chunk)
         if process.returncode != 0:
             return None
-        errors.decode("utf-8")
         return output.decode("utf-8")
     except (OSError, UnicodeError):
         return None

@@ -2086,10 +2086,12 @@ first-mismatch locations remain readable.
 
 ## Hardware probe resource ownership
 
-Hardware probes drain stdout and stderr under a combined 64 KiB byte ceiling. Excess
-output, invalid UTF-8, nonzero exit or deadline expiry makes the probe unavailable;
-partial output never establishes identity. On POSIX each probe owns a new process
-group. After success, timeout or collection failure, cleanup attempts to kill the
+Hardware probes run with `LC_ALL=C` in the child environment for stable labels.
+They drain stdout and stderr under a combined 64 KiB byte ceiling and discard
+stderr bytes without decoding them. Excess output, invalid UTF-8 on stdout,
+nonzero exit or deadline expiry makes the probe unavailable, and partial output
+never establishes identity. On POSIX each probe owns a new process group.
+After success, timeout or collection failure, cleanup attempts to kill the
 group (including pipe-holding descendants), close the selector and both pipes,
 and reap the leader with a wait of up to 0.25 seconds. A close error leaves the
 probe result intact and cleanup continues with the remaining handles and child

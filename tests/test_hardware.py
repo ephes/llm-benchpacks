@@ -353,7 +353,7 @@ def test_probe_unkillable_leader_stays_unavailable(monkeypatch, tmp_path):
 
 def test_probe_combined_budget_boundary():
     import sys
-    source = "import os; os.write(1, b'x' * 32768); os.write(2, b'y' * 32768)"
+    source = "import os; os.write(1, b'x' * 32768); os.write(2, b'\\xff' * 32768)"
     assert hardware._run([sys.executable, '-c', source]) == 'x' * 32768
     assert hardware._run([sys.executable, '-c', source + "; os.write(2, b'z')"]) is None
 
