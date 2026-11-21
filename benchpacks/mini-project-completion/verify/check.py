@@ -172,23 +172,47 @@ def _check_cli(cli: Any) -> dict[str, Any]:
     }
 
 
+class _SuiteResult(unittest.TextTestResult):
+    _active_test: unittest.TestCase | None = None
+    skipped_tests = 0
+
+    def startTest(self, test: unittest.TestCase) -> None:
+        super().startTest(test)
+        self._active_test = test
+
+    def stopTest(self, test: unittest.TestCase) -> None:
+        self._active_test = None
+        super().stopTest(test)
+
+    def addSkip(self, test: unittest.TestCase, reason: str) -> None:
+        super().addSkip(test, reason)
+        # Fixture and subtest skips do not correspond to a testsRun increment.
+        if test is self._active_test:
+            self.skipped_tests += 1
+
+
 def _check_unittest_suite(workspace: Path) -> dict[str, Any]:
     test_file = workspace / "tests" / "test_notes_cli.py"
     loader = unittest.TestLoader()
     suite = loader.discover(str(workspace / "tests"))
     stream = io.StringIO()
-    result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
+    result = unittest.TextTestRunner(
+        stream=stream, verbosity=2, resultclass=_SuiteResult
+    ).run(suite)
+    executed = result.testsRun - result.skipped_tests
     return {
         "name": "visible_unittest_suite",
         "test_file_exists": test_file.is_file(),
         "tests_run": result.testsRun,
+        "tests_executed": executed,
         "minimum_tests_run": 3,
+        "skipped": len(result.skipped),
         "failures": len(result.failures),
         "errors": len(result.errors),
         "output": stream.getvalue(),
         "passed": (
             test_file.is_file()
-            and result.testsRun >= 3
+            and executed >= 3
             and result.wasSuccessful()
         ),
     }

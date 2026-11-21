@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require three executed tests for the mini-project completion suite and
+  record its executed-test and skip counts in the verifier receipt.
+
 - Release descriptors still owned by a contained result traversal when closing
   a directory fails, preserving the original failure.
 

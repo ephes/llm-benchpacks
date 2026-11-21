@@ -152,7 +152,9 @@ Initial packs:
   `notes/store.py` and `notes/cli.py`; the runner copies the repo fixture into
   `workspace/complete-notes-cli/rep-001/`, applies the model patch inside that
   workspace, captures `patch/complete-notes-cli/rep-001.diff`, and runs a
-  stdlib `verify-script` with visible and hidden execution checks. The pack
+  stdlib `verify-script` with visible and hidden execution checks. The visible
+  unittest suite must execute at least three tests, excluding whole-test skips.
+  The suite receipt records executed tests and skip events. The pack
   sets `defaults.warmup = 0`, `defaults.repetitions = 1`,
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`. It is the first small

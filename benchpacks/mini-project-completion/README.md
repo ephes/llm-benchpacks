@@ -42,6 +42,11 @@ workspace patch artifact to exist and be non-empty, writes structured JSON to
 the runner-provided `--output` path, and uses the process exit code as the
 pass/fail authority.
 
+The visible regression suite must execute at least three tests and have a
+successful unittest result. The receipt records unittest's `tests_run`,
+`tests_executed` after excluding whole-test skips, and the total number of skip
+events under `skipped`, including fixture and subtest skips.
+
 ## Runtime Defaults
 
 The pack sets:
