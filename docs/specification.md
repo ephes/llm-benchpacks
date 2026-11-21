@@ -2104,8 +2104,9 @@ independently.
 ## Comparable successful metric populations
 
 Compare/report refuse differing adapter or model identities within one run, and
-differing versions of the same pack, before aggregation. A missing identity is
-distinct from a present one; homogeneous legacy runs remain readable. Separate
+differing versions of the same pack, before aggregation. A supplied `pack` must
+be an object, and a supplied `pack.id` must be a nonblank string. Rows without
+a `pack` or `pack.id` retain their unlabeled legacy identity. Separate
 runtimes or pack versions into separate result directories. Registry import
 continues to retain mixed sources and their row identities, but registry reports
 and static site export (which includes a report) refuse them before publication.

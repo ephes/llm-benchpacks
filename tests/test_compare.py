@@ -1183,6 +1183,32 @@ def test_scoring_failure_is_still_a_completed_metric_sample(tmp_path):
     assert summarize_runs([load_result_run(tmp_path / 'completed')])[0].wall_s == 9
 
 
+@pytest.mark.parametrize("command", ["compare", "report"])
+@pytest.mark.parametrize("invalid_pack", [{"id": 42}, {"id": None}, {"id": "  "}, []])
+def test_cli_refuses_invalid_pack_identity(tmp_path, capsys, command, invalid_pack):
+    from benchpack.cli import main
+
+    legacy = _record("short")
+    del legacy["pack"]
+    labeled = _record("short")
+    invalid = dict(legacy, pack=invalid_pack)
+    legacy_dir, labeled_dir, invalid_dir = (
+        tmp_path / name for name in ("legacy", "labeled", "invalid")
+    )
+    _write_run(legacy_dir, rows=[legacy, dict(legacy, pack={})])
+    _write_run(labeled_dir, rows=[labeled])
+    _write_run(invalid_dir, rows=[invalid])
+
+    main([command, str(legacy_dir), str(labeled_dir)])
+    output = capsys.readouterr().out
+    assert "| legacy | —/short | 2 |" in output
+    assert "| labeled | runtime-sweep/short | 1 |" in output
+
+    with pytest.raises(SystemExit, match="invalid pack identity"):
+        main([command, str(legacy_dir), str(labeled_dir), str(invalid_dir)])
+    assert capsys.readouterr().out == ""
+
+
 @pytest.mark.parametrize('section, field, attribute, invalid', [
     ('timing', 'wall_s', 'wall_s', -0.01),
     ('timing', 'decode_tps', 'decode_tps', -1),

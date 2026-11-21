@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refuse invalid supplied pack IDs in compare and report. Keep rows with
+  missing pack IDs readable as unlabeled legacy data.
+
 - Accept up to 64 KiB of UTF-8 from a regular Linux `/etc/os-release` target.
   Missing or invalid release metadata leaves the distribution unknown.
 

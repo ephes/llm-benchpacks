@@ -780,7 +780,9 @@ deadline and a 64 KiB output ceiling per probe; unavailable probes do not supply
 identity. Resource sampling has a 5-second deadline.
 
 Compare/report require homogeneous adapter/model identities and one version per
-pack in each run. This also applies to registry reports and site export; split
+pack in each run. A supplied `pack` must be an object and a supplied `pack.id`
+must be a nonblank string. Legacy rows without a pack ID remain readable.
+This also applies to registry reports and site export; split
 mixed imported sources into separate result directories. Only `ok: true` rows supply metric medians and cache coverage;
 `rows`, `ok` and `failed` keep all attempts visible. Timing/rates must be finite
 and nonnegative; tokens must be exact nonnegative counts. Invalid supplied
