@@ -8,6 +8,8 @@ working history and open questions.
 
 - Retire each owned descriptor once when a directory close fails during
   contained result traversal and preserve the original failure.
+- Require complete writes and successful close for contained copies. Remove the
+  owned destination on error and attach a note if cleanup also fails.
 
 ## 2026-11-21 (round 175 B28)
 

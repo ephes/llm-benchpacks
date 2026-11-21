@@ -2247,8 +2247,10 @@ Contained reads/copies and JSONL ingestion compare opened descriptor identity,
 size and nanosecond mtime/ctime after reading. In-place mutation fails before
 using summaries, hashes or publishing bundles/registry rows. JSONL ingestion
 also requires the bytes read to match the opened file's initial size, even if
-a premature EOF follows a complete record. Failed copies remove their partial
-destination. Unlink-only ctime/link-count changes from atomic
+a premature EOF follows a complete record. Copies require full writes and a
+successful buffered close. On failure, they attempt to remove the destination
+they created and preserve the original error if close or removal also fails.
+Unlink-only ctime/link-count changes from atomic
 pathname replacement are allowed when identity, size and mtime stay unchanged.
 This metadata fence handles concurrent writers, not adversarial same-user code
 that restores timestamps. Hashes and summaries describe the admitted bytes.

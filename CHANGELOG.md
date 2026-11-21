@@ -5,6 +5,9 @@
 - Release descriptors still owned by a contained result traversal when closing
   a directory fails, preserving the original failure.
 
+- Reject short writes and remove incomplete contained copies after a buffered
+  close failure. Preserve the primary copy error if cleanup also fails.
+
 - Preserve exact JSON numbers in scoring comparisons and reject nonfinite
   or overflowing decimal values in scoring schemas. Scoring diagnostics keep
   showing decimal schema values as JSON numbers.
