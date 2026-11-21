@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 167 B18)
+
+- Isolate hardware probe close errors so cleanup reaches the remaining handles
+  and child wait while preserving the probe result.
+
 ## 2026-11-20 (round 163 B28)
 
 - Require a complete read of the opened result stream before admitting its

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
+import pytest
+
 import benchpack.hardware as hardware
 from benchpack.hardware import collect_hardware, sample_resources
 
@@ -297,6 +301,30 @@ def test_probe_timeout_after_pipes_close():
                           'import os,time; os.close(1); os.close(2); time.sleep(5)'],
                          timeout=0.1) is None
     assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.parametrize("failed_handle", ["selector", "stdout", "stderr"])
+@pytest.mark.parametrize(("returncode", "expected"), [(0, ""), (1, None)])
+def test_probe_close_failure_preserves_result_and_reaps(
+    monkeypatch, failed_handle, returncode, expected
+):
+    selector = Mock()
+    selector.get_map.return_value = {}
+    process = Mock(returncode=returncode)
+    process.poll.return_value = returncode
+    handles = {"selector": selector, "stdout": process.stdout, "stderr": process.stderr}
+    handles[failed_handle].close.side_effect = OSError("synthetic close failure")
+    monkeypatch.setattr(hardware.selectors, "DefaultSelector", lambda: selector)
+    monkeypatch.setattr(hardware.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(hardware.os, "set_blocking", Mock())
+    retire = Mock()
+    monkeypatch.setattr(hardware, "_retire_probe", retire)
+
+    assert hardware._run(["probe"]) == expected
+    retire.assert_called_once_with(process)
+    for handle in handles.values():
+        handle.close.assert_called_once_with()
+    process.wait.assert_called_once_with(timeout=0.25)
 
 
 def test_probe_selector_failure_retires_process(monkeypatch):
