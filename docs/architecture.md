@@ -621,7 +621,7 @@ On Linux:
 - `lscpu`
 - `free`
 - `nvidia-smi` when available
-- `/etc/os-release`
+- `/etc/os-release` through a bounded regular-file read, with symlink support
 
 ## Compare Flow
 

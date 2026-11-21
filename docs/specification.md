@@ -2095,6 +2095,12 @@ wait. Hardware metadata commands share a 10-second monotonic deadline, and
 resource sampling has a 5-second deadline. A probe is never started after the
 collector budget expires. Escaped sessions are outside process-group ownership.
 
+Linux distribution detection accepts up to 64 KiB of UTF-8 data from a stable
+regular `/etc/os-release` target and supports the standard symlink layout.
+Missing, unreadable, nonregular, oversized, changing or invalid UTF-8 evidence
+leaves `distro` unavailable (`null`). CPU, memory and GPU evidence is evaluated
+independently.
+
 ## Comparable successful metric populations
 
 Compare/report refuse differing adapter or model identities within one run, and

@@ -8,6 +8,8 @@ working history and open questions.
 
 - Isolate hardware probe close errors so cleanup reaches the remaining handles
   and child wait while preserving the probe result.
+- Bound Linux release metadata to 64 KiB from a stable regular-file target
+  and keep CPU, memory and GPU metadata when distribution evidence is unavailable.
 
 ## 2026-11-20 (round 163 B28)
 

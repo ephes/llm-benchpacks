@@ -116,3 +116,8 @@ probe result intact and cleanup continues with the remaining handles and child
 wait. Hardware metadata commands share a 10-second monotonic deadline, and
 resource sampling has a 5-second deadline. A probe is never started after the
 collector budget expires. Escaped sessions are outside process-group ownership.
+
+Linux distribution detection accepts UTF-8 `/etc/os-release` files up to
+64 KiB, including symlinks to regular files. If release evidence is missing
+or rejected, the collector records `distro: null` and retains other hardware
+metadata.

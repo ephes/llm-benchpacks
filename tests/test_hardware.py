@@ -141,15 +141,11 @@ def test_empty_cores_preserves_partial_metadata() -> None:
     assert parsed['ram_mb'] is None
 
 
-def test_decoding_failures_are_unavailable(monkeypatch, tmp_path) -> None:
-    def invalid_encoding(*args, **kwargs):
-        raise UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid')
-
+def test_decoding_failures_are_unavailable(tmp_path) -> None:
     import sys
     assert hardware._run([sys.executable, '-c', "import os; os.write(1, b'\\xff')"]) is None
     evidence = tmp_path / 'os-release'
     evidence.write_bytes(b'\xff')
-    monkeypatch.setattr(type(evidence), 'read_text', invalid_encoding)
     assert hardware._read_file(evidence) is None
 
 
@@ -191,6 +187,51 @@ def test_malformed_integer_evidence_preserves_linux_metadata(monkeypatch):
         assert 'collector_error' not in hw
     assert hardware._parse_nonnegative_int('16') == 16
     assert hardware._parse_memory_mb('1 TB') == 1048576
+
+
+@pytest.mark.parametrize(
+    ("evidence", "expected"),
+    [
+        ("regular", "Test Linux"),
+        ("symlink", "Test Linux"),
+        ("limit", "Test Linux"),
+        ("oversized", None),
+        ("directory", None),
+        ("missing", None),
+    ],
+)
+def test_linux_release_file_preserves_other_hardware(monkeypatch, tmp_path, evidence, expected):
+    release = tmp_path / "os-release"
+    payload = b'PRETTY_NAME="Test Linux"\nID=test\n'
+    if evidence == "symlink":
+        target = tmp_path / "vendor-release"
+        target.write_bytes(payload)
+        release.symlink_to(target.name)
+    elif evidence == "directory":
+        release.mkdir()
+    elif evidence != "missing":
+        if evidence in {"limit", "oversized"}:
+            size = 64 * 1024 + (evidence == "oversized")
+            payload += b"#" * (size - len(payload))
+        release.write_bytes(payload)
+
+    read_file = hardware._read_file
+    monkeypatch.setattr(hardware, "_read_file", lambda path: read_file(release))
+    monkeypatch.setattr(hardware.platform, "system", lambda: "Linux")
+    outputs = {
+        "lscpu": "Model name: Test CPU\nCPU(s): 8",
+        "free": "Mem: 4096",
+        "nvidia-smi": "Test GPU, 1024, driver",
+    }
+    monkeypatch.setattr(hardware, "_run", lambda cmd, timeout: outputs[cmd[0]])
+
+    hw = collect_hardware()
+    assert hw["distro"] == expected
+    assert hw["cpu_model"] == "Test CPU"
+    assert hw["cpu_count"] == 8
+    assert hw["ram_mb"] == 4096
+    assert hw["gpus"] == [{"model": "Test GPU", "vram_mb": 1024, "driver_version": "driver"}]
+    assert "collector_error" not in hw
 
 
 def test_probe_output_budget_and_recovery():
