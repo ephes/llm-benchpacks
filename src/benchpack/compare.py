@@ -724,6 +724,8 @@ def metric_warnings(runs: list[ResultRun]) -> list[str]:
             ):
                 values = row.get(section)
                 if not isinstance(values, dict):
+                    if values is not None:
+                        invalid += 1
                     continue
                 for field in fields:
                     value = values.get(field)
@@ -734,6 +736,7 @@ def metric_warnings(runs: list[ResultRun]) -> list[str]:
     return [
         f"WARNING: {invalid} invalid metric samples ignored; timing/rates require "
         "finite nonnegative values and tokens require exact nonnegative counts. "
+        "Metric sections must be objects when supplied and non-null. "
         "Cached prompt counts cannot exceed prompt counts."
     ]
 

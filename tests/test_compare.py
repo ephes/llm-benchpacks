@@ -1256,6 +1256,21 @@ def test_comparison_metric_domains(tmp_path, section, field, attribute, invalid)
     assert run.records[0][section][field] == invalid
 
 
+@pytest.mark.parametrize("section, malformed", [("timing", 0), ("tokens", [])])
+def test_malformed_metric_section_warns_once(tmp_path, section, malformed):
+    row = _record("short")
+    del row[section]
+    _write_run(tmp_path / "legacy", rows=[row, dict(row, **{section: None})])
+    _write_run(tmp_path / "malformed", rows=[dict(row, **{section: malformed})])
+    runs = [load_result_run(tmp_path / name) for name in ("legacy", "malformed")]
+
+    for renderer in (render_comparison, render_report):
+        assert "invalid metric" not in renderer(runs[:1])
+        warnings = [line for line in renderer(runs).splitlines() if "invalid metric" in line]
+        assert len(warnings) == 1
+        assert warnings[0].startswith("WARNING: 1 invalid metric samples ignored")
+
+
 @pytest.mark.parametrize('command', ['compare', 'report'])
 @pytest.mark.parametrize('limit', ['MAX_REPORT_RUNS', 'MAX_REPORT_BYTES', 'MAX_REPORT_RECORDS'])
 def test_compare_and_report_share_total_input_limits(tmp_path, monkeypatch, command, limit):

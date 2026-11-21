@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Warn once per malformed non-null timing or token section in the aggregate
+  compare and report metric warning.
+
 - Use the fixed context read diagnostic when example agents cannot open the
   context file, omitting the path from the open error.
 
