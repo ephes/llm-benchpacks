@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 175 B28)
+
+- Compare JSON-schema numbers exactly and apply the same numeric admission to
+  pack schemas and model output.
+
 ## 2026-11-21 (round 174 B26)
 
 - Reserve all path-derived labels before assigning compare/report run suffixes.

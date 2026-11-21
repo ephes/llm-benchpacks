@@ -696,8 +696,10 @@ or ignored.
 
 Manifest loading requires string `expected` for `contains` and string
 `pattern` for `regex`, and compiles regex patterns before execution. Empty
-strings are valid. JSON-schema output decoding rejects non-JSON numeric
-constants and float/exponent literals that overflow the finite float range.
+strings are valid. JSON-schema decoding rejects non-JSON numeric constants in
+both schemas and model outputs. Decimal and exponent literals must fit the
+decimal representation and pass the finite float overflow check. Numeric
+equality, bounds, and integer checks use the exact values from both documents.
 Integer literals are not limited to float range, but remain subject to
 Python's integer string digit limit (4300 digits by default). The `integer` type
 accepts finite mathematically integral numbers such as `1.0` and `1e0`,

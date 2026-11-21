@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve exact JSON numbers in scoring comparisons and reject nonfinite
+  or overflowing decimal values in scoring schemas.
+
 - Keep compare and report run labels unique when numbered suffixes would
   collide with labels derived from directory names.
 

@@ -751,10 +751,13 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   Output decoding rejects duplicate object members at every depth, even when
   their values agree. Diagnostics use bounded previews and an explicit
   `[truncated]` marker, with at most 1024 UTF-8 bytes per error.
-  Output decoding rejects NaN, Infinity and -Infinity, including nested values,
-  and float/exponent literals that overflow Python's finite float range.
-  Integer literals are not limited to float range, but remain subject to
-  Python's integer string digit limit (4300 digits by default). `const` and `enum` use JSON-value equality:
+  Schema and output decoding reject NaN, Infinity and -Infinity, including
+  nested values. Decimal and exponent literals must fit the decimal
+  representation and pass the finite float overflow check. Integer literals
+  remain subject to Python's integer string digit limit (4300 digits by default).
+  Numeric equality, bounds, and integer checks use the exact values from
+  both JSON documents, including equivalent decimal spellings.
+  `const` and `enum` use JSON-value equality:
   booleans are distinct from numbers, so `true` does not match `1` and `false`
   does not match `0`. Unknown schema keywords are ignored. Invalid JSON model
   output or schema-shape mismatches produce a normal scoring failure, not a
