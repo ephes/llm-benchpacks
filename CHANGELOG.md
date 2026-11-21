@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Enforce the 64 MiB result sidecar limit when reports read fallback hardware
+  evidence, including files that grow during the read.
+
 - Publish mini-project verifier receipts atomically and preserve previous
   receipts when staging fails.
 
