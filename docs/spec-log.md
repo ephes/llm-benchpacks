@@ -4,6 +4,13 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 177 B14)
+
+- Retire each owned descriptor once when a directory close fails during
+  contained result traversal and preserve the original failure.
+- Require complete writes and successful close for contained copies. Remove the
+  owned destination on error and attach a note if cleanup also fails.
+
 ## 2026-11-21 (round 175 B28)
 
 - Compare JSON-schema numbers exactly and apply the same numeric admission to

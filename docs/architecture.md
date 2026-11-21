@@ -1193,6 +1193,11 @@ before returning records and a digest. Agent-wrap imports apply the same
 descriptor checks to the dataset before decoding. Registry import completes
 input validation before opening a database for mutation.
 
+Contained traversal transfers ownership to the child before closing its
+parent. A directory close failure retires any still-owned descriptor once,
+including an opened result file that cannot be returned. A secondary close
+failure leaves the original error primary.
+
 Reporter writes re-admit the original output-directory identity across harness
 execution. JSONL appends use single-link no-follow regular descriptors with
 rollback on the owned descriptor for write failures and a sync before

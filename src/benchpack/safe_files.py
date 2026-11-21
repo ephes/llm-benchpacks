@@ -107,6 +107,13 @@ def open_regular_at(directory: int, name: str) -> int | None:
     return None
 
 
+def _close_after_error(fd: int, primary: BaseException) -> None:
+    try:
+        os.close(fd)
+    except BaseException:
+        primary.add_note("contained file descriptor cleanup failed")
+
+
 def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     """Open ``root/relative_path`` as a regular file without following links.
 
@@ -124,20 +131,31 @@ def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
                    os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)))
     except OSError:
         return None
+    fd = None
     try:
         for part in parts[:-1]:
             try:
                 child = os.open(part, _DIR_FLAGS, dir_fd=current)
             except OSError:
-                return None
-            os.close(current)
-            current = child
-        try:
-            return open_regular_at(current, parts[-1])
-        except OSError:
-            return None
-    finally:
+                break
+            # A close error may leave the numeric parent descriptor reusable.
+            parent, current = current, child
+            os.close(parent)
+        else:
+            try:
+                fd = open_regular_at(current, parts[-1])
+            except OSError:
+                pass
+    except BaseException as exc:
+        _close_after_error(current, exc)
+        raise
+    try:
         os.close(current)
+    except BaseException as exc:
+        if fd is not None:
+            _close_after_error(fd, exc)
+        raise
+    return fd
 
 
 def read_contained_regular(
@@ -190,16 +208,20 @@ def copy_contained_regular(
     The source is opened once through :func:`open_contained_regular` and copied
     from that descriptor. Returns the number of bytes copied, ``None`` when the
     source is unsafe or unavailable. Raises ``ValueError`` when the source grows
-    beyond ``limit`` bytes; the partial destination is removed.
+    beyond ``limit`` bytes. A failed copy removes the destination it created
+    when possible and preserves the original error.
     """
 
     fd = open_contained_regular(root, relative_path)
     if fd is None:
         return None
     total = 0
+    out = None
+    primary = None
     try:
         initial = os.fstat(fd)
-        with open(destination, "xb") as out:
+        out = open(destination, "xb")
+        with out:
             try:
                 while True:
                     chunk = os.read(fd, _CHUNK_BYTES)
@@ -210,14 +232,33 @@ def copy_contained_regular(
                         raise ValueError(
                             f"source file exceeds {limit} bytes: {relative_path}"
                         )
-                    out.write(chunk)
+                    if out.write(chunk) != len(chunk):
+                        raise OSError("short write to contained copy")
                 require_stable_file(fd, initial)
-            except BaseException:
-                out.close()
-                destination.unlink(missing_ok=True)
+            except BaseException as exc:
+                primary = exc
                 raise
-    finally:
-        os.close(fd)
+    except BaseException as exc:
+        if primary is None:
+            primary = exc
+        elif exc is not primary:
+            primary.add_note("contained copy destination close failed")
+
+    if primary is None:
+        try:
+            os.close(fd)
+        except BaseException as exc:
+            primary = exc
+    else:
+        _close_after_error(fd, primary)
+
+    if primary is not None:
+        if out is not None:
+            try:
+                destination.unlink(missing_ok=True)
+            except BaseException:
+                primary.add_note("contained copy destination cleanup failed")
+        raise primary
     return total
 
 

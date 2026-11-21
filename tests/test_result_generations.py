@@ -3,11 +3,130 @@
 import hashlib
 import json
 import os
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from benchpack import compare, registry, safe_files
 from tests.test_registry import _record, _write_result_dir
+
+
+@pytest.mark.parametrize("failure", ["parent", "parent-and-child", "leaf-directory"])
+def test_contained_open_retires_owned_descriptors(monkeypatch, tmp_path, failure):
+    root, child, leaf = 101, 102, 103
+    attempts = []
+    primary = OSError("directory close failed")
+
+    def open_directory(path, flags, *, dir_fd=None):
+        if dir_fd is None:
+            assert path == tmp_path
+            return root
+        assert (dir_fd, path) == (root, "patch")
+        return child
+
+    def open_regular(directory, name):
+        assert failure == "leaf-directory"
+        assert (directory, name) == (child, "result.diff")
+        return leaf
+
+    def close(fd):
+        attempts.append(fd)
+        if fd == (child if failure == "leaf-directory" else root):
+            raise primary
+        if fd == child and failure == "parent-and-child":
+            raise OSError("child close also failed")
+
+    monkeypatch.setattr(safe_files, "os", SimpleNamespace(
+        open=open_directory, close=close, O_RDONLY=os.O_RDONLY, O_DIRECTORY=os.O_DIRECTORY
+    ))
+    monkeypatch.setattr(safe_files, "open_regular_at", open_regular)
+
+    with pytest.raises(OSError) as raised:
+        safe_files.open_contained_regular(tmp_path, "patch/result.diff")
+
+    assert raised.value is primary
+    assert attempts == ([root, child, leaf] if failure == "leaf-directory" else [root, child])
+
+
+@pytest.mark.parametrize("failure", ["close", "short-write", "write-and-cleanup"])
+def test_contained_copy_retires_incomplete_destination(monkeypatch, tmp_path, failure):
+    source = tmp_path / "result.diff"
+    payload = b"synthetic result evidence"
+    source.write_bytes(payload)
+    destination = tmp_path / "copy.diff"
+    close_error = OSError("buffered close failed")
+    write_error = OSError("write failed")
+    close_attempts = []
+    unlink_attempts = []
+
+    class Destination:
+        def __init__(self):
+            self.stream = open(destination, "xb")
+
+        def __enter__(self):
+            return self
+
+        def write(self, chunk):
+            if failure == "write-and-cleanup":
+                self.stream.write(chunk[:1])
+                raise write_error
+            if failure == "short-write":
+                chunk = chunk[:1]
+            return self.stream.write(chunk)
+
+        def close(self):
+            self.stream.close()
+
+        def __exit__(self, *exc):
+            close_attempts.append(destination)
+            self.close()
+            if failure != "short-write":
+                raise close_error
+
+    def fail_unlink(path, **kwargs):
+        assert path == destination
+        unlink_attempts.append(path)
+        raise OSError("unlink failed")
+
+    def copy():
+        return safe_files.copy_contained_regular(tmp_path, source.name, destination, 4096)
+
+    with monkeypatch.context() as faults:
+        faults.setattr(safe_files, "open", lambda path, mode: Destination(), raising=False)
+        if failure == "write-and-cleanup":
+            faults.setattr(Path, "unlink", fail_unlink)
+        with pytest.raises(OSError) as raised:
+            copy()
+
+    assert close_attempts == [destination]
+    assert source.read_bytes() == payload
+    if failure == "write-and-cleanup":
+        assert raised.value is write_error
+        assert unlink_attempts == [destination]
+        assert destination.exists()
+        destination.unlink()
+    else:
+        assert not destination.exists()
+        if failure == "close":
+            assert raised.value is close_error
+        else:
+            assert "short" in str(raised.value)
+
+    assert copy() == len(payload)
+    assert destination.read_bytes() == payload
+
+
+def test_contained_copy_preserves_existing_destination(tmp_path):
+    source = tmp_path / "result.diff"
+    source.write_bytes(b"source")
+    destination = tmp_path / "copy.diff"
+    destination.write_bytes(b"previous copy")
+
+    with pytest.raises(FileExistsError):
+        safe_files.copy_contained_regular(tmp_path, source.name, destination, 4096)
+
+    assert destination.read_bytes() == b"previous copy"
 
 
 @pytest.mark.parametrize("operation", ["read", "copy", "bundle", "outcome"])
