@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Publish mini-project verifier receipts atomically and preserve previous
+  receipts when staging fails.
+
 - Require three executed tests for the mini-project completion suite and
   record its executed-test and skip counts in the verifier receipt.
 

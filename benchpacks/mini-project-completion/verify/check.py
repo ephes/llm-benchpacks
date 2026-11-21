@@ -218,6 +218,27 @@ def _check_unittest_suite(workspace: Path) -> dict[str, Any]:
     }
 
 
+def _publish_receipt(path: Path, payload: dict[str, Any]) -> None:
+    data = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stage: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as stream:
+            stage = Path(stream.name)
+            if stream.write(data) != len(data):
+                raise OSError("short write staging mini-project verifier receipt")
+        stage.replace(path)
+    except BaseException as exc:
+        if stage is not None:
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                exc.add_note(f"could not remove staged receipt: {cleanup_error}")
+        raise
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -267,11 +288,7 @@ def main() -> int:
         except ValueError:
             pass
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _publish_receipt(output_path, payload)
     return 0 if payload["passed"] else 1
 
 
