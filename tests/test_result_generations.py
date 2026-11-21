@@ -3,11 +3,49 @@
 import hashlib
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
 from benchpack import compare, registry, safe_files
 from tests.test_registry import _record, _write_result_dir
+
+
+@pytest.mark.parametrize("failure", ["parent", "parent-and-child", "leaf-directory"])
+def test_contained_open_retires_owned_descriptors(monkeypatch, tmp_path, failure):
+    root, child, leaf = 101, 102, 103
+    attempts = []
+    primary = OSError("directory close failed")
+
+    def open_directory(path, flags, *, dir_fd=None):
+        if dir_fd is None:
+            assert path == tmp_path
+            return root
+        assert (dir_fd, path) == (root, "patch")
+        return child
+
+    def open_regular(directory, name):
+        assert failure == "leaf-directory"
+        assert (directory, name) == (child, "result.diff")
+        return leaf
+
+    def close(fd):
+        attempts.append(fd)
+        if fd == (child if failure == "leaf-directory" else root):
+            raise primary
+        if fd == child and failure == "parent-and-child":
+            raise OSError("child close also failed")
+
+    monkeypatch.setattr(safe_files, "os", SimpleNamespace(
+        open=open_directory, close=close, O_RDONLY=os.O_RDONLY, O_DIRECTORY=os.O_DIRECTORY
+    ))
+    monkeypatch.setattr(safe_files, "open_regular_at", open_regular)
+
+    with pytest.raises(OSError) as raised:
+        safe_files.open_contained_regular(tmp_path, "patch/result.diff")
+
+    assert raised.value is primary
+    assert attempts == ([root, child, leaf] if failure == "leaf-directory" else [root, child])
 
 
 @pytest.mark.parametrize("operation", ["read", "copy", "bundle", "outcome"])

@@ -107,6 +107,13 @@ def open_regular_at(directory: int, name: str) -> int | None:
     return None
 
 
+def _close_after_error(fd: int, primary: BaseException) -> None:
+    try:
+        os.close(fd)
+    except BaseException:
+        primary.add_note("contained file descriptor cleanup failed")
+
+
 def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
     """Open ``root/relative_path`` as a regular file without following links.
 
@@ -124,20 +131,31 @@ def open_contained_regular(root: Path | int, relative_path: str) -> int | None:
                    os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)))
     except OSError:
         return None
+    fd = None
     try:
         for part in parts[:-1]:
             try:
                 child = os.open(part, _DIR_FLAGS, dir_fd=current)
             except OSError:
-                return None
-            os.close(current)
-            current = child
-        try:
-            return open_regular_at(current, parts[-1])
-        except OSError:
-            return None
-    finally:
+                break
+            # A close error may leave the numeric parent descriptor reusable.
+            parent, current = current, child
+            os.close(parent)
+        else:
+            try:
+                fd = open_regular_at(current, parts[-1])
+            except OSError:
+                pass
+    except BaseException as exc:
+        _close_after_error(current, exc)
+        raise
+    try:
         os.close(current)
+    except BaseException as exc:
+        if fd is not None:
+            _close_after_error(fd, exc)
+        raise
+    return fd
 
 
 def read_contained_regular(
