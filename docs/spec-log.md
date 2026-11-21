@@ -7,6 +7,7 @@ working history and open questions.
 ## 2026-11-21 (round 174 B26)
 
 - Reserve all path-derived labels before assigning compare/report run suffixes.
+- Reject records with missing, nontext or blank case IDs before aggregation.
 
 ## 2026-11-21 (round 173 B25)
 

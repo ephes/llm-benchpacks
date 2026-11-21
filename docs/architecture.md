@@ -15,7 +15,8 @@
   runner-owned sibling artifacts.
 - **Compare/report utilities**: read-only reporting over existing `run.jsonl`
   result directories plus optional per-run `hardware.json` and
-  `run-metadata.json` files.
+  `run-metadata.json` files. Shared case grouping requires a nonblank string
+  `case` on each result record before either renderer calculates summaries.
 - **Local registry tools**: SQLite-backed indexing plus compact public bundle
   creation/validation over existing result directories. They validate
   normalized rows, record compact metadata, and leave benchmark outputs as the

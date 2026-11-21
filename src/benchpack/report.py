@@ -279,7 +279,7 @@ def _render_case_outcomes(runs: list[ResultRun]) -> list[str]:
         "| run | case | rows | ok | scoring pass | scoring fail | unscored |",
         "|-----|------|------|----|--------------|--------------|----------|",
     ]
-    grouped = [group_case_records(run.records) for run in runs]
+    grouped = [group_case_records(run) for run in runs]
     labels = case_labels([key for groups in grouped for key in groups])
     for run, groups in zip(runs, grouped, strict=True):
         for key, rows in groups.items():

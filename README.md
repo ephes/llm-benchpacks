@@ -782,6 +782,8 @@ identity. Resource sampling has a 5-second deadline.
 Compare/report require homogeneous adapter/model identities and one version per
 pack in each run. A supplied `pack` must be an object and a supplied `pack.id`
 must be a nonblank string. Legacy rows without a pack ID remain readable.
+Every record needs a nonblank string `case`. An invalid case stops the command
+with the result directory and record number before any summary is printed.
 The same rules apply to registry reports and site export. Split mixed imported
 sources into separate result directories. Only `ok: true` rows supply metric
 medians and cache coverage. The `rows`, `ok` and `failed` counts show all

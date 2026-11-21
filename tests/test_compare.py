@@ -1219,6 +1219,26 @@ def test_cli_mixed_identity_has_controlled_error(tmp_path, command, capsys):
     assert capsys.readouterr().out == ''
 
 
+@pytest.mark.parametrize("command", ["compare", "report"])
+@pytest.mark.parametrize("case", [_UNSET, None, 42, "", " \t"])
+def test_cli_refuses_unattributed_comparison_record(tmp_path, capsys, command, case):
+    from benchpack.cli import main
+
+    valid, invalid = tmp_path / "valid", tmp_path / "invalid"
+    _write_run(valid)
+    malformed = _record("short", wall_s=99.0)
+    if case is _UNSET:
+        del malformed["case"]
+    else:
+        malformed["case"] = case
+    _write_run(invalid, rows=[_record("short"), malformed])
+
+    with pytest.raises(SystemExit, match="case must be a nonblank string") as exc:
+        main([command, str(valid), str(invalid)])
+    assert f"{invalid}: record 2" in str(exc.value)
+    assert capsys.readouterr().out == ""
+
+
 def test_scoring_failure_is_still_a_completed_metric_sample(tmp_path):
     row = _record('short', wall_s=9)
     row['scoring'] = {'mode': 'contains', 'passed': False}

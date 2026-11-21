@@ -5,6 +5,9 @@
 - Keep compare and report run labels unique when numbered suffixes would
   collide with labels derived from directory names.
 
+- Refuse compare and report records with missing, nontext or blank case IDs
+  and identify the offending record before rendering a summary.
+
 - Warn once per malformed non-null timing or token section in the aggregate
   compare and report metric warning.
 
