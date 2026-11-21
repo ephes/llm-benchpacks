@@ -7,7 +7,7 @@ working history and open questions.
 ## 2026-11-21 (round 175 B28)
 
 - Compare JSON-schema numbers exactly and apply the same numeric admission to
-  pack schemas and model output.
+  pack schemas and model output; diagnostics keep JSON number spellings.
 - Reject nonstring dictionary keys before serializing metadata from Python.
 
 ## 2026-11-21 (round 174 B26)

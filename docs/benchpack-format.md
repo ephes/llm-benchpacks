@@ -756,7 +756,8 @@ scoring = { mode = "json-schema", schema = "fixtures/city.schema.json" }
   representation and pass the finite float overflow check. Integer literals
   remain subject to Python's integer string digit limit (4300 digits by default).
   Numeric equality, bounds, and integer checks use the exact values from
-  both JSON documents, including equivalent decimal spellings.
+  both JSON documents, including equivalent decimal spellings. Diagnostics
+  print schema numbers as JSON number literals, such as `1.5`.
   `const` and `enum` use JSON-value equality:
   booleans are distinct from numbers, so `true` does not match `1` and `false`
   does not match `0`. Unknown schema keywords are ignored. Invalid JSON model

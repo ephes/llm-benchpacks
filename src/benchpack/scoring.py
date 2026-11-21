@@ -16,7 +16,20 @@ from .packs import Scoring
 
 MAX_SCORING_ERROR_BYTES = 1024
 _TRUNCATED = "[truncated]"
-_REPR = reprlib.Repr()
+
+
+class _DiagnosticRepr(reprlib.Repr):
+    # Decoded JSON decimals must read as JSON numbers in scoring diagnostics.
+    def repr_Decimal(self, value: Decimal, level: int) -> str:
+        text = str(value).lower()
+        if len(text) <= self.maxlong:
+            return text
+        head = max(0, (self.maxlong - len(self.fillvalue)) // 2)
+        tail = max(0, self.maxlong - len(self.fillvalue) - head)
+        return text[:head] + self.fillvalue + text[len(text) - tail:]
+
+
+_REPR = _DiagnosticRepr()
 _REPR.maxstring = _REPR.maxother = _REPR.maxlong = 120
 _REPR.maxlist = _REPR.maxdict = _REPR.maxtuple = 4
 _REPR.maxlevel = 3

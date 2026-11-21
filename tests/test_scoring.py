@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from benchpack.packs import Scoring
@@ -153,6 +155,40 @@ def test_json_schema_enum_distinguishes_boolean_from_integer() -> None:
         "passed": False,
         "error": "$ must be one of [0, 1]",
     }
+
+
+@pytest.mark.parametrize(
+    ("schema", "output", "error"),
+    [
+        ({"minimum": Decimal("1.5")}, "1", "$ must be >= 1.5"),
+        ({"maximum": Decimal("1E+300")}, "1e301", "$ must be <= 1e+300"),
+        ({"enum": [Decimal("0.5"), 1]}, "2", "$ must be one of [0.5, 1]"),
+        ({"const": Decimal("0.10")}, "0.2", "$ must equal 0.10"),
+    ],
+)
+def test_json_schema_diagnostics_render_decimals_as_json_numbers(
+    schema: dict[str, object], output: str, error: str
+) -> None:
+    result = evaluate(
+        Scoring(mode="json-schema", schema="inline", schema_data=schema),
+        output,
+    )
+
+    assert result == {"mode": "json-schema", "passed": False, "error": error}
+
+
+def test_json_schema_diagnostics_bound_long_decimal_literals() -> None:
+    literal = "0." + "1" * 500
+    result = evaluate(
+        Scoring(mode="json-schema", schema="inline", schema_data={"const": Decimal(literal)}),
+        "1",
+    )
+
+    assert result is not None
+    error = result["error"]
+    assert error.startswith("$ must equal 0.111")
+    assert "[truncated]" in error
+    assert len(error) < 160
 
 
 def test_json_schema_const_uses_json_equality_inside_arrays() -> None:

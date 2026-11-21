@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Preserve exact JSON numbers in scoring comparisons and reject nonfinite
-  or overflowing decimal values in scoring schemas.
+  or overflowing decimal values in scoring schemas. Scoring diagnostics keep
+  showing decimal schema values as JSON numbers.
 
 - Reject nonstring dictionary keys anywhere in Python run metadata before
   publication, preserving any existing metadata file.
