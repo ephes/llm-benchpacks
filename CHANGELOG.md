@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Accept up to 64 KiB of UTF-8 from a regular Linux `/etc/os-release` target.
+  Missing or invalid release metadata leaves the distribution unknown.
+
+- Keep hardware probe results and attempt all handle closures and child reaping
+  when a selector or pipe close fails.
+
 - Reject agent-wrap datasets that change in place or return incomplete bytes
   during admission, before writing to the registry.
 

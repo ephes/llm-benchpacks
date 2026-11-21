@@ -2087,14 +2087,19 @@ first-mismatch locations remain readable.
 Hardware probes drain stdout and stderr under a combined 64 KiB byte ceiling. Excess
 output, invalid UTF-8, nonzero exit or deadline expiry makes the probe unavailable;
 partial output never establishes identity. On POSIX each probe owns a new process
-group. Cleanup kills the group (including pipe-holding descendants) and reaps its
-leader on success, timeout and collection failure. Cleanup allows up to 0.25 seconds
-beyond the command deadline and never raises: a leader that cannot be killed or
-reaped in that window only makes the probe unavailable; it does not abort hardware
-collection or per-request resource sampling. All metadata commands share a 10-second monotonic
-collector deadline; resource sampling has a 5-second deadline. A probe is never
-started after the collector budget expires. Escaped sessions are outside process-group
-ownership.
+group. After success, timeout or collection failure, cleanup attempts to kill the
+group (including pipe-holding descendants), close the selector and both pipes,
+and reap the leader with a wait of up to 0.25 seconds. A close error leaves the
+probe result intact and cleanup continues with the remaining handles and child
+wait. Hardware metadata commands share a 10-second monotonic deadline, and
+resource sampling has a 5-second deadline. A probe is never started after the
+collector budget expires. Escaped sessions are outside process-group ownership.
+
+Linux distribution detection accepts up to 64 KiB of UTF-8 data from a stable
+regular `/etc/os-release` target and supports the standard symlink layout.
+Missing, unreadable, nonregular, oversized, changing or invalid UTF-8 evidence
+leaves `distro` unavailable (`null`). CPU, memory and GPU evidence is evaluated
+independently.
 
 ## Comparable successful metric populations
 

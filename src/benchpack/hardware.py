@@ -15,13 +15,18 @@ import platform
 import selectors
 import signal
 import socket
+import stat
 import subprocess
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from .safe_files import read_opened_regular
+
 
 MAX_PROBE_BYTES = 64 * 1024
+MAX_OS_RELEASE_BYTES = 64 * 1024
 COLLECTOR_TIMEOUT_S = 10.0
 
 
@@ -88,20 +93,15 @@ def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
     except (OSError, UnicodeError):
         return None
     finally:
-        # Cleanup is best-effort and must never replace the probe result: an
-        # unkillable or unreaped leader only makes this probe unavailable.
-        try:
+        # Each cleanup attempt is independent of the others and the probe result.
+        with suppress(OSError):
             _retire_probe(process)
-        except OSError:
-            pass
-        if selector is not None:
-            selector.close()
-        process.stdout.close()
-        process.stderr.close()
-        try:
+        for handle in (selector, process.stdout, process.stderr):
+            if handle is not None:
+                with suppress(OSError):
+                    handle.close()
+        with suppress(subprocess.TimeoutExpired):
             process.wait(timeout=0.25)
-        except subprocess.TimeoutExpired:
-            pass
 
 
 def _probe(cmd: list[str], deadline: float | None, timeout: float = 5.0) -> str | None:
@@ -116,7 +116,16 @@ def _sysctl(key: str, deadline: float | None = None) -> str | None:
 
 def _read_file(path: Path) -> str | None:
     try:
-        return path.read_text()
+        # Follow the distro's symlink, but open nonblocking and check the target
+        # on the same descriptor that supplies the bytes.
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return None
+            data = read_opened_regular(fd, MAX_OS_RELEASE_BYTES).data
+            return data.decode("utf-8") if data is not None else None
+        finally:
+            os.close(fd)
     except (OSError, UnicodeError):
         return None
 
