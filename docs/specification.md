@@ -2005,6 +2005,9 @@ report published-but-uncertain durability, including the affected log filename.
 
 Reports deduplicate `run.jsonl` inputs by canonical file identity (including
 symlink and hard-link aliases), retaining the first input's label and path.
+A report or comparison admits at most 1,000 supplied run references, including
+aliases and repeats. The loader checks this limit before opening any result
+files and then deduplicates by descriptor identity.
 A report admits at most 100 unique runs, 64 MiB of actual JSONL bytes and 100,000
 records in total; per-run limits still apply. Remaining byte/record allowances
 are passed into the bounded reader, so over-budget inputs are rejected during

@@ -43,6 +43,30 @@ def test_report_deduplicates_canonical_run_identity(tmp_path, monkeypatch):
     assert len(runs) == len(calls) == 1
 
 
+def test_report_caps_run_references_before_opening_aliases(tmp_path, monkeypatch):
+    run = tmp_path / "run"
+    _write_run(run)
+    alias = tmp_path / "alias"
+    alias.symlink_to(run, target_is_directory=True)
+    manifest = tmp_path / "report.toml"
+    manifest.write_text('result_dirs = ["run", "alias", "./run"]\n', encoding="utf-8")
+    paths = report.load_report_set(manifest)
+    monkeypatch.setattr(report, "MAX_REPORT_RUN_REFERENCES", 2, raising=False)
+    opened = []
+    open_result_input = compare._open_result_input
+
+    def track(path):
+        opened.append(path)
+        return open_result_input(path)
+
+    monkeypatch.setattr(compare, "_open_result_input", track)
+    with pytest.raises(report.ReportError, match="run reference limit"):
+        report.load_report_runs(paths)
+    assert opened == []
+    assert len(report.load_report_runs(paths[:2])) == 1
+    assert opened == paths[:2]
+
+
 @pytest.mark.parametrize('exception', [KeyboardInterrupt, OSError])
 def test_external_exception_cleans_parent_and_descendant(tmp_path, monkeypatch, exception):
     marker = tmp_path / 'child.pid'

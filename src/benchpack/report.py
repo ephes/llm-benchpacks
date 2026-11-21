@@ -14,6 +14,7 @@ from .compare import (
     MISSING,
     CompareError,
     MAX_RESULT_RUN_BYTES,
+    MAX_RESULT_RUN_REFERENCES,
     MAX_RESULT_SIDECAR_BYTES,
     MAX_RESULT_RECORDS,
     ResultRun,
@@ -54,6 +55,7 @@ from .safe_files import (
 
 MAX_REPORT_SET_BYTES = 1024 * 1024
 MAX_REPORT_RUNS = 100
+MAX_REPORT_RUN_REFERENCES = MAX_RESULT_RUN_REFERENCES
 MAX_REPORT_BYTES = MAX_RESULT_RUN_BYTES
 MAX_REPORT_RECORDS = MAX_RESULT_RECORDS
 
@@ -176,6 +178,7 @@ def load_report_runs(result_dirs: list[Path | str]) -> list[ResultRun]:
         return load_result_runs(
             result_dirs, run_limit=MAX_REPORT_RUNS,
             byte_limit=MAX_REPORT_BYTES, record_limit=MAX_REPORT_RECORDS,
+            reference_limit=MAX_REPORT_RUN_REFERENCES,
         )
     except CompareError as exc:
         raise ReportError(f"could not admit result inputs: {exc}") from exc

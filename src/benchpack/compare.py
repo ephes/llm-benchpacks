@@ -22,6 +22,7 @@ MAX_RESULT_LINE_BYTES = 1024 * 1024
 MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
 MAX_RESULT_SIDECAR_BYTES = MAX_RESULT_RUN_BYTES
 MAX_RESULT_RECORDS = 100_000
+MAX_RESULT_RUN_REFERENCES = 1_000
 MAX_CASE_SUMMARIES = 100_000
 
 
@@ -185,8 +186,11 @@ def _read_result_run(
 def load_result_runs(
     result_dirs: list[Path | str], *, run_limit: int = 100,
     byte_limit: int = MAX_RESULT_RUN_BYTES, record_limit: int = MAX_RESULT_RECORDS,
+    reference_limit: int = MAX_RESULT_RUN_REFERENCES,
 ) -> list[ResultRun]:
     """Admit a bounded collection, deduplicating the descriptors actually read."""
+    if len(result_dirs) > reference_limit:
+        raise CompareError(f"total run reference limit exceeded ({reference_limit})")
     runs: list[ResultRun] = []
     seen: dict[tuple[int, int], tuple[int, int, int]] = {}
     total_bytes = total_records = 0

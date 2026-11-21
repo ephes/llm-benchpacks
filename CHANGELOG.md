@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Cap report and comparison inputs at 1,000 run references before opening
+  result files. Admitted references still deduplicate by opened file identity.
+
 - Bound expanded run metadata to 100,000 values and depth 64 before JSON
   serialization. Shared subtrees count on every reference.
 
