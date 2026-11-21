@@ -7,6 +7,8 @@ working history and open questions.
 ## 2026-11-21 (round 171 B23)
 
 - Use the bounded context read diagnostic for example context open failures.
+- Close each opened context descriptor once and preserve the admission failure
+  if closing also fails. A close-only failure uses the bounded read diagnostic.
 
 ## 2026-11-21 (round 168 B26)
 
