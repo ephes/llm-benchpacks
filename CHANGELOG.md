@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refuse nonfinite fallback hardware values at every depth before rendering
+  report cells.
+
 - Enforce the 64 MiB result sidecar limit when reports read fallback hardware
   evidence, including files that grow during the read.
 

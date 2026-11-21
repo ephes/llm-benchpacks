@@ -34,6 +34,7 @@ from .compare import (
     unique_json_object,
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
+from .json_numbers import parse_finite_json_float, reject_json_constant
 from .repo_task_outcomes import (
     RepoTaskOutcome,
     count_repo_task_outcomes,
@@ -574,7 +575,12 @@ def _hardware_cell(run: ResultRun) -> str:
         return "hardware.json missing"
 
     try:
-        hardware = json.loads(text, object_pairs_hook=unique_json_object)
+        hardware = json.loads(
+            text,
+            object_pairs_hook=unique_json_object,
+            parse_constant=reject_json_constant,
+            parse_float=parse_finite_json_float,
+        )
     except RecursionError as exc:
         raise ReportError(f"{path} exceeds JSON nesting limit") from exc
     except json.JSONDecodeError as exc:

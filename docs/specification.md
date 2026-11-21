@@ -1178,6 +1178,8 @@ UTF-8, and JSON parsing failures in a hardware sidecar produce a report error.
 Hardware JSON objects require unique decoded member names at every depth.
 The fallback hardware read uses the opened regular file and the 64 MiB result
 sidecar limit. Oversized or changing hardware files fail the report.
+The fallback decoder also rejects nonfinite numbers at every depth, including
+NaN, Infinity, and exponents that overflow the floating-point range.
 When `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly, including when it

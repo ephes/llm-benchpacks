@@ -644,6 +644,34 @@ def test_report_rejects_duplicate_hardware_json_members(tmp_path: Path, hardware
         render_report(load_report_runs([run]))
 
 
+@pytest.mark.parametrize(
+    "hardware",
+    [
+        '{"ram_mb":NaN}',
+        '{"gpus":[{"memory_mb":Infinity}]}',
+        '{"extension":{"values":[-Infinity]}}',
+        '{"ram_mb":1e309}',
+    ],
+    ids=["ram-nan", "gpu-infinity", "nested-negative-infinity", "overflowing-exponent"],
+)
+def test_report_rejects_nonfinite_fallback_hardware(tmp_path: Path, hardware: str) -> None:
+    source = tmp_path / "run"
+    _write_run(source, hardware={
+        "hardware_model_identifier": "synthetic-v1",
+        "ram_mb": 1024.5,
+        "gpus": [{"model": "synthetic-gpu", "memory_mb": 512.25}],
+    })
+    (run,) = load_report_runs([source])
+
+    report_text = render_report([run])
+    assert "hardware_model_identifier=synthetic-v1; ram_mb=1024.5" in report_text
+    assert "gpus=synthetic-gpu" in report_text
+
+    (source / "hardware.json").write_text(hardware, encoding="utf-8")
+    with pytest.raises(ReportError, match=r"could not parse .*hardware\.json: invalid JSON domain"):
+        render_report([run])
+
+
 def test_load_report_set_expands_relative_paths_from_manifest_dir(
     tmp_path: Path,
 ) -> None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import queue
 import signal
@@ -17,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from .json_numbers import parse_finite_json_float, reject_json_constant
 from .packs import Case, Pack, Scoring
 from .safe_files import read_contained_regular
 from .workspaces import PreparedWorkspace
@@ -447,8 +447,8 @@ def _write_authoritative_json(
             try:
                 loaded = json.loads(
                     snapshot.data.decode("utf-8"),
-                    parse_constant=_refuse_json_constant,
-                    parse_float=_finite_json_float,
+                    parse_constant=reject_json_constant,
+                    parse_float=parse_finite_json_float,
                 )
                 if not isinstance(loaded, dict):
                     raise ValueError("expected object")
@@ -481,14 +481,3 @@ def _write_authoritative_json(
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _refuse_json_constant(value: str) -> Any:
-    raise ValueError("nonfinite JSON number")
-
-
-def _finite_json_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        raise ValueError("nonfinite JSON number")
-    return parsed
