@@ -11,7 +11,7 @@ import os
 import stat
 import sys
 import uuid
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
 from benchpack.safe_files import admitted_directory, contained_parts, read_opened_regular
@@ -299,18 +299,25 @@ MAX_CONTEXT_BYTES = 16 * 1024 * 1024
 
 def read_context_text(path: Path) -> str:
     """Admit an opened regular UTF-8 context before decoding control JSON."""
-    fd = os.open(path, _READ)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise ValueError('context must be a regular file')
-        snapshot = read_opened_regular(fd, MAX_CONTEXT_BYTES)
-        if snapshot.data is None:
-            raise ValueError('context exceeds byte limit')
-        return snapshot.data.decode('utf-8')
+        fd = os.open(path, _READ)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise ValueError('context must be a regular file')
+            snapshot = read_opened_regular(fd, MAX_CONTEXT_BYTES)
+            if snapshot.data is None:
+                raise ValueError('context exceeds byte limit')
+            text = snapshot.data.decode('utf-8')
+        except BaseException:
+            # Preserve the admission failure. The descriptor number may already
+            # be reusable if close raises.
+            with suppress(OSError):
+                os.close(fd)
+            raise
+        os.close(fd)
+        return text
     except (OSError, UnicodeError) as exc:
         raise ValueError('could not read stable UTF-8 context') from exc
-    finally:
-        os.close(fd)
 
 
 @contextmanager

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Use the fixed context read diagnostic when example agents cannot open the
+  context file, omitting the path from the open error.
+
+- Keep the original context admission error if closing the descriptor also
+  fails. Report close-only failures with the fixed context read diagnostic.
+
 - Run hardware probes in the C locale so translated systems retain CPU and
   memory metadata.
 

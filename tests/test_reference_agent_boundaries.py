@@ -69,6 +69,63 @@ def test_reference_context_refused_before_artifacts(tmp_path, invalid):
     assert log.read_bytes() == b'previous log'
 
 
+def test_reference_missing_context_uses_fixed_diagnostic(tmp_path):
+    _, _, marker, log, argv = handoff(tmp_path)
+    missing = tmp_path / 'synthetic-missing-context.json'
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), *argv[:-1], str(missing)],
+        capture_output=True, timeout=3,
+    )
+
+    assert result.returncode == 2
+    assert result.stderr == b'reference-agent: could not read stable UTF-8 context\n'
+    assert marker.read_bytes() == b'previous marker'
+    assert log.read_bytes() == b'previous log'
+
+
+@pytest.mark.parametrize(('contents', 'diagnostic'), [
+    (None, 'could not read stable UTF-8 context'),
+    (b'\xff', 'could not read stable UTF-8 context'),
+    (b'oversized', 'context exceeds byte limit'),
+], ids=['valid', 'invalid-utf8', 'oversized'])
+def test_reference_context_close_failure(tmp_path, monkeypatch, capsys, contents, diagnostic):
+    from benchpack import example_io
+
+    context, _, marker, log, argv = handoff(tmp_path)
+    if contents is not None:
+        context.write_bytes(contents)
+    if contents == b'oversized':
+        monkeypatch.setattr(example_io, 'MAX_CONTEXT_BYTES', 1)
+    reference = agent()
+    open_fd, close_fd = os.open, os.close
+    context_fds, close_attempts = [], []
+
+    def track_open(path, *args, **kwargs):
+        fd = open_fd(path, *args, **kwargs)
+        if path == context:
+            context_fds.append(fd)
+        return fd
+
+    def fail_context_close(fd):
+        if fd not in context_fds:
+            return close_fd(fd)
+        close_attempts.append(fd)
+        if len(close_attempts) == 1:
+            close_fd(fd)
+        raise OSError('synthetic close failure', str(context))
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, 'open', track_open)
+        patch.setattr(os, 'close', fail_context_close)
+        assert reference.main(argv) == 2
+
+    assert len(context_fds) == 1
+    assert close_attempts == context_fds
+    assert capsys.readouterr().err == f'reference-agent: {diagnostic}\n'
+    assert marker.read_bytes() == b'previous marker'
+    assert log.read_bytes() == b'previous log'
+
+
 def test_reference_context_in_place_mutation_is_refused(tmp_path, monkeypatch):
     from benchpack import safe_files
     context, _, marker, log, argv = handoff(tmp_path)

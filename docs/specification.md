@@ -2299,7 +2299,11 @@ concurrent sidecar changes; do not share a sidecar between writers.
 The four model/CLI examples read contexts through no-follow nonblocking regular
 file descriptors, with a 16 MiB ceiling, strict UTF-8 and opened-file generation
 checks before JSON admission. FIFOs, oversized or changing inputs fail before
-external execution. Pi reads only contained regular workspace inputs: editable
+external execution. Context open and read errors use the fixed diagnostic
+`could not read stable UTF-8 context` and omit raw filesystem error details.
+The reader attempts one descriptor close. A close error preserves an existing
+admission failure or uses the fixed read diagnostic after a successful read.
+Pi reads only contained regular workspace inputs: editable
 context is capped at 16 MiB in aggregate; data scans share 64 MiB. CSV previews
 retain at most 64 KiB per file and 0–1000 requested data rows plus the header,
 while streaming the row count in chunks of at most 64 KiB. Individual physical
