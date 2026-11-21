@@ -14,6 +14,7 @@ from .compare import (
     MISSING,
     CompareError,
     MAX_RESULT_RUN_BYTES,
+    MAX_RESULT_SIDECAR_BYTES,
     MAX_RESULT_RECORDS,
     ResultRun,
     cache_warnings,
@@ -33,6 +34,7 @@ from .compare import (
     unique_json_object,
 )
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
+from .json_numbers import parse_finite_json_float, reject_json_constant
 from .repo_task_outcomes import (
     RepoTaskOutcome,
     count_repo_task_outcomes,
@@ -42,7 +44,12 @@ from .repo_task_outcomes import (
     summarize_repo_task_outcomes,
 )
 from .run_metadata import RUN_METADATA_FILENAME, RunMetadataError, parse_run_metadata
-from .safe_files import open_regular_at, open_result_directory, require_stable_file
+from .safe_files import (
+    open_regular_at,
+    open_result_directory,
+    read_opened_regular,
+    require_stable_file,
+)
 
 
 MAX_REPORT_SET_BYTES = 1024 * 1024
@@ -563,12 +570,17 @@ def _hardware_cell(run: ResultRun) -> str:
     if run.artifact_root is None:
         return "hardware.json missing"
     path = run.artifact_root / "hardware.json"
-    text = _read_companion_text(run, path)
+    text = _read_companion_text(run, path, byte_limit=MAX_RESULT_SIDECAR_BYTES)
     if text is None:
         return "hardware.json missing"
 
     try:
-        hardware = json.loads(text, object_pairs_hook=unique_json_object)
+        hardware = json.loads(
+            text,
+            object_pairs_hook=unique_json_object,
+            parse_constant=reject_json_constant,
+            parse_float=parse_finite_json_float,
+        )
     except RecursionError as exc:
         raise ReportError(f"{path} exceeds JSON nesting limit") from exc
     except json.JSONDecodeError as exc:
@@ -580,7 +592,9 @@ def _hardware_cell(run: ResultRun) -> str:
     return _hardware_object_cell(hardware)
 
 
-def _read_companion_text(run: ResultRun, path: Path) -> str | None:
+def _read_companion_text(
+    run: ResultRun, path: Path, *, byte_limit: int | None = None,
+) -> str | None:
     try:
         with open_result_directory(path.parent) as directory:
             if run.directory_identity is not None:
@@ -600,6 +614,11 @@ def _read_companion_text(run: ResultRun, path: Path) -> str | None:
                     raise ReportError(f"run metadata file {path} must be a regular file")
                 return None
             try:
+                if byte_limit is not None:
+                    data = read_opened_regular(fd, byte_limit).data
+                    if data is None:
+                        raise ReportError(f"result sidecar byte limit exceeded: {path}")
+                    return data.decode("utf-8")
                 initial = os.fstat(fd)
                 with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as stream:
                     text = stream.read()

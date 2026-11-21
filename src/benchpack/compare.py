@@ -20,6 +20,7 @@ from .safe_files import open_contained_regular, open_result_directory, require_s
 MISSING = "—"
 MAX_RESULT_LINE_BYTES = 1024 * 1024
 MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
+MAX_RESULT_SIDECAR_BYTES = MAX_RESULT_RUN_BYTES
 MAX_RESULT_RECORDS = 100_000
 MAX_CASE_SUMMARIES = 100_000
 

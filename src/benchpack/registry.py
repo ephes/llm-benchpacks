@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .compare import (
-    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, CompareError, ResultRun,
+    MAX_RESULT_RECORDS, MAX_RESULT_RUN_BYTES, MAX_RESULT_SIDECAR_BYTES, CompareError, ResultRun,
     finite_median, _read_result_run, unique_json_object,
 )
 from .external_agent_model_calls import (
@@ -3014,7 +3014,7 @@ def _load_and_validate_result_dir(path: Path | str, **limits: int) -> ResultRun:
                 if name not in opened:
                     sidecars[name] = None
                     continue
-                snapshot = read_opened_regular(opened[name][0], MAX_BUNDLE_FILE_BYTES)
+                snapshot = read_opened_regular(opened[name][0], MAX_RESULT_SIDECAR_BYTES)
                 if snapshot.data is None:
                     raise RegistryError(f"result sidecar byte limit exceeded: {source / name}")
                 try:

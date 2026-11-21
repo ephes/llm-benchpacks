@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Refuse nonfinite fallback hardware values at every depth before rendering
+  report cells.
+
+- Enforce the 64 MiB result sidecar limit when reports read fallback hardware
+  evidence, including files that grow during the read.
+
+- Publish mini-project verifier receipts atomically and preserve previous
+  receipts when staging fails.
+
+- Require three executed tests for the mini-project completion suite and
+  record its executed-test and skip counts in the verifier receipt.
+
 - Release descriptors still owned by a contained result traversal when closing
   a directory fails, preserving the original failure.
 

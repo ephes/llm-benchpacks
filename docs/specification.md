@@ -152,7 +152,11 @@ Initial packs:
   `notes/store.py` and `notes/cli.py`; the runner copies the repo fixture into
   `workspace/complete-notes-cli/rep-001/`, applies the model patch inside that
   workspace, captures `patch/complete-notes-cli/rep-001.diff`, and runs a
-  stdlib `verify-script` with visible and hidden execution checks. The pack
+  stdlib `verify-script` with visible and hidden execution checks. The visible
+  unittest suite must execute at least three tests, excluding whole-test skips.
+  The suite receipt records executed tests and skip events. The verifier
+  publishes its JSON receipt atomically after writing and closing a sibling
+  temporary file. The pack
   sets `defaults.warmup = 0`, `defaults.repetitions = 1`,
   `defaults.stream = false`, and case-local
   `scoring.mode = "verify-script"`. It is the first small
@@ -1172,6 +1176,10 @@ such as `hostname`, `chip`, `hardware_model`, `hardware_model_name`,
 `hardware.json` is tolerated and reported explicitly. Read failures, invalid
 UTF-8, and JSON parsing failures in a hardware sidecar produce a report error.
 Hardware JSON objects require unique decoded member names at every depth.
+The fallback hardware read uses the opened regular file and the 64 MiB result
+sidecar limit. Oversized or changing hardware files fail the report.
+The fallback decoder also rejects nonfinite numbers at every depth, including
+NaN, Infinity, and exponents that overflow the floating-point range.
 When `run-metadata.json` is present, the report includes a concise table for the
 user-supplied runtime, model, operating-condition, and notes fields. Missing
 `run-metadata.json` is tolerated and reported explicitly, including when it

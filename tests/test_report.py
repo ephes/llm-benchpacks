@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from benchpack import report
 from benchpack.compare import ResultRun, load_result_run
 from benchpack.report import (
     ReportError,
@@ -528,6 +529,54 @@ def test_report_distinguishes_missing_single_and_mixed_pack_identity(tmp_path: P
     assert "| mixed | mixed: runtime-sweep 0.1.0, smoke-chat 0.1.0 | openai-chat |" in output
 
 
+@pytest.mark.parametrize("grows_after_stat", [False, True], ids=["oversized", "growing"])
+def test_report_bounds_fallback_sidecar_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, grows_after_stat: bool,
+) -> None:
+    source = tmp_path / "run"
+    _write_run(source, hardware={"hostname": "synthetic"})
+    path = source / "hardware.json"
+    limit = path.stat().st_size
+    monkeypatch.setattr(report, "MAX_RESULT_SIDECAR_BYTES", limit, raising=False)
+    (run,) = load_report_runs([source])
+    assert "hostname=synthetic" in render_report([run])
+
+    identity = path.stat().st_ino
+    target_fd = None
+    stat_calls = 0
+    read_sizes = []
+    real_stat = os.fstat
+    real_read = os.read
+
+    def append_bytes():
+        with path.open("ab") as stream:
+            stream.write(b" " * limit)
+
+    if not grows_after_stat:
+        append_bytes()
+
+    def growing_stat(fd):
+        nonlocal stat_calls, target_fd
+        info = real_stat(fd)
+        if info.st_ino == identity:
+            target_fd = fd
+            stat_calls += 1
+            if grows_after_stat and stat_calls == 2:
+                append_bytes()
+        return info
+
+    def tracked_read(fd, size):
+        if fd == target_fd:
+            read_sizes.append(size)
+        return real_read(fd, size)
+
+    monkeypatch.setattr(os, "fstat", growing_stat)
+    monkeypatch.setattr(os, "read", tracked_read)
+    with pytest.raises(ReportError, match=r"sidecar byte limit exceeded: .*hardware\.json"):
+        render_report([run])
+    assert read_sizes == ([limit + 1] if grows_after_stat else [])
+
+
 def test_report_rejects_malformed_hardware_json(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     _write_run(run_a)
@@ -593,6 +642,34 @@ def test_report_rejects_duplicate_hardware_json_members(tmp_path: Path, hardware
 
     with pytest.raises(ReportError, match=r"could not parse .*hardware\.json: invalid JSON domain"):
         render_report(load_report_runs([run]))
+
+
+@pytest.mark.parametrize(
+    "hardware",
+    [
+        '{"ram_mb":NaN}',
+        '{"gpus":[{"memory_mb":Infinity}]}',
+        '{"extension":{"values":[-Infinity]}}',
+        '{"ram_mb":1e309}',
+    ],
+    ids=["ram-nan", "gpu-infinity", "nested-negative-infinity", "overflowing-exponent"],
+)
+def test_report_rejects_nonfinite_fallback_hardware(tmp_path: Path, hardware: str) -> None:
+    source = tmp_path / "run"
+    _write_run(source, hardware={
+        "hardware_model_identifier": "synthetic-v1",
+        "ram_mb": 1024.5,
+        "gpus": [{"model": "synthetic-gpu", "memory_mb": 512.25}],
+    })
+    (run,) = load_report_runs([source])
+
+    report_text = render_report([run])
+    assert "hardware_model_identifier=synthetic-v1; ram_mb=1024.5" in report_text
+    assert "gpus=synthetic-gpu" in report_text
+
+    (source / "hardware.json").write_text(hardware, encoding="utf-8")
+    with pytest.raises(ReportError, match=r"could not parse .*hardware\.json: invalid JSON domain"):
+        render_report([run])
 
 
 def test_load_report_set_expands_relative_paths_from_manifest_dir(
