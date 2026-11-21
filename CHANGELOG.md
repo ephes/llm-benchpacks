@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Use the fixed context read diagnostic when example agents cannot open the
+  context file, omitting the path from the open error.
+
 - Run hardware probes in the C locale so translated systems retain CPU and
   memory metadata.
 

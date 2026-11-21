@@ -69,6 +69,20 @@ def test_reference_context_refused_before_artifacts(tmp_path, invalid):
     assert log.read_bytes() == b'previous log'
 
 
+def test_reference_missing_context_uses_fixed_diagnostic(tmp_path):
+    _, _, marker, log, argv = handoff(tmp_path)
+    missing = tmp_path / 'synthetic-missing-context.json'
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), *argv[:-1], str(missing)],
+        capture_output=True, timeout=3,
+    )
+
+    assert result.returncode == 2
+    assert result.stderr == b'reference-agent: could not read stable UTF-8 context\n'
+    assert marker.read_bytes() == b'previous marker'
+    assert log.read_bytes() == b'previous log'
+
+
 def test_reference_context_in_place_mutation_is_refused(tmp_path, monkeypatch):
     from benchpack import safe_files
     context, _, marker, log, argv = handoff(tmp_path)

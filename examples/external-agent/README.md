@@ -35,6 +35,8 @@ Duplicate JSON members at any depth and non-integer version/repetition values
 (including booleans and floats) are refused before artifact writes. An atomic
 context replacement can leave a complete old opened snapshot; all authority
 checks use that one snapshot, never a mixture of generations.
+Context open and read errors report `could not read stable UTF-8 context`
+without exposing the filesystem error details.
 
 Marker and telemetry UTF-8 bytes are both encoded, admitted and staged before
 publication through held no-follow workspace/output parent descriptors. Existing

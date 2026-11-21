@@ -299,8 +299,9 @@ MAX_CONTEXT_BYTES = 16 * 1024 * 1024
 
 def read_context_text(path: Path) -> str:
     """Admit an opened regular UTF-8 context before decoding control JSON."""
-    fd = os.open(path, _READ)
+    fd = None
     try:
+        fd = os.open(path, _READ)
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise ValueError('context must be a regular file')
         snapshot = read_opened_regular(fd, MAX_CONTEXT_BYTES)
@@ -310,7 +311,8 @@ def read_context_text(path: Path) -> str:
     except (OSError, UnicodeError) as exc:
         raise ValueError('could not read stable UTF-8 context') from exc
     finally:
-        os.close(fd)
+        if fd is not None:
+            os.close(fd)
 
 
 @contextmanager
