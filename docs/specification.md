@@ -1088,6 +1088,9 @@ The initial summary is intentionally small and deterministic:
   brackets; input bullets and per-case warnings use code spans with a long
   enough fence, and pack-version warnings use the table-cell escaping. The same
   rules apply to `benchpack report` and to the tables in run `summary.md` files.
+  Run summaries also render hardware and runtime metadata fields as literal
+  text. Notes retain paragraph breaks and fold line breaks within a paragraph
+  to spaces. The normalized `run-metadata.json` retains the original text values.
 - `rows` counts measured records, `ok` counts rows with `ok = true`, and
   `failed` counts all other rows. Only successful rows supply metric samples.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are

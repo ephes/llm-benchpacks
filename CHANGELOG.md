@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Render hardware and runtime metadata as literal text in run summaries, with
+  paragraph breaks preserved in notes.
+
 - Refuse nonfinite fallback hardware values at every depth before rendering
   report cells.
 

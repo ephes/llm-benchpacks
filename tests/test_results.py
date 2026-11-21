@@ -619,6 +619,44 @@ def test_write_summary_includes_runtime_metadata_when_supplied(
     assert "Notes: no intentional throttling setup" in text
 
 
+def test_write_summary_renders_metadata_and_hardware_as_literal_text(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    out.mkdir()
+    reporter = RunReporter(out, make_pack(tmp_path))
+    field = "**bold** `code` [link](target) <b>x</b> | pipe\n## injected"
+    metadata = {
+        "runtime": {"name": field},
+        "model": {"id": field},
+        "operating_conditions": {"thermal": field},
+        "notes": "First *paragraph*.\r\nContinued with __text__.\r\n\r\n## Runtime Metadata\n| fake |",
+    }
+    reporter.write_run_metadata(metadata)
+    reporter.write_summary(
+        {
+            "hostname": "host`name\n## injected",
+            "platform": field,
+            "cpu_model": field,
+            "ram_mb": field,
+            "gpus": [{"model": field, "vram_mb": field}],
+        },
+        run_metadata=metadata,
+    )
+
+    text = (out / "summary.md").read_text()
+    assert text.splitlines().count("## Runtime Metadata") == 1
+    assert "\n## injected" not in text
+    assert "\n| fake |" not in text
+    assert "Host: ``host`name ## injected``" in text
+    escaped = r"\*\*bold\*\* \`code\` \[link\](target) &lt;b&gt;x&lt;/b&gt; \| pipe ## injected"
+    for label in ("Host", "CPU", "RAM", "GPU", "Runtime", "Model", "Operating conditions"):
+        assert escaped in next(line for line in text.splitlines() if line.startswith(f"{label}: "))
+    assert (
+        r"Notes: First \*paragraph\*. Continued with \_\_text\_\_." "\n\n"
+        r"\## Runtime Metadata \| fake \|"
+    ) in text
+    assert json.loads((out / "run-metadata.json").read_text()) == metadata
+
+
 def test_write_summary_includes_external_agent_model_call_summary(
     tmp_path: Path,
 ) -> None:

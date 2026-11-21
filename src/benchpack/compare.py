@@ -395,6 +395,16 @@ def markdown_code(value: object) -> str:
     return f"{fence}{pad}{text}{pad}{fence}"
 
 
+def markdown_text(value: object) -> str:
+    """Render one line of literal Markdown prose, including at paragraph start."""
+    text = re.sub(r"([*~])", r"\\\1", markdown_cell(value).strip())
+    # Underscores inside words are already literal, including in model labels.
+    text = re.sub(
+        r"(?<!\w)_+|(?<!_)_+(?!\w)", lambda match: match[0].replace("_", r"\_"), text,
+    )
+    return re.sub(r"^([0-9]{1,9})?([#=+:\-]|[.)](?= |$))", r"\1\\\2", text)
+
+
 def disambiguate_runs(runs: list[ResultRun]) -> list[ResultRun]:
     """Return runs with stable labels when input basenames collide."""
 
