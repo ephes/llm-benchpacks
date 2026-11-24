@@ -2032,12 +2032,13 @@ already exited. The OS reaps orphaned descendants; the runner reaps its own chil
 
 Shared comparison medians use overflow-safe averaging of the two central finite
 samples. A nonrepresentable aggregate is unavailable. This applies to compare,
-report and registry summaries. Prefill parity requires complete homogeneous
-prompt and cache counts within every run/case and equal counts across runs.
-Mixed repetitions yield `prompt-mixed` or `cache-mixed`, even when medians match;
-reordering repetitions cannot establish parity. Status priority is missing-case, no-success,
-prompt-missing, prompt-mixed, prompt-diff, cache-missing, cache-mixed, cache-diff,
-comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
+report and registry summaries. Prefill parity requires matching pack versions
+for the case across runs, complete homogeneous prompt and cache counts within
+every run/case, and equal counts across runs. Mixed repetitions yield
+`prompt-mixed` or `cache-mixed`, even when medians match; reordering repetitions
+cannot establish parity. Status priority is missing-case, no-success,
+pack-version-diff, prompt-missing, prompt-mixed, prompt-diff, cache-missing,
+cache-mixed, cache-diff, comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
 
 ### Unambiguous opened result ingestion
 

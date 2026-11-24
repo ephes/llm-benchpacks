@@ -123,8 +123,9 @@ larger cache object before there are multiple normalized cache fields.
 `tokens.cached_prompt` and warns when prompt-token medians differ for a case
 only when every compared row in that case has a numeric `tokens.prompt` value.
 It also reports a deterministic case-level `prefill parity` status with the
-priority `missing-case`, `no-success`, `prompt-missing`, `prompt-diff`, `cache-missing`,
-`cache-diff`, then `comparable`. Cached-token parity is interpreted only
+priority `missing-case`, `no-success`, `pack-version-diff`, `prompt-missing`,
+`prompt-mixed`, `prompt-diff`, `cache-missing`, `cache-mixed`, `cache-diff`, then
+`comparable`. A case whose pack version differs across runs is not comparable. Cached-token parity is interpreted only
 relative to comparable prompt token counts. The compare table may display
 `prefill_tps med`, but only for cases whose `prefill parity` status is
 `comparable`; every non-comparable status renders `—` even when timing values
