@@ -2442,6 +2442,41 @@ def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_exists
     assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
 
 
+@pytest.mark.parametrize("change", ["stable", "rewrite", "replace"])
+def test_agent_session_harness_read_workspace_text_requires_stable_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "note.txt"
+    target.write_text("old\n", encoding="utf-8")
+    replacement = workspace / "replacement.txt"
+    replacement.write_text("new\n", encoding="utf-8")
+    request = make_harness_request(tmp_path, workspace)
+    read = os.read
+
+    def read_and_change(fd: int, count: int) -> bytes:
+        chunk = read(fd, count)
+        if chunk == b"old\n":
+            if change == "rewrite":
+                target.write_text("new\n", encoding="utf-8")
+                # Force a different mtime even on coarse-grained filesystems.
+                os.utime(target, ns=(0, 0))
+            elif change == "replace":
+                replacement.replace(target)
+        return chunk
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read_and_change)
+        if change == "stable":
+            assert request.read_workspace_text("note.txt") == "old\n"
+        else:
+            with pytest.raises(TaskError, match="could not read harness workspace file"):
+                request.read_workspace_text("note.txt")
+
+    assert request.read_workspace_text("note.txt") == ("old\n" if change == "stable" else "new\n")
+
+
 def test_run_repo_task_executor_internal_harness_rejects_missing_workspace_read(
     tmp_path: Path,
 ) -> None:

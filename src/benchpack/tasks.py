@@ -75,7 +75,7 @@ class AgentSessionHarnessRequest:
         return trusted_root(self.workspace).parent
 
     def read_workspace_text(self, relative_path: str) -> str:
-        """Read bounded UTF-8 text through an admitted regular-file fd."""
+        """Read bounded UTF-8 text from a stable, still-named regular file."""
         path = self.workspace_path(relative_path)
         try:
             with admitted_directory(path.parent, base=self._admission_base()) as directory:
@@ -84,7 +84,8 @@ class AgentSessionHarnessRequest:
                 fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                              dir_fd=directory)
                 try:
-                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    opened = os.fstat(fd)
+                    if not stat.S_ISREG(opened.st_mode):
                         raise OSError('workspace input must be regular')
                     chunks = []
                     total = 0
@@ -96,6 +97,14 @@ class AgentSessionHarnessRequest:
                         chunks.append(chunk)
                     if total > MAX_WORKSPACE_READ_BYTES:
                         raise OSError('workspace read byte limit exceeded')
+                    current = os.fstat(fd)
+                    named = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+                    if any(
+                        getattr(opened, field) != getattr(current, field)
+                        or getattr(current, field) != getattr(named, field)
+                        for field in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+                    ):
+                        raise OSError('workspace file changed during read')
                     text = b''.join(chunks).decode('utf-8')
                 finally:
                     os.close(fd)

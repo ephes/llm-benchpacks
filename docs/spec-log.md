@@ -7,6 +7,8 @@ working history and open questions.
 ## 2026-11-24 (round 183 B15)
 
 - Bound harness workspace inventories to 64 directory levels below the root.
+- Check that harness text reads retain the same file generation at the opened
+  descriptor and resolved directory entry.
 
 ## 2026-11-21 (round 180 B38)
 
