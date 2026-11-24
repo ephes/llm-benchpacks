@@ -449,11 +449,13 @@ numeric median only when that case's `prefill parity` status is `comparable`;
 otherwise it renders `—`. Compare also prints cache metadata coverage as
 valid cached-token rows over successful rows for each case/run group and a
 case-level `prefill parity` status repeated on each run row. The status is one
-of `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`,
-`cache-mixed`, `cache-diff`, or `comparable`, in that priority order. Compare
-requires complete homogeneous prompt/cache samples within each run
-and equal counts across runs. Mixed regimes suppress prefill speed even when
-medians match. Compare warns about mixed or incomplete metadata and differing
+of `missing-case`, `no-success`, `pack-version-diff`, `prompt-missing`,
+`prompt-mixed`, `prompt-diff`, `cache-missing`, `cache-mixed`, `cache-diff`, or
+`comparable`, in that priority order. Compare
+requires matching pack versions for the case, complete homogeneous prompt/cache
+samples within each run, and equal counts across runs. Legacy rows with absent
+versions agree only with other absent versions. Mixed regimes suppress prefill
+speed even when medians match. Compare warns about mixed or incomplete metadata and differing
 counts. Shared medians remain finite through overflow-safe averaging. Prompt-token
 coverage is used to decide whether a
 prompt mismatch warning is meaningful, but the table does not add a second

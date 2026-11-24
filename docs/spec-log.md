@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-24 (round 186 B20)
+
+- Gate case-level prefill parity on matching pack versions in compare and
+  report tables.
+
 ## 2026-11-24 (round 183 B15)
 
 - Bound harness workspace inventories to 64 directory levels below the root.

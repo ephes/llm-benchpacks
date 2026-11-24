@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Withhold prefill TPS in comparisons and reports when the same case comes
+  from different versions of a pack. Other measured medians remain visible.
+
 - Refuse harness workspace listings that exceed 64 directory levels below
   the workspace root.
 

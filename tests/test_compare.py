@@ -796,12 +796,27 @@ def test_render_comparison_suppresses_prompt_and_cache_mismatch_for_missing_case
 def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
-    _write_run(run_a, version="0.1.0")
-    _write_run(run_b, version="0.2.0")
+    for run_dir, version in ((run_a, "0.1.0"), (run_b, "0.2.0")):
+        _write_run(run_dir, rows=[
+            _record("short", version=version, cached_prompt=8),
+            _record("short", pack_id="other-pack", cached_prompt=8),
+        ])
 
-    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+    runs = [load_result_run(run_a), load_result_run(run_b)]
+    for render in (render_comparison, render_report):
+        output = render(runs)
+        assert "WARNING: compared records use different pack ids or versions" in output
+        for run in runs:
+            assert (
+                f"| {run.label} | runtime-sweep/short | 1 | 1 | 1.000 | 0.200 | — | "
+                "40.00 | 30.00 | 60 | 10 | 8 | 1/1 | pack-version-diff |"
+            ) in output
+            assert (
+                f"| {run.label} | other-pack/short | 1 | 1 | 1.000 | 0.200 | 100.00 | "
+                "40.00 | 30.00 | 60 | 10 | 8 | 1/1 | comparable |"
+            ) in output
 
-    assert "WARNING: compared records use different pack ids or versions" in output
+    output = render_comparison(runs)
     assert "`prefill_tps med` is shown only when" in output
     assert "tokens.cached_prompt" in output
     assert (

@@ -1105,7 +1105,7 @@ The initial summary is intentionally small and deterministic:
   successful rows for the case/run group. A cached count greater than the
   same row's valid prompt count is ignored and leaves cache coverage incomplete.
   A missing prompt count still prevents prompt parity.
-- `prefill parity` displays a deterministic case-level prompt/cache
+- `prefill parity` displays a deterministic case-level pack version and prompt/cache
   comparability status repeated on each run row for that case.
 - Null, boolean, non-numeric, non-finite, negative timings/rates,
   fractional/negative token counts and token integers that cannot convert
@@ -1133,20 +1133,21 @@ The `prefill parity` status uses the following priority order:
 
 1. `missing-case`: at least one compared run has zero rows for the case.
 2. `no-success`: at least one present case/run group has no successful rows.
-3. `prompt-missing`: successful rows lack valid `tokens.prompt` evidence.
-4. `prompt-mixed`: prompt counts vary within successful rows of a run/case.
-5. `prompt-diff`: complete homogeneous prompt counts differ across runs.
-6. `cache-missing`: prompt parity holds, but successful cache evidence is incomplete.
-7. `cache-mixed`: cached prompt counts vary within successful rows of a run/case.
-8. `cache-diff`: complete homogeneous cache counts differ across runs.
-9. `comparable`: all runs have successful rows and complete homogeneous prompt/cache
-   counts which match across runs.
+3. `pack-version-diff`: the case's pack version differs across runs. An absent
+   or null version agrees only with another absent or null version.
+4. `prompt-missing`: successful rows lack valid `tokens.prompt` evidence.
+5. `prompt-mixed`: prompt counts vary within successful rows of a run/case.
+6. `prompt-diff`: complete homogeneous prompt counts differ across runs.
+7. `cache-missing`: prompt parity holds, but successful cache evidence is incomplete.
+8. `cache-mixed`: cached prompt counts vary within successful rows of a run/case.
+9. `cache-diff`: complete homogeneous cache counts differ across runs.
+10. `comparable`: all runs have successful rows, agreeing pack versions, and
+    complete homogeneous prompt/cache counts which match across runs.
 
 `prefill_tps med` is a gated speed column, not independent parity evidence. It
 uses only normalized `run.jsonl` `timing.prefill_tps` values that pass the
-shared numeric metric filter, and it remains `—` when parity is
-`missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`,
-`cache-missing`, `cache-mixed`, or `cache-diff`, even if timing values exist. New
+shared numeric metric filter, and it remains `—` for all other statuses,
+even if timing values exist. New
 normalized rows can include
 `tokens.prompt` and `tokens.cached_prompt`, but older rows may lack one or both
 fields and missing values are not parity evidence. The table shows cache

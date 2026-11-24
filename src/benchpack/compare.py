@@ -72,6 +72,7 @@ class CaseSummary:
     case_label: str | None = None
     prompt_homogeneous: bool = False
     cache_homogeneous: bool = False
+    pack_version: str | None = None
 
     @property
     def case_key(self) -> tuple[str | None, str]:
@@ -245,6 +246,14 @@ def record_pack_id(record: dict[str, Any]) -> str | None:
     return pack_id
 
 
+def _record_pack_version(record: dict[str, Any]) -> str | None:
+    pack = record.get("pack")
+    version = pack.get("version") if isinstance(pack, dict) else None
+    if version is not None and not isinstance(version, str):
+        raise CompareError("mixed or invalid pack version identity; split result runs")
+    return version
+
+
 def group_case_records(
     run: ResultRun,
 ) -> dict[tuple[str | None, str], list[dict[str, Any]]]:
@@ -283,11 +292,7 @@ def validate_run_identity(run: ResultRun) -> None:
     versions: dict[str | None, set[str | None]] = {}
     for record in run.records:
         pack_id = record_pack_id(record)
-        pack = record.get("pack")
-        version = pack.get("version") if isinstance(pack, dict) else None
-        if version is not None and not isinstance(version, str):
-            raise CompareError("mixed or invalid pack version identity; split result runs")
-        versions.setdefault(pack_id, set()).add(version)
+        versions.setdefault(pack_id, set()).add(_record_pack_version(record))
     if any(len(values) > 1 for values in versions.values()):
         raise CompareError("mixed pack version identity; split result runs")
 
@@ -365,6 +370,7 @@ def summarize_runs(runs: list[ResultRun]) -> list[CaseSummary]:
                     prompt_homogeneous=len(set(prompt_values)) == 1,
                     cache_homogeneous=len(set(cached_prompt_values)) == 1,
                     pack_id=pack_id,
+                    pack_version=_record_pack_version(rows[0]),
                     case_label=labels[key],
                 )
             )
@@ -494,8 +500,8 @@ def render_comparison(runs: list[ResultRun]) -> str:
         "otherwise it renders as `—`. New rows may include `tokens.prompt` and "
         "`tokens.cached_prompt`, but old rows may lack one or both fields; do "
         "not draw prefill-speed conclusions without prompt/cache parity "
-        "evidence. The `prefill parity` column reports deterministic "
-        "prompt/cache status for each case."
+        "evidence. The `prefill parity` column checks pack version and "
+        "prompt/cache evidence for each case."
     )
     lines.append("")
 
@@ -580,9 +586,7 @@ def _pack_versions(runs: list[ResultRun]) -> set[tuple[str, str]]:
     for run in runs:
         for record in run.records:
             pack_id = record_pack_id(record)
-            pack = record.get("pack")
-            version = pack.get("version") if isinstance(pack, dict) else None
-            versions.add((str(pack_id), str(version)))
+            versions.add((str(pack_id), str(_record_pack_version(record))))
     return versions
 
 
@@ -658,6 +662,10 @@ def _prefill_parity_statuses(
 
         if any(summary.ok == 0 for summary in case_summaries):
             statuses[case] = "no-success"
+            continue
+
+        if len({summary.pack_version for summary in case_summaries}) > 1:
+            statuses[case] = "pack-version-diff"
             continue
 
         if any(summary.prompt_rows < summary.ok for summary in case_summaries):
