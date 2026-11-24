@@ -643,8 +643,10 @@ numeric `timing.prefill_tps` but renders that median only when the case-level
 The shared metric filter excludes booleans, nonnumeric/nonfinite values,
 negative timing/rates, fractional or negative token counts, and token integers that
 cannot convert exactly to finite floats without modifying loaded records or
-input artifacts. Groups with no valid samples render `—`. JSON decoding failures,
-including Python's integer digit limit, produce a file/line `CompareError`.
+input artifacts. Groups with no valid samples render `—`. JSON decoding rejects
+nonfinite constants and overflowing exponents at every depth. These errors and
+Python's integer digit limit produce a `CompareError` with the file and physical
+line before aggregation.
 The shared loader reads binary lines with a 1 MiB physical-line byte limit
 (including line endings), 64 MiB total bytes per run including blank lines,
 and 100,000 retained JSON objects. It checks byte budgets before decoding and the record count before parsing

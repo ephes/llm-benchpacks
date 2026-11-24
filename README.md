@@ -742,7 +742,9 @@ are limited to 100,000 rows, including placeholders for missing cases. The
 number of rows is the number of runs times the number of distinct (pack id,
 case id) pairs across them.
 
-Result ingestion rejects duplicate JSON members at every nesting level. It opens
+Result ingestion rejects duplicate JSON members and nonfinite numbers at every
+nesting level, including `NaN`, `Infinity`, `-Infinity`, and overflowing
+exponents. Parse errors identify the file and physical line. Ingestion opens
 `run.jsonl` without following a final symlink, admits the actual regular-file
 descriptor nonblocking, then applies the existing byte/record limits. Compare,
 report and registry import share this interpretation; refused imports leave the

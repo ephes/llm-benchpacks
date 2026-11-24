@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from .json_numbers import parse_finite_json_float, reject_json_constant
 from .safe_files import open_contained_regular, open_result_directory, require_stable_file
 
 
@@ -158,7 +159,12 @@ def _read_result_run(
             if len(records) >= record_limit:
                 raise CompareError(f"record count limit exceeded in {source}")
             try:
-                record = json.loads(stripped, object_pairs_hook=unique_json_object)
+                record = json.loads(
+                    stripped,
+                    object_pairs_hook=unique_json_object,
+                    parse_constant=reject_json_constant,
+                    parse_float=parse_finite_json_float,
+                )
             except (ValueError, RecursionError) as exc:
                 raise CompareError(f"could not parse {source}: invalid JSON") from exc
             if not isinstance(record, dict):

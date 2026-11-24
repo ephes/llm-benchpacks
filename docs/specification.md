@@ -1111,8 +1111,6 @@ The initial summary is intentionally small and deterministic:
   fractional/negative token counts and token integers that cannot convert
   exactly to finite floats are ignored; a metric with no valid numeric samples is displayed
   as `—`. Other rows still contribute, and input artifacts remain unchanged.
-  Inputs exceeding Python's JSON integer digit limit are rejected with a
-  file/line parse error before metric aggregation.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
@@ -2159,6 +2157,12 @@ All-failed groups have unavailable performance and cannot establish prefill pari
 (`no-success`).
 
 ## Comparison metric and input admission
+
+The shared `run.jsonl` reader rejects duplicate object members, nonfinite
+constants (`NaN`, `Infinity`, `-Infinity`) and floating-point literals with
+overflowing exponents at every depth, including extension fields. These decode
+errors and Python's JSON integer digit limit stop admission before metric
+aggregation. The parse diagnostic names the file and 1-based physical line.
 
 Compare/report metrics require finite nonnegative timing/rate values and exact
 nonnegative token counts (integral floats accepted, booleans refused). Invalid

@@ -8,6 +8,8 @@ working history and open questions.
 
 - Gate case-level prefill parity on matching pack versions in compare and
   report tables.
+- Reject nonfinite JSON numbers at any depth while reading `run.jsonl` and
+  report the file and physical line.
 
 ## 2026-11-24 (round 183 B15)
 
