@@ -600,17 +600,26 @@ their meanings separate.
 
 - `missing-case` means at least one compared result directory has no rows for
   that case.
+- `no-success` means at least one compared result directory has rows for the
+  case but none of them succeeded.
+- `pack-version-diff` means the case comes from different pack versions across
+  the compared runs, so its input or verifier may have changed. An absent
+  version matches only another absent version.
 - `prompt-missing` means at least one non-empty case/run group lacks complete
   numeric `tokens.prompt` metadata.
+- `prompt-mixed` means prompt-token counts vary between repetitions within one
+  result directory.
 - `prompt-diff` means complete prompt-token medians differ, so cache and
   prefill conclusions are not comparable for that case.
 - `cache-missing` means prompt parity holds, but at least one side did not
   report complete `tokens.cached_prompt` metadata.
+- `cache-mixed` means cached prompt-token counts vary between repetitions
+  within one result directory.
 - `cache-diff` means prompt metadata matches, but cached prompt-token medians
   differ.
-- `comparable` means every compared run has rows, complete numeric
-  prompt/cache metadata, matching prompt-token medians, and matching cached
-  prompt-token medians for that case.
+- `comparable` means every compared run has successful rows, the same pack
+  version, complete homogeneous numeric prompt/cache metadata, matching
+  prompt-token counts, and matching cached prompt-token counts for that case.
 - `prefill_tps med` is rendered only when the case-level `prefill parity`
   status is `comparable`; all other statuses render `—`.
 

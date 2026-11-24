@@ -1105,14 +1105,12 @@ The initial summary is intentionally small and deterministic:
   successful rows for the case/run group. A cached count greater than the
   same row's valid prompt count is ignored and leaves cache coverage incomplete.
   A missing prompt count still prevents prompt parity.
-- `prefill parity` displays a deterministic case-level prompt/cache
+- `prefill parity` displays a deterministic case-level pack version and prompt/cache
   comparability status repeated on each run row for that case.
 - Null, boolean, non-numeric, non-finite, negative timings/rates,
   fractional/negative token counts and token integers that cannot convert
   exactly to finite floats are ignored; a metric with no valid numeric samples is displayed
   as `—`. Other rows still contribute, and input artifacts remain unchanged.
-  Inputs exceeding Python's JSON integer digit limit are rejected with a
-  file/line parse error before metric aggregation.
 - Differing `pack.id` or `pack.version` values produce a warning because
   cross-pack comparisons are not reliable.
 - Incomplete cache metadata produces a per-case warning when any compared
@@ -1133,20 +1131,21 @@ The `prefill parity` status uses the following priority order:
 
 1. `missing-case`: at least one compared run has zero rows for the case.
 2. `no-success`: at least one present case/run group has no successful rows.
-3. `prompt-missing`: successful rows lack valid `tokens.prompt` evidence.
-4. `prompt-mixed`: prompt counts vary within successful rows of a run/case.
-5. `prompt-diff`: complete homogeneous prompt counts differ across runs.
-6. `cache-missing`: prompt parity holds, but successful cache evidence is incomplete.
-7. `cache-mixed`: cached prompt counts vary within successful rows of a run/case.
-8. `cache-diff`: complete homogeneous cache counts differ across runs.
-9. `comparable`: all runs have successful rows and complete homogeneous prompt/cache
-   counts which match across runs.
+3. `pack-version-diff`: the case's pack version differs across runs. An absent
+   or null version agrees only with another absent or null version.
+4. `prompt-missing`: successful rows lack valid `tokens.prompt` evidence.
+5. `prompt-mixed`: prompt counts vary within successful rows of a run/case.
+6. `prompt-diff`: complete homogeneous prompt counts differ across runs.
+7. `cache-missing`: prompt parity holds, but successful cache evidence is incomplete.
+8. `cache-mixed`: cached prompt counts vary within successful rows of a run/case.
+9. `cache-diff`: complete homogeneous cache counts differ across runs.
+10. `comparable`: all runs have successful rows, agreeing pack versions, and
+    complete homogeneous prompt/cache counts which match across runs.
 
 `prefill_tps med` is a gated speed column, not independent parity evidence. It
 uses only normalized `run.jsonl` `timing.prefill_tps` values that pass the
-shared numeric metric filter, and it remains `—` when parity is
-`missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`, `prompt-diff`,
-`cache-missing`, `cache-mixed`, or `cache-diff`, even if timing values exist. New
+shared numeric metric filter, and it remains `—` for all other statuses,
+even if timing values exist. New
 normalized rows can include
 `tokens.prompt` and `tokens.cached_prompt`, but older rows may lack one or both
 fields and missing values are not parity evidence. The table shows cache
@@ -2033,12 +2032,13 @@ already exited. The OS reaps orphaned descendants; the runner reaps its own chil
 
 Shared comparison medians use overflow-safe averaging of the two central finite
 samples. A nonrepresentable aggregate is unavailable. This applies to compare,
-report and registry summaries. Prefill parity requires complete homogeneous
-prompt and cache counts within every run/case and equal counts across runs.
-Mixed repetitions yield `prompt-mixed` or `cache-mixed`, even when medians match;
-reordering repetitions cannot establish parity. Status priority is missing-case, no-success,
-prompt-missing, prompt-mixed, prompt-diff, cache-missing, cache-mixed, cache-diff,
-comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
+report and registry summaries. Prefill parity requires matching pack versions
+for the case across runs, complete homogeneous prompt and cache counts within
+every run/case, and equal counts across runs. Mixed repetitions yield
+`prompt-mixed` or `cache-mixed`, even when medians match; reordering repetitions
+cannot establish parity. Status priority is missing-case, no-success,
+pack-version-diff, prompt-missing, prompt-mixed, prompt-diff, cache-missing,
+cache-mixed, cache-diff, comparable. Unknown or mixed regimes suppress prefill speed and produce warnings.
 
 ### Unambiguous opened result ingestion
 
@@ -2158,6 +2158,12 @@ All-failed groups have unavailable performance and cannot establish prefill pari
 (`no-success`).
 
 ## Comparison metric and input admission
+
+The shared `run.jsonl` reader rejects duplicate object members, nonfinite
+constants (`NaN`, `Infinity`, `-Infinity`) and floating-point literals with
+overflowing exponents at every depth, including extension fields. These decode
+errors and Python's JSON integer digit limit stop admission before metric
+aggregation. The parse diagnostic names the file and 1-based physical line.
 
 Compare/report metrics require finite nonnegative timing/rate values and exact
 nonnegative token counts (integral floats accepted, booleans refused). Invalid

@@ -643,8 +643,10 @@ numeric `timing.prefill_tps` but renders that median only when the case-level
 The shared metric filter excludes booleans, nonnumeric/nonfinite values,
 negative timing/rates, fractional or negative token counts, and token integers that
 cannot convert exactly to finite floats without modifying loaded records or
-input artifacts. Groups with no valid samples render `—`. JSON decoding failures,
-including Python's integer digit limit, produce a file/line `CompareError`.
+input artifacts. Groups with no valid samples render `—`. JSON decoding rejects
+nonfinite constants and overflowing exponents at every depth. These errors and
+Python's integer digit limit produce a `CompareError` with the file and physical
+line before aggregation.
 The shared loader reads binary lines with a 1 MiB physical-line byte limit
 (including line endings), 64 MiB total bytes per run including blank lines,
 and 100,000 retained JSON objects. It checks byte budgets before decoding and the record count before parsing
@@ -658,8 +660,8 @@ for the initial read fence and later alias checks. A repeat device/inode pair
 is deduplicated only when size and nanosecond mtime/ctime still agree.
 
 The compare utility warns when pack ids or versions differ. The `prefill_tps
-med` column is gated because prefill comparisons require explicit prompt-cache
-parity: non-comparable cases render `—` even when `timing.prefill_tps` values
+med` column requires matching case-level pack versions and explicit prompt-cache
+parity. Non-comparable cases render `—` even when `timing.prefill_tps` values
 exist in `run.jsonl`. New rows may carry `tokens.prompt` and
 `tokens.cached_prompt`, but old rows may lack one or both fields and missing
 values do not prove parity. Cache warnings are derived only from normalized
@@ -669,10 +671,11 @@ numeric `tokens.prompt` coverage, and when complete cached prompt-token medians
 differ. Prompt-token coverage is used as a warning gate but is not rendered as a
 separate coverage column. It also computes one case-level `prefill parity`
 status from the same summaries and repeats it on every run row for that case.
-The status priority is `missing-case`, `no-success`, `prompt-missing`, `prompt-mixed`,
-`prompt-diff`, `cache-missing`, `cache-mixed`, `cache-diff`, then `comparable`,
-so cache parity is considered only after case and prompt parity hold. Missing case/run groups suppress
-prompt-token and cached-token median mismatch warnings for that case. Compare
+The status priority is `missing-case`, `no-success`, `pack-version-diff`,
+`prompt-missing`, `prompt-mixed`, `prompt-diff`, `cache-missing`, `cache-mixed`,
+`cache-diff`, then `comparable`, so cache parity is considered only after case,
+version and prompt parity hold. Missing case/run groups suppress prompt-token
+and cached-token median mismatch warnings for that case. Compare
 does not read `raw/` files or infer prompt/cache state from timing or prompt
 shape.
 

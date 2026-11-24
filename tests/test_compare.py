@@ -101,6 +101,26 @@ def test_load_result_run_reads_jsonl_from_directory(tmp_path: Path) -> None:
     assert len(run.records) == 2
 
 
+@pytest.mark.parametrize("command", ["compare", "report"])
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity", "1e9999"])
+def test_cli_refuses_nonfinite_result_records(tmp_path, capsys, command, number):
+    from benchpack.cli import main
+
+    good, bad = tmp_path / "good", tmp_path / "bad"
+    _write_run(good)
+    bad.mkdir()
+    artifact = bad / "run.jsonl"
+    valid = json.dumps(_record("short", cached_prompt=8))
+    invalid = valid.removesuffix("}") + ', "extension": {"samples": [' + number + ']}}'
+    artifact.write_text(f"{valid}\n\n{invalid}\n{valid}\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        main([command, str(good), str(bad)])
+
+    assert f"could not parse {artifact}:3: invalid JSON" in str(exc.value)
+    assert capsys.readouterr().out == ""
+
+
 def test_compare_tolerates_repo_task_artifact_fields(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
@@ -265,9 +285,6 @@ def test_summarize_runs_ignores_invalid_prompt_token_values(
 ) -> None:
     run_a = tmp_path / "run-a"
     rows = [
-        _record("short", prompt_tokens=float("nan")),
-        _record("short", prompt_tokens=float("inf")),
-        _record("short", prompt_tokens=float("-inf")),
         _record("short", prompt_tokens=None),
         _record("short", prompt_tokens=True),
         _record("short", prompt_tokens="10"),
@@ -310,9 +327,6 @@ def test_summarize_runs_ignores_invalid_cached_prompt_values(
 ) -> None:
     run_a = tmp_path / "run-a"
     rows = [
-        _record("short", cached_prompt=float("nan")),
-        _record("short", cached_prompt=float("inf")),
-        _record("short", cached_prompt=float("-inf")),
         _record("short", cached_prompt=None),
         _record("short", cached_prompt=True),
         _record("short", cached_prompt="10"),
@@ -336,9 +350,6 @@ def test_summarize_runs_ignores_invalid_prefill_tps_values(
 ) -> None:
     run_a = tmp_path / "run-a"
     rows = [
-        _record("short", prefill_tps=float("nan")),
-        _record("short", prefill_tps=float("inf")),
-        _record("short", prefill_tps=float("-inf")),
         _record("short", prefill_tps=None),
         _record("short", prefill_tps=True),
         _record("short", prefill_tps="100"),
@@ -796,12 +807,27 @@ def test_render_comparison_suppresses_prompt_and_cache_mismatch_for_missing_case
 def test_render_comparison_warns_on_pack_version_mismatch(tmp_path: Path) -> None:
     run_a = tmp_path / "run-a"
     run_b = tmp_path / "run-b"
-    _write_run(run_a, version="0.1.0")
-    _write_run(run_b, version="0.2.0")
+    for run_dir, version in ((run_a, "0.1.0"), (run_b, "0.2.0")):
+        _write_run(run_dir, rows=[
+            _record("short", version=version, cached_prompt=8),
+            _record("short", pack_id="other-pack", cached_prompt=8),
+        ])
 
-    output = render_comparison([load_result_run(run_a), load_result_run(run_b)])
+    runs = [load_result_run(run_a), load_result_run(run_b)]
+    for render in (render_comparison, render_report):
+        output = render(runs)
+        assert "WARNING: compared records use different pack ids or versions" in output
+        for run in runs:
+            assert (
+                f"| {run.label} | runtime-sweep/short | 1 | 1 | 1.000 | 0.200 | — | "
+                "40.00 | 30.00 | 60 | 10 | 8 | 1/1 | pack-version-diff |"
+            ) in output
+            assert (
+                f"| {run.label} | other-pack/short | 1 | 1 | 1.000 | 0.200 | 100.00 | "
+                "40.00 | 30.00 | 60 | 10 | 8 | 1/1 | comparable |"
+            ) in output
 
-    assert "WARNING: compared records use different pack ids or versions" in output
+    output = render_comparison(runs)
     assert "`prefill_tps med` is shown only when" in output
     assert "tokens.cached_prompt" in output
     assert (
@@ -872,7 +898,7 @@ def test_render_comparison_pluralizes_single_input_row(tmp_path: Path) -> None:
 
 def test_compare_isolates_unrepresentable_metrics(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
-    invalid = [10**400, -(10**400), True, False, float("nan"), float("inf")]
+    invalid = [10**400, -(10**400), True, False]
     _write_run(run_dir, rows=[
         _record(case, wall_s=value, prompt_tokens=value, cached_prompt=value)
         for case, values in (("mixed", invalid + [2, 4.0]), ("invalid", invalid))
@@ -886,8 +912,8 @@ def test_compare_isolates_unrepresentable_metrics(tmp_path: Path) -> None:
     assert summaries["mixed"].cached_prompt_tokens == 3.0
     assert summaries["invalid"].wall_s is None
     output = render_comparison([run])
-    assert "| run | mixed | 8 | 8 | 3.000 |" in output
-    assert "| run | invalid | 6 | 6 | — |" in output
+    assert "| run | mixed | 6 | 6 | 3.000 |" in output
+    assert "| run | invalid | 4 | 4 | — |" in output
     assert "3.000" in render_report([run])
     assert (run_dir / "run.jsonl").read_bytes() == original
     assert run.records[0]["timing"]["wall_s"] == 10**400
