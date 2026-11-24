@@ -11,13 +11,14 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import stat
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from .adapters import AdapterResult
-from .compare import markdown_cell
+from .compare import markdown_cell, markdown_code, markdown_text
 from .external_agent_model_calls import ModelCallLogError, summarize_model_call_logs
 from .packs import Case, Pack
 from .repo_task_outcomes import (
@@ -286,20 +287,20 @@ class RunReporter:
             lines.append(self.pack.description)
             lines.append("")
         lines.append(
-            f"Host: `{hardware.get('hostname', 'unknown')}` "
-            f"({hardware.get('platform', 'unknown')})"
+            f"Host: {markdown_code(hardware.get('hostname', 'unknown'))} "
+            f"({markdown_text(hardware.get('platform', 'unknown'))})"
         )
         if hardware.get("cpu_model"):
-            lines.append(f"CPU: {hardware['cpu_model']}")
+            lines.append(f"CPU: {markdown_text(hardware['cpu_model'])}")
         if hardware.get("ram_mb"):
-            lines.append(f"RAM: {hardware['ram_mb']} MB")
+            lines.append(f"RAM: {markdown_text(hardware['ram_mb'])} MB")
         gpus = hardware.get("gpus") or []
         if gpus:
             parts = []
             for g in gpus:
-                model = g.get("model", "?")
+                model = markdown_text(g.get("model", "?"))
                 vram = g.get("vram_mb")
-                parts.append(f"{model} ({vram} MB)" if vram else model)
+                parts.append(f"{model} ({markdown_text(vram)} MB)" if vram else model)
             lines.append("GPU: " + ", ".join(parts))
         if run_metadata is not None:
             lines.append("")
@@ -312,10 +313,12 @@ class RunReporter:
             ):
                 value = run_metadata.get(section)
                 if isinstance(value, dict):
-                    lines.append(f"{label}: {_compact_summary_mapping(value)}")
+                    lines.append(f"{label}: {markdown_text(_compact_summary_mapping(value))}")
             notes = run_metadata.get("notes")
-            if isinstance(notes, str) and notes:
-                lines.append(f"Notes: {notes}")
+            if isinstance(notes, str) and notes.strip():
+                notes = "\n".join(notes.splitlines()).strip()
+                paragraphs = re.split(r"\n(?:[^\S\n]*\n)+", notes)
+                lines.append("Notes: " + "\n\n".join(map(markdown_text, paragraphs)))
         try:
             model_call_summaries = summarize_model_call_logs(self.output_dir)
         except ModelCallLogError as exc:

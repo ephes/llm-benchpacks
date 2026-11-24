@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Reject detected in-place changes while reading a report-set manifest.
+  Atomic replacements preserve the manifest generation already opened.
+
+- Cap report and comparison inputs at 1,000 run references before opening
+  result files. Admitted references still deduplicate by opened file identity.
+
+- Bound expanded run metadata to 100,000 values and depth 64 before JSON
+  serialization. Shared subtrees count on every reference.
+
+- Render hardware and runtime metadata as literal text in run summaries, with
+  paragraph breaks preserved in notes.
+
 - Refuse nonfinite fallback hardware values at every depth before rendering
   report cells.
 

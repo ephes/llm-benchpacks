@@ -705,6 +705,45 @@ def test_load_report_set_allows_omitted_version(tmp_path: Path) -> None:
     assert load_report_set(manifest) == [tmp_path / "results/run-a"]
 
 
+@pytest.mark.parametrize("atomic_replace", [False, True])
+def test_load_report_set_reads_one_manifest_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, atomic_replace: bool,
+) -> None:
+    manifest = tmp_path / "report.toml"
+    original = b'version = 1\nresult_dirs = ["run-a", "run-b"]\n'
+    updated = b'version = 1\nresult_dirs = ["run-c", "run-d"]\n'
+    manifest.write_bytes(original)
+    initial = manifest.stat()
+    replacement = tmp_path / "replacement.toml"
+    replacement.write_bytes(updated)
+    split = original.index(b"run-b")
+    read = os.read
+    changed = False
+
+    def change_after_first_chunk(fd: int, size: int) -> bytes:
+        nonlocal changed
+        info = os.fstat(fd)
+        if changed or (info.st_dev, info.st_ino) != (initial.st_dev, initial.st_ino):
+            return read(fd, size)
+        chunk = read(fd, min(size, split))
+        if atomic_replace:
+            replacement.replace(manifest)
+        else:
+            manifest.write_bytes(updated)
+            os.utime(manifest, ns=(initial.st_atime_ns, initial.st_mtime_ns - 1_000_000_000))
+        changed = True
+        return chunk
+
+    monkeypatch.setattr(report.os, "read", change_after_first_chunk)
+    if atomic_replace:
+        assert load_report_set(manifest) == [tmp_path / "run-a", tmp_path / "run-b"]
+    else:
+        with pytest.raises(ReportError, match="report set manifest changed during read"):
+            load_report_set(manifest)
+    assert changed
+    assert load_report_set(manifest) == [tmp_path / "run-c", tmp_path / "run-d"]
+
+
 def test_load_report_set_rejects_malformed_toml(tmp_path: Path) -> None:
     manifest = tmp_path / "bad.toml"
     manifest.write_text("version = [\n", encoding="utf-8")

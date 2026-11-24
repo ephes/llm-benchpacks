@@ -4,6 +4,18 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-21 (round 180 B38)
+
+- Limit report and comparison run references before opening files.
+- Check report-set manifest stability on the opened descriptor and allow
+  atomic replacement of its pathname.
+
+## 2026-11-21 (round 180 B19)
+
+- Render run summary hardware and metadata as literal text and retain note
+  paragraph breaks.
+- Bound expanded run metadata by value occurrences and depth before serialization.
+
 ## 2026-11-21 (round 177 B14)
 
 - Retire each owned descriptor once when a directory close fails during

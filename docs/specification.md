@@ -1088,6 +1088,9 @@ The initial summary is intentionally small and deterministic:
   brackets; input bullets and per-case warnings use code spans with a long
   enough fence, and pack-version warnings use the table-cell escaping. The same
   rules apply to `benchpack report` and to the tables in run `summary.md` files.
+  Run summaries also render hardware and runtime metadata fields as literal
+  text. Notes retain paragraph breaks and fold line breaks within a paragraph
+  to spaces. The normalized `run-metadata.json` retains the original text values.
 - `rows` counts measured records, `ok` counts rows with `ok = true`, and
   `failed` counts all other rows. Only successful rows supply metric samples.
 - `wall_s`, `ttft_s`, `decode_tps`, `total_tps`, and `tokens.output` are
@@ -1223,7 +1226,10 @@ one or more positional result directories or one report-set manifest. The
 manifest must be a regular file of at most 1 MiB (`MAX_REPORT_SET_BYTES`) and
 valid UTF-8; oversized, non-regular, non-UTF-8, unparseable or excessively
 nested manifests fail with a report error before any result directory is
-inspected. The manifest shape is intentionally narrow:
+inspected. The reader checks the opened file's size and nanosecond timestamps
+for detected in-place changes before parsing. An atomic pathname replacement
+leaves the originally opened generation readable. The manifest shape is
+intentionally narrow:
 
 ```toml
 version = 1
@@ -2002,6 +2008,9 @@ report published-but-uncertain durability, including the affected log filename.
 
 Reports deduplicate `run.jsonl` inputs by canonical file identity (including
 symlink and hard-link aliases), retaining the first input's label and path.
+A report or comparison admits at most 1,000 supplied run references, including
+aliases and repeats. The loader checks this limit before opening any result
+files and then deduplicates by descriptor identity.
 A report admits at most 100 unique runs, 64 MiB of actual JSONL bytes and 100,000
 records in total; per-run limits still apply. Remaining byte/record allowances
 are passed into the bounded reader, so over-budget inputs are rejected during
@@ -2046,9 +2055,10 @@ adapter/harness calls. Normalized metadata is serialized with `allow_nan=False`
 and valid extension objects roundtrip.
 
 Python callers must supply string keys in every metadata dictionary, including
-objects inside extension arrays. Validation checks those keys before JSON
-serialization and raises `RunMetadataError` for other key types before staging
-can begin. An existing metadata file keeps its prior bytes.
+objects inside extension arrays. Before JSON serialization, validation checks
+those keys and limits the expanded tree to 100,000 value occurrences and a
+depth of 64 (root at depth zero). Shared subtrees count on every reference.
+Violations raise `RunMetadataError` before staging, preserving existing metadata.
 
 The standalone `write_run_metadata` helper accepts an absent destination or
 an existing regular file. It checks the destination entry without following

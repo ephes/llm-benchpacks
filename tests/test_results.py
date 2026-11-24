@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from benchpack import run_metadata
 from benchpack.adapters import AdapterResult, RawPaths, Timing, Tokens
 from benchpack.packs import Case, Pack, Scoring
 from benchpack.results import ResultEncodingError, RunReporter
@@ -549,6 +550,43 @@ def test_write_run_metadata_writes_json(tmp_path: Path) -> None:
     assert data["model"]["quantization"] == "Q4_K_M"
 
 
+@pytest.mark.parametrize("reporter_writer", [False, True])
+@pytest.mark.parametrize("limit", ["nodes", "depth"])
+def test_metadata_writers_bound_expanded_tree_before_serializing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reporter_writer: bool, limit: str,
+) -> None:
+    def write(metadata):
+        if reporter_writer:
+            RunReporter(tmp_path, make_pack(tmp_path)).write_run_metadata(metadata)
+        else:
+            run_metadata.write_run_metadata(tmp_path, metadata)
+
+    shared = {"value": "sample"}
+    small = {"extension": [shared, shared]}
+    write(small)
+    artifact = tmp_path / "run-metadata.json"
+    previous = artifact.read_bytes()
+    previous_entries = set(tmp_path.iterdir())
+    assert json.loads(previous) == small
+
+    nested = shared
+    if limit == "nodes":
+        monkeypatch.setattr(run_metadata, "MAX_RUN_METADATA_NODES", 15, raising=False)
+        for _ in range(4):
+            nested = [nested, nested]
+    else:
+        monkeypatch.setattr(run_metadata, "MAX_RUN_METADATA_DEPTH", 4, raising=False)
+        for _ in range(4):
+            nested = [nested]
+
+    with patch.object(json, "dumps", wraps=json.dumps) as dumps:
+        with pytest.raises(run_metadata.RunMetadataError, match="expanded.*limit"):
+            write({"extension": nested})
+        dumps.assert_not_called()
+    assert artifact.read_bytes() == previous
+    assert set(tmp_path.iterdir()) == previous_entries
+
+
 def test_write_summary_includes_pack_and_case(tmp_path: Path) -> None:
     out = tmp_path / "run"
     pack = make_pack(tmp_path, scoring=Scoring(mode="contains", expected="Paris"))
@@ -617,6 +655,44 @@ def test_write_summary_includes_runtime_metadata_when_supplied(
     assert "quantization=Q4_K_M" in text
     assert "Operating conditions: thermal=not captured" in text
     assert "Notes: no intentional throttling setup" in text
+
+
+def test_write_summary_renders_metadata_and_hardware_as_literal_text(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    out.mkdir()
+    reporter = RunReporter(out, make_pack(tmp_path))
+    field = "**bold** `code` [link](target) <b>x</b> | pipe\n## injected"
+    metadata = {
+        "runtime": {"name": field},
+        "model": {"id": field},
+        "operating_conditions": {"thermal": field},
+        "notes": "First *paragraph*.\r\nContinued with __text__.\r\n\r\n## Runtime Metadata\n| fake |",
+    }
+    reporter.write_run_metadata(metadata)
+    reporter.write_summary(
+        {
+            "hostname": "host`name\n## injected",
+            "platform": field,
+            "cpu_model": field,
+            "ram_mb": field,
+            "gpus": [{"model": field, "vram_mb": field}],
+        },
+        run_metadata=metadata,
+    )
+
+    text = (out / "summary.md").read_text()
+    assert text.splitlines().count("## Runtime Metadata") == 1
+    assert "\n## injected" not in text
+    assert "\n| fake |" not in text
+    assert "Host: ``host`name ## injected``" in text
+    escaped = r"\*\*bold\*\* \`code\` \[link\](target) &lt;b&gt;x&lt;/b&gt; \| pipe ## injected"
+    for label in ("Host", "CPU", "RAM", "GPU", "Runtime", "Model", "Operating conditions"):
+        assert escaped in next(line for line in text.splitlines() if line.startswith(f"{label}: "))
+    assert (
+        r"Notes: First \*paragraph\*. Continued with \_\_text\_\_." "\n\n"
+        r"\## Runtime Metadata \| fake \|"
+    ) in text
+    assert json.loads((out / "run-metadata.json").read_text()) == metadata
 
 
 def test_write_summary_includes_external_agent_model_call_summary(

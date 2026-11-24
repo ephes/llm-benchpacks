@@ -22,6 +22,7 @@ MAX_RESULT_LINE_BYTES = 1024 * 1024
 MAX_RESULT_RUN_BYTES = 64 * 1024 * 1024
 MAX_RESULT_SIDECAR_BYTES = MAX_RESULT_RUN_BYTES
 MAX_RESULT_RECORDS = 100_000
+MAX_RESULT_RUN_REFERENCES = 1_000
 MAX_CASE_SUMMARIES = 100_000
 
 
@@ -185,8 +186,11 @@ def _read_result_run(
 def load_result_runs(
     result_dirs: list[Path | str], *, run_limit: int = 100,
     byte_limit: int = MAX_RESULT_RUN_BYTES, record_limit: int = MAX_RESULT_RECORDS,
+    reference_limit: int = MAX_RESULT_RUN_REFERENCES,
 ) -> list[ResultRun]:
     """Admit a bounded collection, deduplicating the descriptors actually read."""
+    if len(result_dirs) > reference_limit:
+        raise CompareError(f"total run reference limit exceeded ({reference_limit})")
     runs: list[ResultRun] = []
     seen: dict[tuple[int, int], tuple[int, int, int]] = {}
     total_bytes = total_records = 0
@@ -393,6 +397,16 @@ def markdown_code(value: object) -> str:
     pad = " " if text.startswith("`") or text.endswith("`") or not text.strip() else ""
     # A pipe would still split a table cell; these spans are used outside tables.
     return f"{fence}{pad}{text}{pad}{fence}"
+
+
+def markdown_text(value: object) -> str:
+    """Render one line of literal Markdown prose, including at paragraph start."""
+    text = re.sub(r"([*~])", r"\\\1", markdown_cell(value).strip())
+    # Underscores inside words are already literal, including in model labels.
+    text = re.sub(
+        r"(?<!\w)_+|(?<!_)_+(?!\w)", lambda match: match[0].replace("_", r"\_"), text,
+    )
+    return re.sub(r"^([0-9]{1,9})?([#=+:\-]|[.)](?= |$))", r"\1\\\2", text)
 
 
 def disambiguate_runs(runs: list[ResultRun]) -> list[ResultRun]:

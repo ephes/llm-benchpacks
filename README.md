@@ -488,7 +488,9 @@ result_dirs = [
 ]
 ```
 
-Relative `result_dirs` entries resolve relative to the manifest file. The
+Relative `result_dirs` entries resolve relative to the manifest file. An in-place
+edit detected during the read fails the report. An atomic replacement leaves
+the originally opened manifest readable. The
 manifest is source-only and read-only: it does not schedule runs, start
 servers, copy artifacts, or write report files.
 
@@ -793,8 +795,11 @@ above the same row's valid prompt count leave cache coverage incomplete and
 block prefill parity. Invalid supplied metrics produce one bounded warning.
 A non-null `timing` or `tokens` section that is not an object counts as one
 invalid sample. Missing and null sections are accepted without a metric warning.
-Both CLIs admit at most 100 distinct run files, 64 MiB JSONL bytes and 100,000
-records across all inputs. Directory aliases and hardlinked files count once
+Both CLIs check a limit of 1,000 run references before opening result files.
+The limit includes aliases, repeated paths and entries supplied through a
+report set. Both CLIs admit at most 100 distinct run files, 64 MiB JSONL bytes
+and 100,000 records across all inputs. Directory aliases and hardlinked files
+count once toward the distinct file limit
 when the opened file's size and nanosecond mtime/ctime match. Both commands
 reject the input set if those values change between references to the same inode.
 Compare requires two distinct files after deduplication.
