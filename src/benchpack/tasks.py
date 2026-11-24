@@ -23,6 +23,7 @@ from .safe_files import admitted_directory, atomic_write_at, trusted_root, Publi
 _EXTERNAL_PROCESS_TIMEOUT_GRACE_S = 0.5
 MAX_WORKSPACE_READ_BYTES = 16 * 1024 * 1024
 MAX_WORKSPACE_ENTRIES = 100_000
+MAX_WORKSPACE_INVENTORY_DEPTH = 64
 
 
 class TaskError(ValueError):
@@ -106,8 +107,13 @@ class AgentSessionHarnessRequest:
         paths = []
         count = 0
         root = trusted_root(self.workspace)
+        kind = 'directories' if directories else 'files'
+        depth_error = (
+            f'could not list harness workspace {kind}: workspace inventory depth limit '
+            f'exceeded ({MAX_WORKSPACE_INVENTORY_DEPTH})'
+        )
 
-        def walk(directory, prefix):
+        def walk(directory: int, prefix: str, depth: int) -> None:
             nonlocal count
             with os.scandir(directory) as entries:
                 for entry in entries:
@@ -116,12 +122,14 @@ class AgentSessionHarnessRequest:
                         raise OSError('workspace inventory entry limit exceeded')
                     relative = f'{prefix}/{entry.name}' if prefix else entry.name
                     if entry.is_dir(follow_symlinks=False):
+                        if depth >= MAX_WORKSPACE_INVENTORY_DEPTH:
+                            raise TaskError(depth_error)
                         if directories:
                             paths.append(relative)
                         fd = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                      dir_fd=directory)
                         try:
-                            walk(fd, relative)
+                            walk(fd, relative, depth + 1)
                             current = os.stat(entry.name, dir_fd=directory, follow_symlinks=False)
                             opened = os.fstat(fd)
                             if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
@@ -131,27 +139,35 @@ class AgentSessionHarnessRequest:
                     elif not directories:
                         # Escaping/dangling links are excluded from discovery.
                         candidate = (root / relative).resolve(strict=False)
-                        if candidate.is_relative_to(root) and self.workspace_file_exists(relative):
-                            paths.append(relative)
+                        if candidate.is_relative_to(root):
+                            # File admission also opens the resolved target's ancestors.
+                            target_depth = len(candidate.relative_to(root).parts) - 1
+                            if target_depth > MAX_WORKSPACE_INVENTORY_DEPTH:
+                                if candidate.is_file():
+                                    raise TaskError(depth_error)
+                                continue
+                            if self._workspace_file_exists(candidate, relative):
+                                paths.append(relative)
 
         try:
             with admitted_directory(root, base=root.parent) as directory:
-                walk(directory, '')
+                walk(directory, '', 0)
         except (OSError, RecursionError) as exc:
-            kind = 'directories' if directories else 'files'
             raise TaskError(f'could not list harness workspace {kind}') from exc
         return tuple(sorted(paths))
 
     def list_workspace_paths(self) -> tuple[str, ...]:
-        """Return sorted paths, refusing incomplete discovery above the cap."""
+        """Return sorted file paths within the inventory entry and depth limits."""
         return self._inventory(directories=False)
 
     def list_workspace_dirs(self) -> tuple[str, ...]:
-        """Return sorted non-symlink directories within the inventory cap."""
+        """Return sorted non-symlink directories within the inventory limits."""
         return self._inventory(directories=True)
 
     def workspace_file_exists(self, relative_path: str) -> bool:
-        path = self.workspace_path(relative_path)
+        return self._workspace_file_exists(self.workspace_path(relative_path), relative_path)
+
+    def _workspace_file_exists(self, path: Path, relative_path: str) -> bool:
         try:
             with admitted_directory(path.parent, base=self._admission_base()) as directory:
                 mode = os.stat(path.name, dir_fd=directory, follow_symlinks=False).st_mode

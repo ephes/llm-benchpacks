@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
 import pytest
 
 from benchpack.packs import (
@@ -1933,6 +1934,29 @@ def test_agent_session_harness_list_workspace_dirs_returns_sorted_nested_dirs(
     request = make_harness_request(tmp_path, workspace)
 
     assert request.list_workspace_dirs() == ("docs", "z-src", "z-src/inner")
+
+
+def test_agent_session_harness_inventory_depth_limit(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    directories = tuple("/".join(["d"] * depth) for depth in range(1, 65))
+    deepest = workspace / directories[-1]
+    deepest.mkdir(parents=True)
+    (deepest / "file.txt").touch()
+    (workspace / "a.txt").touch()
+    request = make_harness_request(tmp_path, workspace)
+    process = psutil.Process()
+    initial_fds = process.num_fds()
+    too_deep = deepest / "extra"
+
+    for _ in range(3):
+        assert request.list_workspace_dirs() == directories
+        assert request.list_workspace_paths() == ("a.txt", f"{directories[-1]}/file.txt")
+        too_deep.mkdir()
+        for listing in (request.list_workspace_dirs, request.list_workspace_paths):
+            with pytest.raises(TaskError, match="workspace inventory depth limit exceeded"):
+                listing()
+        too_deep.rmdir()
+        assert process.num_fds() == initial_fds
 
 
 def test_agent_session_harness_list_workspace_dirs_observes_created_dirs(
