@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
 import pytest
 
 from benchpack.packs import (
@@ -1935,6 +1936,29 @@ def test_agent_session_harness_list_workspace_dirs_returns_sorted_nested_dirs(
     assert request.list_workspace_dirs() == ("docs", "z-src", "z-src/inner")
 
 
+def test_agent_session_harness_inventory_depth_limit(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    directories = tuple("/".join(["d"] * depth) for depth in range(1, 65))
+    deepest = workspace / directories[-1]
+    deepest.mkdir(parents=True)
+    (deepest / "file.txt").touch()
+    (workspace / "a.txt").touch()
+    request = make_harness_request(tmp_path, workspace)
+    process = psutil.Process()
+    initial_fds = process.num_fds()
+    too_deep = deepest / "extra"
+
+    for _ in range(3):
+        assert request.list_workspace_dirs() == directories
+        assert request.list_workspace_paths() == ("a.txt", f"{directories[-1]}/file.txt")
+        too_deep.mkdir()
+        for listing in (request.list_workspace_dirs, request.list_workspace_paths):
+            with pytest.raises(TaskError, match="workspace inventory depth limit exceeded"):
+                listing()
+        too_deep.rmdir()
+        assert process.num_fds() == initial_fds
+
+
 def test_agent_session_harness_list_workspace_dirs_observes_created_dirs(
     tmp_path: Path,
 ) -> None:
@@ -2416,6 +2440,41 @@ def test_run_repo_task_executor_internal_harness_rejects_unsafe_workspace_exists
         )
 
     assert not (out / "task" / "edit-repo" / "rep-001.stdout.log").exists()
+
+
+@pytest.mark.parametrize("change", ["stable", "rewrite", "replace"])
+def test_agent_session_harness_read_workspace_text_requires_stable_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "note.txt"
+    target.write_text("old\n", encoding="utf-8")
+    replacement = workspace / "replacement.txt"
+    replacement.write_text("new\n", encoding="utf-8")
+    request = make_harness_request(tmp_path, workspace)
+    read = os.read
+
+    def read_and_change(fd: int, count: int) -> bytes:
+        chunk = read(fd, count)
+        if chunk == b"old\n":
+            if change == "rewrite":
+                target.write_text("new\n", encoding="utf-8")
+                # Force a different mtime even on coarse-grained filesystems.
+                os.utime(target, ns=(0, 0))
+            elif change == "replace":
+                replacement.replace(target)
+        return chunk
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read_and_change)
+        if change == "stable":
+            assert request.read_workspace_text("note.txt") == "old\n"
+        else:
+            with pytest.raises(TaskError, match="could not read harness workspace file"):
+                request.read_workspace_text("note.txt")
+
+    assert request.read_workspace_text("note.txt") == ("old\n" if change == "stable" else "new\n")
 
 
 def test_run_repo_task_executor_internal_harness_rejects_missing_workspace_read(

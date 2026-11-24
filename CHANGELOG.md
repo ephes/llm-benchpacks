@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Refuse harness workspace listings that exceed 64 directory levels below
+  the workspace root.
+
+- Reject harness text reads if the opened file or its resolved directory entry
+  changes during the read.
+
 - Reject detected in-place changes while reading a report-set manifest.
   Atomic replacements preserve the manifest generation already opened.
 

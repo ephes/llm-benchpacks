@@ -1979,9 +1979,15 @@ Workspace helper operations walk opened directories without following replacemen
 links. Existing internal symlinks to files remain readable and writable; deletion
 removes the link entry. Directory inventories do not traverse directory symlinks.
 Text reads admit only regular files and at most 16 MiB of actual bytes, including
-growth after open. Each inventory visits at most 100,000 entries of any kind and
-raises `TaskError` on overflow; no partial tuple is returned. Output ordering
-remains deterministic. Directories below the workspace root must be real
+growth after open. The device, inode, size and nanosecond mtime and ctime must
+match before and after reading and at the resolved file name in the opened
+parent directory. Detected writes, replacements and removals raise `TaskError`.
+
+Each inventory visits at most 100,000 entries of any kind and descends at most
+64 directory levels below the workspace root, including when opening the parent
+of a resolved file target. Exceeding either limit raises
+`TaskError` without returning a partial tuple. Output ordering remains
+deterministic. Directories below the workspace root must be real
 directories and symlink roots are refused; links among the root's own ancestors
 (for example macOS `/tmp` -> `/private/tmp` or a linked home) are trusted and
 resolved once. Runner-owned task logs apply the same no-follow walk below the
