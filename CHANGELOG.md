@@ -5,6 +5,9 @@
 - Select the best product-offer pair threshold using exact F1, with ties
   resolved in favor of the highest score threshold.
 
+- Apply the inclusive product-offer cluster F1 minima to exact values before
+  rounding reported metrics.
+
 - Fail product-offer scoring before candidate execution when fixture IDs are
   duplicated, hidden-label coverage differs, or eval pair endpoints are unknown.
 

@@ -527,6 +527,59 @@ def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monk
     assert isinstance(payload['combined_score']['value'], float)
 
 
+def run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted):
+    fixtures = synthetic_fixtures()
+    partitions = list(enumerate(zip(truth, predicted, strict=True)))
+    fixtures['test_offers.csv'] = [{'offer_id': str(i)} for i, _ in partitions]
+    fixtures['hidden_test_clusters.csv'] = [
+        {'offer_id': str(i), 'cluster_id': gold} for i, (gold, _) in partitions
+    ]
+    fixtures['eval_pairs.csv'][0].update(offer_id_left='0', offer_id_right='1')
+    cluster_csv = 'offer_id,cluster_id\n' + ''.join(
+        f'{i},{cluster}\n' for i, (_, cluster) in partitions
+    )
+    return run_synthetic_main(
+        scorer, tmp_path, monkeypatch, cluster_csv, 'pair_id,score\np,1\n', fixtures=fixtures,
+    )
+
+
+@pytest.mark.parametrize('fp_offset', [-1, 0, 1])
+def test_pairwise_minimum_uses_exact_f1(scorer, tmp_path, monkeypatch, successful_program, fp_offset):
+    truth = ['correct'] * 500 + [f'single-{i}' for i in range(3500)]
+    predicted = ['correct'] * 500
+    # The three false merges contribute 997,999 pairs. Each extra merge adds one.
+    for size in (1413, 29, 6):
+        predicted.extend([f'merged-{size}'] * size)
+    predicted.extend(truth[len(predicted):])
+    for i in range(fp_offset + 1):
+        predicted[-2 - 2 * i] = predicted[-1 - 2 * i]
+
+    code, payload = run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted)
+    pairwise = payload['metrics']['pairwise_cluster']
+    assert (pairwise['tp_pairs'], pairwise['fp_pairs'], pairwise['fn_pairs']) == (
+        124750, 998000 + fp_offset, 0,
+    )
+    assert pairwise['f1'] == payload['thresholds']['pairwise_cluster_f1_min'] == 0.20
+    assert payload['metrics']['bcubed']['f1'] > 0.70
+    assert payload['passed'] is (fp_offset <= 0)
+    assert code == int(fp_offset > 0)
+
+
+@pytest.mark.parametrize('size_offset', [-1, 0, 1])
+def test_bcubed_minimum_uses_exact_f1(scorer, tmp_path, monkeypatch, successful_program, size_offset):
+    # At offset zero, precision is (2027 + 2 + 1) / 3770 = 7/13 and
+    # recall is 1. Moving a singleton between the two merged groups changes
+    # exact F1 while both variants still round to 0.70.
+    truth = ['correct'] * 2027 + ['mixed'] * 30 + [f'single-{i}' for i in range(1713)]
+    predicted = ['correct'] * 2027 + ['mixed'] * (870 + size_offset) + ['merged'] * (873 - size_offset)
+
+    code, payload = run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted)
+    assert payload['metrics']['bcubed']['f1'] == payload['thresholds']['bcubed_f1_min'] == 0.70
+    assert payload['metrics']['pairwise_cluster']['f1'] > 0.20
+    assert payload['passed'] is (size_offset <= 0)
+    assert code == int(size_offset > 0)
+
+
 def test_missing_cluster_endpoints_are_not_equal(scorer):
     metrics = scorer._eval_cluster_operating_point(eval_pairs=[{
         'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],

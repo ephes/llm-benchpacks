@@ -8,6 +8,8 @@ working history and open questions.
 
 - Select the best product-offer pair threshold using the exact F1 ratio,
   keeping the highest threshold on ties.
+- Evaluate the inclusive B-cubed and pairwise cluster pass minima using exact
+  F1 before rounding the published metrics.
 
 ## 2026-11-27 (round 232 B18)
 

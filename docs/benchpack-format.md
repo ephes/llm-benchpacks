@@ -918,6 +918,8 @@ Product-offer AP uses whole tied-score threshold groups: recall increment times
 precision at each group end, summed without interpolation (zero with no positives).
 The best-hidden row maximizes the exact F1 ratio, choosing the highest score
 threshold on exact ties. The published F1 is rounded to six decimal places.
+Passing requires exact B-cubed F1 of at least `0.70` and exact pairwise cluster
+F1 of at least `0.20`. Both reported cluster F1 values round to six decimal places.
 
 Product-offer invalid evidence has no numeric quality/combined score. Its PR
 reference points to an immutable generation-specific CSV; use `pr_curve.path`.

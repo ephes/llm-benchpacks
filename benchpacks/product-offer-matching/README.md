@@ -134,6 +134,9 @@ Primary pass threshold:
 - B-cubed F1 must be at least `0.70`.
 - Pairwise cluster F1 must be at least `0.20`.
 
+The scorer compares exact cluster F1 values against these inclusive minima.
+The published metrics round to six decimal places.
+
 The verifier writes cluster metrics, eval-pair metrics, precision/recall curve
 metadata, runtime seconds, system metrics, and combined score details into its
 JSON artifact.
@@ -204,8 +207,8 @@ noninterpolated: sum each group's recall increment times precision after the
 whole group is admitted. A positive and a negative tied at the same score have
 AP 0.5 in either CSV order. AP is zero with no positives. The best-hidden row
 is selected by the exact F1 ratio from the confusion counts, with the highest
-threshold winning exact ties. F1 is displayed to six decimal places. Older
-per-item AP can differ for tied scores and must be identified accordingly.
+threshold winning exact ties. Published F1 is rounded to six decimal places.
+Older per-item AP can differ for tied scores and must be identified accordingly.
 
 ### Valid quality evidence and result publication
 

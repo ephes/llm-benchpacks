@@ -14,7 +14,8 @@ import sys
 import time
 import tempfile
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 from itertools import groupby
 from typing import Any
@@ -22,8 +23,8 @@ from typing import Any
 import psutil
 
 
-BCUBED_F1_MIN = 0.70
-PAIRWISE_CLUSTER_F1_MIN = 0.20
+BCUBED_F1_MIN = Fraction(7, 10)
+PAIRWISE_CLUSTER_F1_MIN = Fraction(1, 5)
 PROGRAM_TIMEOUT_S = 60.0
 
 
@@ -465,33 +466,38 @@ def _bcubed_metrics(
     expected_ids: list[str],
     true_clusters: dict[str, str],
     predicted_clusters: dict[str, str],
-) -> dict[str, Any]:
-    true_by_id: dict[str, set[str]] = defaultdict(set)
-    pred_by_id: dict[str, set[str]] = defaultdict(set)
+) -> tuple[dict[str, Any], Fraction]:
+    true_counts: Counter[str] = Counter()
+    pred_counts: Counter[str] = Counter()
     intersections: Counter[tuple[str, str]] = Counter()
     for offer_id in expected_ids:
         true_id = true_clusters[offer_id]
         pred_id = predicted_clusters.get(offer_id, f"__missing__{offer_id}")
-        true_by_id[true_id].add(offer_id)
-        pred_by_id[pred_id].add(offer_id)
+        true_counts[true_id] += 1
+        pred_counts[pred_id] += 1
         intersections[(true_id, pred_id)] += 1
 
-    precision_sum = 0.0
-    recall_sum = 0.0
-    for offer_id in expected_ids:
-        true_id = true_clusters[offer_id]
-        pred_id = predicted_clusters.get(offer_id, f"__missing__{offer_id}")
-        overlap = intersections[(true_id, pred_id)]
-        precision_sum += overlap / len(pred_by_id[pred_id])
-        recall_sum += overlap / len(true_by_id[true_id])
-    precision = precision_sum / len(expected_ids) if expected_ids else 0.0
-    recall = recall_sum / len(expected_ids) if expected_ids else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    # Each of the overlap offers contributes overlap / cluster size. Group
+    # the squared overlaps by denominator before adding exact fractions.
+    precision_numerators: Counter[int] = Counter()
+    recall_numerators: Counter[int] = Counter()
+    for (true_id, pred_id), overlap in intersections.items():
+        squared_overlap = overlap ** 2
+        precision_numerators[pred_counts[pred_id]] += squared_overlap
+        recall_numerators[true_counts[true_id]] += squared_overlap
+    offer_count = len(expected_ids) or 1
+    precision = sum(
+        (Fraction(total, size) for size, total in precision_numerators.items()), Fraction(),
+    ) / offer_count
+    recall = sum(
+        (Fraction(total, size) for size, total in recall_numerators.items()), Fraction(),
+    ) / offer_count
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else Fraction()
     return {
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "f1": round(f1, 6),
-    }
+        "precision": round(float(precision), 6),
+        "recall": round(float(recall), 6),
+        "f1": round(float(f1), 6),
+    }, f1
 
 
 def _cluster_pairwise_metrics(
@@ -499,7 +505,7 @@ def _cluster_pairwise_metrics(
     expected_ids: list[str],
     true_clusters: dict[str, str],
     predicted_clusters: dict[str, str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], Fraction]:
     true_counts: Counter[str] = Counter()
     pred_counts: Counter[str] = Counter()
     intersections: Counter[tuple[str, str]] = Counter()
@@ -516,17 +522,17 @@ def _cluster_pairwise_metrics(
     fn = true_pairs - tp
     precision = tp / predicted_pairs if predicted_pairs else 0.0
     recall = tp / true_pairs if true_pairs else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    f1 = Fraction(2 * tp, (true_pairs + predicted_pairs) or 1)
     return {
         "precision": round(precision, 6),
         "recall": round(recall, 6),
-        "f1": round(f1, 6),
+        "f1": round(float(f1), 6),
         "tp_pairs": tp,
         "fp_pairs": fp,
         "fn_pairs": fn,
         "true_pairs": true_pairs,
         "predicted_pairs": predicted_pairs,
-    }
+    }, f1
 
 
 def _eval_cluster_operating_point(
@@ -771,8 +777,8 @@ def main() -> int:
         "pack_version": args.pack_version,
         "source_fixture_id": args.source_fixture_id,
         "thresholds": {
-            "bcubed_f1_min": BCUBED_F1_MIN,
-            "pairwise_cluster_f1_min": PAIRWISE_CLUSTER_F1_MIN,
+            "bcubed_f1_min": float(BCUBED_F1_MIN),
+            "pairwise_cluster_f1_min": float(PAIRWISE_CLUSTER_F1_MIN),
         },
         "patch_exists": patch_path.is_file(),
         "patch_bytes": patch_path.stat().st_size if patch_path.is_file() else 0,
@@ -851,12 +857,12 @@ def main() -> int:
                 payload["pr_curve"] = None
                 payload["combined_score"] = {"value": None, "unavailable_reason": "invalid prediction evidence"}
                 raise ValueError("invalid prediction evidence")
-            bcubed = _bcubed_metrics(
+            bcubed, bcubed_f1 = _bcubed_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
                 predicted_clusters=predicted_clusters,
             )
-            pairwise = _cluster_pairwise_metrics(
+            pairwise, pairwise_f1 = _cluster_pairwise_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
                 predicted_clusters=predicted_clusters,
@@ -893,8 +899,8 @@ def main() -> int:
             payload["prediction_errors"] = errors
             payload["passed"] = (
                 not errors
-                and bcubed["f1"] >= BCUBED_F1_MIN
-                and pairwise["f1"] >= PAIRWISE_CLUSTER_F1_MIN
+                and bcubed_f1 >= BCUBED_F1_MIN
+                and pairwise_f1 >= PAIRWISE_CLUSTER_F1_MIN
                 and payload["patch_exists"]
                 and payload["patch_bytes"] > 0
             )
