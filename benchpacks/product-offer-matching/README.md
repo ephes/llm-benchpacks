@@ -173,6 +173,13 @@ using only the leader PID have a different scope and must not be compared as
 though the memory methodology were unchanged. Candidate `program_metrics`
 remain self-reported and separate from independently observed system metrics.
 
+### Fixture identity checks
+
+Before launching the candidate, the scorer checks that public and hidden CSVs
+have unique offer or pair IDs, that the hidden labels cover exactly the public
+IDs, and that both endpoints of each eval pair are test offers. A failed check
+produces `passed: false` with `error` and `fixture_errors` in the JSON artifact.
+
 ### Candidate file admission
 
 Predictions and optional metrics are opened once with no-follow, nonblocking

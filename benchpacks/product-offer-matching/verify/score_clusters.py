@@ -418,6 +418,44 @@ def _validate_expected_ids(
     return errors
 
 
+def _fixture_rows_by_id(path: Path, column: str) -> dict[str, dict[str, str]]:
+    rows: dict[str, dict[str, str]] = {}
+    for line, row in enumerate(_read_csv(path), start=2):
+        row_id = row.get(column)
+        if not row_id or not row_id.strip():
+            raise ValueError(f"{path.name} row {line} missing {column}")
+        if row_id in rows:
+            raise ValueError(f"{path.name} row {line} has duplicate {column}")
+        rows[row_id] = row
+    return rows
+
+
+def _load_scoring_fixtures(
+    test_path: Path, eval_pairs_path: Path, hidden_clusters_path: Path, hidden_pairs_path: Path,
+) -> tuple[list[str], list[dict[str, str]], dict[str, str], dict[str, int]]:
+    offer_ids = list(_fixture_rows_by_id(test_path, "offer_id"))
+    eval_pairs = _fixture_rows_by_id(eval_pairs_path, "pair_id")
+    hidden_clusters = _fixture_rows_by_id(hidden_clusters_path, "offer_id")
+    hidden_pairs = _fixture_rows_by_id(hidden_pairs_path, "pair_id")
+    errors = _validate_expected_ids(
+        expected_ids=offer_ids, actual_ids=set(hidden_clusters), output_name=hidden_clusters_path.name,
+    ) + _validate_expected_ids(
+        expected_ids=list(eval_pairs), actual_ids=set(hidden_pairs), output_name=hidden_pairs_path.name,
+    )
+    if errors:
+        raise ValueError("; ".join(errors))
+    for line, row in enumerate(eval_pairs.values(), start=2):
+        for endpoint in ("offer_id_left", "offer_id_right"):
+            if row.get(endpoint) not in hidden_clusters:
+                raise ValueError(f"{eval_pairs_path.name} row {line} has unknown {endpoint}")
+    return (
+        offer_ids,
+        list(eval_pairs.values()),
+        {offer_id: row["cluster_id"] for offer_id, row in hidden_clusters.items()},
+        {pair_id: int(row["label"]) for pair_id, row in hidden_pairs.items()},
+    )
+
+
 def _comb2(value: int) -> int:
     return value * (value - 1) // 2
 
@@ -743,16 +781,14 @@ def main() -> int:
 
     curve = None
     try:
-        test_rows = _read_csv(test_path)
-        eval_pairs = _read_csv(eval_pairs_path)
-        expected_offer_ids = [row["offer_id"] for row in test_rows]
+        try:
+            expected_offer_ids, eval_pairs, true_clusters, pair_labels = _load_scoring_fixtures(
+                test_path, eval_pairs_path, hidden_clusters_path, hidden_pairs_path,
+            )
+        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+            payload["fixture_errors"] = [str(exc)]
+            raise ValueError("invalid scoring fixtures") from exc
         expected_pair_ids = [row["pair_id"] for row in eval_pairs]
-        true_clusters = {
-            row["offer_id"]: row["cluster_id"] for row in _read_csv(hidden_clusters_path)
-        }
-        pair_labels = {
-            row["pair_id"]: int(row["label"]) for row in _read_csv(hidden_pairs_path)
-        }
         run_result = _run_program(workspace, args.case, output_path.parent)
         payload["program"] = {
             key: value

@@ -173,7 +173,10 @@ Initial packs:
   unlabeled `data/test_offers.csv`, and unlabeled `data/eval_pairs.csv`, keep
   hidden test cluster labels and eval-pair labels under `verify/`, capture the
   workspace patch, and run a deterministic `verify-script` that executes the
-  generated clusterer. The verifier reports B-cubed cluster metrics, pairwise
+  generated clusterer. Before launch, the verifier requires unique fixture IDs,
+  exact hidden-label coverage, and eval pair endpoints in the test offer set.
+  Fixture admission failures report `fixture_errors`. The verifier reports
+  B-cubed cluster metrics, pairwise
   cluster metrics, an eval-pair precision/recall curve and average precision
   from `pair_scores.csv`, process RSS, offers per second, eval pairs per
   second, and a transparent combined score. The longer harness timeout is

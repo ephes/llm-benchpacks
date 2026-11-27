@@ -86,14 +86,17 @@ def test_group_signal_to_scorer_retires_candidate_session(tmp_path, signum):
     # session and is only retired if the scorer unwinds through its cleanup.
     workspace = tmp_path / 'workspace'
     (workspace / 'data').mkdir(parents=True)
-    (workspace / 'data' / 'test_offers.csv').write_text('offer_id\na\n')
-    (workspace / 'data' / 'eval_pairs.csv').write_text('pair_id\np\n')
+    (workspace / 'data' / 'eval_pairs.csv').write_text('pair_id,offer_id_left,offer_id_right\np,a,b\n')
+    (workspace / 'data' / 'test_offers.csv').write_text('offer_id\na\nb\n')
+    (tmp_path / 'hidden_test_clusters.csv').write_text('offer_id,cluster_id\na,c\nb,c\n')
+    (tmp_path / 'hidden_eval_pair_labels.csv').write_text('pair_id,label\np,1\n')
     pid_file = tmp_path / 'pid'
     candidate = (f"import os,time; open({str(pid_file)!r},'w').write(str(os.getpid())); "
                  "time.sleep(30)")
     code = f"""import importlib.util, sys
 spec=importlib.util.spec_from_file_location('s', {str(SCORER.resolve())!r})
 s=importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
+s.__file__ = {str(tmp_path / 'score_clusters.py')!r}
 s._run_program = lambda w, c, o: s._run_command([sys.executable, '-c', {candidate!r}], cwd=w, timeout_s=30)
 sys.argv = ['score', '--workspace', {str(workspace)!r}, '--case', 'c', '--pack-id', 'p',
             '--pack-version', '1', '--source-fixture-id', 'f', '--patch', 'missing.patch',
@@ -404,7 +407,16 @@ def test_average_precision_is_invariant_within_ties(scorer):
     assert summary['average_precision'] == .5
 
 
-def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
+def synthetic_fixtures():
+    return {
+        'test_offers.csv': [{'offer_id': 'a'}, {'offer_id': 'b'}],
+        'eval_pairs.csv': [{'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
+        'hidden_test_clusters.csv': [{'offer_id': 'a', 'cluster_id': 'c'},
+                                     {'offer_id': 'b', 'cluster_id': 'c'}],
+        'hidden_eval_pair_labels.csv': [{'pair_id': 'p', 'label': '1'}]}
+
+
+def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs, *, fixtures=None):
     import json
     workspace = tmp_path / 'workspace'
     workspace.mkdir(exist_ok=True)
@@ -412,17 +424,8 @@ def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
     (workspace / 'pair_scores.csv').write_text(pairs)
     patch = tmp_path / 'patch'
     patch.write_text('synthetic change')
-    trusted = {
-        'test_offers.csv': [{'offer_id': 'a'}, {'offer_id': 'b'}],
-        'eval_pairs.csv': [{'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
-        'hidden_test_clusters.csv': [{'offer_id': 'a', 'cluster_id': 'c'},
-                                     {'offer_id': 'b', 'cluster_id': 'c'}],
-        'hidden_eval_pair_labels.csv': [{'pair_id': 'p', 'label': '1'}]}
-    monkeypatch.setattr(scorer, '_read_csv', lambda p: trusted[p.name])
-    monkeypatch.setattr(scorer, '_run_program', lambda *args: {
-        'ok': True, 'duration_s': .5, 'peak_rss_mb': 12,
-        'memory_scope': 'owned_process_group_sampled_rss',
-        'memory_complete': True, 'memory_samples': 2})
+    fixtures = synthetic_fixtures() if fixtures is None else fixtures
+    monkeypatch.setattr(scorer, '_read_csv', lambda p: fixtures[p.name])
     output = tmp_path / 'verify.json'
     monkeypatch.setattr(sys, 'argv', ['score', '--workspace', str(workspace),
         '--case', 'synthetic-python', '--pack-id', 'synthetic', '--pack-version', '0.1',
@@ -431,12 +434,56 @@ def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
     return code, json.loads(output.read_text())
 
 
+@pytest.fixture
+def successful_program(scorer, monkeypatch):
+    monkeypatch.setattr(scorer, '_run_program', lambda *args: {
+        'ok': True, 'duration_s': .5, 'peak_rss_mb': 12,
+        'memory_scope': 'owned_process_group_sampled_rss',
+        'memory_complete': True, 'memory_samples': 2})
+
+
+@pytest.mark.parametrize('filename,problem,diagnostic', [
+    ('test_offers.csv', 'duplicate', 'duplicate offer_id'),
+    ('eval_pairs.csv', 'duplicate', 'duplicate pair_id'),
+    ('hidden_test_clusters.csv', 'duplicate', 'duplicate offer_id'),
+    ('hidden_eval_pair_labels.csv', 'duplicate', 'duplicate pair_id'),
+    ('hidden_test_clusters.csv', 'missing', 'missing 1 expected ids'),
+    ('hidden_eval_pair_labels.csv', 'extra', 'contains 1 unknown ids'),
+    ('eval_pairs.csv', 'dangling', 'unknown offer_id_right'),
+])
+def test_invalid_fixture_identities_stop_before_candidate(
+    scorer, tmp_path, monkeypatch, filename, problem, diagnostic,
+):
+    fixtures = synthetic_fixtures()
+    rows = fixtures[filename]
+    if problem == 'duplicate':
+        rows.append(rows[0].copy())
+    elif problem == 'missing':
+        rows.pop()
+    elif problem == 'extra':
+        rows.append({'pair_id': 'extra', 'label': '0'})
+    elif problem == 'dangling':
+        rows[0]['offer_id_right'] = 'unknown'
+
+    def forbidden(*args):
+        pytest.fail('candidate ran with invalid fixture identities')
+
+    monkeypatch.setattr(scorer, '_run_program', forbidden)
+    code, payload = run_synthetic_main(scorer, tmp_path, monkeypatch, '', '', fixtures=fixtures)
+    assert code == 1
+    assert payload['passed'] is False
+    assert payload['error'] == 'invalid scoring fixtures'
+    assert filename in payload['fixture_errors'][0]
+    assert diagnostic in payload['fixture_errors'][0]
+    assert 'program' not in payload
+
+
 @pytest.mark.parametrize('clusters,pairs', [
     ('offer_id,cluster_id\n', 'pair_id,score\np,1\n'),
     ('offer_id,cluster_id\na,c\na,c\nb,c\n', 'pair_id,score\np,1\n'),
     ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\n'),
     ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\np,1\np,0\n')])
-def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch, clusters, pairs):
+def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch, successful_program, clusters, pairs):
     def forbidden(**kwargs):
         pytest.fail('quality calculation reached with invalid evidence')
     monkeypatch.setattr(scorer, '_bcubed_metrics', forbidden)
@@ -450,7 +497,7 @@ def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch
     assert payload.get('pr_curve') is None
 
 
-def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monkeypatch):
+def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monkeypatch, successful_program):
     _, payload = run_synthetic_main(scorer, tmp_path, monkeypatch,
         'offer_id,cluster_id\na,c1\nb,c2\n', 'pair_id,score\np,0\n')
     assert payload['prediction_errors'] == []
