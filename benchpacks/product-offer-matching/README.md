@@ -202,9 +202,10 @@ sweep over equal-score threshold groups (O(n log n) time, O(n) retained rows).
 Threshold rows retain the `score >= threshold` convention. Average precision is
 noninterpolated: sum each group's recall increment times precision after the
 whole group is admitted. A positive and a negative tied at the same score have
-AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
-the highest threshold on ties. Published historical artifacts are unchanged;
-older per-item AP can differ for tied scores and must be identified accordingly.
+AP 0.5 in either CSV order. AP is zero with no positives. The best-hidden row
+is selected by the exact F1 ratio from the confusion counts, with the highest
+threshold winning exact ties. F1 is displayed to six decimal places. Older
+per-item AP can differ for tied scores and must be identified accordingly.
 
 ### Valid quality evidence and result publication
 

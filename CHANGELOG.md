@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Select the best product-offer pair threshold using exact F1, with ties
+  resolved in favor of the highest score threshold.
+
 - Fail product-offer scoring before candidate execution when fixture IDs are
   duplicated, hidden-label coverage differs, or eval pair endpoints are unknown.
 

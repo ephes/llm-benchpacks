@@ -4,6 +4,11 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-27 (round 232 B19)
+
+- Select the best product-offer pair threshold using the exact F1 ratio,
+  keeping the highest threshold on ties.
+
 ## 2026-11-27 (round 232 B18)
 
 - Validate product-offer fixture identities, hidden-label coverage and eval

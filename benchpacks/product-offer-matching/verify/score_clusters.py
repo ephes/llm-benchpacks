@@ -607,6 +607,8 @@ def _precision_recall_curve(
     tp = fp = 0
     average_precision = 0.0
     curve: list[dict[str, Any]] = []
+    best_row: dict[str, Any] = {}
+    best_tp, best_denominator = 0, 1
     for threshold, group in groupby(ordered, key=scores.__getitem__):
         previous_tp = tp
         for pair_id in group:
@@ -619,20 +621,24 @@ def _precision_recall_curve(
         precision = tp / (tp + fp)
         recall = tp / total_pos if total_pos else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        curve.append({
+        row = {
             "threshold": threshold, "precision": round(precision, 6),
             "recall": round(recall, 6), "f1": round(f1, 6),
             "accuracy": round((tp + tn) / len(scored_ids), 6),
             "tp": tp, "fp": fp, "tn": tn, "fn": fn,
             "positive_prevalence": round(total_pos / len(scored_ids), 6),
-        })
+        }
+        curve.append(row)
+        # Compare 2*TP / (TP+FP+total positives) exactly. Thresholds descend,
+        # so keeping the first equal ratio favors the highest threshold.
+        denominator = tp + fp + total_pos
+        if not best_row or tp * best_denominator > best_tp * denominator:
+            best_row = row
+            best_tp, best_denominator = tp, denominator
         # Noninterpolated AP: each entire tie group contributes its recall
         # increment times precision at the end of that threshold group.
         if total_pos:
             average_precision += (tp - previous_tp) / total_pos * precision
-    best_f1 = max((row["f1"] for row in curve), default=0.0)
-    best_rows = [row for row in curve if row["f1"] == best_f1]
-    best_row = best_rows[0] if best_rows else {}
     summary = {
         "average_precision": round(average_precision, 6),
         "points": len(curve),

@@ -377,6 +377,28 @@ def test_curve_matches_independent_threshold_oracle(scorer):
         assert summary['average_precision'] == round(ap, 6)
 
 
+@pytest.mark.parametrize('counts,best_threshold', [
+    ([(5000, 5001), (1, 3), (4999, 20000)], 2),  # 10002/20005 > 10000/20001
+    ([(1, 1), (1, 3)], 3),  # Both thresholds have exact F1 of 1/2.
+])
+def test_curve_selects_exact_best_threshold(scorer, counts, best_threshold):
+    labels = {}
+    scores = {}
+    for offset, (positives, negatives) in enumerate(counts):
+        for match in [1] * positives + [0] * negatives:
+            pair_id = str(len(labels))
+            labels[pair_id] = match
+            scores[pair_id] = float(3 - offset)
+
+    curve, summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert curve[0]['f1'] == curve[1]['f1']
+    assert summary['best_hidden']['threshold'] == best_threshold
+    assert summary['best_hidden']['f1'] == curve[0]['f1']
+
+
 def test_curve_classification_work_is_linear_after_sort(scorer):
     class Counted(dict):
         reads = 0

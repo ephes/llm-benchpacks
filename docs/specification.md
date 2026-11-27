@@ -177,7 +177,8 @@ Initial packs:
   exact hidden-label coverage, and eval pair endpoints in the test offer set.
   Fixture admission failures report `fixture_errors`. The verifier reports
   B-cubed cluster metrics, pairwise
-  cluster metrics, an eval-pair precision/recall curve and average precision
+  cluster metrics, an eval-pair precision/recall curve with its best exact-F1
+  threshold (highest threshold on ties), and average precision
   from `pair_scores.csv`, process RSS, offers per second, eval pairs per
   second, and a transparent combined score. The longer harness timeout is
   deliberate for local long-context Pi/Qwen runs that must prefill the
