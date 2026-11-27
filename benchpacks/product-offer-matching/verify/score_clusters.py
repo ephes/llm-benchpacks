@@ -457,6 +457,15 @@ def _load_scoring_fixtures(
     )
 
 
+def _round6(numerator: int, denominator: int) -> float:
+    """Round an exact ratio half-even to six decimals before converting it."""
+    return float(round(Fraction(numerator, denominator), 6)) if denominator else 0.0
+
+
+def _round6_exact(value: Fraction) -> float:
+    return float(round(value, 6))
+
+
 def _comb2(value: int) -> int:
     return value * (value - 1) // 2
 
@@ -494,9 +503,9 @@ def _bcubed_metrics(
     ) / offer_count
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else Fraction()
     return {
-        "precision": round(float(precision), 6),
-        "recall": round(float(recall), 6),
-        "f1": round(float(f1), 6),
+        "precision": _round6_exact(precision),
+        "recall": _round6_exact(recall),
+        "f1": _round6_exact(f1),
     }, f1
 
 
@@ -520,13 +529,11 @@ def _cluster_pairwise_metrics(
     tp = sum(_comb2(value) for value in intersections.values())
     fp = predicted_pairs - tp
     fn = true_pairs - tp
-    precision = tp / predicted_pairs if predicted_pairs else 0.0
-    recall = tp / true_pairs if true_pairs else 0.0
     f1 = Fraction(2 * tp, (true_pairs + predicted_pairs) or 1)
     return {
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "f1": round(float(f1), 6),
+        "precision": _round6(tp, predicted_pairs),
+        "recall": _round6(tp, true_pairs),
+        "f1": _round6_exact(f1),
         "tp_pairs": tp,
         "fp_pairs": fp,
         "fn_pairs": fn,
@@ -575,20 +582,16 @@ def _binary_metrics(
             tn += 1
         elif predicted == 0 and actual == 1:
             fn += 1
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    accuracy = (tp + tn) / len(expected_ids) if expected_ids else 0.0
     return {
-        "f1": round(f1, 6),
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "accuracy": round(accuracy, 6),
+        "f1": _round6(2 * tp, 2 * tp + fp + fn),
+        "precision": _round6(tp, tp + fp),
+        "recall": _round6(tp, tp + fn),
+        "accuracy": _round6(tp + tn, len(expected_ids)),
         "tp": tp,
         "fp": fp,
         "tn": tn,
         "fn": fn,
-        "positive_prevalence": round(sum(labels.values()) / len(labels), 6),
+        "positive_prevalence": _round6(sum(labels.values()), len(labels)),
     }
 
 
@@ -625,19 +628,21 @@ def _precision_recall_curve(
         fn = total_pos - tp
         tn = total_neg - fp
         precision = tp / (tp + fp)
-        recall = tp / total_pos if total_pos else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        # 2*TP / (TP+FP+total positives) is the exact F1 ratio. Every
+        # published ratio rounds half-even from its exact value, so equal
+        # ratios publish equal values and decimal midpoints are not decided
+        # by binary approximation.
+        denominator = tp + fp + total_pos
         row = {
-            "threshold": threshold, "precision": round(precision, 6),
-            "recall": round(recall, 6), "f1": round(f1, 6),
-            "accuracy": round((tp + tn) / len(scored_ids), 6),
+            "threshold": threshold, "precision": _round6(tp, tp + fp),
+            "recall": _round6(tp, total_pos), "f1": _round6(2 * tp, denominator),
+            "accuracy": _round6(tp + tn, len(scored_ids)),
             "tp": tp, "fp": fp, "tn": tn, "fn": fn,
-            "positive_prevalence": round(total_pos / len(scored_ids), 6),
+            "positive_prevalence": _round6(total_pos, len(scored_ids)),
         }
         curve.append(row)
-        # Compare 2*TP / (TP+FP+total positives) exactly. Thresholds descend,
-        # so keeping the first equal ratio favors the highest threshold.
-        denominator = tp + fp + total_pos
+        # Compare that ratio exactly. Thresholds descend, so keeping the
+        # first equal ratio favors the highest threshold.
         if not best_row or tp * best_denominator > best_tp * denominator:
             best_row = row
             best_tp, best_denominator = tp, denominator
@@ -649,7 +654,13 @@ def _precision_recall_curve(
         "average_precision": round(average_precision, 6),
         "points": len(curve),
         "best_hidden": {
-            key: (round(value, 6) if isinstance(value, float) else value)
+            # The threshold keeps full precision so applying it reproduces the
+            # reported confusion counts; metrics are already rounded.
+            key: (
+                round(value, 6)
+                if isinstance(value, float) and key != "threshold"
+                else value
+            )
             for key, value in best_row.items()
         },
     }
@@ -676,7 +687,11 @@ def _write_pr_curve(path: Path, curve: list[dict[str, Any]]) -> None:
             writer.writerow(
                 {
                     key: (
-                        f"{row[key]:.12g}"
+                        # repr round-trips, so a cutoff read back from the
+                        # curve selects exactly the row's pairs.
+                        repr(row[key])
+                        if key == "threshold" and isinstance(row.get(key), float)
+                        else f"{row[key]:.12g}"
                         if isinstance(row.get(key), float)
                         else row.get(key)
                     )

@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import time
+from fractions import Fraction
 from pathlib import Path
 
 import psutil
@@ -366,12 +367,14 @@ def test_curve_matches_independent_threshold_oracle(scorer):
             fn = positives - tp
             tn = n - tp - fp - fn
             precision = tp / (tp+fp)
-            recall = tp / positives if positives else 0
-            f1 = 2*precision*recall/(precision+recall) if precision+recall else 0
+
+            def exact(num, den):
+                return float(round(Fraction(num, den), 6)) if den else 0.0
+
             assert row == dict(threshold=threshold, tp=tp, fp=fp, tn=tn, fn=fn,
-                precision=round(precision, 6), recall=round(recall, 6),
-                f1=round(f1, 6), accuracy=round((tp+tn)/n, 6),
-                positive_prevalence=round(positives/n, 6))
+                precision=exact(tp, tp+fp), recall=exact(tp, positives),
+                f1=exact(2*tp, tp+fp+positives), accuracy=exact(tp+tn, n),
+                positive_prevalence=exact(positives, n))
             ap += (tp-previous_tp) * precision / positives if positives else 0
             previous_tp = tp
         assert summary['average_precision'] == round(ap, 6)
@@ -380,6 +383,7 @@ def test_curve_matches_independent_threshold_oracle(scorer):
 @pytest.mark.parametrize('counts,best_threshold', [
     ([(5000, 5001), (1, 3), (4999, 20000)], 2),  # 10002/20005 > 10000/20001
     ([(1, 1), (1, 3)], 3),  # Both thresholds have exact F1 of 1/2.
+    ([(53, 3), (53, 203), (94, 400)], 3),  # Exact F1 53/128 at both rows.
 ])
 def test_curve_selects_exact_best_threshold(scorer, counts, best_threshold):
     labels = {}
@@ -397,6 +401,44 @@ def test_curve_selects_exact_best_threshold(scorer, counts, best_threshold):
     assert curve[0]['f1'] == curve[1]['f1']
     assert summary['best_hidden']['threshold'] == best_threshold
     assert summary['best_hidden']['f1'] == curve[0]['f1']
+
+
+def test_curve_rounds_exact_ratio_midpoints_half_even(scorer):
+    # 8004/12800 = 0.6253125 exactly; the float is slightly above it.
+    labels = {}
+    scores = {}
+    for score, (positives, negatives) in [(1.0, (4002, 3798)), (0.0, (998, 0))]:
+        for match in [1] * positives + [0] * negatives:
+            pair_id = str(len(labels))
+            labels[pair_id] = match
+            scores[pair_id] = score
+    curve, _summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert curve[0]['f1'] == 0.625312
+    metrics = scorer._binary_metrics(
+        expected_ids=list(labels), labels=labels,
+        predictions={pair_id: int(score == 1.0) for pair_id, score in scores.items()},
+    )
+    assert metrics['f1'] == 0.625312
+
+
+def test_best_threshold_keeps_full_precision(scorer, tmp_path):
+    import csv
+    cutoff = 0.9999999999999
+    labels = {'a': 1, 'b': 1, 'c': 0}
+    scores = {'a': 1.0, 'b': cutoff, 'c': 0.5}
+    curve, summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert summary['best_hidden']['threshold'] == cutoff
+    path = tmp_path / 'curve.csv'
+    scorer._write_pr_curve(path, curve)
+    with path.open(newline='') as handle:
+        rows = list(csv.DictReader(handle))
+    assert [float(row['threshold']) for row in rows] == [1.0, cutoff, 0.5]
 
 
 def test_curve_classification_work_is_linear_after_sort(scorer):

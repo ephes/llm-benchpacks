@@ -3,7 +3,9 @@
 ## Unreleased
 
 - Select the best product-offer pair threshold using exact F1, with ties
-  resolved in favor of the highest score threshold.
+  resolved in favor of the highest score threshold. Curve F1 values come from
+  the same exact ratio, published pair and cluster ratios round half-even from
+  exact values, and published thresholds keep full precision.
 
 - Apply the inclusive product-offer cluster F1 minima to exact values before
   rounding reported metrics.

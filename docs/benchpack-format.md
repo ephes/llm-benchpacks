@@ -917,7 +917,8 @@ strict finite unique-member metrics JSON; see the pack README for ceilings.
 Product-offer AP uses whole tied-score threshold groups: recall increment times
 precision at each group end, summed without interpolation (zero with no positives).
 The best-hidden row maximizes the exact F1 ratio, choosing the highest score
-threshold on exact ties. The published F1 is rounded to six decimal places.
+threshold on exact ties. Each row's F1 is that ratio rounded half-even from its exact value to six decimal places;
+thresholds keep full, round-trip precision in the JSON and curve CSV.
 Passing requires exact B-cubed F1 of at least `0.70` and exact pairwise cluster
 F1 of at least `0.20`. Both reported cluster F1 values round to six decimal places.
 

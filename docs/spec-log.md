@@ -10,6 +10,9 @@ working history and open questions.
   keeping the highest threshold on ties.
 - Evaluate the inclusive B-cubed and pairwise cluster pass minima using exact
   F1 before rounding the published metrics.
+- Publish every curve row's F1 from the same exact ratio and keep thresholds at
+  full, round-trip precision in `best_hidden` and the curve CSV. Published
+  count ratios round half-even from their exact values.
 
 ## 2026-11-27 (round 232 B18)
 

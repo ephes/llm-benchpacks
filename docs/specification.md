@@ -2237,7 +2237,11 @@ noninterpolated: sum each group's recall increment times precision after the
 whole group is admitted. A positive and a negative tied at the same score have
 AP 0.5 in either CSV order. AP is zero with no positives. The best-hidden row
 maximizes the exact F1 ratio from the confusion counts and takes the highest
-threshold on exact ties. The reported F1 rounds to six decimal places. Older
+threshold on exact ties. Every row's F1 is that ratio rounded half-even to six
+decimal places from its exact value (as are the other published count ratios),
+so equal ratios publish equal F1. Thresholds keep full precision in the
+best-hidden JSON and round-trip in the curve CSV, so applying a published
+cutoff reproduces its counts. Older
 per-item AP can differ for tied scores and must be identified accordingly.
 
 ### Valid quality evidence and result publication
