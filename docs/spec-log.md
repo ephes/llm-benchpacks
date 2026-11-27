@@ -4,6 +4,23 @@ Use this file for dated changes to the benchmark design. It is intentionally
 lighter than ADRs: decisions go in `docs/decisions.md`; this file captures the
 working history and open questions.
 
+## 2026-11-27 (round 232 B19)
+
+- Select the best product-offer pair threshold using the exact F1 ratio,
+  keeping the highest threshold on ties.
+- Evaluate the inclusive B-cubed and pairwise cluster pass minima using exact
+  F1 before rounding the published metrics.
+- Publish every curve row's F1 from the same exact ratio and keep thresholds at
+  full, round-trip precision in `best_hidden` and the curve CSV. Published
+  count ratios round half-even from their exact values.
+
+## 2026-11-27 (round 232 B18)
+
+- Validate product-offer fixture identities, hidden-label coverage and eval
+  pair endpoints before candidate execution.
+- Retain installed product-offer curves when JSON replacement raises, including
+  when the new reference has already become visible.
+
 ## 2026-11-24 (round 186 B20)
 
 - Gate case-level prefill parity on matching pack versions in compare and

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Select the best product-offer pair threshold using exact F1, with ties
+  resolved in favor of the highest score threshold. Curve F1 values come from
+  the same exact ratio, published pair and cluster ratios round half-even from
+  exact values, and published thresholds keep full precision.
+
+- Apply the inclusive product-offer cluster F1 minima to exact values before
+  rounding reported metrics.
+
+- Fail product-offer scoring before candidate execution when fixture IDs are
+  duplicated, hidden-label coverage differs, or eval pair endpoints are unknown.
+
+- Retain the product-offer precision/recall curve if JSON publication is
+  interrupted, keeping references readable after a completed rename.
+
 - Withhold prefill TPS in comparisons and reports when the same case comes
   from different versions of a pack. Other measured medians remain visible.
 

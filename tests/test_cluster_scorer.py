@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import time
+from fractions import Fraction
 from pathlib import Path
 
 import psutil
@@ -86,14 +87,17 @@ def test_group_signal_to_scorer_retires_candidate_session(tmp_path, signum):
     # session and is only retired if the scorer unwinds through its cleanup.
     workspace = tmp_path / 'workspace'
     (workspace / 'data').mkdir(parents=True)
-    (workspace / 'data' / 'test_offers.csv').write_text('offer_id\na\n')
-    (workspace / 'data' / 'eval_pairs.csv').write_text('pair_id\np\n')
+    (workspace / 'data' / 'eval_pairs.csv').write_text('pair_id,offer_id_left,offer_id_right\np,a,b\n')
+    (workspace / 'data' / 'test_offers.csv').write_text('offer_id\na\nb\n')
+    (tmp_path / 'hidden_test_clusters.csv').write_text('offer_id,cluster_id\na,c\nb,c\n')
+    (tmp_path / 'hidden_eval_pair_labels.csv').write_text('pair_id,label\np,1\n')
     pid_file = tmp_path / 'pid'
     candidate = (f"import os,time; open({str(pid_file)!r},'w').write(str(os.getpid())); "
                  "time.sleep(30)")
     code = f"""import importlib.util, sys
 spec=importlib.util.spec_from_file_location('s', {str(SCORER.resolve())!r})
 s=importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
+s.__file__ = {str(tmp_path / 'score_clusters.py')!r}
 s._run_program = lambda w, c, o: s._run_command([sys.executable, '-c', {candidate!r}], cwd=w, timeout_s=30)
 sys.argv = ['score', '--workspace', {str(workspace)!r}, '--case', 'c', '--pack-id', 'p',
             '--pack-version', '1', '--source-fixture-id', 'f', '--patch', 'missing.patch',
@@ -363,15 +367,78 @@ def test_curve_matches_independent_threshold_oracle(scorer):
             fn = positives - tp
             tn = n - tp - fp - fn
             precision = tp / (tp+fp)
-            recall = tp / positives if positives else 0
-            f1 = 2*precision*recall/(precision+recall) if precision+recall else 0
+
+            def exact(num, den):
+                return float(round(Fraction(num, den), 6)) if den else 0.0
+
             assert row == dict(threshold=threshold, tp=tp, fp=fp, tn=tn, fn=fn,
-                precision=round(precision, 6), recall=round(recall, 6),
-                f1=round(f1, 6), accuracy=round((tp+tn)/n, 6),
-                positive_prevalence=round(positives/n, 6))
+                precision=exact(tp, tp+fp), recall=exact(tp, positives),
+                f1=exact(2*tp, tp+fp+positives), accuracy=exact(tp+tn, n),
+                positive_prevalence=exact(positives, n))
             ap += (tp-previous_tp) * precision / positives if positives else 0
             previous_tp = tp
         assert summary['average_precision'] == round(ap, 6)
+
+
+@pytest.mark.parametrize('counts,best_threshold', [
+    ([(5000, 5001), (1, 3), (4999, 20000)], 2),  # 10002/20005 > 10000/20001
+    ([(1, 1), (1, 3)], 3),  # Both thresholds have exact F1 of 1/2.
+    ([(53, 3), (53, 203), (94, 400)], 3),  # Exact F1 53/128 at both rows.
+])
+def test_curve_selects_exact_best_threshold(scorer, counts, best_threshold):
+    labels = {}
+    scores = {}
+    for offset, (positives, negatives) in enumerate(counts):
+        for match in [1] * positives + [0] * negatives:
+            pair_id = str(len(labels))
+            labels[pair_id] = match
+            scores[pair_id] = float(3 - offset)
+
+    curve, summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert curve[0]['f1'] == curve[1]['f1']
+    assert summary['best_hidden']['threshold'] == best_threshold
+    assert summary['best_hidden']['f1'] == curve[0]['f1']
+
+
+def test_curve_rounds_exact_ratio_midpoints_half_even(scorer):
+    # 8004/12800 = 0.6253125 exactly; the float is slightly above it.
+    labels = {}
+    scores = {}
+    for score, (positives, negatives) in [(1.0, (4002, 3798)), (0.0, (998, 0))]:
+        for match in [1] * positives + [0] * negatives:
+            pair_id = str(len(labels))
+            labels[pair_id] = match
+            scores[pair_id] = score
+    curve, _summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert curve[0]['f1'] == 0.625312
+    metrics = scorer._binary_metrics(
+        expected_ids=list(labels), labels=labels,
+        predictions={pair_id: int(score == 1.0) for pair_id, score in scores.items()},
+    )
+    assert metrics['f1'] == 0.625312
+
+
+def test_best_threshold_keeps_full_precision(scorer, tmp_path):
+    import csv
+    cutoff = 0.9999999999999
+    labels = {'a': 1, 'b': 1, 'c': 0}
+    scores = {'a': 1.0, 'b': cutoff, 'c': 0.5}
+    curve, summary, errors = scorer._precision_recall_curve(
+        expected_ids=list(labels), labels=labels, scores=scores,
+    )
+    assert not errors
+    assert summary['best_hidden']['threshold'] == cutoff
+    path = tmp_path / 'curve.csv'
+    scorer._write_pr_curve(path, curve)
+    with path.open(newline='') as handle:
+        rows = list(csv.DictReader(handle))
+    assert [float(row['threshold']) for row in rows] == [1.0, cutoff, 0.5]
 
 
 def test_curve_classification_work_is_linear_after_sort(scorer):
@@ -404,7 +471,16 @@ def test_average_precision_is_invariant_within_ties(scorer):
     assert summary['average_precision'] == .5
 
 
-def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
+def synthetic_fixtures():
+    return {
+        'test_offers.csv': [{'offer_id': 'a'}, {'offer_id': 'b'}],
+        'eval_pairs.csv': [{'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
+        'hidden_test_clusters.csv': [{'offer_id': 'a', 'cluster_id': 'c'},
+                                     {'offer_id': 'b', 'cluster_id': 'c'}],
+        'hidden_eval_pair_labels.csv': [{'pair_id': 'p', 'label': '1'}]}
+
+
+def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs, *, fixtures=None):
     import json
     workspace = tmp_path / 'workspace'
     workspace.mkdir(exist_ok=True)
@@ -412,17 +488,8 @@ def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
     (workspace / 'pair_scores.csv').write_text(pairs)
     patch = tmp_path / 'patch'
     patch.write_text('synthetic change')
-    trusted = {
-        'test_offers.csv': [{'offer_id': 'a'}, {'offer_id': 'b'}],
-        'eval_pairs.csv': [{'pair_id': 'p', 'offer_id_left': 'a', 'offer_id_right': 'b'}],
-        'hidden_test_clusters.csv': [{'offer_id': 'a', 'cluster_id': 'c'},
-                                     {'offer_id': 'b', 'cluster_id': 'c'}],
-        'hidden_eval_pair_labels.csv': [{'pair_id': 'p', 'label': '1'}]}
-    monkeypatch.setattr(scorer, '_read_csv', lambda p: trusted[p.name])
-    monkeypatch.setattr(scorer, '_run_program', lambda *args: {
-        'ok': True, 'duration_s': .5, 'peak_rss_mb': 12,
-        'memory_scope': 'owned_process_group_sampled_rss',
-        'memory_complete': True, 'memory_samples': 2})
+    fixtures = synthetic_fixtures() if fixtures is None else fixtures
+    monkeypatch.setattr(scorer, '_read_csv', lambda p: fixtures[p.name])
     output = tmp_path / 'verify.json'
     monkeypatch.setattr(sys, 'argv', ['score', '--workspace', str(workspace),
         '--case', 'synthetic-python', '--pack-id', 'synthetic', '--pack-version', '0.1',
@@ -431,12 +498,56 @@ def run_synthetic_main(scorer, tmp_path, monkeypatch, clusters, pairs):
     return code, json.loads(output.read_text())
 
 
+@pytest.fixture
+def successful_program(scorer, monkeypatch):
+    monkeypatch.setattr(scorer, '_run_program', lambda *args: {
+        'ok': True, 'duration_s': .5, 'peak_rss_mb': 12,
+        'memory_scope': 'owned_process_group_sampled_rss',
+        'memory_complete': True, 'memory_samples': 2})
+
+
+@pytest.mark.parametrize('filename,problem,diagnostic', [
+    ('test_offers.csv', 'duplicate', 'duplicate offer_id'),
+    ('eval_pairs.csv', 'duplicate', 'duplicate pair_id'),
+    ('hidden_test_clusters.csv', 'duplicate', 'duplicate offer_id'),
+    ('hidden_eval_pair_labels.csv', 'duplicate', 'duplicate pair_id'),
+    ('hidden_test_clusters.csv', 'missing', 'missing 1 expected ids'),
+    ('hidden_eval_pair_labels.csv', 'extra', 'contains 1 unknown ids'),
+    ('eval_pairs.csv', 'dangling', 'unknown offer_id_right'),
+])
+def test_invalid_fixture_identities_stop_before_candidate(
+    scorer, tmp_path, monkeypatch, filename, problem, diagnostic,
+):
+    fixtures = synthetic_fixtures()
+    rows = fixtures[filename]
+    if problem == 'duplicate':
+        rows.append(rows[0].copy())
+    elif problem == 'missing':
+        rows.pop()
+    elif problem == 'extra':
+        rows.append({'pair_id': 'extra', 'label': '0'})
+    elif problem == 'dangling':
+        rows[0]['offer_id_right'] = 'unknown'
+
+    def forbidden(*args):
+        pytest.fail('candidate ran with invalid fixture identities')
+
+    monkeypatch.setattr(scorer, '_run_program', forbidden)
+    code, payload = run_synthetic_main(scorer, tmp_path, monkeypatch, '', '', fixtures=fixtures)
+    assert code == 1
+    assert payload['passed'] is False
+    assert payload['error'] == 'invalid scoring fixtures'
+    assert filename in payload['fixture_errors'][0]
+    assert diagnostic in payload['fixture_errors'][0]
+    assert 'program' not in payload
+
+
 @pytest.mark.parametrize('clusters,pairs', [
     ('offer_id,cluster_id\n', 'pair_id,score\np,1\n'),
     ('offer_id,cluster_id\na,c\na,c\nb,c\n', 'pair_id,score\np,1\n'),
     ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\n'),
     ('offer_id,cluster_id\na,c\nb,c\n', 'pair_id,score\np,1\np,0\n')])
-def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch, clusters, pairs):
+def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch, successful_program, clusters, pairs):
     def forbidden(**kwargs):
         pytest.fail('quality calculation reached with invalid evidence')
     monkeypatch.setattr(scorer, '_bcubed_metrics', forbidden)
@@ -450,12 +561,65 @@ def test_invalid_predictions_never_receive_quality(scorer, tmp_path, monkeypatch
     assert payload.get('pr_curve') is None
 
 
-def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monkeypatch):
+def test_complete_wrong_predictions_still_receive_quality(scorer, tmp_path, monkeypatch, successful_program):
     _, payload = run_synthetic_main(scorer, tmp_path, monkeypatch,
         'offer_id,cluster_id\na,c1\nb,c2\n', 'pair_id,score\np,0\n')
     assert payload['prediction_errors'] == []
     assert payload['metrics']['pairwise_cluster']['f1'] == 0
     assert isinstance(payload['combined_score']['value'], float)
+
+
+def run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted):
+    fixtures = synthetic_fixtures()
+    partitions = list(enumerate(zip(truth, predicted, strict=True)))
+    fixtures['test_offers.csv'] = [{'offer_id': str(i)} for i, _ in partitions]
+    fixtures['hidden_test_clusters.csv'] = [
+        {'offer_id': str(i), 'cluster_id': gold} for i, (gold, _) in partitions
+    ]
+    fixtures['eval_pairs.csv'][0].update(offer_id_left='0', offer_id_right='1')
+    cluster_csv = 'offer_id,cluster_id\n' + ''.join(
+        f'{i},{cluster}\n' for i, (_, cluster) in partitions
+    )
+    return run_synthetic_main(
+        scorer, tmp_path, monkeypatch, cluster_csv, 'pair_id,score\np,1\n', fixtures=fixtures,
+    )
+
+
+@pytest.mark.parametrize('fp_offset', [-1, 0, 1])
+def test_pairwise_minimum_uses_exact_f1(scorer, tmp_path, monkeypatch, successful_program, fp_offset):
+    truth = ['correct'] * 500 + [f'single-{i}' for i in range(3500)]
+    predicted = ['correct'] * 500
+    # The three false merges contribute 997,999 pairs. Each extra merge adds one.
+    for size in (1413, 29, 6):
+        predicted.extend([f'merged-{size}'] * size)
+    predicted.extend(truth[len(predicted):])
+    for i in range(fp_offset + 1):
+        predicted[-2 - 2 * i] = predicted[-1 - 2 * i]
+
+    code, payload = run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted)
+    pairwise = payload['metrics']['pairwise_cluster']
+    assert (pairwise['tp_pairs'], pairwise['fp_pairs'], pairwise['fn_pairs']) == (
+        124750, 998000 + fp_offset, 0,
+    )
+    assert pairwise['f1'] == payload['thresholds']['pairwise_cluster_f1_min'] == 0.20
+    assert payload['metrics']['bcubed']['f1'] > 0.70
+    assert payload['passed'] is (fp_offset <= 0)
+    assert code == int(fp_offset > 0)
+
+
+@pytest.mark.parametrize('size_offset', [-1, 0, 1])
+def test_bcubed_minimum_uses_exact_f1(scorer, tmp_path, monkeypatch, successful_program, size_offset):
+    # At offset zero, precision is (2027 + 2 + 1) / 3770 = 7/13 and
+    # recall is 1. Moving a singleton between the two merged groups changes
+    # exact F1 while both variants still round to 0.70.
+    truth = ['correct'] * 2027 + ['mixed'] * 30 + [f'single-{i}' for i in range(1713)]
+    predicted = ['correct'] * 2027 + ['mixed'] * (870 + size_offset) + ['merged'] * (873 - size_offset)
+
+    code, payload = run_synthetic_partition(scorer, tmp_path, monkeypatch, truth, predicted)
+    assert payload['metrics']['bcubed']['f1'] == payload['thresholds']['bcubed_f1_min'] == 0.70
+    assert payload['metrics']['pairwise_cluster']['f1'] > 0.20
+    assert payload['passed'] is (size_offset <= 0)
+    assert code == int(size_offset > 0)
 
 
 def test_missing_cluster_endpoints_are_not_equal(scorer):
@@ -496,6 +660,29 @@ def test_result_publication_preserves_previous_generation(scorer, tmp_path, monk
         scorer._publish_result(output, payload, [])
     assert output.read_bytes() == previous
     assert old_curve.read_bytes() == b'old exact curve\n'
+
+
+def test_result_publication_retains_curve_after_json_rename(scorer, tmp_path, monkeypatch):
+    import json
+
+    output = tmp_path / 'verify.json'
+    replace = scorer.os.replace
+
+    def interrupt_after_replace(src, dst):
+        replace(src, dst)
+        if Path(dst) == output:
+            raise SystemExit(143)
+
+    monkeypatch.setattr(scorer.os, 'replace', interrupt_after_replace)
+    with pytest.raises(SystemExit) as interrupted:
+        scorer._publish_result(output, {'passed': True, 'pr_curve': {'points': 0}}, [])
+    assert interrupted.value.code == 143
+
+    published = json.loads(output.read_text())
+    assert published['passed'] is True
+    assert Path(published['pr_curve']['path']).read_text().splitlines() == [
+        'threshold,precision,recall,f1,accuracy,tp,fp,tn,fn,positive_prevalence',
+    ]
 
 
 def test_generation_reference_survives_outer_normalization(scorer, tmp_path):

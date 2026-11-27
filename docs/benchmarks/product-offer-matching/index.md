@@ -189,7 +189,8 @@ Ranking metrics:
 - Full precision/recall curve over `data/eval_pairs.csv` from
   `pair_scores.csv`.
 - Average precision.
-- Hidden-best F1 point for diagnostics.
+- Hidden-best F1 point for diagnostics, selected by exact F1 with the highest
+  threshold winning ties.
 - Operating-point pair metrics induced by the submitted clusters.
 
 System metrics:
@@ -213,6 +214,9 @@ Pass thresholds:
 
 - B-cubed F1 must be at least `0.70`.
 - Pairwise cluster F1 must be at least `0.20`.
+
+Both minima are inclusive and use exact F1. Published cluster metrics round to
+six decimal places.
 
 The thresholds are deliberately not the main interpretation surface. For model
 comparisons, inspect the metric JSON, PR curve CSV, throughput, memory, and

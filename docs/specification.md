@@ -173,11 +173,16 @@ Initial packs:
   unlabeled `data/test_offers.csv`, and unlabeled `data/eval_pairs.csv`, keep
   hidden test cluster labels and eval-pair labels under `verify/`, capture the
   workspace patch, and run a deterministic `verify-script` that executes the
-  generated clusterer. The verifier reports B-cubed cluster metrics, pairwise
-  cluster metrics, an eval-pair precision/recall curve and average precision
-  from `pair_scores.csv`, process RSS, offers per second, eval pairs per
-  second, and a transparent combined score. The longer harness timeout is
-  deliberate for local long-context Pi/Qwen runs that must prefill the
+  generated clusterer. Before launch, the verifier requires unique fixture IDs,
+  exact hidden-label coverage, and eval pair endpoints in the test offer set.
+  Fixture admission failures report `fixture_errors`. Passing requires exact
+  B-cubed F1 of at least `0.70` and exact pairwise cluster F1 of at least `0.20`.
+  Public cluster metrics round to six decimal places. The verifier reports
+  B-cubed and pairwise cluster metrics, an eval-pair precision/recall curve,
+  the threshold with the highest exact F1 (higher threshold on ties), and
+  average precision from `pair_scores.csv`, process RSS, offers per second,
+  eval pairs per second, and a transparent combined score. The longer harness
+  timeout supports local long-context Pi/Qwen runs that must prefill the
   real-data fixture preview. This pack is not part of the default matrix and
   does not use LLM-as-judge scoring. The bundled
   `examples/external-agent/pi-agent.py` wrapper for this live lane runs Pi
@@ -2230,9 +2235,14 @@ sweep over equal-score threshold groups (O(n log n) time, O(n) retained rows).
 Threshold rows retain the `score >= threshold` convention. Average precision is
 noninterpolated: sum each group's recall increment times precision after the
 whole group is admitted. A positive and a negative tied at the same score have
-AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
-the highest threshold on ties. Published historical artifacts are unchanged;
-older per-item AP can differ for tied scores and must be identified accordingly.
+AP 0.5 in either CSV order. AP is zero with no positives. The best-hidden row
+maximizes the exact F1 ratio from the confusion counts and takes the highest
+threshold on exact ties. Every row's F1 is that ratio rounded half-even to six
+decimal places from its exact value (as are the other published count ratios),
+so equal ratios publish equal F1. Thresholds keep full precision in the
+best-hidden JSON and round-trip in the curve CSV, so applying a published
+cutoff reproduces its counts. Older
+per-item AP can differ for tied scores and must be identified accordingly.
 
 ### Valid quality evidence and result publication
 
@@ -2244,13 +2254,14 @@ normal numeric quality scores, including genuine low scores.
 
 The scorer stages a complete generation-specific PR CSV and strictly serialized
 JSON before publication. It installs the immutable curve first, then atomically
-replaces the JSON with a reference to that exact generation. Serialization,
-write or replacement failure preserves the previous JSON and its referenced
-curve bytes. Old referenced curves remain intact; consumers must read
-`pr_curve.path`, not infer a fixed `.pr-curve.csv` filename. A process crash may
-leave an unreferenced complete curve. This is atomic visibility, not a promise
-of crash durability across power loss. Outer verifier normalization preserves
-the generation reference.
+replaces the JSON with a reference to that exact generation. A failure before
+the final rename preserves the previous JSON and its curve. If the rename
+lands before an interruption is reported, the published JSON still has a
+readable curve. Installed curves are retained, including complete generations
+left unreferenced by an interrupted publication. Consumers use `pr_curve.path`
+to locate the curve. Atomic visibility applies during publication. Durability
+across power loss is outside this contract. Outer verifier normalization
+preserves the generation reference.
 
 ### Billiger fixture rebuilding
 

@@ -14,7 +14,8 @@ import sys
 import time
 import tempfile
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 from itertools import groupby
 from typing import Any
@@ -22,8 +23,8 @@ from typing import Any
 import psutil
 
 
-BCUBED_F1_MIN = 0.70
-PAIRWISE_CLUSTER_F1_MIN = 0.20
+BCUBED_F1_MIN = Fraction(7, 10)
+PAIRWISE_CLUSTER_F1_MIN = Fraction(1, 5)
 PROGRAM_TIMEOUT_S = 60.0
 
 
@@ -418,6 +419,53 @@ def _validate_expected_ids(
     return errors
 
 
+def _fixture_rows_by_id(path: Path, column: str) -> dict[str, dict[str, str]]:
+    rows: dict[str, dict[str, str]] = {}
+    for line, row in enumerate(_read_csv(path), start=2):
+        row_id = row.get(column)
+        if not row_id or not row_id.strip():
+            raise ValueError(f"{path.name} row {line} missing {column}")
+        if row_id in rows:
+            raise ValueError(f"{path.name} row {line} has duplicate {column}")
+        rows[row_id] = row
+    return rows
+
+
+def _load_scoring_fixtures(
+    test_path: Path, eval_pairs_path: Path, hidden_clusters_path: Path, hidden_pairs_path: Path,
+) -> tuple[list[str], list[dict[str, str]], dict[str, str], dict[str, int]]:
+    offer_ids = list(_fixture_rows_by_id(test_path, "offer_id"))
+    eval_pairs = _fixture_rows_by_id(eval_pairs_path, "pair_id")
+    hidden_clusters = _fixture_rows_by_id(hidden_clusters_path, "offer_id")
+    hidden_pairs = _fixture_rows_by_id(hidden_pairs_path, "pair_id")
+    errors = _validate_expected_ids(
+        expected_ids=offer_ids, actual_ids=set(hidden_clusters), output_name=hidden_clusters_path.name,
+    ) + _validate_expected_ids(
+        expected_ids=list(eval_pairs), actual_ids=set(hidden_pairs), output_name=hidden_pairs_path.name,
+    )
+    if errors:
+        raise ValueError("; ".join(errors))
+    for line, row in enumerate(eval_pairs.values(), start=2):
+        for endpoint in ("offer_id_left", "offer_id_right"):
+            if row.get(endpoint) not in hidden_clusters:
+                raise ValueError(f"{eval_pairs_path.name} row {line} has unknown {endpoint}")
+    return (
+        offer_ids,
+        list(eval_pairs.values()),
+        {offer_id: row["cluster_id"] for offer_id, row in hidden_clusters.items()},
+        {pair_id: int(row["label"]) for pair_id, row in hidden_pairs.items()},
+    )
+
+
+def _round6(numerator: int, denominator: int) -> float:
+    """Round an exact ratio half-even to six decimals before converting it."""
+    return float(round(Fraction(numerator, denominator), 6)) if denominator else 0.0
+
+
+def _round6_exact(value: Fraction) -> float:
+    return float(round(value, 6))
+
+
 def _comb2(value: int) -> int:
     return value * (value - 1) // 2
 
@@ -427,33 +475,38 @@ def _bcubed_metrics(
     expected_ids: list[str],
     true_clusters: dict[str, str],
     predicted_clusters: dict[str, str],
-) -> dict[str, Any]:
-    true_by_id: dict[str, set[str]] = defaultdict(set)
-    pred_by_id: dict[str, set[str]] = defaultdict(set)
+) -> tuple[dict[str, Any], Fraction]:
+    true_counts: Counter[str] = Counter()
+    pred_counts: Counter[str] = Counter()
     intersections: Counter[tuple[str, str]] = Counter()
     for offer_id in expected_ids:
         true_id = true_clusters[offer_id]
         pred_id = predicted_clusters.get(offer_id, f"__missing__{offer_id}")
-        true_by_id[true_id].add(offer_id)
-        pred_by_id[pred_id].add(offer_id)
+        true_counts[true_id] += 1
+        pred_counts[pred_id] += 1
         intersections[(true_id, pred_id)] += 1
 
-    precision_sum = 0.0
-    recall_sum = 0.0
-    for offer_id in expected_ids:
-        true_id = true_clusters[offer_id]
-        pred_id = predicted_clusters.get(offer_id, f"__missing__{offer_id}")
-        overlap = intersections[(true_id, pred_id)]
-        precision_sum += overlap / len(pred_by_id[pred_id])
-        recall_sum += overlap / len(true_by_id[true_id])
-    precision = precision_sum / len(expected_ids) if expected_ids else 0.0
-    recall = recall_sum / len(expected_ids) if expected_ids else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    # Each of the overlap offers contributes overlap / cluster size. Group
+    # the squared overlaps by denominator before adding exact fractions.
+    precision_numerators: Counter[int] = Counter()
+    recall_numerators: Counter[int] = Counter()
+    for (true_id, pred_id), overlap in intersections.items():
+        squared_overlap = overlap ** 2
+        precision_numerators[pred_counts[pred_id]] += squared_overlap
+        recall_numerators[true_counts[true_id]] += squared_overlap
+    offer_count = len(expected_ids) or 1
+    precision = sum(
+        (Fraction(total, size) for size, total in precision_numerators.items()), Fraction(),
+    ) / offer_count
+    recall = sum(
+        (Fraction(total, size) for size, total in recall_numerators.items()), Fraction(),
+    ) / offer_count
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else Fraction()
     return {
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "f1": round(f1, 6),
-    }
+        "precision": _round6_exact(precision),
+        "recall": _round6_exact(recall),
+        "f1": _round6_exact(f1),
+    }, f1
 
 
 def _cluster_pairwise_metrics(
@@ -461,7 +514,7 @@ def _cluster_pairwise_metrics(
     expected_ids: list[str],
     true_clusters: dict[str, str],
     predicted_clusters: dict[str, str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], Fraction]:
     true_counts: Counter[str] = Counter()
     pred_counts: Counter[str] = Counter()
     intersections: Counter[tuple[str, str]] = Counter()
@@ -476,19 +529,17 @@ def _cluster_pairwise_metrics(
     tp = sum(_comb2(value) for value in intersections.values())
     fp = predicted_pairs - tp
     fn = true_pairs - tp
-    precision = tp / predicted_pairs if predicted_pairs else 0.0
-    recall = tp / true_pairs if true_pairs else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    f1 = Fraction(2 * tp, (true_pairs + predicted_pairs) or 1)
     return {
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "f1": round(f1, 6),
+        "precision": _round6(tp, predicted_pairs),
+        "recall": _round6(tp, true_pairs),
+        "f1": _round6_exact(f1),
         "tp_pairs": tp,
         "fp_pairs": fp,
         "fn_pairs": fn,
         "true_pairs": true_pairs,
         "predicted_pairs": predicted_pairs,
-    }
+    }, f1
 
 
 def _eval_cluster_operating_point(
@@ -531,20 +582,16 @@ def _binary_metrics(
             tn += 1
         elif predicted == 0 and actual == 1:
             fn += 1
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    accuracy = (tp + tn) / len(expected_ids) if expected_ids else 0.0
     return {
-        "f1": round(f1, 6),
-        "precision": round(precision, 6),
-        "recall": round(recall, 6),
-        "accuracy": round(accuracy, 6),
+        "f1": _round6(2 * tp, 2 * tp + fp + fn),
+        "precision": _round6(tp, tp + fp),
+        "recall": _round6(tp, tp + fn),
+        "accuracy": _round6(tp + tn, len(expected_ids)),
         "tp": tp,
         "fp": fp,
         "tn": tn,
         "fn": fn,
-        "positive_prevalence": round(sum(labels.values()) / len(labels), 6),
+        "positive_prevalence": _round6(sum(labels.values()), len(labels)),
     }
 
 
@@ -569,6 +616,8 @@ def _precision_recall_curve(
     tp = fp = 0
     average_precision = 0.0
     curve: list[dict[str, Any]] = []
+    best_row: dict[str, Any] = {}
+    best_tp, best_denominator = 0, 1
     for threshold, group in groupby(ordered, key=scores.__getitem__):
         previous_tp = tp
         for pair_id in group:
@@ -579,27 +628,39 @@ def _precision_recall_curve(
         fn = total_pos - tp
         tn = total_neg - fp
         precision = tp / (tp + fp)
-        recall = tp / total_pos if total_pos else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        curve.append({
-            "threshold": threshold, "precision": round(precision, 6),
-            "recall": round(recall, 6), "f1": round(f1, 6),
-            "accuracy": round((tp + tn) / len(scored_ids), 6),
+        # 2*TP / (TP+FP+total positives) is the exact F1 ratio. Every
+        # published ratio rounds half-even from its exact value, so equal
+        # ratios publish equal values and decimal midpoints are not decided
+        # by binary approximation.
+        denominator = tp + fp + total_pos
+        row = {
+            "threshold": threshold, "precision": _round6(tp, tp + fp),
+            "recall": _round6(tp, total_pos), "f1": _round6(2 * tp, denominator),
+            "accuracy": _round6(tp + tn, len(scored_ids)),
             "tp": tp, "fp": fp, "tn": tn, "fn": fn,
-            "positive_prevalence": round(total_pos / len(scored_ids), 6),
-        })
+            "positive_prevalence": _round6(total_pos, len(scored_ids)),
+        }
+        curve.append(row)
+        # Compare that ratio exactly. Thresholds descend, so keeping the
+        # first equal ratio favors the highest threshold.
+        if not best_row or tp * best_denominator > best_tp * denominator:
+            best_row = row
+            best_tp, best_denominator = tp, denominator
         # Noninterpolated AP: each entire tie group contributes its recall
         # increment times precision at the end of that threshold group.
         if total_pos:
             average_precision += (tp - previous_tp) / total_pos * precision
-    best_f1 = max((row["f1"] for row in curve), default=0.0)
-    best_rows = [row for row in curve if row["f1"] == best_f1]
-    best_row = best_rows[0] if best_rows else {}
     summary = {
         "average_precision": round(average_precision, 6),
         "points": len(curve),
         "best_hidden": {
-            key: (round(value, 6) if isinstance(value, float) else value)
+            # The threshold keeps full precision so applying it reproduces the
+            # reported confusion counts; metrics are already rounded.
+            key: (
+                round(value, 6)
+                if isinstance(value, float) and key != "threshold"
+                else value
+            )
             for key, value in best_row.items()
         },
     }
@@ -626,7 +687,11 @@ def _write_pr_curve(path: Path, curve: list[dict[str, Any]]) -> None:
             writer.writerow(
                 {
                     key: (
-                        f"{row[key]:.12g}"
+                        # repr round-trips, so a cutoff read back from the
+                        # curve selects exactly the row's pairs.
+                        repr(row[key])
+                        if key == "threshold" and isinstance(row.get(key), float)
+                        else f"{row[key]:.12g}"
                         if isinstance(row.get(key), float)
                         else row.get(key)
                     )
@@ -653,15 +718,9 @@ def _publish_result(output_path: Path, payload: dict[str, Any], curve) -> None:
         (stage / "result.json").write_text(serialized, encoding="utf-8")
         if curve is not None:
             os.replace(stage / "curve.csv", generation)
-        try:
-            os.replace(stage / "result.json", output_path)
-        except BaseException:
-            if curve is not None:
-                try:
-                    generation.unlink()
-                except OSError:
-                    pass  # An unreferenced complete curve is safe to retain.
-            raise
+        # The rename can succeed before reporting an interruption. Keep the
+        # curve even if a reader has already opened JSON that references it.
+        os.replace(stage / "result.json", output_path)
 
 
 def _combined_score(
@@ -733,8 +792,8 @@ def main() -> int:
         "pack_version": args.pack_version,
         "source_fixture_id": args.source_fixture_id,
         "thresholds": {
-            "bcubed_f1_min": BCUBED_F1_MIN,
-            "pairwise_cluster_f1_min": PAIRWISE_CLUSTER_F1_MIN,
+            "bcubed_f1_min": float(BCUBED_F1_MIN),
+            "pairwise_cluster_f1_min": float(PAIRWISE_CLUSTER_F1_MIN),
         },
         "patch_exists": patch_path.is_file(),
         "patch_bytes": patch_path.stat().st_size if patch_path.is_file() else 0,
@@ -743,16 +802,14 @@ def main() -> int:
 
     curve = None
     try:
-        test_rows = _read_csv(test_path)
-        eval_pairs = _read_csv(eval_pairs_path)
-        expected_offer_ids = [row["offer_id"] for row in test_rows]
+        try:
+            expected_offer_ids, eval_pairs, true_clusters, pair_labels = _load_scoring_fixtures(
+                test_path, eval_pairs_path, hidden_clusters_path, hidden_pairs_path,
+            )
+        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+            payload["fixture_errors"] = [str(exc)]
+            raise ValueError("invalid scoring fixtures") from exc
         expected_pair_ids = [row["pair_id"] for row in eval_pairs]
-        true_clusters = {
-            row["offer_id"]: row["cluster_id"] for row in _read_csv(hidden_clusters_path)
-        }
-        pair_labels = {
-            row["pair_id"]: int(row["label"]) for row in _read_csv(hidden_pairs_path)
-        }
         run_result = _run_program(workspace, args.case, output_path.parent)
         payload["program"] = {
             key: value
@@ -815,12 +872,12 @@ def main() -> int:
                 payload["pr_curve"] = None
                 payload["combined_score"] = {"value": None, "unavailable_reason": "invalid prediction evidence"}
                 raise ValueError("invalid prediction evidence")
-            bcubed = _bcubed_metrics(
+            bcubed, bcubed_f1 = _bcubed_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
                 predicted_clusters=predicted_clusters,
             )
-            pairwise = _cluster_pairwise_metrics(
+            pairwise, pairwise_f1 = _cluster_pairwise_metrics(
                 expected_ids=expected_offer_ids,
                 true_clusters=true_clusters,
                 predicted_clusters=predicted_clusters,
@@ -857,8 +914,8 @@ def main() -> int:
             payload["prediction_errors"] = errors
             payload["passed"] = (
                 not errors
-                and bcubed["f1"] >= BCUBED_F1_MIN
-                and pairwise["f1"] >= PAIRWISE_CLUSTER_F1_MIN
+                and bcubed_f1 >= BCUBED_F1_MIN
+                and pairwise_f1 >= PAIRWISE_CLUSTER_F1_MIN
                 and payload["patch_exists"]
                 and payload["patch_bytes"] > 0
             )

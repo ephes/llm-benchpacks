@@ -134,6 +134,9 @@ Primary pass threshold:
 - B-cubed F1 must be at least `0.70`.
 - Pairwise cluster F1 must be at least `0.20`.
 
+The scorer compares exact cluster F1 values against these inclusive minima.
+The published metrics round to six decimal places.
+
 The verifier writes cluster metrics, eval-pair metrics, precision/recall curve
 metadata, runtime seconds, system metrics, and combined score details into its
 JSON artifact.
@@ -173,6 +176,13 @@ using only the leader PID have a different scope and must not be compared as
 though the memory methodology were unchanged. Candidate `program_metrics`
 remain self-reported and separate from independently observed system metrics.
 
+### Fixture identity checks
+
+Before launching the candidate, the scorer checks that public and hidden CSVs
+have unique offer or pair IDs, that the hidden labels cover exactly the public
+IDs, and that both endpoints of each eval pair are test offers. A failed check
+produces `passed: false` with `error` and `fixture_errors` in the JSON artifact.
+
 ### Candidate file admission
 
 Predictions and optional metrics are opened once with no-follow, nonblocking
@@ -195,9 +205,12 @@ sweep over equal-score threshold groups (O(n log n) time, O(n) retained rows).
 Threshold rows retain the `score >= threshold` convention. Average precision is
 noninterpolated: sum each group's recall increment times precision after the
 whole group is admitted. A positive and a negative tied at the same score have
-AP 0.5 in either CSV order. AP is zero with no positives. Best-hidden F1 keeps
-the highest threshold on ties. Published historical artifacts are unchanged;
-older per-item AP can differ for tied scores and must be identified accordingly.
+AP 0.5 in either CSV order. AP is zero with no positives. The best-hidden row
+is selected by the exact F1 ratio from the confusion counts, with the highest
+threshold winning exact ties. Each row's F1 is that ratio rounded half-even
+from its exact value to six decimal places. Thresholds keep full precision in `best_hidden` and round-trip
+in the curve CSV, so a published cutoff reproduces its confusion counts.
+Older per-item AP can differ for tied scores and must be identified accordingly.
 
 ### Valid quality evidence and result publication
 
@@ -209,13 +222,14 @@ normal numeric quality scores, including genuine low scores.
 
 The scorer stages a complete generation-specific PR CSV and strictly serialized
 JSON before publication. It installs the immutable curve first, then atomically
-replaces the JSON with a reference to that exact generation. Serialization,
-write or replacement failure preserves the previous JSON and its referenced
-curve bytes. Old referenced curves remain intact; consumers must read
-`pr_curve.path`, not infer a fixed `.pr-curve.csv` filename. A process crash may
-leave an unreferenced complete curve. This is atomic visibility, not a promise
-of crash durability across power loss. Outer verifier normalization preserves
-the generation reference.
+replaces the JSON with a reference to that exact generation. A failure before
+the JSON rename preserves the previous JSON and its curve. If the rename
+lands before an interruption is reported, the visible JSON's curve remains
+readable. Installed curves are retained, including complete generations left
+unreferenced by an interrupted publication. Consumers locate the curve using
+`pr_curve.path`. Atomic visibility applies during publication. Durability
+across power loss is outside this contract. Outer verifier normalization
+preserves the generation reference.
 
 ### Billiger fixture rebuilding
 
