@@ -1247,7 +1247,9 @@ The product-offer pack-local scorer owns candidate process-group lifecycle and
 bounded pipe capture, and uses psutil for group RSS evidence (see pack README).
 
 The pack-local product-offer scorer publishes an immutable curve generation
-before atomically committing its JSON reference; outer normalization retains it.
+before atomically committing its JSON reference. It retains the installed curve
+if JSON replacement raises, since a reader may already hold the new reference.
+Outer normalization preserves that reference.
 
 Contained evidence reads and copies share `require_stable_file`: descriptor
 identity, size and nanosecond mtime/ctime are fenced after reading, before

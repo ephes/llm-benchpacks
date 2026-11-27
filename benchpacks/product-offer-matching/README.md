@@ -216,13 +216,14 @@ normal numeric quality scores, including genuine low scores.
 
 The scorer stages a complete generation-specific PR CSV and strictly serialized
 JSON before publication. It installs the immutable curve first, then atomically
-replaces the JSON with a reference to that exact generation. Serialization,
-write or replacement failure preserves the previous JSON and its referenced
-curve bytes. Old referenced curves remain intact; consumers must read
-`pr_curve.path`, not infer a fixed `.pr-curve.csv` filename. A process crash may
-leave an unreferenced complete curve. This is atomic visibility, not a promise
-of crash durability across power loss. Outer verifier normalization preserves
-the generation reference.
+replaces the JSON with a reference to that exact generation. A failure before
+the JSON rename preserves the previous JSON and its curve. If the rename
+lands before an interruption is reported, the visible JSON's curve remains
+readable. Installed curves are retained, including complete generations left
+unreferenced by an interrupted publication. Consumers locate the curve using
+`pr_curve.path`. Atomic visibility applies during publication. Durability
+across power loss is outside this contract. Outer verifier normalization
+preserves the generation reference.
 
 ### Billiger fixture rebuilding
 

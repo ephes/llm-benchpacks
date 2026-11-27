@@ -545,6 +545,29 @@ def test_result_publication_preserves_previous_generation(scorer, tmp_path, monk
     assert old_curve.read_bytes() == b'old exact curve\n'
 
 
+def test_result_publication_retains_curve_after_json_rename(scorer, tmp_path, monkeypatch):
+    import json
+
+    output = tmp_path / 'verify.json'
+    replace = scorer.os.replace
+
+    def interrupt_after_replace(src, dst):
+        replace(src, dst)
+        if Path(dst) == output:
+            raise SystemExit(143)
+
+    monkeypatch.setattr(scorer.os, 'replace', interrupt_after_replace)
+    with pytest.raises(SystemExit) as interrupted:
+        scorer._publish_result(output, {'passed': True, 'pr_curve': {'points': 0}}, [])
+    assert interrupted.value.code == 143
+
+    published = json.loads(output.read_text())
+    assert published['passed'] is True
+    assert Path(published['pr_curve']['path']).read_text().splitlines() == [
+        'threshold,precision,recall,f1,accuracy,tp,fp,tn,fn,positive_prevalence',
+    ]
+
+
 def test_generation_reference_survives_outer_normalization(scorer, tmp_path):
     import json
     from benchpack.verifiers import _write_authoritative_json

@@ -5,6 +5,9 @@
 - Fail product-offer scoring before candidate execution when fixture IDs are
   duplicated, hidden-label coverage differs, or eval pair endpoints are unknown.
 
+- Retain the product-offer precision/recall curve if JSON publication is
+  interrupted, keeping references readable after a completed rename.
+
 - Withhold prefill TPS in comparisons and reports when the same case comes
   from different versions of a pack. Other measured medians remain visible.
 

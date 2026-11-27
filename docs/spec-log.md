@@ -8,6 +8,8 @@ working history and open questions.
 
 - Validate product-offer fixture identities, hidden-label coverage and eval
   pair endpoints before candidate execution.
+- Retain installed product-offer curves when JSON replacement raises, including
+  when the new reference has already become visible.
 
 ## 2026-11-24 (round 186 B20)
 

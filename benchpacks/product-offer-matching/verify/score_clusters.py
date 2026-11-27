@@ -691,15 +691,9 @@ def _publish_result(output_path: Path, payload: dict[str, Any], curve) -> None:
         (stage / "result.json").write_text(serialized, encoding="utf-8")
         if curve is not None:
             os.replace(stage / "curve.csv", generation)
-        try:
-            os.replace(stage / "result.json", output_path)
-        except BaseException:
-            if curve is not None:
-                try:
-                    generation.unlink()
-                except OSError:
-                    pass  # An unreferenced complete curve is safe to retain.
-            raise
+        # The rename can succeed before reporting an interruption. Keep the
+        # curve even if a reader has already opened JSON that references it.
+        os.replace(stage / "result.json", output_path)
 
 
 def _combined_score(
